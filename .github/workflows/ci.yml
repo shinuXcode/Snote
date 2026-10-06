@@ -1,0 +1,95 @@
+name: Snote CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "website/**"
+      - "supabase/**"
+      - ".github/workflows/**"
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: snote-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flutter:
+    name: Flutter smoke build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.6
+          cache: true
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsqlite3-dev
+
+      - name: Generate Android and Web runners
+        working-directory: app
+        run: flutter create --platforms=android,web --org=com.snote .
+
+      - name: Install dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Generate launcher icons
+        working-directory: app
+        run: dart run launcher_icons
+
+      - name: Analyze
+        working-directory: app
+        run: flutter analyze
+
+      - name: Test
+        working-directory: app
+        run: flutter test
+
+      - name: Configure Web SQLite
+        working-directory: app
+        run: dart run sqflite_common_ffi_web:setup --force
+
+      - name: Build Android APK
+        working-directory: app
+        run: flutter build apk --release
+
+      - name: Build Web
+        working-directory: app
+        run: flutter build web --release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: snote-smoke-builds
+          path: |
+            app/build/app/outputs/flutter-apk/app-release.apk
+            app/build/web
+          if-no-files-found: error
+
+  website:
+    name: Showcase website
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: website/package.json
+
+      - run: npm install
+      - run: npm run typecheck
+      - run: npm run build
