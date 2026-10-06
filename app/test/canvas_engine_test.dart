@@ -38,7 +38,7 @@ void main() {
     expect(decoded.first.id, 'stroke-1');
     expect(decoded.first.points, hasLength(2));
     expect(decoded.first.pen.type, PenType.fountain);
-    expect(decoded.first.pen.color.value, pen.color.value);
+    expect(decoded.first.pen.color.toARGB32(), pen.color.toARGB32());
   });
 
   test('fountain width decreases as velocity increases', () {
