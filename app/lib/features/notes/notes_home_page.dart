@@ -218,7 +218,7 @@ class _RailButton extends StatelessWidget {
   const _RailButton({required this.icon, required this.label, required this.color, required this.onTap});
   @override Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(bottom: 5),
-    child: ListTile(dense: true, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)), leading: Icon(icon), title: Text(label, style: const TextStyle(fontWeight: FontWeight.w650)), onTap: onTap),
+    child: ListTile(dense: true, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)), leading: Icon(icon), title: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)), onTap: onTap),
   );
 }
 
