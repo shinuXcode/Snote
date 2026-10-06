@@ -17,7 +17,7 @@ class NoteSyncService {
     final id=item['entity_id']! as String;
     final rows=await db.query('notes',where:'id=?',whereArgs:[id],limit:1);if(rows.isEmpty)return;
     final n=rows.first;
-    final payload={'id':id,'user_id':userId,'title':n['title'],'folder_id':n['folder_id'],'note_type':n['note_type'],'version':n['version'],'updated_at':DateTime.fromMillisecondsSinceEpoch(n['updated_at']! as int).toUtc().toIso8601String(),'deleted_at':n['deleted_at']==null?null:DateTime.fromMillisecondsSinceEpoch(n['deleted_at']! as int).toUtc().toIso8601String()};
+    final payload={'id':id,'user_id':userId,'title':n['title'],'folder_id':n['folder_id'],'note_type':n['note_type'],'content_json':n['content_json']==null?null:jsonDecode(n['content_json'] as String),'version':n['version'],'updated_at':DateTime.fromMillisecondsSinceEpoch(n['updated_at']! as int).toUtc().toIso8601String(),'deleted_at':n['deleted_at']==null?null:DateTime.fromMillisecondsSinceEpoch(n['deleted_at']! as int).toUtc().toIso8601String()};
     await client.from('notes').upsert(payload);
     await db.update('notes',{'sync_state':'synced'},where:'id=?',whereArgs:[id]);
   }
