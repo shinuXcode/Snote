@@ -2,16 +2,17 @@ import Link from "next/link";
 import Reveal from "../../components/Reveal";
 
 const version = "0.4.0";
-const releasePage = "https://github.com/shinuXcode/Snote/releases/latest";
-const web = process.env.NEXT_PUBLIC_SNOTE_WEB_APP_URL || "/";
+const releasePage = "https://github.com/shinuXcode/Snote/releases/tag/v0.4.0";
+const assetBase = "https://github.com/shinuXcode/Snote/releases/download/v0.4.0";
+const web = process.env.NEXT_PUBLIC_SNOTE_WEB_APP_URL || assetBase + "/Snote-Web.tar.gz";
 
 const builds = [
-  ["Android", "APK", "Snote-Android.apk", "Android release will appear here when the verified v0.4.0 build is published."],
-  ["Windows", "ZIP", "Snote-Windows.zip", "Windows desktop release."],
-  ["macOS", "ZIP", "Snote-macOS.zip", "macOS desktop release."],
-  ["Linux", "TAR.GZ", "Snote-Linux.tar.gz", "Linux desktop bundle."],
-  ["iOS", "UNSIGNED ZIP", "Snote-iOS-unsigned.zip", "Development build; App Store signing is required."],
-  ["Web", "Browser", web, "Open the browser app."],
+  ["Android", "APK", assetBase + "/Snote-Android.apk", "Verified Android APK."],
+  ["Windows", "ZIP", assetBase + "/Snote-Windows.zip", "Verified Windows desktop bundle."],
+  ["macOS", "ZIP", assetBase + "/Snote-macOS.zip", "Verified macOS desktop bundle."],
+  ["Linux", "TAR.GZ", assetBase + "/Snote-Linux.tar.gz", "Verified Linux desktop bundle."],
+  ["iOS", "UNSIGNED ZIP", assetBase + "/Snote-iOS-unsigned.zip", "Unsigned iOS build; App Store distribution still requires Apple signing."],
+  ["Web", "WEB", web, "Launch the web app when configured, or download the verified web bundle."],
 ] as const;
 
 export default function Page() {
@@ -30,9 +31,7 @@ export default function Page() {
           <div className="eyebrow">Release status</div>
           <h2>Verified builds only.</h2>
           <p className="muted">
-            Direct installer links stay disabled until GitHub publishes a verified
-            release asset. This prevents the download page from sending users to
-            dead 404 URLs.
+            Downloads are linked directly to the verified v0.4.0 release assets.
           </p>
           <a className="cta" href={releasePage}>
             Open Snote releases
@@ -50,8 +49,8 @@ export default function Page() {
               {name === "Web" ? (
                 <a className="cta" href={url}>Launch</a>
               ) : (
-                <a className="ghost-cta" href={releasePage}>
-                  View release
+                <a className="ghost-cta" href={url}>
+                  Download
                 </a>
               )}
             </article>
