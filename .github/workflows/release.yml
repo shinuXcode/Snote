@@ -14,7 +14,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: snote-production-release
+  group: snote-production-release-${{ github.sha }}
   cancel-in-progress: true
 
 jobs:
