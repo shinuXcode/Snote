@@ -1,109 +1,119 @@
-name: Snote Release
+name: Snote Production Release
 
 on:
   push:
-    tags:
-      - "v*.*.*"
+    branches: [main]
+    paths:
+      - "app/**"
+      - "website/**"
+      - "supabase/**"
+      - ".github/workflows/release.yml"
+  workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: snote-production-release
+  cancel-in-progress: true
+
 jobs:
   build:
+    name: Build ${{ matrix.target }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
             target: android
+            artifact: Snote-Android.apk
           - os: ubuntu-latest
             target: linux
+            artifact: Snote-Linux.tar.gz
           - os: windows-latest
             target: windows
+            artifact: Snote-Windows.zip
           - os: macos-latest
-            target: apple
+            target: macos
+            artifact: Snote-macOS.zip
+          - os: macos-latest
+            target: ios
+            artifact: Snote-iOS-unsigned.zip
           - os: ubuntu-latest
             target: web
+            artifact: Snote-Web.tar.gz
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
         with:
           flutter-version: 3.47.3
           cache: true
 
-      - if: matrix.target == 'linux'
-        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsqlite3-dev
+      - name: Setup Linux dependencies
+        if: matrix.os == 'ubuntu-latest' && matrix.target != 'web' && matrix.target != 'android'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsqlite3-dev
 
-      - if: matrix.target == 'android'
-        working-directory: app
-        run: |
-          flutter create --platforms=android --org=com.snote .
-          rm -f test/widget_test.dart
-      - if: matrix.target == 'android'
-        working-directory: app
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path("android/app/build.gradle.kts")
-          s = p.read_text()
-          s = s.replace("minSdk = flutter.minSdkVersion", "minSdk = 24")
-          p.write_text(s)
-          PY
-
-      - if: matrix.target == 'linux'
-        working-directory: app
-        run: |
-          flutter create --platforms=linux --org=com.snote .
-          rm -f test/widget_test.dart
-      - if: matrix.target == 'windows'
-        working-directory: app
-        run: |
-          flutter create --platforms=windows --org=com.snote .
-          rm -f test/widget_test.dart
-      - if: matrix.target == 'windows'
-        working-directory: app
-        run: dart run pdfx:install_windows
-
-      - if: matrix.target == 'apple'
-        working-directory: app
-        run: flutter create --platforms=ios,macos --org=com.snote .
-          rm -f test/widget_test.dart
-      - if: matrix.target == 'apple'
+      - name: Generate target runner
         working-directory: app
         shell: bash
         run: |
-          if [ -f ios/Podfile ]; then sed -i '' "s/platform :ios, '12.0'/platform :ios, '13.0'/" ios/Podfile || true; fi
-          if [ -f macos/Podfile ]; then sed -i '' "s/platform :osx, '10.14'/platform :osx, '10.15'/" macos/Podfile || true; fi
+          case "${{ matrix.target }}" in
+            android) flutter create --platforms=android --org=com.snote . ;;
+            linux) flutter create --platforms=linux --org=com.snote . ;;
+            windows) flutter create --platforms=windows --org=com.snote . ;;
+            macos) flutter create --platforms=macos --org=com.snote . ;;
+            ios) flutter create --platforms=ios --org=com.snote . ;;
+            web) flutter create --platforms=web . ;;
+          esac
+          rm -f test/widget_test.dart
+
+      - name: Configure Android
+        if: matrix.target == 'android'
+        working-directory: app
+        run: |
           python3 - <<'PY'
           from pathlib import Path
-          p = Path('ios/Runner/Info.plist')
-          if p.exists():
-            s = p.read_text()
-            if 'NSCameraUsageDescription' not in s:
-              s = s.replace('</dict>', '  <key>NSCameraUsageDescription</key>\n  <string>Snote uses the camera to scan note transfer QR codes.</string>\n</dict>')
-              p.write_text(s)
-          p = Path('macos/Runner/Info.plist')
-          if p.exists():
-            s = p.read_text()
-            if 'NSCameraUsageDescription' not in s:
-              s = s.replace('</dict>', '  <key>NSCameraUsageDescription</key>\n  <string>Snote uses the camera to scan note transfer QR codes.</string>\n</dict>')
+          p = Path('android/app/build.gradle.kts')
+          s = p.read_text()
+          s = s.replace('minSdk = flutter.minSdkVersion', 'minSdk = 24')
+          p.write_text(s)
+          p = Path('android/app/src/main/AndroidManifest.xml')
+          s = p.read_text()
+          if 'android.permission.CAMERA' not in s:
+              s = s.replace('</manifest>', '    <uses-permission android:name="android.permission.CAMERA" />\n</manifest>')
               p.write_text(s)
           PY
 
-      - if: matrix.target == 'web'
+      - name: Configure Apple camera permission
+        if: matrix.target == 'ios' || matrix.target == 'macos'
         working-directory: app
+        shell: bash
         run: |
-          flutter create --platforms=web .
-          rm -f test/widget_test.dart
+          python3 - <<'PY'
+          from pathlib import Path
+          for raw in ['ios/Runner/Info.plist', 'macos/Runner/Info.plist']:
+              p = Path(raw)
+              if not p.exists():
+                  continue
+              s = p.read_text()
+              if 'NSCameraUsageDescription' not in s:
+                  s = s.replace('</dict>', '  <key>NSCameraUsageDescription</key>\n  <string>Snote uses the camera to scan note transfer QR codes.</string>\n</dict>')
+                  p.write_text(s)
+          PY
 
       - name: Install dependencies
         working-directory: app
         run: flutter pub get
 
-      - name: Generate app icons
+      - name: Generate app icon
         working-directory: app
         run: dart run launcher_icons
 
@@ -115,60 +125,93 @@ jobs:
         working-directory: app
         run: flutter test
 
-      - if: matrix.target == 'android'
+      - name: Install web PDF assets
+        if: matrix.target == 'web'
         working-directory: app
-        run: flutter build apk --release --dart-define=SUPABASE_URL="$SUPABASE_URL" --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
-      - if: matrix.target == 'linux'
-        working-directory: app
-        run: flutter build linux --release --dart-define=SUPABASE_URL="$SUPABASE_URL" --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
-      - if: matrix.target == 'windows'
-        working-directory: app
-        run: flutter build windows --release --dart-define=SUPABASE_URL="$SUPABASE_URL" --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
-      - if: matrix.target == 'apple'
-        working-directory: app
-        run: |
-          flutter build macos --release --dart-define=SUPABASE_URL="$SUPABASE_URL" --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
-          flutter build ios --release --no-codesign --dart-define=SUPABASE_URL="$SUPABASE_URL" --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
-      - if: matrix.target == 'web'
-        working-directory: app
-        run: |
-          dart run pdfx:install_web
-          flutter build web --release --dart-define=SUPABASE_URL="$SUPABASE_URL" --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
+        run: dart run pdfx:install_web
 
-      - if: matrix.target == 'android'
+      - name: Build Android
+        if: matrix.target == 'android'
+        working-directory: app
+        run: flutter build apk --release
+
+      - name: Build Linux
+        if: matrix.target == 'linux'
+        working-directory: app
+        run: flutter build linux --release
+
+      - name: Build Windows
+        if: matrix.target == 'windows'
+        working-directory: app
+        run: flutter build windows --release
+
+      - name: Build macOS
+        if: matrix.target == 'macos'
+        working-directory: app
+        run: flutter build macos --release
+
+      - name: Build iOS
+        if: matrix.target == 'ios'
+        working-directory: app
+        run: flutter build ios --release --no-codesign
+
+      - name: Build Web
+        if: matrix.target == 'web'
+        working-directory: app
+        run: flutter build web --release
+
+      - name: Package Android
+        if: matrix.target == 'android'
         run: cp app/build/app/outputs/flutter-apk/app-release.apk Snote-Android.apk
-      - if: matrix.target == 'linux'
+
+      - name: Package Linux
+        if: matrix.target == 'linux'
         run: tar -czf Snote-Linux.tar.gz -C app/build/linux/x64/release bundle
-      - if: matrix.target == 'windows'
+
+      - name: Package Windows
+        if: matrix.target == 'windows'
         shell: pwsh
         run: Compress-Archive -Path app/build/windows/x64/runner/Release/* -DestinationPath Snote-Windows.zip
-      - if: matrix.target == 'apple'
-        run: |
-          ditto -c -k --sequesterRsrc --keepParent app/build/macos/Build/Products/Release Snote-macOS.zip
-          ditto -c -k --sequesterRsrc --keepParent app/build/ios/iphoneos Snote-iOS-unsigned.zip
-      - if: matrix.target == 'web'
+
+      - name: Package macOS
+        if: matrix.target == 'macos'
+        run: ditto -c -k --sequesterRsrc --keepParent app/build/macos/Build/Products/Release Snote-macOS.zip
+
+      - name: Package iOS
+        if: matrix.target == 'ios'
+        run: ditto -c -k --sequesterRsrc --keepParent app/build/ios/iphoneos Snote-iOS-unsigned.zip
+
+      - name: Package Web
+        if: matrix.target == 'web'
         run: tar -czf Snote-Web.tar.gz -C app/build web
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload platform artifact
+        uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.target }}
-          path: |
-            Snote-*.apk
-            Snote-*.zip
-            Snote-*.tar.gz
+          path: ${{ matrix.artifact }}
           if-no-files-found: error
 
   publish:
+    name: Publish v0.4.0
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
         with:
           path: dist
           pattern: release-*
           merge-multiple: true
-      - name: Publish release
+
+      - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: v0.4.0
         run: |
-          gh release create "${{ github.ref_name }}" dist/Snote-* --generate-notes --title "Snote ${{ github.ref_name }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" dist/* --title "Snote 0.4.0" --generate-notes --latest
+          fi
