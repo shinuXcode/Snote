@@ -356,7 +356,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
     return Scaffold(
       appBar: AppBar(
-        titleSpacing: 0,
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        surfaceTintColor: Colors.transparent,
+        titleSpacing: 8,
         title: TextField(
           controller: _title,
           onSubmitted: (_) => _save(),
@@ -364,10 +366,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
             hintText: 'Untitled note',
             border: InputBorder.none,
           ),
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-          ),
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.3),
         ),
         actions: [
           IconButton(
@@ -407,9 +406,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
           ),
         ],
         bottom: PreferredSize(
-          preferredSize: Size.fromHeight(
-            _drawing ? 62 : 112,
-          ),
+          preferredSize: Size.fromHeight(_drawing ? 64 : 112),
           child: Column(
             children: [
               if (!_drawing)
@@ -593,6 +590,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     return Padding(
       padding: const EdgeInsets.only(right: 6),
       child: ChoiceChip(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
         avatar: Icon(icon, size: 17),
         label: Text(label),
         selected: selected,
