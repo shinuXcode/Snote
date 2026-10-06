@@ -17,6 +17,16 @@ jobs:
       - name: Generate Android platform files
         working-directory: app
         run: flutter create --platforms=android --org=com.snote .
+      - name: Set Android minimum SDK
+        working-directory: app
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("android/app/build.gradle.kts")
+          s = p.read_text()
+          s = s.replace("minSdk = flutter.minSdkVersion", "minSdk = 24")
+          p.write_text(s)
+          PY
       - name: Verify and build
         working-directory: app
         run: |
