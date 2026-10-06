@@ -1,0 +1,32 @@
+name: Snote Web
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate Flutter platform files
+        working-directory: app
+        run: flutter create --platforms=web .
+      - name: Build web
+        working-directory: app
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter build web --release
+      - name: Upload web build
+        uses: actions/upload-artifact@v4
+        with:
+          name: snote-web
+          path: app/build/web
