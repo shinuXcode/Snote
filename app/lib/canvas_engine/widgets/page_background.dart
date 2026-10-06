@@ -15,7 +15,7 @@ class PageBackground extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawColor(paperColor);
+    canvas.drawColor(paperColor, BlendMode.srcOver);
 
     final p = Paint()
       ..color = lineColor
