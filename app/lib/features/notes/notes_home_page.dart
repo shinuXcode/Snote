@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../data/local/note_repository.dart';
-import '../../data/remote/supabase_service.dart';
 import '../../sync/sync_engine.dart';
 import '../../ui/snote_logo.dart';
 import '../auth/login_page.dart';
@@ -261,7 +260,7 @@ class _NoteCard extends StatelessWidget {
       )),
     ));
   }
-  String _dateLabel(DateTime d) => 'Updated ' + d.day.toString().padLeft(2, '0') + '/' + d.month.toString().padLeft(2, '0') + '/' + d.year.toString();
+  String _dateLabel(DateTime d) => 'Updated ${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
 }
 
 class _EmptyNotes extends StatelessWidget {
