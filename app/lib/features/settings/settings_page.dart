@@ -47,7 +47,7 @@ class _SettingsPageState extends State<SettingsPage> {
               onTap: () async {
                 final ok = await _lock.authenticate();
                 if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
+                ScaffoldMessenger.of(this.context).showSnackBar(
                   SnackBar(
                     content: Text(ok ? 'Authentication is available.' : 'Authentication unavailable.'),
                   ),
@@ -88,13 +88,13 @@ class _SettingsPageState extends State<SettingsPage> {
                     final count = await transfer.importFromPickedFile();
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Imported ' + count.toString() + ' notes.')),
+                        SnackBar(content: Text('Imported $count notes.')),
                       );
                     }
                   } else if (choice == 'export') {
                     final payload = await transfer.exportAll();
                     await showDialog<void>(
-                      context: context,
+                      context: this.context,
                       builder: (context) => AlertDialog(
                         title: const Text('Notebook JSON'),
                         content: SelectableText(payload),
