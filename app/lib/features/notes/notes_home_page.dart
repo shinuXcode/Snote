@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import '../../data/local/note_repository.dart';
+import '../../data/remote/note_sync_service.dart';
 import '../../data/remote/supabase_service.dart';
 import '../../sync/sync_engine.dart';
 import '../../ui/snote_logo.dart';
@@ -17,7 +18,7 @@ class NotesHomePage extends StatefulWidget {
 
 class _NotesHomePageState extends State<NotesHomePage> {
   final _repo = NoteRepository();
-  final _sync = SyncEngine();
+  late final SyncEngine _sync;
 
   List<LocalNote> _notes = const [];
   LocalNote? _selected;
@@ -27,6 +28,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
   @override
   void initState() {
     super.initState();
+    _sync = SyncEngine(service: SnoteSupabase.client == null ? null : NoteSyncService(SnoteSupabase.client!));
     unawaited(_load());
     if (!widget.localOnly) unawaited(_startSync());
   }
