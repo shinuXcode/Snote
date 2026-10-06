@@ -270,7 +270,7 @@ class _EmptyNotes extends StatelessWidget {
     const SizedBox(height: 18), const Text('Your notebook is empty', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900)), const SizedBox(height: 7),
     Text('Create your first page and start writing.', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyMedium), const SizedBox(height: 18),
     FilledButton.icon(onPressed: onCreate, icon: const Icon(Icons.add_rounded), label: const Text('Create note')),
-  ]));
+  ])));
 }
 
 class _WorkspaceEmpty extends StatelessWidget {
@@ -279,7 +279,7 @@ class _WorkspaceEmpty extends StatelessWidget {
     Icon(Icons.draw_rounded, size: 58, color: Theme.of(context).colorScheme.primary), const SizedBox(height: 16),
     const Text('Pick a page to start writing', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)), const SizedBox(height: 6),
     Text('Your notebook stays local-first and ready for handwriting.', style: Theme.of(context).textTheme.bodyMedium),
-  ]));
+  ])));
 }
 
 class _MobileInfoPanel extends StatelessWidget {
@@ -288,7 +288,7 @@ class _MobileInfoPanel extends StatelessWidget {
     Icon(Icons.person_rounded, size: 58, color: Theme.of(context).colorScheme.primary), const SizedBox(height: 14),
     const Text('Account & sync', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)), const SizedBox(height: 7),
     const Text('Sign in to connect your notebook when cloud services are configured.', textAlign: TextAlign.center),
-  ]));
+  ])));
 }
 
 class _ToolsSheet extends StatelessWidget {
@@ -298,7 +298,7 @@ class _ToolsSheet extends StatelessWidget {
     _ToolTile(icon: Icons.folder_copy_rounded, title: 'Folders', subtitle: 'Organize notebooks', value: 'folders'),
     _ToolTile(icon: Icons.picture_as_pdf_rounded, title: 'PDF annotation', subtitle: 'Write directly on PDFs', value: 'pdf'),
     _ToolTile(icon: Icons.qr_code_2_rounded, title: 'Private transfer', subtitle: 'Move notes without cloud', value: 'import'),
-  ]));
+  ])));
 }
 
 class _ToolTile extends StatelessWidget {
