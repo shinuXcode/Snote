@@ -93,11 +93,13 @@ class _QrImportPageState extends State<QrImportPage> {
   }
 
   Future<void> _pickFile() async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['json', 'snote'], withData: true);
-    final bytes = result?.files.single.bytes;
-    if (bytes == null) return;
+    final file = await FilePicker.pickFile(
+      type: FileType.custom,
+      allowedExtensions: ['json', 'snote'],
+    );
+    if (file == null) return;
     try {
-      await _consume(utf8.decode(bytes));
+      await _consume(utf8.decode(await file.readAsBytes()));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
     }
@@ -105,7 +107,7 @@ class _QrImportPageState extends State<QrImportPage> {
 
   @override
   Widget build(BuildContext context) {
-    final progress = _total == null || _total == 0 ? 0 : _chunks.length / _total!;
+    final progress = _total == null || _total == 0 ? null : (_chunks.length / _total!).toDouble();
     return Scaffold(
       appBar: AppBar(title: const Text('Import transfer')),
       body: Column(
