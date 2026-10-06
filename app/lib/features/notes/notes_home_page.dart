@@ -6,6 +6,7 @@ import '../../data/remote/supabase_service.dart';
 import '../../sync/sync_engine.dart';
 import '../../ui/snote_logo.dart';
 import '../auth/login_page.dart';
+import '../settings/settings_page.dart';
 import 'note_editor_page.dart';
 
 class NotesHomePage extends StatefulWidget {
@@ -110,7 +111,6 @@ class _NotesHomePageState extends State<NotesHomePage> {
         ],
       ),
     );
-
     controller.dispose();
 
     if (name == null || name.trim().isEmpty) return;
@@ -162,6 +162,12 @@ class _NotesHomePageState extends State<NotesHomePage> {
     );
   }
 
+  Future<void> _openSettings() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const SettingsPage()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 850;
@@ -170,6 +176,11 @@ class _NotesHomePageState extends State<NotesHomePage> {
       appBar: AppBar(
         title: const SnoteLogo(size: 34),
         actions: [
+          IconButton(
+            tooltip: 'Settings',
+            onPressed: _openSettings,
+            icon: const Icon(Icons.settings_outlined),
+          ),
           if (widget.localOnly)
             TextButton.icon(
               onPressed: _openAccount,
