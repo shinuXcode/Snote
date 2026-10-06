@@ -31,15 +31,14 @@ class NotebookTransferService {
   }
 
   Future<int> importFromPickedFile() async {
-    final result = await FilePicker.platform.pickFiles(
+    final file = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: ['json', 'snote'],
-      withData: true,
     );
 
-    if (result == null || result.files.single.bytes == null) return 0;
+    if (file == null) return 0;
 
-    final raw = utf8.decode(result.files.single.bytes!);
+    final raw = utf8.decode(await file.readAsBytes());
     final decoded = jsonDecode(raw);
 
     if (decoded is! Map || decoded['notes'] is! List) {
