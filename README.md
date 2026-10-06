@@ -1,20 +1,44 @@
 # Snote
 
-Open-source, offline-first handwriting and rich-text note-taking app.
+Open-source, offline-first handwriting and rich-text notes for Android, iOS, Windows, macOS, Linux and Web.
 
-## Targets
-Android · iOS · Windows · macOS · Linux · Web
+## Repository
 
-## Architecture
-- Flutter/Dart client
-- Offline-first local persistence
-- Vector stroke storage
-- Optional Supabase authentication and metadata sync
-- Optional user-owned Google Drive/WebDAV backup
-- React/Next.js showcase website
+- app/ — Flutter client
+- website/ — multipage showcase and authenticated note portal
+- supabase/ — database/RLS migrations
+- .github/workflows/ — CI, diagnostics and release automation
 
-## Status
-Early architecture bootstrap. Canvas engine is being implemented before cloud sync and advanced note features.
+## Core behavior
+
+Snote writes locally first. Authentication and cloud sync are optional at the client layer; once configured, queued changes synchronize against the authenticated Supabase account.
+
+The same account can be used by Flutter clients and the web portal to browse and export cloud-synced notes.
+
+## Local setup
+
+Flutter:
+flutter pub get
+flutter run
+
+Cloud-enabled:
+flutter run --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_PUBLISHABLE_KEY=...
+
+Website:
+cd website
+npm install
+npm run typecheck
+npm run build
+npm run dev
+
+## Release
+
+Tag a version such as v0.3.2. The release workflow builds Android, Windows, Linux, macOS, iOS (unsigned) and Web artifacts, then publishes them to GitHub Releases.
+
+Required GitHub Actions secrets:
+- SUPABASE_URL
+- SUPABASE_PUBLISHABLE_KEY
 
 ## License
+
 MIT
