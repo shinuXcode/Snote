@@ -1,14 +1,11 @@
 name: Snote Release
-
 on:
   push:
     tags:
       - "v*.*.*"
   workflow_dispatch:
-
 permissions:
   contents: write
-
 jobs:
   build:
     strategy:
@@ -25,16 +22,13 @@ jobs:
             target: apple
           - os: ubuntu-latest
             target: web
-
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: 3.47.6
           cache: true
 
       - if: matrix.target == 'linux'
@@ -43,6 +37,16 @@ jobs:
       - if: matrix.target == 'android'
         working-directory: app
         run: flutter create --platforms=android --org=com.snote .
+      - if: matrix.target == 'android'
+        working-directory: app
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("android/app/build.gradle.kts")
+          s = p.read_text()
+          s = s.replace("minSdk = flutter.minSdkVersion", "minSdk = 24")
+          p.write_text(s)
+          PY
 
       - if: matrix.target == 'linux'
         working-directory: app
@@ -50,12 +54,17 @@ jobs:
 
       - if: matrix.target == 'windows'
         working-directory: app
-        shell: pwsh
         run: flutter create --platforms=windows --org=com.snote .
 
       - if: matrix.target == 'apple'
         working-directory: app
         run: flutter create --platforms=ios,macos --org=com.snote .
+      - if: matrix.target == 'apple'
+        working-directory: app
+        shell: bash
+        run: |
+          if [ -f ios/Podfile ]; then sed -i '' "s/platform :ios, '12.0'/platform :ios, '13.0'/" ios/Podfile || true; fi
+          if [ -f macos/Podfile ]; then sed -i '' "s/platform :osx, '10.14'/platform :osx, '10.15'/" macos/Podfile || true; fi
 
       - if: matrix.target == 'web'
         working-directory: app
@@ -67,7 +76,7 @@ jobs:
 
       - name: Generate app icons
         working-directory: app
-        run: dart run flutter_launcher_icons
+        run: dart run launcher_icons
 
       - name: Analyze
         working-directory: app
@@ -80,21 +89,17 @@ jobs:
       - if: matrix.target == 'android'
         working-directory: app
         run: flutter build apk --release
-
       - if: matrix.target == 'linux'
         working-directory: app
         run: flutter build linux --release
-
       - if: matrix.target == 'windows'
         working-directory: app
         run: flutter build windows --release
-
       - if: matrix.target == 'apple'
         working-directory: app
         run: |
           flutter build macos --release
           flutter build ios --release --no-codesign
-
       - if: matrix.target == 'web'
         working-directory: app
         run: |
@@ -103,19 +108,15 @@ jobs:
 
       - if: matrix.target == 'android'
         run: cp app/build/app/outputs/flutter-apk/app-release.apk Snote-Android.apk
-
       - if: matrix.target == 'linux'
         run: tar -czf Snote-Linux.tar.gz -C app/build/linux/x64/release bundle
-
       - if: matrix.target == 'windows'
         shell: pwsh
         run: Compress-Archive -Path app/build/windows/x64/runner/Release/* -DestinationPath Snote-Windows.zip
-
       - if: matrix.target == 'apple'
         run: |
           ditto -c -k --sequesterRsrc --keepParent app/build/macos/Build/Products/Release Snote-macOS.zip
           ditto -c -k --sequesterRsrc --keepParent app/build/ios/iphoneos Snote-iOS-unsigned.zip
-
       - if: matrix.target == 'web'
         run: tar -czf Snote-Web.tar.gz -C app/build web
 
@@ -137,9 +138,8 @@ jobs:
           path: dist
           pattern: release-*
           merge-multiple: true
-
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ github.ref_name }}" dist/Snote-*             --generate-notes             --title "Snote ${{ github.ref_name }}"
+          gh release create "${{ github.ref_name }}" dist/Snote-* --generate-notes --title "Snote ${{ github.ref_name }}"
