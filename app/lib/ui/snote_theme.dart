@@ -61,7 +61,7 @@ class SnoteTheme {
           const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
         ),
       ),
-      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
         elevation: 2,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       ),
