@@ -85,7 +85,7 @@ class _FoldersPageState extends State<FoldersPage> {
           : ListView.separated(
               padding: const EdgeInsets.all(16),
               itemCount: _folders.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              separatorBuilder: (_, _) => const SizedBox(height: 8),
               itemBuilder: (context, index) {
                 final folder = _folders[index];
                 return ListTile(
