@@ -14,6 +14,7 @@ class LocalNote {
   final int createdAt;
   final int updatedAt;
   final int? deletedAt;
+  final int version;
 
   const LocalNote({
     required this.id,
@@ -24,6 +25,7 @@ class LocalNote {
     required this.createdAt,
     required this.updatedAt,
     this.deletedAt,
+    required this.version,
   });
 
   Map<String, Object?> toMap() => {
@@ -35,7 +37,7 @@ class LocalNote {
         'created_at': createdAt,
         'updated_at': updatedAt,
         'deleted_at': deletedAt,
-        'version': 1,
+        'version': version,
         'sync_state': 'pending',
       };
 
@@ -48,6 +50,7 @@ class LocalNote {
         createdAt: (m['created_at']! as num).toInt(),
         updatedAt: (m['updated_at']! as num).toInt(),
         deletedAt: (m['deleted_at'] as num?)?.toInt(),
+        version: (m['version'] as num?)?.toInt() ?? 1,
       );
 
   Map<String, Object?> toRemote(String userId) => {
@@ -64,7 +67,7 @@ class LocalNote {
         'updated_at': DateTime.fromMillisecondsSinceEpoch(
           updatedAt,
         ).toUtc().toIso8601String(),
-        'version': 1,
+        'version': version,
         'deleted_at': deletedAt == null
             ? null
             : DateTime.fromMillisecondsSinceEpoch(
@@ -85,22 +88,19 @@ class NoteRepository {
     final now = DateTime.now().millisecondsSinceEpoch;
     final note = LocalNote(
       id: _uuid.v4(),
-      title: title,
+      title: title.trim().isEmpty ? 'Untitled note' : title.trim(),
       folderId: folderId,
       noteType: 'handwriting',
       createdAt: now,
       updatedAt: now,
+      version: 1,
     );
 
     final db = await _db;
 
     await db.transaction((tx) async {
       await tx.insert('notes', note.toMap());
-      await _queue(
-        tx,
-        note.id,
-        'upsert',
-      );
+      await _queue(tx, note.id, 'upsert');
     });
 
     return note;
@@ -108,7 +108,6 @@ class NoteRepository {
 
   Future<LocalNote?> get(String id) async {
     final db = await _db;
-
     final rows = await db.query(
       'notes',
       where: 'id = ?',
@@ -120,14 +119,10 @@ class NoteRepository {
     return LocalNote.fromMap(rows.first);
   }
 
-  Future<List<LocalNote>> list({
-    String? folderId,
-  }) async {
+  Future<List<LocalNote>> list({String? folderId}) async {
     final db = await _db;
 
-    final whereParts = <String>[
-      'deleted_at IS NULL',
-    ];
+    final whereParts = <String>['deleted_at IS NULL'];
     final args = <Object?>[];
 
     if (folderId == null) {
@@ -149,13 +144,11 @@ class NoteRepository {
 
   Future<List<LocalNote>> listAllVisible() async {
     final db = await _db;
-
     final rows = await db.query(
       'notes',
       where: 'deleted_at IS NULL',
       orderBy: 'updated_at DESC',
     );
-
     return rows.map(LocalNote.fromMap).toList();
   }
 
@@ -164,16 +157,28 @@ class NoteRepository {
     Map<String, Object?> content,
   ) async {
     final db = await _db;
-    final now = DateTime.now().millisecondsSinceEpoch;
 
     await db.transaction((tx) async {
+      final rows = await tx.query(
+        'notes',
+        columns: ['version'],
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (rows.isEmpty) return;
+
+      final currentVersion =
+          (rows.first['version'] as num?)?.toInt() ?? 1;
+
       await tx.update(
         'notes',
         {
           'content_json': jsonEncode(content),
-          'updated_at': now,
-          'version': 'version + 1',
+          'updated_at': DateTime.now().millisecondsSinceEpoch,
+          'version': currentVersion + 1,
           'sync_state': 'pending',
+          'deleted_at': null,
         },
         where: 'id = ?',
         whereArgs: [id],
@@ -184,41 +189,40 @@ class NoteRepository {
   }
 
   Future<void> rename(String id, String title) async {
+    final trimmed = title.trim();
+    if (trimmed.isEmpty) return;
+
     final db = await _db;
-    final now = DateTime.now().millisecondsSinceEpoch;
 
     await db.transaction((tx) async {
       await tx.update(
         'notes',
         {
-          'title': title.trim(),
-          'updated_at': now,
+          'title': trimmed,
+          'updated_at': DateTime.now().millisecondsSinceEpoch,
           'sync_state': 'pending',
         },
         where: 'id = ?',
         whereArgs: [id],
       );
-
       await _queue(tx, id, 'upsert');
     });
   }
 
   Future<void> moveToFolder(String id, String? folderId) async {
     final db = await _db;
-    final now = DateTime.now().millisecondsSinceEpoch;
 
     await db.transaction((tx) async {
       await tx.update(
         'notes',
         {
           'folder_id': folderId,
-          'updated_at': now,
+          'updated_at': DateTime.now().millisecondsSinceEpoch,
           'sync_state': 'pending',
         },
         where: 'id = ?',
         whereArgs: [id],
       );
-
       await _queue(tx, id, 'upsert');
     });
   }
@@ -238,14 +242,12 @@ class NoteRepository {
         where: 'id = ?',
         whereArgs: [id],
       );
-
       await _queue(tx, id, 'delete');
     });
   }
 
   Future<List<Map<String, Object?>>> pendingQueue() async {
     final db = await _db;
-
     return db.query(
       'sync_queue',
       orderBy: 'created_at ASC',
@@ -263,7 +265,6 @@ class NoteRepository {
         where: 'id = ?',
         whereArgs: [noteId],
       );
-
       await tx.delete(
         'sync_queue',
         where: 'entity_type = ? AND entity_id = ?',
@@ -276,24 +277,23 @@ class NoteRepository {
     final id = remote['id']?.toString();
     if (id == null || id.isEmpty) return;
 
-    final db = await _db;
+    DateTime? parseDate(Object? value) =>
+        value == null ? null : DateTime.tryParse(value.toString());
 
-    DateTime? parseDate(Object? value) {
-      if (value == null) return null;
-      return DateTime.tryParse(value.toString());
-    }
+    final updatedDate = parseDate(remote['updated_at']);
+    if (updatedDate == null) return;
 
-    final updated =
-        parseDate(remote['updated_at'])?.millisecondsSinceEpoch;
-    if (updated == null) return;
-
+    final updated = updatedDate.millisecondsSinceEpoch;
     final local = await get(id);
+
     if (local != null && local.updatedAt > updated) return;
 
     final created =
         parseDate(remote['created_at'])?.millisecondsSinceEpoch ?? updated;
     final deleted =
         parseDate(remote['deleted_at'])?.millisecondsSinceEpoch;
+
+    final db = await _db;
 
     await db.insert(
       'notes',
@@ -341,8 +341,7 @@ class NoteRepository {
         'entity_type': 'note',
         'entity_id': id,
         'operation': operation,
-        'created_at':
-            DateTime.now().millisecondsSinceEpoch,
+        'created_at': DateTime.now().millisecondsSinceEpoch,
         'attempts': 0,
       },
     );
