@@ -1,3 +1,46 @@
-import Link from "next/link";import MotionHero from "../components/MotionHero";
-const features=[["✎","Handwriting & Stylus","Pressure-aware strokes, palm rejection and a workspace designed around natural writing."],["▣","PDF Workspace","Annotate documents, highlight passages and keep markups with the original note."],["⌁","Infinite Ideas","Mind maps, sketches, diagrams and free-form pages without forcing your thinking into boxes."],["☁","Sync Everywhere","Keep local-first notes on every device and synchronize when signed in and online."],["◌","E-Ink Focus","A calmer reading and writing mode for long study sessions and paper-like screens."],["⌘","Open Source","A transparent architecture with no subscription-first lock-in."]];
-export default function Home(){return <><MotionHero/><main><section className="section shell"><div className="sectionHead"><span className="eyebrow">One workspace</span><h2 className="title">Made for the way you actually think.</h2><p className="muted">Inspired by the best parts of Samsung Notes, Apple Notes and TouchNotes — without copying their limitations.</p></div><div className="grid">{features.map(([icon,title,body])=><article className="card" key={title}><div className="iconBox">{icon}</div><h3>{title}</h3><p className="muted">{body}</p></article>)}</div><div className="showcase"><div className="windowBar"><i className="dot"/><i className="dot"/><i className="dot"/></div><div className="mock"><aside className="side"><b>Folders</b>{["Personal","Study","Work","Projects","Ideas"].map(x=><div className="sideLine" key={x}/>)}</aside><div className="paper"><span className="pill">Today · Study</span><h3>The Solar System</h3><p>Write, sketch, annotate and connect ideas naturally. Your page stays yours while Snote handles the organization around it.</p><p><b>☼</b> Ideas → Notes → Knowledge</p></div><aside className="tools"><b>Tools</b>{["Ballpoint","Pencil","Highlighter","Lasso","Shapes","Image"].map(x=><div className="tool" key={x}/>)}</aside></div></div></section><section className="section shell"><div className="grid"><div><span className="eyebrow">Your account</span><h2 className="title">Sign in once.<br/>Continue anywhere.</h2><p className="muted">Your account connects the same notebook across supported clients. Local work stays usable offline; queued changes sync when connectivity returns.</p><div className="actions" style={{justifyContent:"flex-start"}}><Link className="cta" href="/account">Open account →</Link><Link className="ghost" href="/download">Get the app</Link></div></div><div className="card"><span className="pill">Built around your data</span><h3>Local first. Cloud when useful.</h3><p className="muted">The editor does not depend on a live connection. Cloud storage is the bridge between devices, not the thing standing between you and your notes.</p><div className="stats"><div className="stat"><b>6+</b><span className="muted">platforms</span></div><div className="stat"><b>100%</b><span className="muted">open source</span></div><div className="stat"><b>0</b><span className="muted">forced subscription</span></div></div></div></div></section><section className="section shell"><div className="card"><span className="eyebrow">Ready when you are</span><div className="quote">A notebook should get out of the way and let the idea win.</div><Link className="cta" href="/download">Download Snote</Link></div></section></main></>}
+import Link from "next/link";
+import MotionHero from "../components/MotionHero";
+import Reveal from "../components/Reveal";
+
+const features=[
+  ["01","Stylus engine","Pressure-aware vector strokes, velocity-based fountain ink, pencil texture and palm rejection."],
+  ["02","Paper & canvas","A calm page system with lined, grid, dotted and Cornell templates plus zoomable workspaces."],
+  ["03","PDF workspace","Keep annotation content separate from the source document so your handwriting remains editable."],
+  ["04","One identity","The same account can carry your notes between supported Snote clients and the website portal."],
+];
+
+export default function Home(){
+  return <>
+    <MotionHero />
+    <main className="shell">
+      <section className="section">
+        <Reveal>
+          <div className="eyebrow">The workspace</div>
+          <h2 className="title">A notebook that gets out of the way.</h2>
+          <p className="lead">Inspired by the calmness of Apple Notes, the pen-first focus of Samsung Notes and the page feeling of dedicated handwriting apps.</p>
+        </Reveal>
+        <div className="grid">
+          {features.map(([n,title,body])=><Reveal key={title}><article className="card feature-card"><span className="pill">{n}</span><h3>{title}</h3><p className="muted">{body}</p></article></Reveal>)}
+        </div>
+      </section>
+      <section className="section split">
+        <Reveal className="card accent-panel">
+          <div className="eyebrow">Built for continuity</div>
+          <h2 className="title">Write offline. Continue everywhere.</h2>
+          <p className="muted">Local changes stay available immediately. When you sign in and reconnect, the sync queue reconciles the notebook with your account.</p>
+          <Link className="cta" href="/account">Open your account</Link>
+        </Reveal>
+        <Reveal className="card">
+          <div className="demo-page">
+            <span className="demo-line demo-small" />
+            <span className="demo-line" />
+            <span className="demo-line demo-short" />
+            <span className="demo-stroke stroke-one" />
+            <span className="demo-stroke stroke-two" />
+            <span className="demo-dot" />
+          </div>
+        </Reveal>
+      </section>
+    </main>
+  </>;
+}
