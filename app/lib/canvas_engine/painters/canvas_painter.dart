@@ -28,7 +28,7 @@ class SnoteCanvasPainter extends CustomPainter {
 
     if (points.length == 1) {
       final paint = Paint()
-        ..color = stroke.pen.color.withOpacity(stroke.pen.opacity)
+        ..color = stroke.pen.color.withValues(alpha: stroke.pen.opacity)
         ..style = PaintingStyle.fill;
       canvas.drawCircle(points.first.position, stroke.pen.size / 2, paint);
       return;
@@ -54,8 +54,8 @@ class SnoteCanvasPainter extends CustomPainter {
       }
 
       final paint = Paint()
-        ..color = stroke.pen.color.withOpacity(
-          stroke.pen.type == PenType.pencil
+        ..color = stroke.pen.color.withValues(
+          alpha: stroke.pen.type == PenType.pencil
               ? stroke.pen.opacity * .72
               : stroke.pen.opacity,
         )
@@ -88,7 +88,7 @@ class SnoteCanvasPainter extends CustomPainter {
 
       if (stroke.pen.type == PenType.pencil) {
         final texturePaint = Paint()
-          ..color = stroke.pen.color.withOpacity(stroke.pen.opacity * .12)
+          ..color = stroke.pen.color.withValues(alpha: stroke.pen.opacity * .12)
           ..style = PaintingStyle.stroke
           ..strokeWidth = width * .55
           ..strokeCap = StrokeCap.round;
