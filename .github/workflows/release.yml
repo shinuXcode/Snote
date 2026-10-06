@@ -31,7 +31,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.47.6
+          flutter-version: 3.47.3
           cache: true
 
       - if: matrix.target == 'linux'
@@ -57,6 +57,9 @@ jobs:
       - if: matrix.target == 'windows'
         working-directory: app
         run: flutter create --platforms=windows --org=com.snote .
+      - if: matrix.target == 'windows'
+        working-directory: app
+        run: dart run pdfx:install_windows
 
       - if: matrix.target == 'apple'
         working-directory: app
@@ -67,6 +70,21 @@ jobs:
         run: |
           if [ -f ios/Podfile ]; then sed -i '' "s/platform :ios, '12.0'/platform :ios, '13.0'/" ios/Podfile || true; fi
           if [ -f macos/Podfile ]; then sed -i '' "s/platform :osx, '10.14'/platform :osx, '10.15'/" macos/Podfile || true; fi
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('ios/Runner/Info.plist')
+          if p.exists():
+            s = p.read_text()
+            if 'NSCameraUsageDescription' not in s:
+              s = s.replace('</dict>', '  <key>NSCameraUsageDescription</key>\n  <string>Snote uses the camera to scan note transfer QR codes.</string>\n</dict>')
+              p.write_text(s)
+          p = Path('macos/Runner/Info.plist')
+          if p.exists():
+            s = p.read_text()
+            if 'NSCameraUsageDescription' not in s:
+              s = s.replace('</dict>', '  <key>NSCameraUsageDescription</key>\n  <string>Snote uses the camera to scan note transfer QR codes.</string>\n</dict>')
+              p.write_text(s)
+          PY
 
       - if: matrix.target == 'web'
         working-directory: app
