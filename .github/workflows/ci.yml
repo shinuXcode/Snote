@@ -26,7 +26,7 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.47.6
+          flutter-version: 3.47.3
           cache: true
 
       - name: Install Linux dependencies
@@ -37,6 +37,20 @@ jobs:
       - name: Generate Android and Web runners
         working-directory: app
         run: flutter create --platforms=android,web --org=com.snote .
+
+      - name: Configure camera permissions
+        working-directory: app
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('android/app/src/main/AndroidManifest.xml')
+          if p.exists():
+            s = p.read_text()
+            if 'android.permission.CAMERA' not in s:
+              s = s.replace('<manifest ', '<manifest ', 1).replace('>', '>', 1)
+              s = s.replace('\n', '\n    <uses-permission android:name="android.permission.CAMERA" />\n', 1)
+              p.write_text(s)
+          PY
 
       - name: Install dependencies
         working-directory: app
