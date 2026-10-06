@@ -1,12 +1,12 @@
 import Link from "next/link";
 import Reveal from "../../components/Reveal";
 
-const version = "0.3.0";
+const version = "0.4.0";
 const releasePage = "https://github.com/shinuXcode/Snote/releases/latest";
 const web = process.env.NEXT_PUBLIC_SNOTE_WEB_APP_URL || "/";
 
 const builds = [
-  ["Android", "APK", "Snote-Android.apk", "Android release will appear here when the verified v0.3.0 build is published."],
+  ["Android", "APK", "Snote-Android.apk", "Android release will appear here when the verified v0.4.0 build is published."],
   ["Windows", "ZIP", "Snote-Windows.zip", "Windows desktop release."],
   ["macOS", "ZIP", "Snote-macOS.zip", "macOS desktop release."],
   ["Linux", "TAR.GZ", "Snote-Linux.tar.gz", "Linux desktop bundle."],
