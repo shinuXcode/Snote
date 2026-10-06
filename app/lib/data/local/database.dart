@@ -12,7 +12,7 @@ class SnoteDatabase{
   if(_db!=null)return _db!;
   if(kIsWeb){databaseFactory=databaseFactoryFfiWeb;_db=await openDatabase('snote.db',version:databaseVersion,onCreate:_create,onUpgrade:_upgrade);return _db!;}
   if(defaultTargetPlatform==TargetPlatform.windows||defaultTargetPlatform==TargetPlatform.linux||defaultTargetPlatform==TargetPlatform.macOS){sqfliteFfiInit();databaseFactory=databaseFactoryFfi;}
-  final dir=await getApplicationDocumentsDirectory();final path=join(dir.path,'snote','snote.db');
+  final dir=await getApplicationDocumentsDirectory();final path=join(dir.path,'snote.db');
   _db=await openDatabase(path,version:databaseVersion,onCreate:_create,onUpgrade:_upgrade);return _db!;
  }
  static Future<void> _create(Database db,int version)async{await db.execute(createFoldersTable);await db.execute(createNotesTable);await db.execute(createPagesTable);await db.execute(createSyncQueueTable);await db.execute(createAttachmentsTable);}
