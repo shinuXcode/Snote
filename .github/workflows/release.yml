@@ -3,9 +3,9 @@ on:
   push:
     tags:
       - "v*.*.*"
-  workflow_dispatch:
 permissions:
   contents: write
+
 jobs:
   build:
     strategy:
@@ -24,8 +24,13 @@ jobs:
             target: web
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: 3.47.6
@@ -88,23 +93,23 @@ jobs:
 
       - if: matrix.target == 'android'
         working-directory: app
-        run: flutter build apk --release
+        run: flutter build apk --release --dart-define=SUPABASE_URL="${SUPABASE_URL}" --dart-define=SUPABASE_PUBLISHABLE_KEY="${SUPABASE_PUBLISHABLE_KEY}"
       - if: matrix.target == 'linux'
         working-directory: app
-        run: flutter build linux --release
+        run: flutter build linux --release --dart-define=SUPABASE_URL="${SUPABASE_URL}" --dart-define=SUPABASE_PUBLISHABLE_KEY="${SUPABASE_PUBLISHABLE_KEY}"
       - if: matrix.target == 'windows'
         working-directory: app
-        run: flutter build windows --release
+        run: flutter build windows --release --dart-define=SUPABASE_URL="${SUPABASE_URL}" --dart-define=SUPABASE_PUBLISHABLE_KEY="${SUPABASE_PUBLISHABLE_KEY}"
       - if: matrix.target == 'apple'
         working-directory: app
         run: |
-          flutter build macos --release
-          flutter build ios --release --no-codesign
+          flutter build macos --release --dart-define=SUPABASE_URL="${SUPABASE_URL}" --dart-define=SUPABASE_PUBLISHABLE_KEY="${SUPABASE_PUBLISHABLE_KEY}"
+          flutter build ios --release --no-codesign --dart-define=SUPABASE_URL="${SUPABASE_URL}" --dart-define=SUPABASE_PUBLISHABLE_KEY="${SUPABASE_PUBLISHABLE_KEY}"
       - if: matrix.target == 'web'
         working-directory: app
         run: |
           dart run sqflite_common_ffi_web:setup --force
-          flutter build web --release
+          flutter build web --release --dart-define=SUPABASE_URL="${SUPABASE_URL}" --dart-define=SUPABASE_PUBLISHABLE_KEY="${SUPABASE_PUBLISHABLE_KEY}"
 
       - if: matrix.target == 'android'
         run: cp app/build/app/outputs/flutter-apk/app-release.apk Snote-Android.apk
