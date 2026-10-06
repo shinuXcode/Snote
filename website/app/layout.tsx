@@ -1,14 +1,3 @@
-import type { Metadata } from "next";
-
-export const metadata: Metadata = {
-  title: "Snote — Open-source notes",
-  description: "Offline-first handwriting and rich-text notes.",
-};
-
-export default function RootLayout({children}: {children: React.ReactNode}) {
-  return (
-    <html lang="en">
-      <body>{children}</body>
-    </html>
-  );
-}
+import type {Metadata} from "next";import "./globals.css";import Link from "next/link";
+export const metadata:Metadata={title:"Snote — Write without limits",description:"Open-source, offline-first handwriting and rich-text notes."};
+export default function RootLayout({children}:{children:React.ReactNode}){return <><header className="nav"><div className="shell navin"><Link href="/" className="brand"><img src="/snote-logo.svg" alt="Snote"/><span>Snote</span></Link><nav className="links"><Link href="/how-it-works">How it works</Link><Link href="/download">Download</Link><Link href="/founder">Founder</Link><Link href="/account">Account</Link></nav></div></header>{children}<footer className="footer"><div className="shell">Snote · Open source · Offline first</div></footer></>}
