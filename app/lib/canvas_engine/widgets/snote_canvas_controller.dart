@@ -11,7 +11,7 @@ class SnoteCanvasController extends ChangeNotifier {
   bool get canUndo => _canUndo;
   bool get canRedo => _canRedo;
 
-  void _bind({
+  void bind({
     required VoidCallback undo,
     required VoidCallback redo,
     required VoidCallback clear,
@@ -30,7 +30,7 @@ class SnoteCanvasController extends ChangeNotifier {
   void redo() => _redoAction?.call();
   void clear() => _clearAction?.call();
 
-  void _unbind() {
+  void unbind() {
     _undoAction = null;
     _redoAction = null;
     _clearAction = null;
@@ -38,7 +38,7 @@ class SnoteCanvasController extends ChangeNotifier {
 
   @override
   void dispose() {
-    _unbind();
+    unbind();
     super.dispose();
   }
 }
