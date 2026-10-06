@@ -7,7 +7,7 @@ class StrokeCodec {
         'id': s.id,
         'pen': {
           'type': s.pen.type.name,
-          'color': s.pen.color.value,
+          'color': s.pen.color.toARGB32(),
           'size': s.pen.size,
           'opacity': s.pen.opacity,
         },
