@@ -1,8 +1,10 @@
 name: Snote Release
+
 on:
   push:
     tags:
       - "v*.*.*"
+
 permissions:
   contents: write
 
@@ -24,16 +26,12 @@ jobs:
             target: web
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
-    env:
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
 
     steps:
       - uses: actions/checkout@v4
-
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.47.6
+          channel: stable
           cache: true
 
       - if: matrix.target == 'linux'
@@ -56,7 +54,6 @@ jobs:
       - if: matrix.target == 'linux'
         working-directory: app
         run: flutter create --platforms=linux --org=com.snote .
-
       - if: matrix.target == 'windows'
         working-directory: app
         run: flutter create --platforms=windows --org=com.snote .
@@ -93,23 +90,24 @@ jobs:
 
       - if: matrix.target == 'android'
         working-directory: app
-        run: flutter build apk --release --dart-define=SUPABASE_URL="${SUPABASE_URL}" --dart-define=SUPABASE_PUBLISHABLE_KEY="${SUPABASE_PUBLISHABLE_KEY}"
+        run: flutter build apk --release --dart-define=SUPABASE_URL="$SUPABASE_URL" --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
       - if: matrix.target == 'linux'
         working-directory: app
-        run: flutter build linux --release --dart-define=SUPABASE_URL="${SUPABASE_URL}" --dart-define=SUPABASE_PUBLISHABLE_KEY="${SUPABASE_PUBLISHABLE_KEY}"
+        run: flutter build linux --release --dart-define=SUPABASE_URL="$SUPABASE_URL" --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
       - if: matrix.target == 'windows'
         working-directory: app
-        run: flutter build windows --release --dart-define=SUPABASE_URL="${SUPABASE_URL}" --dart-define=SUPABASE_PUBLISHABLE_KEY="${SUPABASE_PUBLISHABLE_KEY}"
+        run: flutter build windows --release --dart-define=SUPABASE_URL="$SUPABASE_URL" --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
       - if: matrix.target == 'apple'
         working-directory: app
         run: |
-          flutter build macos --release --dart-define=SUPABASE_URL="${SUPABASE_URL}" --dart-define=SUPABASE_PUBLISHABLE_KEY="${SUPABASE_PUBLISHABLE_KEY}"
-          flutter build ios --release --no-codesign --dart-define=SUPABASE_URL="${SUPABASE_URL}" --dart-define=SUPABASE_PUBLISHABLE_KEY="${SUPABASE_PUBLISHABLE_KEY}"
+          flutter build macos --release --dart-define=SUPABASE_URL="$SUPABASE_URL" --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
+          flutter build ios --release --no-codesign --dart-define=SUPABASE_URL="$SUPABASE_URL" --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
       - if: matrix.target == 'web'
         working-directory: app
         run: |
           dart run sqflite_common_ffi_web:setup --force
-          flutter build web --release --dart-define=SUPABASE_URL="${SUPABASE_URL}" --dart-define=SUPABASE_PUBLISHABLE_KEY="${SUPABASE_PUBLISHABLE_KEY}"
+          dart run pdfx:install_web
+          flutter build web --release --dart-define=SUPABASE_URL="$SUPABASE_URL" --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
 
       - if: matrix.target == 'android'
         run: cp app/build/app/outputs/flutter-apk/app-release.apk Snote-Android.apk
