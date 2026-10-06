@@ -32,7 +32,6 @@ class SnoteCanvas extends StatefulWidget {
 class _SnoteCanvasState extends State<SnoteCanvas> {
   final _uuid = const Uuid();
   final _palmRejection = PalmRejection();
-
   final List<Stroke> _strokes = [];
   final List<List<Stroke>> _history = [];
   final List<List<Stroke>> _redo = [];
@@ -43,16 +42,21 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
   @override
   void initState() {
     super.initState();
-    _strokes.addAll(StrokeCodec.documentToStrokes(widget.initialDocument));
+    _replaceDocument(widget.initialDocument);
     _bindController();
   }
 
   @override
   void didUpdateWidget(covariant SnoteCanvas oldWidget) {
     super.didUpdateWidget(oldWidget);
+
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller?._unbind();
       _bindController();
+    }
+
+    if (!identical(oldWidget.initialDocument, widget.initialDocument)) {
+      _replaceDocument(widget.initialDocument, clearHistory: false);
     }
   }
 
@@ -60,6 +64,20 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
   void dispose() {
     widget.controller?._unbind();
     super.dispose();
+  }
+
+  void _replaceDocument(
+    Map<String, Object?>? document, {
+    bool clearHistory = true,
+  }) {
+    _strokes
+      ..clear()
+      ..addAll(StrokeCodec.documentToStrokes(document));
+    if (clearHistory) {
+      _history.clear();
+      _redo.clear();
+    }
+    if (mounted) setState(() {});
   }
 
   void _bindController() {
@@ -74,9 +92,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
 
   void _snapshot() {
     _history.add(List<Stroke>.of(_strokes));
-    if (_history.length > 100) {
-      _history.removeAt(0);
-    }
+    if (_history.length > 100) _history.removeAt(0);
     _redo.clear();
   }
 
