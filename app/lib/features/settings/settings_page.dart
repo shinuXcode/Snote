@@ -45,11 +45,16 @@ class _SettingsPageState extends State<SettingsPage> {
                 'Lock individual notes with the device authentication system.',
               ),
               onTap: () async {
+                final messenger = ScaffoldMessenger.of(context);
                 final ok = await _lock.authenticate();
                 if (!mounted) return;
-                ScaffoldMessenger.of(this.context).showSnackBar(
+                messenger.showSnackBar(
                   SnackBar(
-                    content: Text(ok ? 'Authentication is available.' : 'Authentication unavailable.'),
+                    content: Text(
+                      ok
+                          ? 'Authentication is available.'
+                          : 'Authentication unavailable.',
+                    ),
                   ),
                 );
               },
@@ -59,9 +64,15 @@ class _SettingsPageState extends State<SettingsPage> {
             child: ListTile(
               leading: const Icon(Icons.import_export_rounded),
               title: const Text('Import / export notebook'),
-              subtitle: const Text('Move your notes as portable Snote JSON.'),
+              subtitle: const Text(
+                'Move your notes as portable Snote JSON.',
+              ),
               onTap: () async {
-                final transfer = NotebookTransferService(NoteRepository());
+                final navigator = Navigator.of(context);
+                final messenger = ScaffoldMessenger.of(context);
+                final transfer =
+                    NotebookTransferService(NoteRepository());
+
                 final choice = await showModalBottomSheet<String>(
                   context: context,
                   builder: (context) => SafeArea(
@@ -71,12 +82,14 @@ class _SettingsPageState extends State<SettingsPage> {
                         ListTile(
                           leading: const Icon(Icons.upload_file_rounded),
                           title: const Text('Import JSON'),
-                          onTap: () => Navigator.pop(context, 'import'),
+                          onTap: () =>
+                              Navigator.pop(context, 'import'),
                         ),
                         ListTile(
                           leading: const Icon(Icons.download_rounded),
                           title: const Text('Export JSON'),
-                          onTap: () => Navigator.pop(context, 'export'),
+                          onTap: () =>
+                              Navigator.pop(context, 'export'),
                         ),
                       ],
                     ),
@@ -85,34 +98,38 @@ class _SettingsPageState extends State<SettingsPage> {
 
                 try {
                   if (choice == 'import') {
-                    final count = await transfer.importFromPickedFile();
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Imported $count notes.')),
-                      );
-                    }
+                    final count =
+                        await transfer.importFromPickedFile();
+                    if (!mounted) return;
+                    messenger.showSnackBar(
+                      SnackBar(
+                        content: Text('Imported $count notes.'),
+                      ),
+                    );
                   } else if (choice == 'export') {
                     final payload = await transfer.exportAll();
-                    await showDialog<void>(
-                      context: this.context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('Notebook JSON'),
-                        content: SelectableText(payload),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text('Close'),
+                    if (!mounted) return;
+                    await navigator.push<void>(
+                      MaterialPageRoute<void>(
+                        builder: (_) => Scaffold(
+                          appBar: AppBar(
+                            title: const Text('Notebook JSON'),
                           ),
-                        ],
+                          body: SelectableText(
+                            payload,
+                            style: const TextStyle(
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                        ),
                       ),
                     );
                   }
                 } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(e.toString())),
-                    );
-                  }
+                  if (!mounted) return;
+                  messenger.showSnackBar(
+                    SnackBar(content: Text(e.toString())),
+                  );
                 }
               },
             ),
