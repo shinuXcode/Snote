@@ -29,7 +29,11 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
     final bytes = await file.readAsBytes();
     final future = PdfDocument.openData(bytes);
 
-    if (future == null) return;
+    if (!mounted) {
+      final document = await future;
+      await document.close();
+      return;
+    }
 
     setState(() {
       _bytes = bytes;
