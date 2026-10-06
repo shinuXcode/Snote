@@ -16,14 +16,15 @@ class SnoteTheme {
       useMaterial3: true,
       colorScheme: scheme,
       scaffoldBackgroundColor: canvas,
-      splashFactory: InkSparkle.splashFactory,
+      splashFactory: InkRipple.splashFactory,
       visualDensity: VisualDensity.standard,
+      materialTapTargetSize: MaterialTapTargetSize.padded,
       appBarTheme: const AppBarTheme(
         backgroundColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         centerTitle: false,
-        titleSpacing: 0,
+        titleSpacing: 16,
       ),
       cardTheme: CardThemeData(
         elevation: 0,
@@ -49,10 +50,10 @@ class SnoteTheme {
           borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: violet, width: 1.5),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        height: 72,
+        height: 76,
         elevation: 0,
         backgroundColor: Colors.white,
         indicatorColor: scheme.primaryContainer,
@@ -62,11 +63,11 @@ class SnoteTheme {
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
         elevation: 2,
-        shape: StadiumBorder(),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          minimumSize: const Size(0, 50),
+          minimumSize: const Size(0, 52),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         ),
       ),
@@ -81,12 +82,13 @@ class SnoteTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
-      scaffoldBackgroundColor: const Color(0xFF101014),
+      scaffoldBackgroundColor: const Color(0xFF101114),
+      materialTapTargetSize: MaterialTapTargetSize.padded,
       appBarTheme: const AppBarTheme(
         backgroundColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        titleSpacing: 0,
+        titleSpacing: 16,
       ),
       cardTheme: CardThemeData(
         elevation: 0,
@@ -99,7 +101,7 @@ class SnoteTheme {
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
       ),
-      navigationBarTheme: const NavigationBarThemeData(height: 72, elevation: 0),
+      navigationBarTheme: const NavigationBarThemeData(height: 76, elevation: 0),
     );
   }
 }
