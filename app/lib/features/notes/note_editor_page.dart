@@ -540,10 +540,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                           ),
                           child: Center(
                             child: Text(
-                              _penSize.toStringAsFixed(
-                                    1,
-                                  ) +
-                                  ' px',
+                              '${_penSize.toStringAsFixed(1)} px',
                             ),
                           ),
                         ),
