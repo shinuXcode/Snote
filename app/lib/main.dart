@@ -5,6 +5,7 @@ import 'package:flutter_quill/flutter_quill.dart';
 import 'app/auth_gate.dart';
 import 'app/theme_controller.dart';
 import 'data/remote/supabase_service.dart';
+import 'ui/snote_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,34 +36,21 @@ class _SnoteAppState extends State<SnoteApp> {
 
   @override
   Widget build(BuildContext context) {
-    final seed = _theme.eInk
-        ? const Color(0xff77746d)
-        : const Color(0xFF7165FF);
-
+    final baseLight = SnoteTheme.light();
+    final baseDark = SnoteTheme.dark();
     return MaterialApp(
       title: 'Snote',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: seed,
-          brightness: Brightness.light,
-        ),
-        useMaterial3: true,
-        scaffoldBackgroundColor: _theme.eInk
-            ? const Color(0xffefede7)
-            : const Color(0xFFF5F6FA),
-        cardTheme: const CardThemeData(
-          elevation: 0,
-          margin: EdgeInsets.zero,
-        ),
-      ),
-      darkTheme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: seed,
-          brightness: Brightness.dark,
-        ),
-        useMaterial3: true,
-      ),
+      theme: _theme.eInk
+          ? baseLight.copyWith(
+              colorScheme: ColorScheme.fromSeed(
+                seedColor: const Color(0xFF77746D),
+                brightness: Brightness.light,
+              ),
+              scaffoldBackgroundColor: const Color(0xFFF1EEE7),
+            )
+          : baseLight,
+      darkTheme: _theme.eInk ? baseDark : baseDark,
       themeMode: ThemeMode.system,
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
@@ -70,10 +58,7 @@ class _SnoteAppState extends State<SnoteApp> {
         GlobalWidgetsLocalizations.delegate,
         FlutterQuillLocalizations.delegate,
       ],
-      supportedLocales: const [
-        Locale('en'),
-        Locale('hi'),
-      ],
+      supportedLocales: const [Locale('en'), Locale('hi')],
       home: const AuthGate(),
     );
   }
