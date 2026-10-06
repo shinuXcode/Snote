@@ -5,45 +5,27 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: 3.47.6
           cache: true
-
       - name: Generate Android platform files
         working-directory: app
         run: flutter create --platforms=android --org=com.snote .
-
-      - name: Install dependencies
+      - name: Verify and build
         working-directory: app
-        run: flutter pub get
-
-      - name: Generate app icon
-        working-directory: app
-        run: dart run flutter_launcher_icons
-
-      - name: Analyze
-        working-directory: app
-        run: flutter analyze
-
-      - name: Test
-        working-directory: app
-        run: flutter test
-
-      - name: Build APK
-        working-directory: app
-        run: flutter build apk --release
-
+        run: |
+          flutter pub get
+          dart run launcher_icons
+          flutter analyze
+          flutter test
+          flutter build apk --release
       - uses: actions/upload-artifact@v4
         with:
           name: snote-android-apk
           path: app/build/app/outputs/flutter-apk/app-release.apk
-          if-no-files-found: error
