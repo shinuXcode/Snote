@@ -41,9 +41,10 @@ class _SettingsPageState extends State<SettingsPage> {
               subtitle: const Text('Protect individual notes with device authentication.'),
               trailing: const Icon(Icons.chevron_right_rounded),
               onTap: () async {
+                final messenger = ScaffoldMessenger.of(context);
                 final ok = await _lock.authenticate();
                 if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? 'Device authentication is available.' : 'Authentication is unavailable.')));
+                messenger.showSnackBar(SnackBar(content: Text(ok ? 'Device authentication is available.' : 'Authentication is unavailable.')));
               },
             ),
           ])),
@@ -82,7 +83,7 @@ class _SettingsPageState extends State<SettingsPage> {
     try {
       if (choice == 'import') {
         final count = await transfer.importFromPickedFile();
-        if (mounted) messenger.showSnackBar(SnackBar(content: Text('Imported ' + count.toString() + ' notes.')));
+        if (mounted) messenger.showSnackBar(SnackBar(content: Text('Imported $count notes.')));
       } else if (choice == 'export') {
         final payload = await transfer.exportAll();
         if (!mounted) return;
