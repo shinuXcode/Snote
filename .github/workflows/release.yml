@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -24,74 +25,100 @@ jobs:
             target: apple
           - os: ubuntu-latest
             target: web
+
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.47.6
+          channel: stable
           cache: true
+
       - if: matrix.target == 'linux'
         run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsqlite3-dev
+
       - if: matrix.target == 'android'
         working-directory: app
         run: flutter create --platforms=android --org=com.snote .
+
       - if: matrix.target == 'linux'
         working-directory: app
         run: flutter create --platforms=linux --org=com.snote .
+
       - if: matrix.target == 'windows'
         working-directory: app
         shell: pwsh
         run: flutter create --platforms=windows --org=com.snote .
+
       - if: matrix.target == 'apple'
         working-directory: app
         run: flutter create --platforms=ios,macos --org=com.snote .
+
       - if: matrix.target == 'web'
         working-directory: app
         run: flutter create --platforms=web .
-      - name: Flutter dependencies
+
+      - name: Install dependencies
         working-directory: app
         run: flutter pub get
-      - name: Generate launcher icons
+
+      - name: Generate app icons
         working-directory: app
-        run: dart run launcher_icons
-      - name: Analyze and test
+        run: dart run flutter_launcher_icons
+
+      - name: Analyze
         working-directory: app
-        run: |
-          flutter analyze
-          flutter test
+        run: flutter analyze
+
+      - name: Test
+        working-directory: app
+        run: flutter test
+
       - if: matrix.target == 'android'
         working-directory: app
         run: flutter build apk --release
+
       - if: matrix.target == 'linux'
         working-directory: app
         run: flutter build linux --release
+
       - if: matrix.target == 'windows'
         working-directory: app
         run: flutter build windows --release
+
       - if: matrix.target == 'apple'
         working-directory: app
         run: |
           flutter build macos --release
           flutter build ios --release --no-codesign
+
       - if: matrix.target == 'web'
         working-directory: app
         run: |
           dart run sqflite_common_ffi_web:setup --force
           flutter build web --release
+
       - if: matrix.target == 'android'
         run: cp app/build/app/outputs/flutter-apk/app-release.apk Snote-Android.apk
+
       - if: matrix.target == 'linux'
         run: tar -czf Snote-Linux.tar.gz -C app/build/linux/x64/release bundle
+
       - if: matrix.target == 'windows'
         shell: pwsh
         run: Compress-Archive -Path app/build/windows/x64/runner/Release/* -DestinationPath Snote-Windows.zip
+
       - if: matrix.target == 'apple'
         run: |
           ditto -c -k --sequesterRsrc --keepParent app/build/macos/Build/Products/Release Snote-macOS.zip
           ditto -c -k --sequesterRsrc --keepParent app/build/ios/iphoneos Snote-iOS-unsigned.zip
+
       - if: matrix.target == 'web'
         run: tar -czf Snote-Web.tar.gz -C app/build web
+
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.target }}
@@ -99,6 +126,7 @@ jobs:
             Snote-*.apk
             Snote-*.zip
             Snote-*.tar.gz
+          if-no-files-found: error
 
   publish:
     needs: build
@@ -109,7 +137,9 @@ jobs:
           path: dist
           pattern: release-*
           merge-multiple: true
+
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" dist/Snote-* --generate-notes --title "Snote ${{ github.ref_name }}"
+        run: |
+          gh release create "${{ github.ref_name }}" dist/Snote-*             --generate-notes             --title "Snote ${{ github.ref_name }}"
