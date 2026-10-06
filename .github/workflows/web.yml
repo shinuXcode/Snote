@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: 3.47.6
           cache: true
       - name: Generate Web platform files
         working-directory: app
@@ -21,6 +21,7 @@ jobs:
         working-directory: app
         run: |
           flutter pub get
+          dart run launcher_icons
           dart run sqflite_common_ffi_web:setup --force
           flutter analyze
           flutter test
