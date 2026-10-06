@@ -49,7 +49,7 @@ class _FoldersPageState extends State<FoldersPage> {
         const SizedBox(height: 16), const Text('No folders yet', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)), const SizedBox(height: 6),
         const Text('Create folders to keep subjects, projects and notebooks organized.', textAlign: TextAlign.center),
         const SizedBox(height: 18), FilledButton.icon(onPressed: _create, icon: const Icon(Icons.add_rounded), label: const Text('Create folder')),
-      ])) : ListView.builder(
+      ]))) : ListView.builder(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 100), itemCount: _folders.length,
         itemBuilder: (_, i) { final f = _folders[i]; return Card(margin: const EdgeInsets.only(bottom: 10), child: ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
