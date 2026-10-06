@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/config/supabase_config.dart';
 import '../data/remote/supabase_service.dart';
+import '../features/auth/login_page.dart';
 import '../features/notes/notes_home_page.dart';
 
 class AuthGate extends StatelessWidget {
@@ -18,8 +19,9 @@ class AuthGate extends StatelessWidget {
     return StreamBuilder<AuthState>(
       stream: client.auth.onAuthStateChange,
       builder: (context, _) {
-        final signedIn = client.auth.currentSession != null;
-        return NotesHomePage(localOnly: !signedIn);
+        final session = client.auth.currentSession;
+        if (session == null) return const LoginPage();
+        return const NotesHomePage();
       },
     );
   }
