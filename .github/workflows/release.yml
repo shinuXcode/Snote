@@ -39,7 +39,8 @@ jobs:
 
       - if: matrix.target == 'android'
         working-directory: app
-        run: flutter create --platforms=android --org=com.snote .
+        run: |
+          flutter create --platforms=android --org=com.snote .
           rm -f test/widget_test.dart
       - if: matrix.target == 'android'
         working-directory: app
@@ -54,11 +55,13 @@ jobs:
 
       - if: matrix.target == 'linux'
         working-directory: app
-        run: flutter create --platforms=linux --org=com.snote .
+        run: |
+          flutter create --platforms=linux --org=com.snote .
           rm -f test/widget_test.dart
       - if: matrix.target == 'windows'
         working-directory: app
-        run: flutter create --platforms=windows --org=com.snote .
+        run: |
+          flutter create --platforms=windows --org=com.snote .
           rm -f test/widget_test.dart
       - if: matrix.target == 'windows'
         working-directory: app
@@ -92,7 +95,8 @@ jobs:
 
       - if: matrix.target == 'web'
         working-directory: app
-        run: flutter create --platforms=web .
+        run: |
+          flutter create --platforms=web .
           rm -f test/widget_test.dart
 
       - name: Install dependencies
