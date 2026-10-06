@@ -1,14 +1,4 @@
-export default function Home() {
-  return (
-    <main style={{fontFamily: "system-ui", minHeight: "100vh", padding: "64px", maxWidth: 1100, margin: "auto"}}>
-      <p>SNOTE</p>
-      <h1>Write without limits.</h1>
-      <p>Offline-first handwriting, rich text and PDF annotation for every device.</p>
-      <section style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 16, marginTop: 40}}>
-        <article><h2>Low latency</h2><p>Vector strokes designed for responsive stylus input.</p></article>
-        <article><h2>Offline first</h2><p>Your notes remain usable without an internet connection.</p></article>
-        <article><h2>Open source</h2><p>No mandatory subscription or proprietary cloud dependency.</p></article>
-      </section>
-    </main>
-  );
-}
+import MotionHero from "../components/MotionHero";
+import Link from "next/link";
+const features=[["Stylus engine","Low-latency vector strokes, pressure, velocity and palm rejection."],["PDF workspace","Annotate documents while keeping handwriting as editable vector data."],["Anywhere","Android, iOS, Windows, macOS, Linux and Web from one codebase."],["Your account","Sync note metadata and cloud stroke objects through protected user storage."]];
+export default function Home(){return <><MotionHero/><main className="shell"><section className="section"><div className="eyebrow">Built for writing</div><h2 className="title">A notebook that disappears behind the idea.</h2><div className="grid">{features.map(([a,b])=><article className="card" key={a}><h3>{a}</h3><p className="muted">{b}</p></article>)}</div></section><section className="section"><div className="card"><div className="eyebrow">One identity</div><h2 className="title">Sign in once. Continue anywhere.</h2><p className="muted">Your account connects the same notes across supported Snote clients. Offline changes are queued locally and synchronized when connectivity returns.</p><Link className="cta" href="/account">Open account</Link></div></section></main></>}
