@@ -25,7 +25,7 @@ class SnoteAuthService {
     );
   }
 
-  Future<void> signInWithGoogle({
+  Future<bool> signInWithGoogle({
     required String redirectTo,
   }) {
     return client.auth.signInWithOAuth(
