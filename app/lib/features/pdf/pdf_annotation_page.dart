@@ -19,26 +19,20 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
   Uint8List? _bytes;
 
   Future<void> _openPdf() async {
-    final result = await FilePicker.platform.pickFiles(
+    final file = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: ['pdf'],
-      withData: true,
     );
 
-    if (result == null) return;
+    if (file == null) return;
 
-    final file = result.files.single;
-
-    final future = file.bytes != null
-        ? PdfDocument.openData(file.bytes!)
-        : (file.path == null
-              ? null
-              : PdfDocument.openFile(file.path!));
+    final bytes = await file.readAsBytes();
+    final future = PdfDocument.openData(bytes);
 
     if (future == null) return;
 
     setState(() {
-      _bytes = file.bytes;
+      _bytes = bytes;
       _controller = PdfControllerPinch(document: future);
     });
   }
