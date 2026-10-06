@@ -145,8 +145,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
       builder: (context) => AlertDialog(
         title: const Text('Move to trash?'),
         content: Text(
-          note.title +
-              ' will be hidden from the notebook.',
+          '${note.title} will be hidden from the notebook.',
         ),
         actions: [
           TextButton(
@@ -423,7 +422,7 @@ class _NoteList extends StatelessWidget {
         100,
       ),
       itemCount: notes.length,
-      separatorBuilder: (_, __) =>
+      separatorBuilder: (_, _) =>
           const SizedBox(height: 4),
       itemBuilder: (context, index) {
         final note = notes[index];
