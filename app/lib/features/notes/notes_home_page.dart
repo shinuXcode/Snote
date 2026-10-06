@@ -298,7 +298,7 @@ class _ToolsSheet extends StatelessWidget {
     _ToolTile(icon: Icons.folder_copy_rounded, title: 'Folders', subtitle: 'Organize notebooks', value: 'folders'),
     _ToolTile(icon: Icons.picture_as_pdf_rounded, title: 'PDF annotation', subtitle: 'Write directly on PDFs', value: 'pdf'),
     _ToolTile(icon: Icons.qr_code_2_rounded, title: 'Private transfer', subtitle: 'Move notes without cloud', value: 'import'),
-  ])));
+  ]));
 }
 
 class _ToolTile extends StatelessWidget {
