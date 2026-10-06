@@ -1,3 +1,41 @@
-import type {Metadata} from "next";import "./globals.css";import Link from "next/link";
-export const metadata:Metadata={title:"Snote — Your ideas. Beautifully.",description:"Snote is an open-source, offline-first notebook for handwriting, rich text, PDFs and creative thinking.",icons:{icon:"/snote-logo.svg"}};
-export default function RootLayout({children}:{children:React.ReactNode}){return <><header className="nav"><div className="shell navin"><Link href="/" className="brand"><img src="/snote-logo.svg" alt="Snote"/><span>Snote</span></Link><nav className="links"><Link href="/how-it-works">How it works</Link><Link href="/download">Download</Link><Link href="/founder">Founder</Link><Link href="/account" className="navcta">Account</Link></nav></div></header>{children}<footer className="footer"><div className="shell footerGrid"><div><div className="brand"><img src="/snote-logo.svg" alt=""/>Snote</div><p>Think. Write. Create. Everywhere.</p></div><div><Link href="/download">Downloads</Link> · <Link href="/account">Account</Link> · <Link href="/founder">Founder</Link></div></div></footer></>}
+import type {Metadata} from "next";
+import "./globals.css";
+import Link from "next/link";
+import MobileNav from "../components/MobileNav";
+
+export const metadata:Metadata={
+  title:"Snote — Write without limits",
+  description:"Open-source, offline-first handwriting and rich-text notes."
+};
+
+const nav=[
+  ["/features","Features"],
+  ["/how-it-works","How it works"],
+  ["/download","Download"],
+  ["/founder","Founder"],
+  ["/account","Account"],
+];
+
+export default function RootLayout({children}:{children:React.ReactNode}){
+  return <>
+    <header className="nav">
+      <div className="shell navin">
+        <Link href="/" className="brand">
+          <img src="/snote-logo.svg" alt="Snote" />
+          <span>Snote</span>
+        </Link>
+        <nav className="links">
+          {nav.map(([href,label])=><Link key={href} href={href}>{label}</Link>)}
+        </nav>
+        <MobileNav />
+      </div>
+    </header>
+    {children}
+    <footer className="footer">
+      <div className="shell footerin">
+        <span>Snote · Open source · Offline first</span>
+        <span>Android · iOS · Windows · macOS · Linux · Web</span>
+      </div>
+    </footer>
+  </>;
+}
