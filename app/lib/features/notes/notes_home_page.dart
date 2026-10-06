@@ -117,13 +117,21 @@ class _NotesHomePageState extends State<NotesHomePage> {
   Future<void> _openSettings() async => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage()));
 
   Future<void> _openTools() async {
+    final navigator = Navigator.of(context);
     final action = await showModalBottomSheet<String>(
       context: context, showDragHandle: true, builder: (_) => const _ToolsSheet(),
     );
     if (!mounted) return;
-    if (action == 'folders') await Navigator.push(context, MaterialPageRoute(builder: (_) => const FoldersPage()));
-    if (action == 'pdf') await Navigator.push(context, MaterialPageRoute(builder: (_) => const PdfAnnotationPage()));
-    if (action == 'import') { await Navigator.push(context, MaterialPageRoute(builder: (_) => const QrImportPage())); await _load(); }
+    if (action == 'folders') {
+      await navigator.push(MaterialPageRoute(builder: (_) => const FoldersPage()));
+    }
+    if (action == 'pdf') {
+      await navigator.push(MaterialPageRoute(builder: (_) => const PdfAnnotationPage()));
+    }
+    if (action == 'import') {
+      await navigator.push(MaterialPageRoute(builder: (_) => const QrImportPage()));
+      await _load();
+    }
   }
 
   @override
