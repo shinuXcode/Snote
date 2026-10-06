@@ -37,6 +37,7 @@ jobs:
       - name: Generate Android and Web runners
         working-directory: app
         run: flutter create --platforms=android,web --org=com.snote .
+          rm -f test/widget_test.dart
 
       - name: Configure camera permissions
         working-directory: app
