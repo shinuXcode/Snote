@@ -89,7 +89,8 @@ class _LoginPageState extends State<LoginPage> {
                 const Text('A notebook that feels like yours.', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900, height: 1.05)),
                 const SizedBox(height: 12),
                 const Text('Write by hand. Type rich text. Annotate PDFs. Keep your everyday notes local-first.', style: TextStyle(fontSize: 15, height: 1.5)),
-              ])), Expanded(child: form));
+              ])), Expanded(child: form),
+            ]);
           }),
         )),
       ))),
