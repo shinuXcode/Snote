@@ -1,10 +1,8 @@
 name: Snote Windows
-
 on:
   workflow_dispatch:
   push:
     branches: [main]
-
 jobs:
   build:
     runs-on: windows-latest
@@ -16,12 +14,13 @@ jobs:
           cache: true
       - name: Generate Windows files
         working-directory: app
-        shell: pwsh
-        run: flutter create --platforms=windows .
-      - name: Build
+        run: flutter create --platforms=windows --org=com.snote .
+      - name: Verify and build
         working-directory: app
         run: |
           flutter pub get
+          flutter analyze
+          flutter test
           flutter build windows --release
       - uses: actions/upload-artifact@v4
         with:
