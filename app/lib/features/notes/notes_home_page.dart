@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import '../../data/local/note_repository.dart';
-import '../../data/remote/note_sync_service.dart';
 import '../../data/remote/supabase_service.dart';
 import '../../sync/sync_engine.dart';
 import '../../ui/snote_logo.dart';
+import '../auth/login_page.dart';
 import 'note_editor_page.dart';
 
 class NotesHomePage extends StatefulWidget {
@@ -18,7 +18,7 @@ class NotesHomePage extends StatefulWidget {
 
 class _NotesHomePageState extends State<NotesHomePage> {
   final _repo = NoteRepository();
-  late final SyncEngine _sync;
+  final _sync = SyncEngine();
 
   List<LocalNote> _notes = const [];
   LocalNote? _selected;
@@ -28,7 +28,6 @@ class _NotesHomePageState extends State<NotesHomePage> {
   @override
   void initState() {
     super.initState();
-    _sync = SyncEngine(service: SnoteSupabase.client == null ? null : NoteSyncService(SnoteSupabase.client!));
     unawaited(_load());
     if (!widget.localOnly) unawaited(_startSync());
   }
@@ -41,16 +40,21 @@ class _NotesHomePageState extends State<NotesHomePage> {
   Future<void> _load() async {
     final notes = await _repo.list();
     if (!mounted) return;
+
     final selectedId = _selected?.id;
+    LocalNote? nextSelected;
+
+    if (notes.isNotEmpty) {
+      nextSelected = notes.firstWhere(
+        (n) => n.id == selectedId,
+        orElse: () => notes.first,
+      );
+    }
+
     setState(() {
       _notes = notes;
+      _selected = nextSelected;
       _loading = false;
-      _selected = selectedId == null
-          ? (notes.isEmpty ? null : notes.first)
-          : notes.cast<LocalNote?>().firstWhere(
-                (n) => n?.id == selectedId,
-                orElse: () => notes.isEmpty ? null : notes.first,
-              );
     });
   }
 
@@ -84,6 +88,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
 
   Future<void> _rename(LocalNote note) async {
     final controller = TextEditingController(text: note.title);
+
     final name = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
@@ -105,9 +110,11 @@ class _NotesHomePageState extends State<NotesHomePage> {
         ],
       ),
     );
+
     controller.dispose();
 
     if (name == null || name.trim().isEmpty) return;
+
     await _repo.rename(note.id, name.trim());
     await _load();
   }
@@ -132,13 +139,14 @@ class _NotesHomePageState extends State<NotesHomePage> {
     );
 
     if (yes != true) return;
+
     await _repo.delete(note.id);
-    if (_selected?.id == note.id) _selected = null;
     await _load();
   }
 
   Future<void> _manualSync() async {
     if (widget.localOnly) return;
+
     setState(() => _syncing = true);
     try {
       await _sync.flush();
@@ -146,6 +154,12 @@ class _NotesHomePageState extends State<NotesHomePage> {
     } finally {
       if (mounted) setState(() => _syncing = false);
     }
+  }
+
+  Future<void> _openAccount() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const LoginPage()),
+    );
   }
 
   @override
@@ -156,6 +170,12 @@ class _NotesHomePageState extends State<NotesHomePage> {
       appBar: AppBar(
         title: const SnoteLogo(size: 34),
         actions: [
+          if (widget.localOnly)
+            TextButton.icon(
+              onPressed: _openAccount,
+              icon: const Icon(Icons.cloud_outlined),
+              label: const Text('Sign in to sync'),
+            ),
           if (!widget.localOnly)
             IconButton(
               tooltip: 'Sync now',
@@ -264,15 +284,21 @@ class _NoteList extends StatelessWidget {
 
         return ListTile(
           selected: selected?.id == note.id,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          leading: const CircleAvatar(child: Icon(Icons.note_alt_outlined)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          leading: const CircleAvatar(
+            child: Icon(Icons.note_alt_outlined),
+          ),
           title: Text(
             note.title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
           subtitle: Text(
-            DateTime.fromMillisecondsSinceEpoch(note.updatedAt).toLocal().toString(),
+            DateTime.fromMillisecondsSinceEpoch(note.updatedAt)
+                .toLocal()
+                .toString(),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -283,8 +309,14 @@ class _NoteList extends StatelessWidget {
               if (action == 'delete') onDelete(note);
             },
             itemBuilder: (_) => const [
-              PopupMenuItem(value: 'rename', child: Text('Rename')),
-              PopupMenuItem(value: 'delete', child: Text('Move to trash')),
+              PopupMenuItem(
+                value: 'rename',
+                child: Text('Rename'),
+              ),
+              PopupMenuItem(
+                value: 'delete',
+                child: Text('Move to trash'),
+              ),
             ],
           ),
         );
