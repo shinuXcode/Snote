@@ -1,12 +1,10 @@
 name: Snote Web
-
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -16,17 +14,18 @@ jobs:
         with:
           channel: stable
           cache: true
-      - name: Generate Flutter platform files
+      - name: Generate Web platform files
         working-directory: app
         run: flutter create --platforms=web .
-      - name: Build web
+      - name: Verify and build
         working-directory: app
         run: |
           flutter pub get
+          dart run sqflite_common_ffi_web:setup --force
           flutter analyze
+          flutter test
           flutter build web --release
-      - name: Upload web build
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: snote-web
           path: app/build/web
