@@ -21,5 +21,31 @@ class NoteSyncService {
     await client.from('notes').upsert(payload);
     await db.update('notes',{'sync_state':'synced'},where:'id=?',whereArgs:[id]);
   }
+  Future<void> pullLatest() async {
+    final user=client.auth.currentUser;
+    if(user==null)return;
+    final rows=await client.from('notes').select().eq('user_id',user.id).order('updated_at',ascending:false);
+    final db=await SnoteDatabase.open();
+    for(final remote in rows){
+      final id=remote['id']?.toString();
+      if(id==null)continue;
+      final local=await db.query('notes',where:'id=?',whereArgs:[id],limit:1);
+      final remoteTime=DateTime.parse(remote['updated_at'].toString()).millisecondsSinceEpoch;
+      if(local.isNotEmpty && (local.first['updated_at'] as int)>=remoteTime)continue;
+      await db.insert('notes',{
+        'id':id,
+        'title':remote['title']?.toString()??'Untitled note',
+        'folder_id':remote['folder_id'],
+        'note_type':remote['note_type']?.toString()??'handwriting',
+        'content_json':remote['content_json']==null?null:jsonEncode(remote['content_json']),
+        'created_at':local.isNotEmpty?local.first['created_at']:remoteTime,
+        'updated_at':remoteTime,
+        'deleted_at':remote['deleted_at']==null?null:DateTime.parse(remote['deleted_at'].toString()).millisecondsSinceEpoch,
+        'version':remote['version']??1,
+        'sync_state':'synced',
+      },conflictAlgorithm:ConflictAlgorithm.replace);
+    }
+  }
+
   Future<String> exportRemoteNotes() async {final user=client.auth.currentUser;if(user==null)throw StateError('Authentication required');final rows=await client.from('notes').select().eq('user_id',user.id).order('updated_at',ascending:false);return const JsonEncoder.withIndent('  ').convert({'format':'snote-json-v1','exportedAt':DateTime.now().toUtc().toIso8601String(),'notes':rows});}
 }
