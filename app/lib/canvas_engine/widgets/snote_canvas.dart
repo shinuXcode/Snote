@@ -51,7 +51,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     super.didUpdateWidget(oldWidget);
 
     if (oldWidget.controller != widget.controller) {
-      oldWidget.controller?._unbind();
+      oldWidget.controller?.unbind();
       _bindController();
     }
 
@@ -62,7 +62,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
 
   @override
   void dispose() {
-    widget.controller?._unbind();
+    widget.controller?.unbind();
     super.dispose();
   }
 
@@ -73,15 +73,17 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _strokes
       ..clear()
       ..addAll(StrokeCodec.documentToStrokes(document));
+
     if (clearHistory) {
       _history.clear();
       _redo.clear();
     }
+
     if (mounted) setState(() {});
   }
 
   void _bindController() {
-    widget.controller?._bind(
+    widget.controller?.bind(
       undo: undo,
       redo: redo,
       clear: clear,
@@ -133,7 +135,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     return ColoredBox(
       color: widget.backgroundColor,
       child: Listener(
-        behavior: HitTestBehavior.opaque,
+        behavior: HitTestBehavior.translucent,
         onPointerDown: _pointerDown,
         onPointerMove: _pointerMove,
         onPointerUp: _pointerUp,
@@ -203,6 +205,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
 
   void _pointerCancel(PointerCancelEvent event) {
     if (event.pointer != _activePointer) return;
+
     setState(() {
       _activeStroke = null;
       _activePointer = -1;
