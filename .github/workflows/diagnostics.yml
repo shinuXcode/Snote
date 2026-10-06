@@ -12,78 +12,78 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: subosito/flutter-action@v2
+        continue-on-error: true
         with:
           flutter-version: 3.47.6
           cache: true
 
-      - name: Generate platform
-        working-directory: app
-        run: flutter create --platforms=android --org=com.snote .
-
-      - name: Verify Flutter
-        working-directory: app
+      - name: Capture Flutter diagnostics
         shell: bash
         run: |
+          mkdir -p ci
           set +e
           {
-            echo "=== flutter --version ==="
+            echo "=== flutter path ==="
+            command -v flutter || true
+            echo "=== flutter version ==="
             flutter --version
+            echo "=== create ==="
+            cd app
+            flutter create --platforms=android --org=com.snote .
+            echo "create_status=$?"
             echo "=== pub get ==="
             flutter pub get
-            GET_STATUS=$?
-            echo "pub_get_status=$GET_STATUS"
-            echo "=== launcher icons ==="
+            echo "pub_get_status=$?"
+            echo "=== icons ==="
             dart run launcher_icons
-            ICON_STATUS=$?
-            echo "launcher_icons_status=$ICON_STATUS"
+            echo "icons_status=$?"
             echo "=== analyze ==="
             flutter analyze
-            ANALYZE_STATUS=$?
-            echo "analyze_status=$ANALYZE_STATUS"
-            echo "=== tests ==="
+            echo "analyze_status=$?"
+            echo "=== test ==="
             flutter test
-            TEST_STATUS=$?
-            echo "test_status=$TEST_STATUS"
-            echo "=== build ==="
+            echo "test_status=$?"
+            echo "=== apk ==="
             flutter build apk --release
-            BUILD_STATUS=$?
-            echo "build_status=$BUILD_STATUS"
-            printf "RESULT get=%s icon=%s analyze=%s test=%s build=%s\n" "$GET_STATUS" "$ICON_STATUS" "$ANALYZE_STATUS" "$TEST_STATUS" "$BUILD_STATUS"
-            exit 0
-          } 2>&1 | tee ../flutter-ci.log
+            echo "build_status=$?"
+          } 2>&1 | tee ../ci/flutter.log
+          exit 0
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: snote-flutter-diagnostics
-          path: app/../flutter-ci.log
+          path: ci/flutter.log
           if-no-files-found: error
+
   web:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: website
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v5
         with:
           node-version: 24
-      - name: Verify website
+      - name: Capture website diagnostics
         shell: bash
         run: |
+          mkdir -p ci
           set +e
           {
+            cd website
+            echo "=== npm install ==="
             npm install
             echo "npm_install_status=$?"
+            echo "=== typecheck ==="
             npm run typecheck
             echo "typecheck_status=$?"
+            echo "=== build ==="
             npm run build
             echo "next_build_status=$?"
-            exit 0
-          } 2>&1 | tee ../website-ci.log
+          } 2>&1 | tee ../ci/website.log
+          exit 0
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: snote-website-diagnostics
-          path: website/../website-ci.log
+          path: ci/website.log
           if-no-files-found: error
