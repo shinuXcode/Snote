@@ -132,7 +132,6 @@ jobs:
       - if: matrix.target == 'web'
         working-directory: app
         run: |
-          dart run sqflite_common_ffi_web:setup --force
           dart run pdfx:install_web
           flutter build web --release --dart-define=SUPABASE_URL="$SUPABASE_URL" --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
 
