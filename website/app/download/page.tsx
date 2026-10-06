@@ -1,3 +1,25 @@
 import Link from "next/link";
-const version="0.2.0";const builds=[["Android","APK","Android phones and tablets","/downloads/snote-android.apk"],["Windows","x64","Windows desktop","/downloads/snote-windows.zip"],["macOS","Universal","Intel + Apple Silicon","/downloads/snote-macos.zip"],["Linux","App","Linux desktop","/downloads/snote-linux.tar.gz"],["Web","Browser","Use Snote instantly","/"]];
-export default function Page(){return <main className="section shell"><div className="sectionHead"><span className="eyebrow">Downloads</span><h1 className="title">Snote {version}</h1><p className="muted">One notebook. Every screen. Builds are published here only after the corresponding CI workflow passes.</p></div><div className="grid">{builds.map(([name,type,desc,url])=><article className="card downloadCard" key={name}><span className="pill">{type}</span><h2>{name}</h2><p className="muted">{desc}</p><a className="cta" href={url}>{name==="Web"?"Open Web App":"Download"}</a></article>)}</div><section className="section" style={{paddingBottom:0}}><div className="card"><span className="eyebrow">Release notes</span><h2 className="title">0.2.0</h2><p className="muted">Cross-platform build pipeline, shared Snote branding, account portal improvements and a stronger handwriting workspace.</p><Link href="/account">Access your cloud notes →</Link></div></section></main>}
+import Reveal from "../../components/Reveal";
+
+const version="0.3.0";
+const releases="https://github.com/shinuXcode/Snote/releases/latest/download";
+const web=process.env.NEXT_PUBLIC_SNOTE_WEB_APP_URL || "/";
+
+const builds=[
+  ["Android","APK",releases+"/Snote-Android.apk","Install on supported Android devices"],
+  ["Windows","ZIP",releases+"/Snote-Windows.zip","Portable desktop build"],
+  ["macOS","ZIP",releases+"/Snote-macOS.zip","macOS desktop build"],
+  ["Linux","TAR.GZ",releases+"/Snote-Linux.tar.gz","Linux desktop bundle"],
+  ["iOS","UNSIGNED ZIP",releases+"/Snote-iOS-unsigned.zip","Development build; App Store signing required"],
+  ["Web","Browser",web,"Open the browser app"],
+];
+
+export default function Page(){
+  return <main className="shell section">
+    <Reveal><div className="eyebrow">Download center</div><h1 className="title">Snote {version}</h1><p className="lead">Every platform uses the same notebook format and account identity.</p></Reveal>
+    <div className="grid">
+      {builds.map(([name,type,url,desc])=><Reveal key={name}><article className="card feature-card"><span className="pill">{type}</span><h2>{name}</h2><p className="muted">{desc}</p><a className="cta" href={url}>{name==="Web"?"Launch":"Download"}</a></article></Reveal>)}
+    </div>
+    <Reveal><div className="card" style={{marginTop:18}}><div className="eyebrow">Release policy</div><h2>Published only from passing release builds.</h2><p className="muted">The tagged release workflow builds platform artifacts, runs analyze/tests and publishes the same versioned assets used by this page.</p><Link href="/account">Open the note portal →</Link></div></Reveal>
+  </main>
+}
