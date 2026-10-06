@@ -26,7 +26,7 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.47.6
+          channel: stable
           cache: true
 
       - name: Install Linux dependencies
@@ -54,9 +54,11 @@ jobs:
         working-directory: app
         run: flutter test
 
-      - name: Configure Web SQLite
+      - name: Configure Web SQLite and PDF.js
         working-directory: app
-        run: dart run sqflite_common_ffi_web:setup --force
+        run: |
+          dart run sqflite_common_ffi_web:setup --force
+          dart run pdfx:install_web
 
       - name: Build Android APK
         working-directory: app
