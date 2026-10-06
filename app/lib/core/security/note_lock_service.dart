@@ -6,7 +6,7 @@ class NoteLockService {
   final _auth = LocalAuthentication();
   final _storage = const FlutterSecureStorage();
 
-  String _key(String noteId) => 'snote.lock.' + noteId;
+  String _key(String noteId) => 'snote.lock.$noteId';
 
   Future<bool> isLocked(String noteId) async {
     if (kIsWeb) return false;
