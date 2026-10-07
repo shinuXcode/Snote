@@ -61,6 +61,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
   String? _activeSticker;
   int _activePointer = -1;
   bool _ignorePointer = false;
+  bool _eraseSnapshotTaken = false;
   DateTime? _lastStylusTap;
   Offset? _lastStylusPosition;
 
@@ -278,7 +279,11 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     }
 
     if (widget.tool == CanvasTool.eraser) {
-      _eraseAt(point);
+      if (!_eraseSnapshotTaken) {
+        _snapshot();
+        _eraseSnapshotTaken = true;
+      }
+      _eraseAt(point, snapshotAlreadyTaken: true);
       return;
     }
 
@@ -307,7 +312,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     if (event.pointer != _activePointer || _ignorePointer) return;
 
     if (widget.tool == CanvasTool.eraser) {
-      _eraseAt(event.localPosition);
+      _eraseAt(event.localPosition, snapshotAlreadyTaken: true);
       return;
     }
     if (widget.tool == CanvasTool.lasso) {
@@ -342,6 +347,8 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       if (_activePoints.isNotEmpty) _commitActive();
     }
 
+    if (widget.tool == CanvasTool.eraser) _eraseSnapshotTaken = false;
+
     if (event.kind == PointerDeviceKind.stylus) {
       _lastStylusTap = DateTime.now();
       _lastStylusPosition = event.localPosition;
@@ -351,6 +358,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
 
   void _pointerCancel(PointerCancelEvent event) {
     if (event.pointer != _activePointer) return;
+    if (widget.tool == CanvasTool.eraser) _eraseSnapshotTaken = false;
     _cancelActive();
     _activePointer = -1;
   }
@@ -390,7 +398,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _notifyAndRefresh();
   }
 
-  void _eraseAt(Offset point) {
+  void _eraseAt(Offset point, {bool snapshotAlreadyTaken = false}) {
     final radius = (widget.pen.size * 3.3).clamp(16, 44);
     final hit = _strokes.indexWhere((s) {
       for (final p in s.points) {
@@ -399,7 +407,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       return false;
     });
     if (hit < 0) return;
-    _snapshot();
+    if (!snapshotAlreadyTaken) _snapshot();
     _strokes.removeAt(hit);
     _selected.removeWhere((id) => !_strokes.any((s) => s.id == id));
     _notifyAndRefresh();
