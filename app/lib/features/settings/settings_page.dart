@@ -3,6 +3,7 @@ import '../../app/theme_controller.dart';
 import '../../core/settings/app_settings.dart';
 import '../../data/local/notebook_transfer_service.dart';
 import '../../data/local/note_repository.dart';
+import '../updates/update_center_page.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -55,7 +56,7 @@ class _SettingsPageState extends State<SettingsPage> {
       const SizedBox(height: 24),
       _infoCard(context, Icons.draw_rounded, 'Writing first', 'Stylus ink is rendered from an in-place stroke buffer so pointer movement does not rebuild the whole editor.'),
       _infoCard(context, Icons.lock_outline_rounded, 'Note password', 'Note Lock is per-note and separate from the device screen lock. Biometric note lock is not used.'),
-      _infoCard(context, Icons.auto_awesome_rounded, 'E-Ink simulation', 'Warm paper, grayscale and reduced motion approximate a physical e-ink reading mode on normal displays.'),
+      _infoCard(context, Icons.auto_awesome_rounded, 'Physical E-Ink mode', 'Neutral grayscale, low-contrast surfaces and reduced visual motion simulate a physical e-ink presentation without adding a warm tint.'),
     ],
   );
 
@@ -106,16 +107,17 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       ),
       _group('Display', [
+        _themeStyleSelector(),
         _customToggle(
           value: _theme.eInk,
-          title: 'E-Ink / Paper Eye Comfort',
-          subtitle: 'Warm paper palette and lower visual contrast.',
+          title: 'Physical E-Ink display',
+          subtitle: 'Neutral grayscale presentation with reduced visual noise.',
           onChanged: _theme.setEInk,
         ),
         _customToggle(
           value: _theme.grayscale,
-          title: 'Physical-style grayscale',
-          subtitle: 'Approximate grayscale output on LCD/OLED screens.',
+          title: 'Strict grayscale output',
+          subtitle: 'Remove color from the app display while E-Ink mode is active.',
           onChanged: _theme.setGrayscale,
         ),
         _customToggle(
@@ -168,17 +170,47 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ),
       ]),
-      _group('About', [
+      _group('Updates & About', [
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.system_update_alt_rounded),
+            title: const Text('Updates & notifications', style: TextStyle(fontWeight: FontWeight.w800)),
+            subtitle: const Text('Check releases, open the update page and review app notices.'),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UpdateCenterPage())),
+          ),
+        ),
         Card(
           child: ListTile(
             leading: const Icon(Icons.info_outline_rounded),
-            title: const Text('Snote 0.6.0', style: TextStyle(fontWeight: FontWeight.w900)),
+            title: const Text('Snote 0.7.0', style: TextStyle(fontWeight: FontWeight.w900)),
             subtitle: const Text('Offline-first handwriting and rich-text notes.'),
-            onTap: () => showAboutDialog(context: context, applicationName: 'Snote', applicationVersion: '0.6.0'),
+            onTap: () => showAboutDialog(context: context, applicationName: 'Snote', applicationVersion: '0.7.0'),
           ),
         ),
       ]),
+,
     ],
+  );
+
+  Widget _themeStyleSelector() => Card(
+    margin: const EdgeInsets.only(bottom: 8),
+    child: ListTile(
+      leading: const Icon(Icons.palette_outlined),
+      title: const Text('Interface profile', style: TextStyle(fontWeight: FontWeight.w800)),
+      subtitle: Text(_theme.style.name),
+      trailing: DropdownButtonHideUnderline(
+        child: DropdownButton<SnoteThemeStyle>(
+          value: _theme.style,
+          items: SnoteThemeStyle.values.map((style) => DropdownMenuItem(
+            value: style,
+            child: Text(style.name[0].toUpperCase() + style.name.substring(1)),
+          )).toList(),
+          onChanged: (style) {
+            if (style != null) _theme.setStyle(style);
+          },
+        ),
+      ),
+    ),
   );
 
   Widget _group(String title, List<Widget> children) => Column(
