@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../data/local/note_repository.dart';
 import '../../data/local/database.dart';
-import '../notes/note_editor_page.dart';
 
 class TrashPage extends StatefulWidget {
   const TrashPage({super.key});
@@ -22,15 +21,7 @@ class _TrashPageState extends State<TrashPage> {
   }
 
   Future<void> _restore(LocalNote note) async { await _repo.restore(note.id); await _load(); }
-  Future<void> _purge(LocalNote note) async {
-    final db=await _repoDatabase();
-    await db.delete('notes',where:'id = ? AND owner_id = ?',whereArgs:[note.id, 'local']);
-    await _load();
-  }
-  Future<dynamic> _repoDatabase() async {
-    // Hard deletion is intentionally kept behind the repository trash UI.
-    return await SnoteDatabase.open();
-  }
+  Future<void> _purge(LocalNote note) async { await _repo.permanentlyDelete(note.id); await _load(); }
 
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:const Text('Bin / Recently deleted'),actions:[
