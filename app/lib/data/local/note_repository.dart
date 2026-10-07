@@ -224,8 +224,8 @@ class NoteRepository {
           'updated_at': DateTime.now().millisecondsSinceEpoch,
           'sync_state': 'pending',
         },
-        where: 'id = ?',
-        whereArgs: [id],
+        where: 'id = ? AND owner_id = ?',
+        whereArgs: [id, SnoteAccountScope.ownerId],
       );
       await _queue(tx, id, 'upsert');
     });
