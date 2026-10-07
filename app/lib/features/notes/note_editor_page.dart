@@ -172,29 +172,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     return Scaffold(
       backgroundColor: const Color(0xffedf2f7),
       body: SafeArea(child: Stack(children: [
-        Positioned.fill(child: InteractiveViewer(
-          minScale: .55, maxScale: 4, boundaryMargin: const EdgeInsets.all(450),
-          panEnabled: _pan, scaleEnabled: _pan,
-          child: Center(child: AspectRatio(aspectRatio: 210/297, child: Material(
-            elevation: 6, color: Colors.white,
-            child: Stack(fit: StackFit.expand, children: [
-              CustomPaint(painter: PageBackground(template: _template)),
-              if (_drawing) IgnorePointer(
-                ignoring: _pan,
-                child: SnoteCanvas(
-                  key: ValueKey(Object.hash(widget.note.id, _page)),
-                  pen: _pen, tool: _tool, controller: _canvas, initialDocument: _current,
-                  backgroundColor: Colors.transparent, onChanged: _canvasChanged,
-                  onSelectionChanged: (n) => setState(() => _selected = n),
-                ),
-              ) else Padding(
-                padding: const EdgeInsets.all(26),
-                child: QuillEditor(focusNode: _focus, scrollController: _scroll, controller: _quill,
-                  config: const QuillEditorConfig(placeholder: 'Start writing…')),
-              ),
-            ]),
-          ))),
-        )),
+        Positioned.fill(child: _pageViewport()),
+
         if (!_full) _header(),
         if (!_full) _tabs(),
         if (_previews) _previewRail(),
@@ -208,6 +187,59 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
             child: Icon(_toolbar ? Icons.chevron_right_rounded : Icons.edit_rounded),
           )),
       ])),
+    );
+  }
+
+  Widget _pageViewport() {
+    final page = Center(
+      child: AspectRatio(
+        aspectRatio: 210 / 297,
+        child: Material(
+          elevation: 6,
+          color: Colors.white,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              CustomPaint(painter: PageBackground(template: _template)),
+              if (_drawing)
+                SnoteCanvas(
+                  key: ValueKey(Object.hash(widget.note.id, _page)),
+                  pen: _pen,
+                  tool: _tool,
+                  controller: _canvas,
+                  initialDocument: _current,
+                  backgroundColor: Colors.transparent,
+                  onChanged: _canvasChanged,
+                  onSelectionChanged: (n) => setState(() => _selected = n),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.all(26),
+                  child: QuillEditor(
+                    focusNode: _focus,
+                    scrollController: _scroll,
+                    controller: _quill,
+                    config: const QuillEditorConfig(placeholder: 'Start writing…'),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    // Critical writing-mode rule: no InteractiveViewer is present while drawing.
+    // Pan/zoom is an explicit mode, so stylus strokes cannot move the page.
+    if (!_pan) return page;
+
+    return InteractiveViewer(
+      minScale: .55,
+      maxScale: 4,
+      boundaryMargin: const EdgeInsets.all(450),
+      panEnabled: true,
+      scaleEnabled: true,
+      clipBehavior: Clip.none,
+      child: page,
     );
   }
 
@@ -250,7 +282,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         _colorDot(const Color(0xff16a34a)),_colorDot(const Color(0xff7c3aed)),
         IconButton(tooltip:'Stroke size',onPressed:_sizePicker,icon:const Icon(Icons.line_weight_rounded)),
         IconButton(tooltip:'Hand / pan',onPressed:()=>setState(()=>_pan=!_pan),icon:Icon(_pan?Icons.pan_tool_rounded:Icons.pan_tool_outlined)),
-        IconButton(tooltip:'Text mode',onPressed:()=>setState(()=>_drawing=false),icon:const Icon(Icons.text_fields_rounded)),
+        IconButton(
+          tooltip: _drawing ? 'Text mode' : 'Drawing mode',
+          onPressed: () => setState(() => _drawing = !_drawing),
+          icon: Icon(_drawing ? Icons.text_fields_rounded : Icons.draw_rounded),
+        ),
       ],
     )),
   )));
