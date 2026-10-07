@@ -81,20 +81,15 @@ jobs:
       - name: Configure Windows C++ compatibility
         if: matrix.target == 'windows'
         working-directory: app
-        shell: bash
+        shell: pwsh
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('windows/CMakeLists.txt')
-          s = p.read_text()
-          definition = 'add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)'
-          anchor = 'include(flutter/generated_plugins.cmake)'
-          if definition not in s:
-              if anchor not in s:
-                  raise SystemExit('Flutter Windows generated_plugins CMake anchor not found')
-              s = s.replace(anchor, definition + '\n' + anchor, 1)
-              p.write_text(s)
-          PY
+          $cmake = "windows/CMakeLists.txt"
+          if (-not (Test-Path $cmake)) { throw "Flutter Windows CMakeLists.txt was not generated" }
+          $content = Get-Content $cmake -Raw
+          $definition = "add_compile_options(/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)"
+          if ($content -notmatch [regex]::Escape($definition)) {
+            Add-Content -Path $cmake -Value ("`r`n# MSVC compatibility for the current local_auth_windows plugin.`r`n" + $definition + "`r`n")
+          }
 
       - name: Configure Android
         if: matrix.target == 'android'
