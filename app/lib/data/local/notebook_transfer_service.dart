@@ -1,22 +1,25 @@
 import 'dart:convert';
 import 'dart:typed_data';
+
 import 'package:archive/archive.dart';
 import 'package:file_picker/file_picker.dart';
+
 import 'folder_repository.dart';
 import 'note_repository.dart';
 
 class NotebookTransferService {
   final NoteRepository repository;
   final FolderRepository folders = FolderRepository();
+
   NotebookTransferService(this.repository);
 
   Future<Map<String, dynamic>> _manifest() async {
     final notes = await repository.listAllVisible();
     final allFolders = await folders.listAllVisible();
     return {
-      'format': 'snote-notebook-v2',
+      'format': 'snote-notebook-v3',
       'app': 'Snote',
-      'version': 2,
+      'version': 3,
       'exportedAt': DateTime.now().toUtc().toIso8601String(),
       'folders': allFolders.map((f) => f.toExport()).toList(),
       'notes': notes.map((n) => {
@@ -40,14 +43,15 @@ class NotebookTransferService {
     ));
     final bytes = ZipEncoder().encodeBytes(archive);
     final name = 'snote-notebook-' + DateTime.now().millisecondsSinceEpoch.toString() + '.snote.zip';
-    return FilePicker.saveFile(fileName: name, bytes: bytes);
+    return FilePicker.saveFile(fileName: name, bytes: bytes, mimeType: 'application/zip');
   }
 
   Future<Uri?> exportJsonPicked() async {
     final manifest = await _manifest();
     return FilePicker.saveFile(
       fileName: 'snote-notebook.json',
-      bytes: utf8.encode(const JsonEncoder.withIndent('  ').convert(manifest)),
+      bytes: Uint8List.fromList(utf8.encode(const JsonEncoder.withIndent('  ').convert(manifest))),
+      mimeType: 'application/json',
     );
   }
 
@@ -58,9 +62,9 @@ class NotebookTransferService {
       buffer.writeln('## ' + note.title);
       buffer.writeln();
       if (note.contentJson != null && note.contentJson!.isNotEmpty) {
-        buffer.writeln('```json');
+        buffer.writeln('~~~json');
         buffer.writeln(note.contentJson);
-        buffer.writeln('```');
+        buffer.writeln('~~~');
       }
       buffer.writeln();
     }
@@ -76,7 +80,7 @@ class NotebookTransferService {
     final buffer = StringBuffer();
     for (final note in notes) {
       buffer.writeln(note.title);
-      buffer.writeln('=' * note.title.length);
+      buffer.writeln(List.filled(note.title.length, '=').join());
       buffer.writeln(note.contentJson ?? '');
       buffer.writeln();
     }
@@ -107,6 +111,7 @@ class NotebookTransferService {
     if (name.endsWith('.md') || name.endsWith('.txt') || name.endsWith('.csv') || name.endsWith('.tsv')) {
       return _importText(file.name, utf8.decode(bytes));
     }
+
     if (name.endsWith('.zip') || name.endsWith('.goodnotes') || name.endsWith('.touchnotes')) {
       return _importArchive(bytes);
     }
@@ -137,18 +142,12 @@ class NotebookTransferService {
     for (final item in notes.whereType<Map>()) {
       final title = item['title']?.toString().trim();
       if (title == null || title.isEmpty) continue;
-      final note = await repository.create(
-        title: title,
-        folderId: folderMap[item['folderId']?.toString()],
-      );
-
+      final note = await repository.create(title: title, folderId: folderMap[item['folderId']?.toString()]);
       final content = item['contentJson'];
       if (content is String && content.isNotEmpty) {
         try {
           final parsed = jsonDecode(content);
-          if (parsed is Map) {
-            await repository.saveContent(note.id, parsed.cast<String, Object?>());
-          }
+          if (parsed is Map) await repository.saveContent(note.id, parsed.cast<String, Object?>());
         } catch (_) {}
       } else if (content is Map) {
         await repository.saveContent(note.id, content.cast<String, Object?>());
@@ -159,48 +158,32 @@ class NotebookTransferService {
   }
 
   Future<int> _importText(String filename, String raw) async {
-    final title = filename.replaceFirst(RegExp(r'\.[^.]+
-    final archive = ZipDecoder().decodeBytes(bytes);
-    var imported = 0;
-
-    for (final file in archive) {
-      if (!file.isFile || !file.name.toLowerCase().endsWith('.json')) continue;
-      final data = file.readBytes();
-      if (data == null) continue;
-      try {
-        imported += await _importJson(utf8.decode(data));
-      } catch (_) {}
-    }
-
-    return imported;
-  }
-}
-), '').trim();
+    final title = filename.replaceFirst(RegExp(r'\.[^.]+$'), '').trim();
     if (title.isEmpty || raw.trim().isEmpty) return 0;
     final note = await repository.create(title: title);
     await repository.saveContent(note.id, {
       'version': 5,
       'pages': <Map<String, Object?>>[],
-      'text_delta': <Map<String, Object?>>[
-        <String, Object?>{'insert': raw + '\n'},
-      ],
+      'text_delta': <Map<String, Object?>>[<String, Object?>{'insert': raw + '\n'}],
       'importedText': true,
     });
     return 1;
   }
+
   Future<int> _importArchive(List<int> bytes) async {
     final archive = ZipDecoder().decodeBytes(bytes);
     var imported = 0;
-
     for (final file in archive) {
-      if (!file.isFile || !file.name.toLowerCase().endsWith('.json')) continue;
+      if (!file.isFile) continue;
+      final lower = file.name.toLowerCase();
       final data = file.readBytes();
       if (data == null) continue;
-      try {
-        imported += await _importJson(utf8.decode(data));
-      } catch (_) {}
+      if (lower.endsWith('.json')) {
+        try { imported += await _importJson(utf8.decode(data)); } catch (_) {}
+      } else if (lower.endsWith('.md') || lower.endsWith('.txt') || lower.endsWith('.csv') || lower.endsWith('.tsv')) {
+        try { imported += await _importText(file.name.split('/').last, utf8.decode(data)); } catch (_) {}
+      }
     }
-
     return imported;
   }
 }
