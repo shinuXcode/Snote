@@ -7,7 +7,14 @@ class StrokeCodec {
     'id': s.id, 'shape': s.shape, 'fill': s.fill, 'fillOpacity': s.fillOpacity,
     'customSides': s.customSides, 'stickerText': s.stickerText,
     'dashed': s.dashed, 'fillColor': s.fillColor?.toARGB32(),
-    'pen': {'type': s.pen.type.name, 'color': s.pen.color.toARGB32(), 'size': s.pen.size, 'opacity': s.pen.opacity},
+    'pen': {
+      'type': s.pen.type.name,
+      'color': s.pen.color.toARGB32(),
+      'size': s.pen.size,
+      'opacity': s.pen.opacity,
+      'pressureSensitivity': s.pen.pressureSensitivity,
+      'velocitySensitivity': s.pen.velocitySensitivity,
+    },
     'points': s.points.map((p) => {'x': p.position.dx, 'y': p.position.dy, 'pressure': p.pressure, 'timestamp': p.timestamp}).toList(),
   };
 
@@ -37,6 +44,8 @@ class StrokeCodec {
           color: Color((penMap['color'] as num?)?.toInt() ?? 0xff111111),
           size: ((penMap['size'] as num?)?.toDouble() ?? 3).clamp(.5, 60),
           opacity: ((penMap['opacity'] as num?)?.toDouble() ?? 1).clamp(.05, 1),
+          pressureSensitivity: ((penMap['pressureSensitivity'] as num?)?.toDouble() ?? .55).clamp(0, 1),
+          velocitySensitivity: ((penMap['velocitySensitivity'] as num?)?.toDouble() ?? .65).clamp(0, 1),
         ),
       );
     }).where((s) => s.id.isNotEmpty && s.points.isNotEmpty).toList();
