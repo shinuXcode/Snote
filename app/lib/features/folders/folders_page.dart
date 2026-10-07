@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../data/local/folder_repository.dart';
 import '../../data/local/note_repository.dart';
 import '../notes/note_editor_page.dart';
+import '../pdf/pdf_annotation_page.dart';
 
 class FoldersPage extends StatefulWidget {
   const FoldersPage({super.key});
@@ -41,7 +42,7 @@ class _FoldersPageState extends State<FoldersPage> {
     await _load();
   }
 
-  Future<void> _createNote() async {
+  Future<void> _importPdf() async {\n    await Navigator.push(context, MaterialPageRoute(builder: (_) => PdfAnnotationPage(folderId: _parentId)));\n    await _load();\n  }\n\n  Future<void> _createNote() async {
     final note = await _notes.create(folderId: _parentId);
     if (!mounted) return;
     await Navigator.push(context, MaterialPageRoute(builder: (_) => NoteEditorPage(note: note)));
@@ -100,7 +101,7 @@ class _FoldersPageState extends State<FoldersPage> {
         }),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
         actions: [
-          IconButton(onPressed: _createFolder, tooltip: 'New folder', icon: const Icon(Icons.create_new_folder_rounded)),
+          IconButton(onPressed: _importPdf, tooltip: 'Import PDF', icon: const Icon(Icons.picture_as_pdf_rounded)),\n          IconButton(onPressed: _createFolder, tooltip: 'New folder', icon: const Icon(Icons.create_new_folder_rounded)),
           IconButton(onPressed: _createNote, tooltip: 'New note', icon: const Icon(Icons.note_add_rounded)),
         ],
       ),
