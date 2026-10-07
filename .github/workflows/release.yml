@@ -78,6 +78,28 @@ jobs:
           esac
           rm -f test/widget_test.dart
 
+      - name: Configure Windows C++ compatibility
+        if: matrix.target == 'windows'
+        working-directory: app
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('windows/CMakeLists.txt')
+          s = p.read_text()
+          definition = 'add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)'
+          if definition not in s:
+              anchor = 'project(runner LANGUAGES CXX)'
+              if anchor not in s:
+                  raise SystemExit('Unexpected Flutter Windows CMake structure')
+              s = s.replace(
+                  anchor,
+                  anchor + '\n\n# Compatibility for current MSVC/Windows runners while local_auth_windows uses the deprecated coroutine header.\n' + definition,
+                  1,
+              )
+              p.write_text(s)
+          PY
+
       - name: Configure Android
         if: matrix.target == 'android'
         working-directory: app
