@@ -350,7 +350,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onHorizontalDragEnd: _pageSwipe,
-                  child: _page(),
+                  child: _pageView(),
                 ),
               ),
               if (!_full) _header(),
@@ -404,7 +404,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     );
   }
 
-  Widget _page() {
+  Widget _pageView() {
     final horizontal = pageData['orientation']?.toString() == 'horizontal';
     final child = Center(
       child: AspectRatio(
@@ -575,7 +575,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                 _toolButton(CanvasTool.pencil, Icons.brush_rounded),
                 _toolButton(CanvasTool.highlighter, Icons.highlight_rounded),
                 _toolButton(CanvasTool.eraser, Icons.auto_fix_normal_rounded),
-                _toolButton(CanvasTool.lasso, Icons.lasso_rounded),
+                _toolButton(CanvasTool.lasso, Icons.gesture_rounded),
                 IconButton.filledTonal(onPressed: () => setState(() => _shapePanel = !_shapePanel), icon: const Icon(Icons.category_outlined), tooltip: 'Shapes'),
                 IconButton.filledTonal(onPressed: _stickers, icon: const Icon(Icons.emoji_emotions_outlined), tooltip: 'Stickers'),
                 ...[Colors.black, Colors.red, Colors.orange, Colors.green, Colors.blue, Colors.purple].map(_colorDot),
@@ -634,7 +634,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       case CanvasTool.pencil: return Icons.brush_rounded;
       case CanvasTool.highlighter: return Icons.highlight_rounded;
       case CanvasTool.eraser: return Icons.auto_fix_normal_rounded;
-      case CanvasTool.lasso: return Icons.lasso_rounded;
+      case CanvasTool.lasso: return Icons.gesture_rounded;
       case CanvasTool.sticker: return Icons.emoji_emotions_outlined;
       default: return Icons.category_outlined;
     }

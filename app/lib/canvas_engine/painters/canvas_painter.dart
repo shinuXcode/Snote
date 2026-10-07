@@ -105,7 +105,7 @@ class SnoteCanvasPainter extends CustomPainter {
     for (var i = 1; i < points.length; i++) {
       final a = points[i - 1];
       final b = points[i];
-      var width = stroke.pen.size.clamp(.5, 60);
+      var width = stroke.pen.size.clamp(.5, 60).toDouble();
       if (stroke.pen.type == PenType.fountain) {
         final dt = (b.timestamp - a.timestamp).clamp(.5, 250.0);
         final velocity = (b.position - a.position).distance / dt;
@@ -173,7 +173,7 @@ class SnoteCanvasPainter extends CustomPainter {
         final square = Rect.fromCenter(center: center, width: size, height: size);
         canvas.drawOval(stroke.shape == 'circle' ? square : rect, paint);
       case 'triangle':
-        canvas.drawPath(_regularPolygon(center, rect.width.abs().clamp(1, double.infinity), 3, -math.pi / 2), paint);
+        canvas.drawPath(_regularPolygon(center, rect.width.abs().clamp(1, double.infinity).toDouble(), 3, -math.pi / 2), paint);
       case 'diamond':
         final path = Path()
           ..moveTo(center.dx, rect.top)

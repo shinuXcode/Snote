@@ -116,7 +116,6 @@ class _NotesHomePageState extends State<NotesHomePage> {
 
   Future<void> _openAccount() async => Navigator.push(context, MaterialPageRoute(builder: (_) => const LoginPage()));
   Future<void> _openSettings() async => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage()));
-  Future<void> _openFolders() async { await Navigator.push(context, MaterialPageRoute(builder: (_) => const FoldersPage())); await _load(); }
 
   Future<void> _openTools() async {
     final navigator = Navigator.of(context);
@@ -147,7 +146,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
 
   Widget _desktop() {
     return Row(children: [
-      _SideRail(localOnly: widget.localOnly, onAccount: _openAccount, onSettings: _openSettings, onTools: _openTools, onFolders: _openFolders),
+      _SideRail(localOnly: widget.localOnly, onAccount: _openAccount, onSettings: _openSettings, onTools: _openTools),
       Expanded(child: Column(children: [
         _TopBar(search: _search, localOnly: widget.localOnly, syncing: _syncing, onSync: _syncNow, onTools: _openTools),
         Expanded(child: Row(children: [
@@ -204,8 +203,8 @@ class _TopBar extends StatelessWidget {
 }
 
 class _SideRail extends StatelessWidget {
-  final bool localOnly; final VoidCallback onAccount, onSettings, onTools, onFolders;
-  const _SideRail({required this.localOnly, required this.onAccount, required this.onSettings, required this.onTools, required this.onFolders});
+  final bool localOnly; final VoidCallback onAccount, onSettings, onTools;
+  const _SideRail({required this.localOnly, required this.onAccount, required this.onSettings, required this.onTools});
   @override Widget build(BuildContext context) {
     final active = Theme.of(context).colorScheme.primaryContainer;
     return Container(width: 236, padding: const EdgeInsets.fromLTRB(16, 22, 16, 18),
@@ -213,7 +212,6 @@ class _SideRail extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Padding(padding: EdgeInsets.only(left: 8, bottom: 30), child: SnoteLogo(size: 38)),
         _RailButton(icon: Icons.notes_rounded, label: 'All notes', color: active, onTap: () {}),
-        _RailButton(icon: Icons.folder_copy_rounded, label: 'Folders', color: active, onTap: onFolders),
         _RailButton(icon: Icons.person_outline_rounded, label: localOnly ? 'Sign in & sync' : 'Account', color: active, onTap: onAccount),
         _RailButton(icon: Icons.grid_view_rounded, label: 'Tools', color: active, onTap: onTools),
         const Spacer(),

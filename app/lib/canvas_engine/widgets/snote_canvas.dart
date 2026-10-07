@@ -1,3 +1,5 @@
+class _CanvasRepaint extends ChangeNotifier { void repaint() => notifyListeners(); }
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -45,7 +47,7 @@ class SnoteCanvas extends StatefulWidget {
 class _SnoteCanvasState extends State<SnoteCanvas> {
   final _uuid = const Uuid();
   final _palmRejection = PalmRejection();
-  final _repaint = ChangeNotifier();
+  final _repaint = _CanvasRepaint();
   final List<Stroke> _strokes = [];
   final List<List<Stroke>> _history = [];
   final List<List<Stroke>> _redo = [];
@@ -271,7 +273,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
 
     if (widget.tool == CanvasTool.lasso) {
       _lassoPath..clear()..add(point);
-      _repaint.notifyListeners();
+      _repaint.repaint();
       return;
     }
 
@@ -289,7 +291,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     if (widget.tool == CanvasTool.sticker) {
       _commitActive();
     } else {
-      _repaint.notifyListeners();
+      _repaint.repaint();
     }
   }
 
@@ -310,7 +312,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     }
     if (widget.tool == CanvasTool.lasso) {
       _lassoPath.add(event.localPosition);
-      _repaint.notifyListeners();
+      _repaint.repaint();
       return;
     }
     if (_activePen == null || _activeTool == null) return;
@@ -322,7 +324,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     }
 
     _activePoints.add(_sample(position, event.pressure, event.timeStamp));
-    _repaint.notifyListeners();
+    _repaint.repaint();
   }
 
   void _pointerUp(PointerUpEvent event) {
@@ -360,7 +362,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _activeSticker = null;
     _activePoints.clear();
     _lassoPath.clear();
-    _repaint.notifyListeners();
+    _repaint.repaint();
   }
 
   void _commitActive() {
@@ -406,7 +408,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
   void _finishLasso() {
     if (_lassoPath.length < 3) {
       _lassoPath.clear();
-      _repaint.notifyListeners();
+      _repaint.repaint();
       _notifySelection();
       return;
     }

@@ -7,7 +7,7 @@ import 'note_repository.dart';
 class NotebookTransferService {
   final NoteRepository repository;
   final FolderRepository folders = FolderRepository();
-  const NotebookTransferService(this.repository);
+  NotebookTransferService(this.repository);
 
   Future<Map<String, dynamic>> _manifest() async {
     final notes = await repository.listAllVisible();
@@ -30,7 +30,7 @@ class NotebookTransferService {
     };
   }
 
-  Future<String?> exportPicked() async {
+  Future<Uri?> exportPicked() async {
     final manifest = await _manifest();
     final archive = Archive();
     archive.addFile(ArchiveFile.bytes(
@@ -42,7 +42,7 @@ class NotebookTransferService {
     return FilePicker.saveFile(fileName: name, bytes: bytes);
   }
 
-  Future<String?> exportJsonPicked() async {
+  Future<Uri?> exportJsonPicked() async {
     final manifest = await _manifest();
     return FilePicker.saveFile(
       fileName: 'snote-notebook.json',
@@ -54,11 +54,10 @@ class NotebookTransferService {
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['json', 'snote', 'zip', 'goodnotes', 'touchnotes'],
-      withData: true,
     );
-    if (result == null || result.files.isEmpty) return 0;
+    if (result.isEmpty) return 0;
 
-    final file = result.files.single;
+    final file = result.first;
     final bytes = file.bytes ?? await file.readAsBytes();
     final name = file.name.toLowerCase();
 

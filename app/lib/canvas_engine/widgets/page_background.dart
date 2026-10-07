@@ -22,7 +22,7 @@ class PageBackground extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     canvas.drawColor(paperColor, BlendMode.srcOver);
-    final s = spacing.clamp(10, 80);
+    final double s = spacing.clamp(10, 80).toDouble();
     final line = Paint()..color = lineColor.withValues(alpha: lineOpacity.clamp(0, 1))..strokeWidth = .7;
 
     switch (template) {

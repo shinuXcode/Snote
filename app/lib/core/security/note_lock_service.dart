@@ -45,7 +45,7 @@ class NoteLockService {
 
   Future<void> lock(String noteId) async {
     final config = await _read(noteId);
-    if (config == null) throw const StateError('Set a password before locking this note.');
+    if (config == null) throw StateError('Set a password before locking this note.');
     await _storage.write(key: _key(noteId), value: jsonEncode({...config, 'locked': true}));
   }
 
