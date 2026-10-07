@@ -577,64 +577,125 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   Widget _toolbarWidget() {
     final size = MediaQuery.sizeOf(context);
     if (_toolbarY == 0) _toolbarY = size.height - 100;
+
     if (_docked) {
+      final vertical = _dockSide == 'left' || _dockSide == 'right';
       return Positioned(
-        left: _dockSide == 'left' ? 8 : null,
-        right: _dockSide == 'right' ? 8 : null,
-        top: _dockSide == 'top' ? 64 : (_dockSide == 'bottom' ? null : size.height * .44),
-        bottom: _dockSide == 'bottom' ? 10 : null,
-        child: Material(
-          elevation: 10,
-          borderRadius: BorderRadius.circular(18),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            IconButton(onPressed: () => setState(() => _docked = false), icon: Icon(_toolIcon(_tool))),
-            IconButton(onPressed: () => setState(() => _toolbar = false), icon: const Icon(Icons.close_rounded)),
-          ]),
+        left: _dockSide == 'left' ? 0 : null,
+        right: _dockSide == 'right' ? 0 : null,
+        top: _dockSide == 'top' ? 58 : (_dockSide == 'bottom' ? null : 58),
+        bottom: _dockSide == 'bottom' ? 0 : null,
+        child: SafeArea(
+          child: Material(
+            elevation: SnoteThemeController.instance.eInk ? 1 : 14,
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: .98),
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(_dockSide == 'left' || _dockSide == 'top' ? 20 : 0),
+              topRight: Radius.circular(_dockSide == 'right' || _dockSide == 'top' ? 20 : 0),
+              bottomLeft: Radius.circular(_dockSide == 'left' || _dockSide == 'bottom' ? 20 : 0),
+              bottomRight: Radius.circular(_dockSide == 'right' || _dockSide == 'bottom' ? 20 : 0),
+            ),
+            child: _toolbarContent(vertical ? Axis.vertical : Axis.horizontal, docked: true),
+          ),
         ),
       );
     }
 
     return Positioned(
-      left: _toolbarX.clamp(8, size.width - 90),
-      top: _toolbarY.clamp(60, size.height - 70),
+      left: _toolbarX.clamp(8, math.max(8, size.width - 120)),
+      top: _toolbarY.clamp(60, math.max(60, size.height - 80)),
       child: GestureDetector(
         onPanUpdate: (d) => setState(() {
-          _toolbarX = (_toolbarX + d.delta.dx).clamp(8, size.width - 90);
-          _toolbarY = (_toolbarY + d.delta.dy).clamp(60, size.height - 70);
+          _toolbarX = (_toolbarX + d.delta.dx).clamp(8, math.max(8, size.width - 120));
+          _toolbarY = (_toolbarY + d.delta.dy).clamp(60, math.max(60, size.height - 80));
         }),
         onPanEnd: (_) => _snapToolbar(size),
         child: Material(
           elevation: SnoteThemeController.instance.eInk ? 1 : 16,
           color: Theme.of(context).colorScheme.surface.withValues(alpha: .98),
           borderRadius: BorderRadius.circular(24),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-            child: Wrap(
-              spacing: 1,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                const Icon(Icons.drag_indicator_rounded, size: 18),
-                _toolButton(CanvasTool.ballpoint, Icons.edit_rounded),
-                _toolButton(CanvasTool.fountain, Icons.gesture_rounded),
-                _toolButton(CanvasTool.pencil, Icons.brush_rounded),
-                _toolButton(CanvasTool.highlighter, Icons.highlight_rounded),
-                _toolButton(CanvasTool.eraser, Icons.auto_fix_normal_rounded),
-                _toolButton(CanvasTool.lasso, Icons.gesture_rounded),
-                IconButton.filledTonal(onPressed: () => setState(() => _shapePanel = !_shapePanel), icon: const Icon(Icons.category_outlined), tooltip: 'Shapes'),
-                IconButton.filledTonal(onPressed: _stickers, icon: const Icon(Icons.emoji_emotions_outlined), tooltip: 'Stickers'),
-                ...[Colors.black, Colors.red, Colors.orange, Colors.green, Colors.blue, Colors.purple].map(_colorDot),
-                IconButton(onPressed: _colorSheet, icon: Icon(Icons.color_lens_outlined, color: _penColor), tooltip: 'More colors'),
-                IconButton(onPressed: _styleSheet, icon: const Icon(Icons.tune_rounded), tooltip: 'Tool style'),
-                IconButton(onPressed: () => setState(() => _pan = !_pan), icon: Icon(_pan ? Icons.pan_tool_rounded : Icons.pan_tool_outlined), tooltip: 'Pan/zoom'),
-                IconButton(onPressed: () => setState(() => _draw = !_draw), icon: Icon(_draw ? Icons.text_fields_rounded : Icons.draw_rounded), tooltip: 'Text/draw'),
-                IconButton(onPressed: () => setState(() => _toolbar = false), icon: const Icon(Icons.close_rounded), tooltip: 'Close'),
-              ],
-            ),
-          ),
+          child: _toolbarContent(Axis.horizontal, docked: false),
         ),
       ),
     );
   }
+
+  Widget _toolbarContent(Axis axis, {required bool docked}) {
+    final items = <Widget>[
+      GestureDetector(
+        onPanUpdate: docked ? (d) => setState(() => _docked = false) : null,
+        child: Padding(
+          padding: const EdgeInsets.all(6),
+          child: Icon(
+            Icons.drag_indicator_rounded,
+            size: 19,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ),
+      _toolButton(CanvasTool.ballpoint, Icons.edit_rounded),
+      _toolButton(CanvasTool.fountain, Icons.gesture_rounded),
+      _toolButton(CanvasTool.pencil, Icons.brush_rounded),
+      _toolButton(CanvasTool.highlighter, Icons.highlight_rounded),
+      _toolButton(CanvasTool.eraser, Icons.auto_fix_normal_rounded),
+      _toolButton(CanvasTool.lasso, Icons.gesture_rounded),
+      IconButton.filledTonal(
+        onPressed: () => setState(() => _shapePanel = !_shapePanel),
+        icon: const Icon(Icons.category_outlined),
+        tooltip: 'Shapes',
+      ),
+      IconButton.filledTonal(
+        onPressed: _stickers,
+        icon: const Icon(Icons.emoji_emotions_outlined),
+        tooltip: 'Stickers',
+      ),
+      ..._penPalette.map(_colorDot),
+      IconButton(
+        onPressed: _colorSheet,
+        icon: Icon(Icons.color_lens_outlined, color: _penColor),
+        tooltip: 'Custom color',
+      ),
+      IconButton(
+        onPressed: _styleSheet,
+        icon: const Icon(Icons.tune_rounded),
+        tooltip: 'Tool style',
+      ),
+      IconButton(
+        onPressed: () => setState(() => _pan = !_pan),
+        icon: Icon(_pan ? Icons.pan_tool_rounded : Icons.pan_tool_outlined),
+        tooltip: 'Pan and zoom',
+      ),
+      IconButton(
+        onPressed: () => setState(() => _draw = !_draw),
+        icon: Icon(_draw ? Icons.text_fields_rounded : Icons.draw_rounded),
+        tooltip: 'Text / draw',
+      ),
+      IconButton(
+        onPressed: () => setState(() => _toolbar = false),
+        icon: const Icon(Icons.close_rounded),
+        tooltip: 'Close tools',
+      ),
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      child: Flex(
+        direction: axis,
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: items,
+      ),
+    );
+  }
+
+  List<Color> get _penPalette => const [
+    Color(0xff111111), Color(0xff374151), Color(0xff6b7280), Color(0xff9ca3af),
+    Color(0xffb91c1c), Color(0xffef4444), Color(0xfff97316), Color(0xfff59e0b),
+    Color(0xffca8a04), Color(0xff16a34a), Color(0xff22c55e), Color(0xff0f766e),
+    Color(0xff0891b2), Color(0xff2563eb), Color(0xff4f46e5), Color(0xff7c3aed),
+    Color(0xffc026d3), Color(0xffdb2777), Color(0xffbe185d), Color(0xff92400e),
+    Color(0xff65a30d), Color(0xff0d9488), Color(0xff0284c7), Color(0xfff8fafc),
+  ];
 
   void _snapToolbar(Size size) {
     final map = {
