@@ -275,7 +275,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'Stroke ' + _size.toStringAsFixed(1) + ' px',
+                'Stroke \${_size.toStringAsFixed(1)} px',
                 style: const TextStyle(fontWeight: FontWeight.w800),
               ),
               Slider(
@@ -347,7 +347,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  _selected.toString() + ' selected',
+                  '\${_selected} selected',
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
                 IconButton(
