@@ -36,7 +36,7 @@ class SnoteSettings extends ChangeNotifier {
     'eInkProfile': 'physical',
     'defaultPageTemplate': 'dotted',
     'defaultPaperPalette': 'paper-white',
-    'pencaseTools': 'ballpoint,fountain,pencil,highlighter,eraser,l asso',
+    'pencaseTools': 'ballpoint,fountain,pencil,highlighter,eraser,lasso',
   };
 
   bool getBool(String key) => (_values[key] as bool?) ?? boolDefaults[key] ?? false;
