@@ -9,6 +9,11 @@ class SnoteCanvasController extends ChangeNotifier {
   void Function(double dx, double dy)? _moveSelectionAction;
   VoidCallback? _selectAllAction;
   VoidCallback? _clearSelectionAction;
+  void Function(Color color)? _changeColorAction;
+  void Function(double size)? _changeSizeAction;
+  VoidCallback? _toggleFillAction;
+  VoidCallback? _bringToFrontAction;
+  VoidCallback? _sendToBackAction;
 
   bool _canUndo = false;
   bool _canRedo = false;
@@ -30,6 +35,11 @@ class SnoteCanvasController extends ChangeNotifier {
     required bool canUndo,
     required bool canRedo,
     required int selectionCount,
+    void Function(Color color)? changeColor,
+    void Function(double size)? changeSize,
+    VoidCallback? toggleFill,
+    VoidCallback? bringToFront,
+    VoidCallback? sendToBack,
   }) {
     _undoAction = undo;
     _redoAction = redo;
@@ -42,6 +52,11 @@ class SnoteCanvasController extends ChangeNotifier {
     _canUndo = canUndo;
     _canRedo = canRedo;
     _selectionCount = selectionCount;
+    _changeColorAction = changeColor;
+    _changeSizeAction = changeSize;
+    _toggleFillAction = toggleFill;
+    _bringToFrontAction = bringToFront;
+    _sendToBackAction = sendToBack;
     notifyListeners();
   }
 
@@ -53,6 +68,11 @@ class SnoteCanvasController extends ChangeNotifier {
   void moveSelection(double dx, double dy) => _moveSelectionAction?.call(dx, dy);
   void selectAll() => _selectAllAction?.call();
   void clearSelection() => _clearSelectionAction?.call();
+  void changeColor(Color color) => _changeColorAction?.call(color);
+  void changeSize(double size) => _changeSizeAction?.call(size);
+  void toggleFill() => _toggleFillAction?.call();
+  void bringToFront() => _bringToFrontAction?.call();
+  void sendToBack() => _sendToBackAction?.call();
 
   void unbind() {
     _undoAction = null;
@@ -63,6 +83,11 @@ class SnoteCanvasController extends ChangeNotifier {
     _moveSelectionAction = null;
     _selectAllAction = null;
     _clearSelectionAction = null;
+    _changeColorAction = null;
+    _changeSizeAction = null;
+    _toggleFillAction = null;
+    _bringToFrontAction = null;
+    _sendToBackAction = null;
   }
 
   @override
