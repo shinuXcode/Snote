@@ -17,10 +17,24 @@ class Stroke {
   final String id;
   final List<StrokePoint> points;
   final PenConfig pen;
+  final String? shape;
 
   const Stroke({
     required this.id,
     required this.points,
     required this.pen,
+    this.shape,
   });
+
+  Stroke copyWith({
+    String? id,
+    List<StrokePoint>? points,
+    PenConfig? pen,
+    String? shape,
+  }) => Stroke(
+        id: id ?? this.id,
+        points: points ?? this.points,
+        pen: pen ?? this.pen,
+        shape: shape ?? this.shape,
+      );
 }
