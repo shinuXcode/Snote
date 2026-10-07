@@ -19,42 +19,47 @@ class InkFrame {
 class InkInputPipeline {
   final double smoothing;
   final List<StrokePoint> _realPoints = <StrokePoint>[];
+  final List<StrokePoint> _livePoints = <StrokePoint>[];
   StrokePoint? _lastFiltered;
   Offset? _lastDirection;
   StrokePoint? _previousPrediction;
   double _predictionConfidence = 1;
+  bool _hasPrediction = false;
 
   InkInputPipeline({this.smoothing = .72});
 
-  List<StrokePoint> get realPoints =>
-      List<StrokePoint>.unmodifiable(_realPoints);
+  List<StrokePoint> get realPoints => _realPoints;
+  List<StrokePoint> get livePoints => _livePoints;
 
   void reset() {
     _realPoints.clear();
+    _livePoints.clear();
     _lastFiltered = null;
     _lastDirection = null;
     _previousPrediction = null;
     _predictionConfidence = 1;
+    _hasPrediction = false;
   }
 
   InkFrame begin(PointerDownEvent event) {
     reset();
-    final point = _append(
+    _append(
       event.localPosition,
       event.pressure,
       event.timeStamp,
       event.tilt,
       event.orientation,
     );
-    return InkFrame(
-      realPoints: realPoints,
-      livePoints: List<StrokePoint>.unmodifiable(_realPoints),
+    return const InkFrame(
+      realPoints: <StrokePoint>[],
+      livePoints: <StrokePoint>[],
       predictedPoint: null,
       predictionHorizonMs: 0,
-    );
+    ).copyWith(realPoints: _realPoints, livePoints: _livePoints);
   }
 
   InkFrame update(PointerMoveEvent event) {
+    _removePrediction();
     final point = _append(
       event.localPosition,
       event.pressure,
@@ -65,12 +70,14 @@ class InkInputPipeline {
     _reconcilePrediction(point);
 
     final prediction = _predict();
-    final live = <StrokePoint>[..._realPoints];
-    if (prediction != null) live.add(prediction);
+    if (prediction != null) {
+      _livePoints.add(prediction);
+      _hasPrediction = true;
+    }
 
     return InkFrame(
-      realPoints: realPoints,
-      livePoints: List<StrokePoint>.unmodifiable(live),
+      realPoints: _realPoints,
+      livePoints: _livePoints,
       predictedPoint: prediction,
       predictionHorizonMs:
           prediction == null ? 0 : prediction.timestamp - point.timestamp,
@@ -78,6 +85,7 @@ class InkInputPipeline {
   }
 
   List<StrokePoint> finish(PointerUpEvent event) {
+    _removePrediction();
     _append(
       event.localPosition,
       event.pressure,
@@ -85,7 +93,7 @@ class InkInputPipeline {
       event.tilt,
       event.orientation,
     );
-    return realPoints;
+    return _realPoints;
   }
 
   StrokePoint _append(
@@ -106,7 +114,20 @@ class InkInputPipeline {
 
     final filteredPosition = _filterPosition(normalized);
     final filtered = normalized.copyWith(position: filteredPosition);
+
+    if (_realPoints.isNotEmpty) {
+      final previous = _realPoints.last;
+      final distance = (filtered.position - previous.position).distance;
+      final dt = filtered.timestamp - previous.timestamp;
+      if (distance < .22 &&
+          dt < 3 &&
+          (filtered.pressure - previous.pressure).abs() < .03) {
+        return previous;
+      }
+    }
+
     _realPoints.add(filtered);
+    _livePoints.add(filtered);
     _lastFiltered = filtered;
     return filtered;
   }
@@ -122,9 +143,8 @@ class InkInputPipeline {
     final speedNorm = (speed / 2.4).clamp(0, 1).toDouble();
     final stabilization = smoothing.clamp(.15, .9).toDouble();
 
-    var alpha = .70 -
-        stabilization * .25 +
-        speedNorm * stabilization * .48;
+    var alpha =
+        .70 - stabilization * .25 + speedNorm * stabilization * .48;
 
     final direction =
         distance < .01 ? _lastDirection : delta / distance;
@@ -175,9 +195,18 @@ class InkInputPipeline {
     return predicted;
   }
 
+  void _removePrediction() {
+    if (_hasPrediction && _livePoints.isNotEmpty) {
+      _livePoints.removeLast();
+    }
+    _previousPrediction = null;
+    _hasPrediction = false;
+  }
+
   void _reconcilePrediction(StrokePoint actual) {
     final previous = _previousPrediction;
     if (previous == null) return;
+
     final error = (actual.position - previous.position).distance;
     if (error > 18) {
       _predictionConfidence =
@@ -188,4 +217,16 @@ class InkInputPipeline {
     }
     _previousPrediction = null;
   }
+}
+
+extension on InkFrame {
+  InkFrame copyWith({
+    List<StrokePoint>? realPoints,
+    List<StrokePoint>? livePoints,
+  }) => InkFrame(
+    realPoints: realPoints ?? this.realPoints,
+    livePoints: livePoints ?? this.livePoints,
+    predictedPoint: predictedPoint,
+    predictionHorizonMs: predictionHorizonMs,
+  );
 }
