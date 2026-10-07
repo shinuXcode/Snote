@@ -966,18 +966,115 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         ),
       );
 
+  Map<String, Object?> _clonePage(Map<String, Object?> source) =>
+      Map<String, Object?>.from(jsonDecode(jsonEncode(source)) as Map);
+
+  void _insertBlankPage(int index) {
+    final target = (index + 1).clamp(0, _pages.length);
+    _pages.insert(target, _newPage());
+    setState(() => _page = target);
+    _scheduleSave();
+  }
+
+  void _duplicatePage(int index) {
+    final page = _clonePage(_pages[index]);
+    page['id'] = DateTime.now().microsecondsSinceEpoch.toString();
+    _pages.insert(index + 1, page);
+    setState(() => _page = index + 1);
+    _scheduleSave();
+  }
+
+  void _deletePage(int index) {
+    if (_pages.length <= 1) {
+      _pages[0] = _newPage();
+      setState(() => _page = 0);
+    } else {
+      _pages.removeAt(index);
+      setState(() => _page = _page.clamp(0, _pages.length - 1));
+    }
+    _scheduleSave();
+  }
+
+  void _movePageBy(int index, int delta) {
+    final target = index + delta;
+    if (target < 0 || target >= _pages.length) return;
+    final page = _pages.removeAt(index);
+    _pages.insert(target, page);
+    setState(() => _page = target);
+    _scheduleSave();
+  }
+
+  Future<void> _changePageBackground(int index) async {
+    const colors = [
+      Color(0xffffffff), Color(0xfff4f4f2), Color(0xffeef3f7),
+      Color(0xfffff4cf), Color(0xffececec), Color(0xffe7edf9),
+      Color(0xfff6e9f3), Color(0xffeaf5ea),
+    ];
+    final choice = await showModalBottomSheet<Color?>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.fromLTRB(18, 12, 18, 28),
+        child: Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: colors.map((color) => InkWell(
+            onTap: () => Navigator.pop(sheetContext, color),
+            child: CircleAvatar(backgroundColor: color, radius: 20),
+          )).toList(),
+        ),
+      ),
+    );
+    if (choice == null) return;
+    setState(() => _pages[index]['paperColor'] = choice.toARGB32());
+    _scheduleSave();
+  }
+
+  Future<void> _addPageToAnotherNote(int index, {bool cut = false}) async {
+    final targets = (await _repo.listAllVisible()).where((n) => n.id != widget.note.id).toList();
+    if (targets.isEmpty) return;
+    final target = await showDialog<LocalNote?>(
+      context: context,
+      builder: (dialog) => SimpleDialog(
+        title: const Text('Add page to note'),
+        children: targets.map((n) => SimpleDialogOption(
+          onPressed: () => Navigator.pop(dialog, n),
+          child: Text(n.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+        )).toList(),
+      ),
+    );
+    if (target == null) return;
+
+    final targetNote = await _repo.get(target.id);
+    final data = <String, Object?>{'version': 5, 'pages': <Object?>[]};
+    if (targetNote?.contentJson != null) {
+      try {
+        final decoded = jsonDecode(targetNote!.contentJson!);
+        if (decoded is Map) {
+          if (decoded['pages'] is List) data['pages'] = List<Object?>.from(decoded['pages'] as List);
+          if (decoded['text_delta'] is List) data['text_delta'] = List<Object?>.from(decoded['text_delta'] as List);
+        }
+      } catch (_) {}
+    }
+    final pages = List<Object?>.from(data['pages'] as List);
+    pages.add(_clonePage(_pages[index]));
+    data['pages'] = pages;
+    await _repo.saveContent(target.id, data);
+    if (cut) _deletePage(index);
+  }
+
   Widget _previewRail() => Positioned(
         left: 0,
         top: 0,
         bottom: 0,
-        width: 142,
+        width: 156,
         child: Material(
-          elevation: 16,
-          color: Theme.of(context).colorScheme.surface,
+          elevation: SnoteThemeController.instance.eInk ? 0 : 12,
+          color: Theme.of(context).colorScheme.surface.withValues(alpha: .94),
           child: SafeArea(
             child: Column(children: [
               Row(children: [
-                const Expanded(child: Padding(padding: EdgeInsets.only(left: 10), child: Text('Pages', style: TextStyle(fontWeight: FontWeight.w900)))),
+                const Expanded(child: Padding(padding: EdgeInsets.only(left: 12), child: Text('Pages', style: TextStyle(fontWeight: FontWeight.w900))),
                 IconButton(onPressed: () => setState(() => _preview = false), icon: const Icon(Icons.close_rounded)),
               ]),
               Expanded(
@@ -988,26 +1085,97 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                     if (newIndex > oldIndex) newIndex--;
                     final item = _pages.removeAt(oldIndex);
                     _pages.insert(newIndex, item);
-                    setState(() {});
+                    setState(() => _page = newIndex);
                     _scheduleSave();
                   },
-                  itemBuilder: (_, index) => Padding(
-                    key: ValueKey(_pages[index]['id'].toString()),
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: InkWell(
-                      onTap: () => _selectPage(index),
-                      child: Container(
-                        height: 160,
-                        decoration: BoxDecoration(color: _pageColorAt(index), borderRadius: BorderRadius.circular(10), border: Border.all(color: index == _page ? Theme.of(context).colorScheme.primary : Colors.black12, width: index == _page ? 2 : 1)),
-                        alignment: Alignment.bottomRight,
-                        padding: const EdgeInsets.all(7),
-                        child: Text((index + 1).toString(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800)),
+                  itemBuilder: (_, index) {
+                    final page = _pages[index];
+                    final templateName = page['template']?.toString();
+                    final template = PageTemplate.values.firstWhere(
+                      (t) => t.name == templateName,
+                      orElse: () => PageTemplate.dotted,
+                    );
+                    return Padding(
+                      key: ValueKey(page['id'].toString()),
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Stack(
+                        children: [
+                          InkWell(
+                            borderRadius: BorderRadius.circular(11),
+                            onTap: () => _selectPage(index),
+                            child: Container(
+                              height: 160,
+                              decoration: BoxDecoration(
+                                color: _pageColorAt(index),
+                                borderRadius: BorderRadius.circular(11),
+                                border: Border.all(
+                                  color: index == _page ? Theme.of(context).colorScheme.primary : Colors.black12,
+                                  width: index == _page ? 2 : 1,
+                                ),
+                              ),
+                              child: _settings.getBool('securePagePreviews')
+                                  ? const Center(child: Icon(Icons.lock_outline_rounded, size: 27))
+                                  : CustomPaint(
+                                      painter: PageBackground(
+                                        template: template,
+                                        paperColor: _pageColorAt(index),
+                                        lineColor: page['lineColor'] is num ? Color((page['lineColor'] as num).toInt()) : const Color(0xffaab2bd),
+                                        spacing: page['spacing'] is num ? (page['spacing'] as num).toDouble() : 20,
+                                        lineOpacity: page['lineOpacity'] is num ? (page['lineOpacity'] as num).toDouble() : .8,
+                                      ),
+                                    ),
+                            ),
+                          ),
+                          Positioned(
+                            left: 4,
+                            top: 4,
+                            child: Material(
+                              color: Theme.of(context).colorScheme.surface.withValues(alpha: .84),
+                              borderRadius: BorderRadius.circular(9),
+                              child: PopupMenuButton<String>(
+                                tooltip: 'Page actions',
+                                onSelected: (action) {
+                                  switch (action) {
+                                    case 'blank': _insertBlankPage(index); break;
+                                    case 'duplicate': _duplicatePage(index); break;
+                                    case 'background': _changePageBackground(index); break;
+                                    case 'up': _movePageBy(index, -1); break;
+                                    case 'down': _movePageBy(index, 1); break;
+                                    case 'copy': _addPageToAnotherNote(index); break;
+                                    case 'cut': _addPageToAnotherNote(index, cut: true); break;
+                                    case 'delete': _deletePage(index); break;
+                                  }
+                                },
+                                itemBuilder: (_) => const [
+                                  PopupMenuItem(value: 'blank', child: Text('Insert blank page')),
+                                  PopupMenuItem(value: 'duplicate', child: Text('Duplicate page')),
+                                  PopupMenuItem(value: 'background', child: Text('Change background')),
+                                  PopupMenuItem(value: 'up', child: Text('Move up')),
+                                  PopupMenuItem(value: 'down', child: Text('Move down')),
+                                  PopupMenuItem(value: 'copy', child: Text('Add to another note')),
+                                  PopupMenuItem(value: 'cut', child: Text('Cut to another note')),
+                                  PopupMenuItem(value: 'delete', child: Text('Delete page')),
+                                ],
+                                icon: const Icon(Icons.more_horiz_rounded, size: 18),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            right: 7,
+                            bottom: 6,
+                            child: Text((index + 1).toString(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800)),
+                          ),
+                        ],
                       ),
-                    ),
-                  ),
+                    );
+                  },
                 ),
               ),
-              IconButton.filledTonal(onPressed: _addPage, icon: const Icon(Icons.add_rounded), tooltip: 'Add page'),
+              IconButton.filledTonal(
+                onPressed: () => _insertBlankPage(_pages.length - 1),
+                icon: const Icon(Icons.add_rounded),
+                tooltip: 'Insert blank page',
+              ),
             ]),
           ),
         ),
