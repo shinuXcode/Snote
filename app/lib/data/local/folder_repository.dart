@@ -151,8 +151,8 @@ class FolderRepository {
       await tx.update(
         'folders',
         {'deleted_at': now, 'updated_at': now},
-        where: 'id = ?',
-        whereArgs: [id],
+        where: 'id = ? AND owner_id = ?',
+        whereArgs: [id, SnoteAccountScope.ownerId],
       );
       await _queue(tx, id, 'delete');
 
@@ -168,8 +168,8 @@ class FolderRepository {
         await tx.update(
           'folders',
           {'deleted_at': now, 'updated_at': now},
-          where: 'id = ?',
-          whereArgs: [childId],
+          where: 'id = ? AND owner_id = ?',
+          whereArgs: [childId, SnoteAccountScope.ownerId],
         );
         await _queue(tx, childId, 'delete');
       }
@@ -190,8 +190,8 @@ class FolderRepository {
             'updated_at': now,
             'sync_state': 'pending',
           },
-          where: 'id = ?',
-          whereArgs: [noteId],
+          where: 'id = ? AND owner_id = ?',
+          whereArgs: [noteId, SnoteAccountScope.ownerId],
         );
         await _queue(tx, noteId, 'delete');
       }
