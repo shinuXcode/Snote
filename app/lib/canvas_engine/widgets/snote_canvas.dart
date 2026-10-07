@@ -17,6 +17,8 @@ class SnoteCanvas extends StatefulWidget {
   final CanvasTool tool;
   final ValueChanged<Map<String, Object?>>? onChanged;
   final ValueChanged<int>? onSelectionChanged;
+  final VoidCallback? onEraserMiss;
+  final bool autoRecognition;
   final Map<String, Object?>? initialDocument;
   final SnoteCanvasController? controller;
   final Color backgroundColor;
@@ -34,6 +36,8 @@ class SnoteCanvas extends StatefulWidget {
     this.tool = CanvasTool.ballpoint,
     this.onChanged,
     this.onSelectionChanged,
+    this.onEraserMiss,
+    this.autoRecognition = true,
     this.initialDocument,
     this.controller,
     this.backgroundColor = Colors.white,
@@ -386,12 +390,15 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     }
 
     _snapshot();
+    final recognizedShape = _activeTool!.isShape
+        ? _activeTool!.name
+        : (widget.autoRecognition ? _recognizeShape(_activePoints) : null);
     final stroke = Stroke(
       id: _uuid.v4(),
       points: List<StrokePoint>.of(_activePoints),
       pen: _activePen!,
-      shape: _activeTool!.isShape ? _activeTool!.name : null,
-      fill: widget.shapeFill && _activeTool!.isShape,
+      shape: recognizedShape,
+      fill: widget.shapeFill && recognizedShape != null,
       customSides: widget.customShapeSides,
       stickerText: _activeSticker,
     );
@@ -402,6 +409,40 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _activeTool = null;
     _activeSticker = null;
     _notifyAndRefresh();
+  }
+
+  String? _recognizeShape(List<StrokePoint> points) {
+    if (points.length < 4) return null;
+    final first = points.first.position;
+    final last = points.last.position;
+    final closed = (last - first).distance < 28;
+    var left = first.dx, right = first.dx, top = first.dy, bottom = first.dy;
+    for (final p in points.skip(1)) {
+      left = math.min(left, p.position.dx);
+      right = math.max(right, p.position.dx);
+      top = math.min(top, p.position.dy);
+      bottom = math.max(bottom, p.position.dy);
+    }
+    final width = right - left;
+    final height = bottom - top;
+    if (width < 20 || height < 20) {
+      final start = points.first.position;
+      final end = points.last.position;
+      final line = end - start;
+      if (line.distance < 20) return null;
+      var maxDistance = 0.0;
+      for (final p in points) {
+        final distance = ((p.position.dx - start.dx) * line.dy -
+                (p.position.dy - start.dy) * line.dx).abs() /
+            line.distance;
+        maxDistance = math.max(maxDistance, distance);
+      }
+      return maxDistance < 12 ? 'line' : null;
+    }
+    if (!closed) return null;
+    final ratio = width / height;
+    if (ratio > .72 && ratio < 1.38) return 'rectangle';
+    return 'ellipse';
   }
 
   void _eraseAt(
@@ -423,7 +464,10 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       }
       return false;
     });
-    if (hit < 0) return;
+    if (hit < 0) {
+      widget.onEraserMiss?.call();
+      return;
+    }
     if (!snapshotAlreadyTaken) _snapshot();
     _strokes.removeAt(hit);
     _selected.removeWhere((id) => !_strokes.any((s) => s.id == id));
