@@ -56,6 +56,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   bool _shapePanel = false;
   String? _sticker;
   int _selected = 0;
+  Timer? _saveTimer;
+  bool _savePending = false;
+  bool _saveInFlight = false;
 
   Map<String, Object?> get pageData => _pages[_page];
   PenConfig get pen => PenConfig(
@@ -154,22 +157,56 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   }
 
   void _scheduleSave() {
-    unawaited(Future<void>.delayed(const Duration(milliseconds: 450), () async {
-      if (!mounted || _loading || (_locked && !_unlocked)) return;
-      await _save();
-    }));
+    if (_loading || (_locked && !_unlocked)) return;
+    _savePending = true;
+    _saveTimer?.cancel();
+    _saveTimer = Timer(const Duration(milliseconds: 700), () {
+      unawaited(_save());
+    });
   }
 
-  Future<void> _save() async {
+  Future<void> _save({bool force = false}) async {
     if (_loading || _pages.isEmpty || (_locked && !_unlocked)) return;
-    await _repo.saveContent(widget.note.id, {
-      'version': 4,
-      'pages': _pages,
-      'text_delta': _quill.document.toDelta().toJson(),
-    });
-    final title = _title.text.trim();
-    if (title.isNotEmpty && title != widget.note.title) {
-      await _repo.rename(widget.note.id, title);
+    _saveTimer?.cancel();
+    _saveTimer = null;
+    if (_saveInFlight) {
+      _savePending = true;
+      return;
+    }
+    if (!force && !_savePending) return;
+    _savePending = false;
+    _saveInFlight = true;
+    try {
+      await _repo.saveContent(widget.note.id, {
+        'version': 5,
+        'pages': _pages,
+        'text_delta': _quill.document.toDelta().toJson(),
+      });
+      final title = _title.text.trim();
+      if (title.isNotEmpty && title != widget.note.title) {
+        await _repo.rename(widget.note.id, title);
+      }
+    } finally {
+      _saveInFlight = false;
+      if (_savePending && mounted) {
+        _saveTimer = Timer(const Duration(milliseconds: 700), () {
+          unawaited(_save());
+        });
+      }
+    }
+  }
+
+  Future<void> _flushSave() async {
+    _saveTimer?.cancel();
+    _saveTimer = null;
+    if (_savePending || _saveInFlight) {
+      if (!_saveInFlight) {
+        await _save(force: true);
+      }
+      while (_saveInFlight) {
+        await Future<void>.delayed(const Duration(milliseconds: 16));
+      }
+      if (_savePending && mounted) await _save(force: true);
     }
   }
 
@@ -178,7 +215,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   }
 
   void _changed(Map<String, Object?> value) {
-    setState(() => _pages[_page] = Map<String, Object?>.from(pageData)..addAll(value));
+    // Canvas changes do not affect the editor chrome. Avoid rebuilding the
+    // entire page on every completed stroke; only persist the latest snapshot.
+    _pages[_page] = Map<String, Object?>.from(pageData)..addAll(value);
     _scheduleSave();
   }
 
@@ -318,6 +357,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
   @override
   void dispose() {
+    _saveTimer?.cancel();
     _quill.removeListener(_scheduleSave);
     _quill.dispose();
     _title.dispose();
@@ -337,7 +377,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       canPop: !_settings.getBool('disableBackGesture'),
       onPopInvokedWithResult: (didPop, _) async {
         if (!didPop) {
-          await _save();
+          await _flushSave();
           if (mounted) Navigator.maybePop(context);
         }
       },
@@ -415,18 +455,21 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              CustomPaint(
-                painter: PageBackground(
-                  template: _template(),
-                  paperColor: _pageColor(),
-                  lineColor: _pageColor('lineColor', const Color(0xffd8dee8)),
-                  spacing: _pageDouble('spacing', 28),
-                  lineOpacity: _pageDouble('lineOpacity', .85),
-                  cornellAssist: pageData['cornellAssist'] == true,
+              RepaintBoundary(
+                child: CustomPaint(
+                  painter: PageBackground(
+                    template: _template(),
+                    paperColor: _pageColor(),
+                    lineColor: _pageColor('lineColor', const Color(0xffd8dee8)),
+                    spacing: _pageDouble('spacing', 28),
+                    lineOpacity: _pageDouble('lineOpacity', .85),
+                    cornellAssist: pageData['cornellAssist'] == true,
+                  ),
                 ),
               ),
               if (_draw)
-                SnoteCanvas(
+                RepaintBoundary(
+                  child: SnoteCanvas(
                   key: ValueKey(widget.note.id + '-' + _page.toString()),
                   pen: pen,
                   tool: _tool,
@@ -441,7 +484,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                     if (mounted && count != _selected) setState(() => _selected = count);
                   },
                   onStylusDoubleTap: _settings.getBool('stylusDoubleTapUndo') ? _canvas.undo : null,
-                )
+                ),
+              )
               else
                 Padding(
                   padding: const EdgeInsets.all(24),
@@ -487,7 +531,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
           child: SizedBox(
             height: 58,
             child: Row(children: [
-              IconButton(onPressed: () async { await _save(); if (mounted) Navigator.maybePop(context); }, icon: const Icon(Icons.arrow_back_rounded)),
+              IconButton(onPressed: () async { await _flushSave(); if (mounted) Navigator.maybePop(context); }, icon: const Icon(Icons.arrow_back_rounded)),
               Expanded(child: TextField(controller: _title, decoration: const InputDecoration(border: InputBorder.none, hintText: 'Untitled note'), onSubmitted: (_) => _save())),
               IconButton(tooltip: 'Pages', onPressed: () => setState(() => _preview = !_preview), icon: const Icon(Icons.view_sidebar_outlined)),
               IconButton(tooltip: 'Paper', onPressed: _paperSheet, icon: const Icon(Icons.grid_4x4_rounded)),
