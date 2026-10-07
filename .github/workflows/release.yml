@@ -78,19 +78,6 @@ jobs:
           esac
           rm -f test/widget_test.dart
 
-      - name: Configure Windows C++ compatibility
-        if: matrix.target == 'windows'
-        working-directory: app
-        shell: pwsh
-        run: |
-          $cmake = "windows/CMakeLists.txt"
-          if (-not (Test-Path $cmake)) { throw "Flutter Windows CMakeLists.txt was not generated" }
-          $content = Get-Content $cmake -Raw
-          $definition = "add_compile_options(/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)"
-          if ($content -notmatch [regex]::Escape($definition)) {
-            Add-Content -Path $cmake -Value ("`r`n# MSVC compatibility for the current local_auth_windows plugin.`r`n" + $definition + "`r`n")
-          }
-
       - name: Configure Android
         if: matrix.target == 'android'
         working-directory: app
