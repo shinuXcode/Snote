@@ -404,7 +404,9 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     if (_temporaryEraser ||
         widget.tool == CanvasTool.eraser ||
         widget.tool == CanvasTool.pixelEraser) {
-      _activeTool = CanvasTool.eraser;
+      _activeTool = widget.tool == CanvasTool.pixelEraser
+          ? CanvasTool.pixelEraser
+          : CanvasTool.eraser;
       _activePen = widget.pen;
       _eraserPoint = event.localPosition;
       _eraserRadius = _eraseRadius(event.pressure);
@@ -412,11 +414,19 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
         _snapshot();
         _eraseSnapshotTaken = true;
       }
-      _eraseAt(
-        event.localPosition,
-        pressure: event.pressure,
-        snapshotAlreadyTaken: true,
-      );
+      if (_activeTool == CanvasTool.pixelEraser) {
+        _erasePixelAt(
+          event.localPosition,
+          pressure: event.pressure,
+          snapshotAlreadyTaken: true,
+        );
+      } else {
+        _eraseAt(
+          event.localPosition,
+          pressure: event.pressure,
+          snapshotAlreadyTaken: true,
+        );
+      }
       _repaint.repaint();
       return;
     }
@@ -459,11 +469,19 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
         _temporaryEraser) {
       _eraserPoint = event.localPosition;
       _eraserRadius = _eraseRadius(event.pressure);
-      _eraseAt(
-        event.localPosition,
-        pressure: event.pressure,
-        snapshotAlreadyTaken: _eraseSnapshotTaken,
-      );
+      if (_activeTool == CanvasTool.pixelEraser) {
+        _erasePixelAt(
+          event.localPosition,
+          pressure: event.pressure,
+          snapshotAlreadyTaken: _eraseSnapshotTaken,
+        );
+      } else {
+        _eraseAt(
+          event.localPosition,
+          pressure: event.pressure,
+          snapshotAlreadyTaken: _eraseSnapshotTaken,
+        );
+      }
       _repaint.repaint();
       return;
     }
@@ -649,6 +667,109 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _eraserPoint = event.localPosition;
     _eraserRadius = _eraseRadius(event.pressure);
     _repaint.repaint();
+  }
+
+  void _erasePixelAt(
+    Offset point, {
+    double pressure = 1,
+    bool snapshotAlreadyTaken = false,
+  }) {
+    final normalizedPressure =
+        pressure.isNaN ? 1.0 : pressure.clamp(0, 1).toDouble();
+    if (widget.pressureErase &&
+        normalizedPressure < widget.pressureEraseThreshold) {
+      return;
+    }
+
+    final baseRadius =
+        (widget.pen.size * 3.3).clamp(16, 44).toDouble();
+    final radius = widget.pressureErase &&
+            widget.pressureEraseArea
+        ? baseRadius * (.65 + normalizedPressure * .75)
+        : baseRadius;
+
+    var changed = false;
+    for (var i = _strokes.length - 1; i >= 0; i--) {
+      final stroke = _strokes[i];
+      if (stroke.shape != null || stroke.stickerText != null) {
+        if (stroke.points.any(
+          (p) => (p.position - point).distance <= radius,
+        )) {
+          if (!snapshotAlreadyTaken && !changed) _snapshot();
+          _strokes.removeAt(i);
+          changed = true;
+        }
+        continue;
+      }
+
+      final pieces = <List<StrokePoint>>[];
+      var current = <StrokePoint>[];
+      var hit = false;
+      for (var p = 0; p < stroke.points.length; p++) {
+        final currentPoint = stroke.points[p];
+        final pointHit =
+            (currentPoint.position - point).distance <= radius;
+        final segmentHit = p > 0 &&
+            _distanceToSegment(
+                  point,
+                  stroke.points[p - 1].position,
+                  currentPoint.position,
+                ) <=
+                radius;
+        if (pointHit || segmentHit) {
+          hit = true;
+          if (current.isNotEmpty) pieces.add(current);
+          current = <StrokePoint>[];
+        } else {
+          current.add(currentPoint);
+        }
+      }
+      if (current.isNotEmpty) pieces.add(current);
+
+      if (!hit) continue;
+      if (!snapshotAlreadyTaken && !changed) _snapshot();
+      _strokes.removeAt(i);
+      for (var p = pieces.length - 1; p >= 0; p--) {
+        final piece = pieces[p];
+        if (piece.isEmpty) continue;
+        _strokes.insert(
+          i,
+          stroke.copyWith(
+            id: p == 0 ? stroke.id : _uuid.v4(),
+            points: piece,
+          ),
+        );
+      }
+      changed = true;
+    }
+
+    if (!changed) {
+      widget.onEraserMiss?.call();
+      return;
+    }
+    _notifyAndRefresh();
+  }
+
+  double _distanceToSegment(
+    Offset point,
+    Offset a,
+    Offset b,
+  ) {
+    final vector = b - a;
+    final lengthSquared =
+        vector.dx * vector.dx + vector.dy * vector.dy;
+    if (lengthSquared <= .0001) {
+      return (point - a).distance;
+    }
+    final projection = ((point.dx - a.dx) * vector.dx +
+            (point.dy - a.dy) * vector.dy) /
+        lengthSquared;
+    final t = projection.clamp(0, 1).toDouble();
+    final closest = Offset(
+      a.dx + vector.dx * t,
+      a.dy + vector.dy * t,
+    );
+    return (point - closest).distance;
   }
 
   void _eraseAt(

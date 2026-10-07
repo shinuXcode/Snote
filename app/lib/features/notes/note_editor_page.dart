@@ -1410,6 +1410,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     var opacity = _opacity;
     var fill = _fill;
     var sides = _sides;
+    var curve = _settings.getString('pressureCurve');
+    var exponent = _settings.getDouble('pressureExponent');
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -1423,7 +1425,46 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
             SwitchListTile(contentPadding: EdgeInsets.zero, value: fill, onChanged: (v) => setModal(() => fill = v), title: const Text('Fill shapes')),
             if (_tool == CanvasTool.customPolygon)
               ListTile(title: Text('Polygon sides ' + sides.toString()), subtitle: Slider(value: sides.toDouble(), min: 3, max: 24, divisions: 21, onChanged: (v) => setModal(() => sides = v.round()))),
-            FilledButton(onPressed: () { setState(() { _penSize = size; _opacity = opacity; _fill = fill; _sides = sides; }); Navigator.pop(sheetContext); }, child: const Text('Apply')),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text('Pressure response', style: Theme.of(context).textTheme.titleSmall),
+            ),
+            DropdownButtonFormField<String>(
+              value: curve,
+              items: const [
+                DropdownMenuItem(value: 'soft', child: Text('Soft')),
+                DropdownMenuItem(value: 'linear', child: Text('Linear')),
+                DropdownMenuItem(value: 'firm', child: Text('Firm')),
+                DropdownMenuItem(value: 'custom', child: Text('Custom')),
+              ],
+              onChanged: (value) {
+                if (value != null) setModal(() => curve = value);
+              },
+            ),
+            if (curve == 'custom')
+              ListTile(
+                title: Text('Custom curve ' + exponent.toStringAsFixed(2)),
+                subtitle: Slider(
+                  value: exponent.clamp(.35, 2.5),
+                  min: .35,
+                  max: 2.5,
+                  onChanged: (v) => setModal(() => exponent = v),
+                ),
+              ),
+            FilledButton(
+              onPressed: () {
+                setState(() {
+                  _penSize = size;
+                  _opacity = opacity;
+                  _fill = fill;
+                  _sides = sides;
+                });
+                unawaited(_settings.setString('pressureCurve', curve));
+                unawaited(_settings.setDouble('pressureExponent', exponent));
+                Navigator.pop(sheetContext);
+              },
+              child: const Text('Apply'),
+            ),
           ]),
         ),
       ),
