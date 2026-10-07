@@ -4,6 +4,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../local/database.dart';
+import '../../core/config/account_scope.dart';
 
 class NoteSyncService {
   final SupabaseClient client;
@@ -17,6 +18,8 @@ class NoteSyncService {
     final db = await SnoteDatabase.open();
     final queue = await db.query(
       'sync_queue',
+      where: 'owner_id = ?',
+      whereArgs: [SnoteAccountScope.ownerId],
       orderBy: 'created_at ASC',
       limit: 50,
     );
@@ -74,8 +77,8 @@ class NoteSyncService {
   ) async {
     final rows = await db.query(
       'notes',
-      where: 'id = ?',
-      whereArgs: [id],
+      where: 'id = ? AND owner_id = ?',
+      whereArgs: [id, SnoteAccountScope.ownerId],
       limit: 1,
     );
 
@@ -127,8 +130,8 @@ class NoteSyncService {
       await db.update(
         'notes',
         {'sync_state': 'synced'},
-        where: 'id = ?',
-        whereArgs: [id],
+        where: 'id = ? AND owner_id = ?',
+        whereArgs: [id, SnoteAccountScope.ownerId],
       );
     }
 
@@ -142,8 +145,8 @@ class NoteSyncService {
   ) async {
     final rows = await db.query(
       'folders',
-      where: 'id = ?',
-      whereArgs: [id],
+      where: 'id = ? AND owner_id = ?',
+      whereArgs: [id, SnoteAccountScope.ownerId],
       limit: 1,
     );
 
@@ -227,8 +230,8 @@ class NoteSyncService {
 
     final local = await db.query(
       'notes',
-      where: 'id = ?',
-      whereArgs: [id],
+      where: 'id = ? AND owner_id = ?',
+      whereArgs: [id, SnoteAccountScope.ownerId],
       limit: 1,
     );
 
@@ -244,6 +247,7 @@ class NoteSyncService {
       'notes',
       {
         'id': id,
+        'owner_id': SnoteAccountScope.ownerId,
         'title': remote['title']?.toString() ?? 'Untitled note',
         'folder_id': remote['folder_id'],
         'note_type':
@@ -283,8 +287,8 @@ class NoteSyncService {
 
     final local = await db.query(
       'folders',
-      where: 'id = ?',
-      whereArgs: [id],
+      where: 'id = ? AND owner_id = ?',
+      whereArgs: [id, SnoteAccountScope.ownerId],
       limit: 1,
     );
 
@@ -300,6 +304,7 @@ class NoteSyncService {
       'folders',
       {
         'id': id,
+        'owner_id': SnoteAccountScope.ownerId,
         'parent_id': remote['parent_id'],
         'name': remote['name']?.toString() ?? 'Folder',
         'created_at': local.isNotEmpty
