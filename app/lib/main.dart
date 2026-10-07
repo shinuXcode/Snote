@@ -31,16 +31,35 @@ class _SnoteAppState extends State<SnoteApp> {
   Widget build(BuildContext context) {
     final light = SnoteTheme.light();
     final dark = SnoteTheme.dark();
+    final styleSeed = switch (_theme.style) {
+      SnoteThemeStyle.apple => const Color(0xff007aff),
+      SnoteThemeStyle.windows => const Color(0xff0078d4),
+      SnoteThemeStyle.mac => const Color(0xff8e8e93),
+      SnoteThemeStyle.standard => SnoteTheme.violet,
+    };
     final app = MaterialApp(
       title: 'Snote',
       debugShowCheckedModeBanner: false,
       theme: _theme.eInk
-          ? light.copyWith(
-              scaffoldBackgroundColor: const Color(0xfff2efe7),
-              colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff77746d)),
-              pageTransitionsTheme: _theme.reduceMotion ? const PageTransitionsTheme(builders: {}) : null,
+          ? ThemeData(
+              useMaterial3: true,
+              colorScheme: ColorScheme.fromSeed(
+                seedColor: Colors.grey,
+                brightness: Brightness.light,
+              ),
+              scaffoldBackgroundColor: const Color(0xffededed),
+              cardTheme: CardThemeData(
+                color: const Color(0xfff7f7f7),
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+              pageTransitionsTheme: _theme.reduceMotion
+                  ? const PageTransitionsTheme(builders: {})
+                  : const PageTransitionsTheme(),
             )
-          : light,
+          : light.copyWith(
+              colorScheme: ColorScheme.fromSeed(seedColor: styleSeed),
+            ),
       darkTheme: dark,
       themeMode: ThemeMode.system,
       localizationsDelegates: const [
