@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../data/local/note_repository.dart';
-import '../../data/local/database.dart';
 
 class TrashPage extends StatefulWidget {
   const TrashPage({super.key});
