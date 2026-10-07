@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../models/stroke.dart';
 import '../models/pen_config.dart';
@@ -31,7 +30,7 @@ class SnoteCanvasPainter extends CustomPainter {
         ..strokeWidth = 2
         ..strokeCap = StrokeCap.round;
       final path = Path()..moveTo(lassoPath.first.dx, lassoPath.first.dy);
-      for (final point in lassoPath.skip(1)) path.lineTo(point.dx, point.dy);
+      for (final point in lassoPath.skip(1)) { path.lineTo(point.dx, point.dy); }
       canvas.drawPath(path, p);
     }
   }
