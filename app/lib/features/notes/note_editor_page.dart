@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -49,11 +50,16 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   String _dockSide = 'bottom';
   double _toolbarX = 16;
   double _toolbarY = 0;
+  final ValueNotifier<Offset> _toolbarOffset = ValueNotifier(const Offset(16, 0));
   CanvasTool _tool = CanvasTool.ballpoint;
   Color _penColor = const Color(0xff263238);
   double _penSize = 3;
   double _opacity = 1;
+  double _pressureSensitivity = .55;
+  double _velocitySensitivity = .65;
   bool _fill = false;
+  bool _dashed = false;
+  Color? _fillColor;
   int _sides = 6;
   bool _shapePanel = false;
   String? _sticker;
@@ -68,6 +74,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         color: _penColor,
         size: _penSize,
         opacity: _tool == CanvasTool.highlighter ? _opacity.clamp(.08, .55) : _opacity,
+        pressureSensitivity: _pressureSensitivity,
+        velocitySensitivity: _velocitySensitivity,
       );
 
   @override
@@ -152,6 +160,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     final dock = pageData['toolbarDock']?.toString();
     if (x is num) _toolbarX = x.toDouble();
     if (y is num) _toolbarY = y.toDouble();
+    _toolbarOffset.value = Offset(_toolbarX, _toolbarY);
     if (dock != null && dock != 'free') {
       _docked = true;
       _dockSide = dock;
@@ -366,6 +375,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     _focus.dispose();
     _scroll.dispose();
     _canvas.dispose();
+    _toolbarOffset.dispose();
     unawaited(WakelockPlus.disable());
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
@@ -501,6 +511,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                   pressureErase: _settings.getBool('pressureErase'),
                   pressureEraseArea: _settings.getBool('pressureEraseArea'),
                   pressureEraseThreshold: _settings.getDouble('pressureEraseThreshold'),
+                  eraseWithStylusButton: true,
+                  eraseMark: true,
+                  dashed: _dashed,
+                  fillColor: _fillColor,
                 ),
               )
               else
