@@ -15,6 +15,8 @@ class SnoteCanvasPainter extends CustomPainter {
   final String? activeStickerText;
   final Set<String> selectedIds;
   final List<Offset> lassoPath;
+  final bool drawStrokes;
+  final bool drawActive;
 
   SnoteCanvasPainter({
     required this.strokes,
@@ -27,21 +29,25 @@ class SnoteCanvasPainter extends CustomPainter {
     required this.activeStickerText,
     required this.selectedIds,
     required this.lassoPath,
+    this.drawStrokes = true,
+    this.drawActive = true,
     Listenable? repaint,
   }) : super(repaint: repaint);
 
   @override
   void paint(Canvas canvas, Size size) {
-    for (final stroke in strokes) {
-      _drawStroke(canvas, stroke, selectedIds.contains(stroke.id));
+    if (drawStrokes) {
+      for (final stroke in strokes) {
+        _drawStroke(canvas, stroke, selectedIds.contains(stroke.id));
+      }
     }
-    if (activeStroke != null) {
+    if (drawActive && activeStroke != null) {
       _drawStroke(canvas, activeStroke!, false);
-    } else if (activePoints.isNotEmpty && activePen != null && activeTool != null) {
+    } else if (drawActive && activePoints.isNotEmpty && activePen != null && activeTool != null) {
       _drawActive(canvas);
     }
 
-    if (lassoPath.length > 1) {
+    if (drawActive && lassoPath.length > 1) {
       final p = Paint()
         ..color = const Color(0xff4f6df6)
         ..style = PaintingStyle.stroke
@@ -256,6 +262,8 @@ class SnoteCanvasPainter extends CustomPainter {
         oldDelegate.activeCustomSides != activeCustomSides ||
         oldDelegate.activeStickerText != activeStickerText ||
         !identical(oldDelegate.selectedIds, selectedIds) ||
-        !identical(oldDelegate.lassoPath, lassoPath);
+        !identical(oldDelegate.lassoPath, lassoPath) ||
+        oldDelegate.drawStrokes != drawStrokes ||
+        oldDelegate.drawActive != drawActive;
   }
 }
