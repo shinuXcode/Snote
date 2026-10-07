@@ -39,7 +39,7 @@ class _TrashPageState extends State<TrashPage> {
             child:ListTile(
               leading:const CircleAvatar(child:Icon(Icons.delete_outline_rounded)),
               title:Text(n.title,maxLines:1,overflow:TextOverflow.ellipsis),
-              subtitle:Text(left==0?'Expires today':'Expires in '+left.toString()+' day(s)'),
+              subtitle:Text(left == 0 ? 'Expires today' : 'Expires in \${left} day(s)'),
               trailing:Wrap(spacing:0,children:[
                 IconButton(tooltip:'Restore',onPressed:()=>_restore(n),icon:const Icon(Icons.restore_rounded)),
                 IconButton(tooltip:'Delete permanently',onPressed:()=>_purge(n),icon:const Icon(Icons.delete_forever_outlined)),
