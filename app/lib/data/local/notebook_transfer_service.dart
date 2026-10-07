@@ -91,7 +91,7 @@ class NotebookTransferService {
     );
   }
 
-  Future<int> importPicked() async {
+  Future<int> importPicked({String? targetFolderId}) async {
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['json', 'snote', 'zip', 'goodnotes', 'touchnotes', 'md', 'txt', 'csv', 'tsv'],
@@ -104,22 +104,22 @@ class NotebookTransferService {
 
     if (name.endsWith('.json') || (name.endsWith('.snote') && !name.endsWith('.snote.zip'))) {
       try {
-        return await _importJson(utf8.decode(bytes));
+        return await _importJson(utf8.decode(bytes), fallbackFolderId: targetFolderId);
       } catch (_) {}
     }
 
     if (name.endsWith('.md') || name.endsWith('.txt') || name.endsWith('.csv') || name.endsWith('.tsv')) {
-      return _importText(file.name, utf8.decode(bytes));
+      return _importText(file.name, utf8.decode(bytes), folderId: targetFolderId);
     }
 
     if (name.endsWith('.zip') || name.endsWith('.goodnotes') || name.endsWith('.touchnotes')) {
-      return _importArchive(bytes);
+      return _importArchive(bytes, fallbackFolderId: targetFolderId);
     }
 
     throw const FormatException('Unsupported notebook package.');
   }
 
-  Future<int> _importJson(String raw) async {
+  Future<int> _importJson(String raw, {String? fallbackFolderId}) async {
     final decoded = jsonDecode(raw);
     if (decoded is! Map) throw const FormatException('Invalid notebook JSON.');
 
@@ -130,7 +130,9 @@ class NotebookTransferService {
         final oldId = item['id']?.toString();
         final folderName = item['name']?.toString().trim();
         if (oldId == null || folderName == null || folderName.isEmpty) continue;
-        final newFolder = await folders.create(name: folderName);
+        final parentId = item['parentId']?.toString();
+        final mappedParentId = parentId == null ? fallbackFolderId : folderMap[parentId] ?? fallbackFolderId;
+        final newFolder = await folders.create(name: folderName, parentId: mappedParentId);
         folderMap[oldId] = newFolder.id;
       }
     }
@@ -142,7 +144,8 @@ class NotebookTransferService {
     for (final item in notes.whereType<Map>()) {
       final title = item['title']?.toString().trim();
       if (title == null || title.isEmpty) continue;
-      final note = await repository.create(title: title, folderId: folderMap[item['folderId']?.toString()]);
+      final oldFolderId = item['folderId']?.toString();
+      final note = await repository.create(title: title, folderId: folderMap[oldFolderId] ?? fallbackFolderId);
       final content = item['contentJson'];
       if (content is String && content.isNotEmpty) {
         try {
@@ -157,10 +160,10 @@ class NotebookTransferService {
     return imported;
   }
 
-  Future<int> _importText(String filename, String raw) async {
+  Future<int> _importText(String filename, String raw, {String? folderId}) async {
     final title = filename.replaceFirst(RegExp(r'\.[^.]+$'), '').trim();
     if (title.isEmpty || raw.trim().isEmpty) return 0;
-    final note = await repository.create(title: title);
+    final note = await repository.create(title: title, folderId: folderId);
     await repository.saveContent(note.id, {
       'version': 5,
       'pages': <Map<String, Object?>>[],
@@ -170,7 +173,7 @@ class NotebookTransferService {
     return 1;
   }
 
-  Future<int> _importArchive(List<int> bytes) async {
+  Future<int> _importArchive(List<int> bytes, {String? fallbackFolderId}) async {
     final archive = ZipDecoder().decodeBytes(bytes);
     var imported = 0;
     for (final file in archive) {
@@ -179,9 +182,9 @@ class NotebookTransferService {
       final data = file.readBytes();
       if (data == null) continue;
       if (lower.endsWith('.json')) {
-        try { imported += await _importJson(utf8.decode(data)); } catch (_) {}
+        try { imported += await _importJson(utf8.decode(data), fallbackFolderId: fallbackFolderId); } catch (_) {}
       } else if (lower.endsWith('.md') || lower.endsWith('.txt') || lower.endsWith('.csv') || lower.endsWith('.tsv')) {
-        try { imported += await _importText(file.name.split('/').last, utf8.decode(data)); } catch (_) {}
+        try { imported += await _importText(file.name.split('/').last, utf8.decode(data), folderId: fallbackFolderId); } catch (_) {}
       }
     }
     return imported;
