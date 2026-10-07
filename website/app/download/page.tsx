@@ -1,8 +1,8 @@
 import Link from "next/link";
 import Reveal from "../../components/Reveal";
 
-const version = "0.6.0";
-const releasePage = "https://github.com/shinuXcode/Snote/releases/tag/v0.6.0";
+const version = "0.7.0";
+const releasePage = "https://github.com/shinuXcode/Snote/releases/tag/v0.7.0";
 const assetBase = "https://github.com/shinuXcode/Snote/releases/download/v0.6.0";
 const web = process.env.NEXT_PUBLIC_SNOTE_WEB_APP_URL || assetBase + "/Snote-Web.tar.gz";
 
@@ -36,6 +36,17 @@ export default function Page() {
           <a className="cta" href={releasePage}>
             Open Snote releases
           </a>
+        </div>
+      </Reveal>
+
+      <Reveal>
+        <div className="card" style={{ marginTop: 18, marginBottom: 18 }}>
+          <div className="eyebrow">Release history</div>
+          <p className="muted">Snote keeps previous releases available so users can stay on an older build when needed.</p>
+          <div className="row">
+            <a className="ghost-cta" href="https://github.com/shinuXcode/Snote/releases/tag/v0.7.0">Snote 0.7.0</a>
+            <a className="ghost-cta" href="https://github.com/shinuXcode/Snote/releases/tag/v0.6.0">Snote 0.6.0</a>
+          </div>
         </div>
       </Reveal>
 
