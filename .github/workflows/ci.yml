@@ -91,6 +91,45 @@ jobs:
             app/build/web
           if-no-files-found: error
 
+  windows:
+    name: Windows smoke build
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.3
+          cache: true
+
+      - name: Generate Windows runner
+        working-directory: app
+        shell: bash
+        run: |
+          flutter create --platforms=windows --org=com.snote .
+          rm -f test/widget_test.dart
+
+      - name: Install dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Generate launcher icons
+        working-directory: app
+        run: dart run launcher_icons
+
+      - name: Analyze
+        working-directory: app
+        run: flutter analyze
+
+      - name: Test
+        working-directory: app
+        run: flutter test
+
+      - name: Build Windows
+        working-directory: app
+        run: flutter build windows --release
+
   website:
     name: Showcase website
     runs-on: ubuntu-latest
