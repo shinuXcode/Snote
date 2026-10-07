@@ -656,24 +656,36 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   }
 
   Widget _toolbarContent(Axis axis, {required bool docked}) {
+    final configured = _settings.getString('pencaseTools').split(',').where((v) => v.isNotEmpty).toSet();
+    final defaultTools = <CanvasTool>[
+      CanvasTool.ballpoint,
+      CanvasTool.fountain,
+      CanvasTool.pencil,
+      CanvasTool.highlighter,
+      CanvasTool.eraser,
+      CanvasTool.lasso,
+    ];
+    final pencaseTools = defaultTools.where((tool) => configured.contains(tool.name)).toList();
+
     final items = <Widget>[
       GestureDetector(
-        onPanUpdate: docked ? (d) => setState(() => _docked = false) : null,
+        onPanUpdate: docked
+            ? (_) {
+                if (!mounted) return;
+                setState(() {
+                  _docked = false;
+                  _toolbarX = 16;
+                  _toolbarY = 100;
+                  _toolbarOffset.value = Offset(_toolbarX, _toolbarY);
+                });
+              }
+            : null,
         child: Padding(
-          padding: const EdgeInsets.all(6),
-          child: Icon(
-            Icons.drag_indicator_rounded,
-            size: 19,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
+          padding: const EdgeInsets.all(7),
+          child: Icon(Icons.drag_indicator_rounded, size: 19, color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
       ),
-      _toolButton(CanvasTool.ballpoint, Icons.edit_rounded),
-      _toolButton(CanvasTool.fountain, Icons.gesture_rounded),
-      _toolButton(CanvasTool.pencil, Icons.brush_rounded),
-      _toolButton(CanvasTool.highlighter, Icons.highlight_rounded),
-      _toolButton(CanvasTool.eraser, Icons.auto_fix_normal_rounded),
-      _toolButton(CanvasTool.lasso, Icons.gesture_rounded),
+      ...pencaseTools.map((tool) => _toolButton(tool, _toolIcon(tool))),
       IconButton.filledTonal(
         onPressed: () => setState(() => _shapePanel = !_shapePanel),
         icon: const Icon(Icons.category_outlined),
@@ -688,12 +700,17 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       IconButton(
         onPressed: _colorSheet,
         icon: Icon(Icons.color_lens_outlined, color: _penColor),
-        tooltip: 'Custom color',
+        tooltip: 'Colors',
       ),
       IconButton(
         onPressed: _styleSheet,
         icon: const Icon(Icons.tune_rounded),
         tooltip: 'Tool style',
+      ),
+      IconButton(
+        onPressed: _pencaseSheet,
+        icon: const Icon(Icons.inventory_2_outlined),
+        tooltip: 'Pencase',
       ),
       IconButton(
         onPressed: () => setState(() => _pan = !_pan),
@@ -713,15 +730,26 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     ];
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-      child: Flex(
-        direction: axis,
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: items,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+      child: Flex(direction: axis, mainAxisSize: MainAxisSize.min, children: items),
     );
   }
+
+  IconData _toolIcon(CanvasTool tool) {
+    switch (tool) {
+      case CanvasTool.ballpoint: return Icons.edit_rounded;
+      case CanvasTool.fountain: return Icons.gesture_rounded;
+      case CanvasTool.pencil: return Icons.brush_rounded;
+      case CanvasTool.highlighter: return Icons.highlight_rounded;
+      case CanvasTool.eraser: return Icons.auto_fix_normal_rounded;
+      case CanvasTool.lasso: return Icons.gesture_rounded;
+      case CanvasTool.line: return Icons.horizontal_rule_rounded;
+      case CanvasTool.arrow: return Icons.arrow_forward_rounded;
+      case CanvasTool.rectangle: return Icons.crop_square_rounded;
+      default: return Icons.category_outlined;
+    }
+  }
+
 
   List<Color> get _penPalette => const [
     Color(0xff111111), Color(0xff374151), Color(0xff6b7280), Color(0xff9ca3af),
@@ -768,6 +796,99 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       );
 
 
+  Future<void> _selectionColorSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.fromLTRB(18, 10, 18, 28),
+        child: Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: _penPalette.map((color) => InkWell(
+            onTap: () {
+              _canvas.changeColor(color);
+              Navigator.pop(sheetContext);
+            },
+            child: CircleAvatar(backgroundColor: color, radius: 17),
+          )).toList(),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _selectionSizeSheet() async {
+    var size = _penSize;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (_, setModal) => Padding(
+          padding: const EdgeInsets.fromLTRB(22, 10, 22, 28),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text('Selected stroke ' + size.toStringAsFixed(1)),
+            Slider(value: size.clamp(.5, 24), min: .5, max: 24, divisions: 47, onChanged: (v) => setModal(() => size = v)),
+            FilledButton(onPressed: () { _canvas.changeSize(size); Navigator.pop(sheetContext); }, child: const Text('Apply')),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pencaseSheet() async {
+    const tools = <CanvasTool>[
+      CanvasTool.ballpoint, CanvasTool.fountain, CanvasTool.pencil,
+      CanvasTool.highlighter, CanvasTool.eraser, CanvasTool.lasso,
+      CanvasTool.line, CanvasTool.arrow, CanvasTool.rectangle,
+    ];
+    final selected = _settings.getString('pencaseTools').split(',').where((v) => v.isNotEmpty).toSet();
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (_, setModal) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Align(alignment: Alignment.centerLeft, child: Text('Pencase', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900))),
+              const SizedBox(height: 8),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Keep your most-used tools in the floating toolbar.'),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: tools.map((tool) => FilterChip(
+                  avatar: Icon(_toolIcon(tool), size: 18),
+                  label: Text(tool.label),
+                  selected: selected.contains(tool.name),
+                  onSelected: (value) => setModal(() {
+                    if (value) {
+                      selected.add(tool.name);
+                    } else {
+                      selected.remove(tool.name);
+                    }
+                  }),
+                )).toList(),
+              ),
+              const SizedBox(height: 14),
+              FilledButton(
+                onPressed: () async {
+                  await _settings.setString('pencaseTools', selected.join(','));
+                  if (mounted) Navigator.pop(sheetContext);
+                },
+                child: const Text('Save pencase'),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _shapePanelWidget() {
     final entries = [
       [CanvasTool.line, Icons.horizontal_rule_rounded],
@@ -809,22 +930,38 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   }
 
   Widget _selectionTools() => Positioned(
-        left: 0,
-        right: 0,
-        bottom: 86,
+        left: 8,
+        right: 8,
+        bottom: 82,
         child: Center(
-          child: Material(
-            elevation: 10,
+          child: ClipRRect(
             borderRadius: BorderRadius.circular(22),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Padding(padding: const EdgeInsets.symmetric(horizontal: 10), child: Text('$_selected selected')),
-              IconButton(onPressed: () => _canvas.moveSelection(-8, 0), icon: const Icon(Icons.arrow_back_rounded)),
-              IconButton(onPressed: () => _canvas.moveSelection(8, 0), icon: const Icon(Icons.arrow_forward_rounded)),
-              IconButton(onPressed: _canvas.duplicateSelection, icon: const Icon(Icons.copy_rounded)),
-              IconButton(onPressed: _canvas.deleteSelection, icon: const Icon(Icons.delete_outline_rounded)),
-              IconButton(onPressed: _canvas.selectAll, icon: const Icon(Icons.select_all_rounded)),
-              IconButton(onPressed: _canvas.clearSelection, icon: const Icon(Icons.close_rounded)),
-            ]),
+            child: BackdropFilter(
+              filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: Material(
+                color: Theme.of(context).colorScheme.surface.withValues(alpha: .78),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: Text('$_selected selected', style: const TextStyle(fontWeight: FontWeight.w800)),
+                    ),
+                    IconButton(onPressed: _selectionColorSheet, icon: const Icon(Icons.palette_outlined), tooltip: 'Color'),
+                    IconButton(onPressed: _selectionSizeSheet, icon: const Icon(Icons.line_weight_rounded), tooltip: 'Stroke'),
+                    IconButton(onPressed: _canvas.toggleFill, icon: const Icon(Icons.format_color_fill_outlined), tooltip: 'Fill'),
+                    IconButton(onPressed: _canvas.bringToFront, icon: const Icon(Icons.vertical_align_top_rounded), tooltip: 'Bring to front'),
+                    IconButton(onPressed: _canvas.sendToBack, icon: const Icon(Icons.vertical_align_bottom_rounded), tooltip: 'Send to back'),
+                    IconButton(onPressed: () => _canvas.moveSelection(-8, 0), icon: const Icon(Icons.arrow_back_rounded)),
+                    IconButton(onPressed: () => _canvas.moveSelection(8, 0), icon: const Icon(Icons.arrow_forward_rounded)),
+                    IconButton(onPressed: _canvas.duplicateSelection, icon: const Icon(Icons.copy_rounded), tooltip: 'Duplicate'),
+                    IconButton(onPressed: _canvas.deleteSelection, icon: const Icon(Icons.delete_outline_rounded), tooltip: 'Delete'),
+                    IconButton(onPressed: _canvas.selectAll, icon: const Icon(Icons.select_all_rounded), tooltip: 'Select all'),
+                    IconButton(onPressed: _canvas.clearSelection, icon: const Icon(Icons.close_rounded), tooltip: 'Close'),
+                  ]),
+                ),
+              ),
+            ),
           ),
         ),
       );
