@@ -209,10 +209,35 @@ class _SettingsPageState extends State<SettingsPage> {
     final action = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
-      builder: (_) => SafeArea(
-        child: Column(mainAxisSize: MainAxisSize.min, children: const [
-          ListTile(leading: Icon(Icons.file_upload_outlined), title: Text('Import portable package'), subtitle: Text('JSON, .snote, ZIP, GoodNotes/TouchNotes archive'), trailing: Icon(Icons.chevron_right_rounded)),
-          ListTile(leading: Icon(Icons.file_download_outlined), title: Text('Export portable package'), trailing: Icon(Icons.chevron_right_rounded)),
+      builder: (sheetContext) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.file_upload_outlined),
+            title: const Text('Import notes'),
+            subtitle: const Text('JSON, Snote, ZIP, GoodNotes/TouchNotes archive, Markdown, TXT, CSV, TSV'),
+            onTap: () => Navigator.pop(sheetContext, 'import'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.file_download_outlined),
+            title: const Text('Export portable package'),
+            subtitle: const Text('Snote ZIP with folders and note data'),
+            onTap: () => Navigator.pop(sheetContext, 'export'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.code_rounded),
+            title: const Text('Export JSON'),
+            onTap: () => Navigator.pop(sheetContext, 'json'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.article_outlined),
+            title: const Text('Export Markdown'),
+            onTap: () => Navigator.pop(sheetContext, 'markdown'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.text_snippet_outlined),
+            title: const Text('Export plain text'),
+            onTap: () => Navigator.pop(sheetContext, 'text'),
+          ),
         ]),
       ),
     );
@@ -222,6 +247,15 @@ class _SettingsPageState extends State<SettingsPage> {
         if (mounted) messenger.showSnackBar(SnackBar(content: Text('Imported $count note(s).')));
       } else if (action == 'export') {
         final path = await transfer.exportPicked();
+        if (path != null && mounted) messenger.showSnackBar(SnackBar(content: Text('Exported: $path')));
+      } else if (action == 'json') {
+        final path = await transfer.exportJsonPicked();
+        if (path != null && mounted) messenger.showSnackBar(SnackBar(content: Text('Exported: $path')));
+      } else if (action == 'markdown') {
+        final path = await transfer.exportMarkdownPicked();
+        if (path != null && mounted) messenger.showSnackBar(SnackBar(content: Text('Exported: $path')));
+      } else if (action == 'text') {
+        final path = await transfer.exportTextPicked();
         if (path != null && mounted) messenger.showSnackBar(SnackBar(content: Text('Exported: $path')));
       }
     } catch (e) {
