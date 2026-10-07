@@ -397,6 +397,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                   },
                   onHorizontalDragEnd: _pan ? null : _pageSwipe,
                   onDoubleTap: () => setState(() => _toolbar = !_toolbar),
+                  onLongPress: _settings.getBool('fingerLongPressSelection')
+                      ? () => _selectTool(CanvasTool.lasso)
+                      : null,
                   child: _pageView(),
                 ),
               ),
@@ -490,6 +493,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                   onSelectionChanged: (count) {
                     if (mounted && count != _selected) setState(() => _selected = count);
                   },
+                  autoRecognition: _settings.getBool('autoRecognition'),
+                  onEraserMiss: _settings.getBool('eraseClickSwitch') && _tool == CanvasTool.eraser
+                      ? () => _selectTool(CanvasTool.ballpoint)
+                      : null,
                   onStylusDoubleTap: _settings.getBool('stylusDoubleTapUndo') ? _canvas.undo : null,
                   pressureErase: _settings.getBool('pressureErase'),
                   pressureEraseArea: _settings.getBool('pressureEraseArea'),
