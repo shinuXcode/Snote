@@ -1,6 +1,12 @@
 import 'dart:ui';
 
-enum PenType { ballpoint, fountain, pencil, highlighter, pointer }
+enum PenType {
+  ballpoint,
+  fountain,
+  pencil,
+  highlighter,
+  pointer,
+}
 
 enum CanvasTool {
   ballpoint,
@@ -12,38 +18,21 @@ enum CanvasTool {
   line,
   arrow,
   rectangle,
-  roundedRectangle,
   ellipse,
   triangle,
-  circle,
-  diamond,
-  hexagon,
-  star,
-  customPolygon,
-  sticker,
 }
 
 extension CanvasToolX on CanvasTool {
-  bool get isPen => const {
-    CanvasTool.ballpoint,
-    CanvasTool.fountain,
-    CanvasTool.pencil,
-    CanvasTool.highlighter,
-  }.contains(this);
+  bool get isPen => this == CanvasTool.ballpoint ||
+      this == CanvasTool.fountain ||
+      this == CanvasTool.pencil ||
+      this == CanvasTool.highlighter;
 
-  bool get isShape => const {
-    CanvasTool.line,
-    CanvasTool.arrow,
-    CanvasTool.rectangle,
-    CanvasTool.roundedRectangle,
-    CanvasTool.ellipse,
-    CanvasTool.triangle,
-    CanvasTool.circle,
-    CanvasTool.diamond,
-    CanvasTool.hexagon,
-    CanvasTool.star,
-    CanvasTool.customPolygon,
-  }.contains(this);
+  bool get isShape => this == CanvasTool.line ||
+      this == CanvasTool.arrow ||
+      this == CanvasTool.rectangle ||
+      this == CanvasTool.ellipse ||
+      this == CanvasTool.triangle;
 
   PenType get penType {
     switch (this) {
@@ -69,17 +58,12 @@ extension CanvasToolX on CanvasTool {
       case CanvasTool.line: return 'Line';
       case CanvasTool.arrow: return 'Arrow';
       case CanvasTool.rectangle: return 'Rectangle';
-      case CanvasTool.roundedRectangle: return 'Rounded rectangle';
-      case CanvasTool.ellipse: return 'Ellipse';
+      case CanvasTool.ellipse: return 'Circle';
       case CanvasTool.triangle: return 'Triangle';
-      case CanvasTool.circle: return 'Circle';
-      case CanvasTool.diamond: return 'Diamond';
-      case CanvasTool.hexagon: return 'Hexagon';
-      case CanvasTool.star: return 'Star';
-      case CanvasTool.customPolygon: return 'Custom polygon';
-      case CanvasTool.sticker: return 'Sticker';
     }
   }
+
+  String get iconName => label;
 }
 
 class PenConfig {
@@ -94,13 +78,4 @@ class PenConfig {
     this.size = 3,
     this.opacity = 1,
   });
-
-  PenConfig copyWith({PenType? type, Color? color, double? size, double? opacity}) {
-    return PenConfig(
-      type: type ?? this.type,
-      color: color ?? this.color,
-      size: size ?? this.size,
-      opacity: opacity ?? this.opacity,
-    );
-  }
 }

@@ -4,30 +4,26 @@ import 'stroke.dart';
 
 class StrokeCodec {
   static Map<String, Object?> strokeToJson(Stroke s) => {
-    'id': s.id,
-    'shape': s.shape,
-    'fill': s.fill,
-    'fillOpacity': s.fillOpacity,
-    'customSides': s.customSides,
-    'stickerText': s.stickerText,
-    'pen': {
-      'type': s.pen.type.name,
-      'color': s.pen.color.toARGB32(),
-      'size': s.pen.size,
-      'opacity': s.pen.opacity,
-    },
-    'points': s.points.map((p) => {
-      'x': p.position.dx,
-      'y': p.position.dy,
-      'pressure': p.pressure,
-      'timestamp': p.timestamp,
-    }).toList(),
-  };
+        'id': s.id,
+        'shape': s.shape,
+        'pen': {
+          'type': s.pen.type.name,
+          'color': s.pen.color.toARGB32(),
+          'size': s.pen.size,
+          'opacity': s.pen.opacity,
+        },
+        'points': s.points.map((p) => {
+          'x': p.position.dx,
+          'y': p.position.dy,
+          'pressure': p.pressure,
+          'timestamp': p.timestamp,
+        }).toList(),
+      };
 
   static Map<String, Object?> strokesToDocument(List<Stroke> strokes) => {
-    'version': 3,
-    'strokes': strokes.map(strokeToJson).toList(),
-  };
+        'version': 2,
+        'strokes': strokes.map(strokeToJson).toList(),
+      };
 
   static List<Stroke> documentToStrokes(Object? document) {
     if (document is! Map) return const [];
@@ -56,13 +52,10 @@ class StrokeCodec {
         pressure: ((p['pressure'] as num?)?.toDouble() ?? 1).clamp(0, 1),
         timestamp: (p['timestamp'] as num?)?.toDouble() ?? 0,
       )).toList();
+
       return Stroke(
         id: raw['id']?.toString() ?? '',
         shape: raw['shape']?.toString(),
-        fill: raw['fill'] == true,
-        fillOpacity: ((raw['fillOpacity'] as num?)?.toDouble() ?? .18).clamp(0, 1),
-        customSides: ((raw['customSides'] as num?)?.toInt() ?? 6).clamp(3, 24),
-        stickerText: raw['stickerText']?.toString(),
         points: points,
         pen: pen,
       );
