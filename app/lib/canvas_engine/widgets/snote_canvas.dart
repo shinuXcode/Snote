@@ -1,5 +1,3 @@
-class _CanvasRepaint extends ChangeNotifier { void repaint() => notifyListeners(); }
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +9,8 @@ import '../models/stroke.dart';
 import '../models/stroke_codec.dart';
 import '../painters/canvas_painter.dart';
 import 'snote_canvas_controller.dart';
+
+class _CanvasRepaint extends ChangeNotifier { void repaint() => notifyListeners(); }
 
 class SnoteCanvas extends StatefulWidget {
   final PenConfig pen;
