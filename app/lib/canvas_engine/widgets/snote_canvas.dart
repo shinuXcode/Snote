@@ -24,6 +24,9 @@ class SnoteCanvas extends StatefulWidget {
   final int customShapeSides;
   final String? stickerText;
   final VoidCallback? onStylusDoubleTap;
+  final bool pressureErase;
+  final bool pressureEraseArea;
+  final double pressureEraseThreshold;
 
   const SnoteCanvas({
     super.key,
@@ -38,6 +41,9 @@ class SnoteCanvas extends StatefulWidget {
     this.customShapeSides = 6,
     this.stickerText,
     this.onStylusDoubleTap,
+    this.pressureErase = true,
+    this.pressureEraseArea = true,
+    this.pressureEraseThreshold = .35,
   });
 
   @override
@@ -283,7 +289,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
         _snapshot();
         _eraseSnapshotTaken = true;
       }
-      _eraseAt(point, snapshotAlreadyTaken: true);
+      _eraseAt(point, pressure: event.pressure, snapshotAlreadyTaken: true);
       return;
     }
 
@@ -312,7 +318,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     if (event.pointer != _activePointer || _ignorePointer) return;
 
     if (widget.tool == CanvasTool.eraser) {
-      _eraseAt(event.localPosition, snapshotAlreadyTaken: true);
+      _eraseAt(event.localPosition, pressure: event.pressure, snapshotAlreadyTaken: true);
       return;
     }
     if (widget.tool == CanvasTool.lasso) {
@@ -398,8 +404,19 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _notifyAndRefresh();
   }
 
-  void _eraseAt(Offset point, {bool snapshotAlreadyTaken = false}) {
-    final radius = (widget.pen.size * 3.3).clamp(16, 44);
+  void _eraseAt(
+    Offset point, {
+    double pressure = 1,
+    bool snapshotAlreadyTaken = false,
+  }) {
+    final normalizedPressure = pressure.isNaN ? 1.0 : pressure.clamp(0, 1);
+    if (widget.pressureErase && normalizedPressure < widget.pressureEraseThreshold) {
+      return;
+    }
+    final baseRadius = (widget.pen.size * 3.3).clamp(16, 44).toDouble();
+    final radius = widget.pressureErase && widget.pressureEraseArea
+        ? baseRadius * (.65 + normalizedPressure * .75)
+        : baseRadius;
     final hit = _strokes.indexWhere((s) {
       for (final p in s.points) {
         if ((p.position - point).distance <= radius) return true;
