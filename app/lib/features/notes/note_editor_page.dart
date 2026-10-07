@@ -491,6 +491,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                     if (mounted && count != _selected) setState(() => _selected = count);
                   },
                   onStylusDoubleTap: _settings.getBool('stylusDoubleTapUndo') ? _canvas.undo : null,
+                  pressureErase: _settings.getBool('pressureErase'),
+                  pressureEraseArea: _settings.getBool('pressureEraseArea'),
+                  pressureEraseThreshold: _settings.getDouble('pressureEraseThreshold'),
                 ),
               )
               else
