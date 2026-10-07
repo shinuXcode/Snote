@@ -1,5 +1,4 @@
 const databaseVersion = 5;
-
 const createNotesTable = '''
 CREATE TABLE notes (
   id TEXT PRIMARY KEY,

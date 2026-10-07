@@ -1,8 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
-
-import 'database.dart';
 import '../../core/config/account_scope.dart';
+import 'database.dart';
 
 class LocalFolder {
   final String id;
@@ -11,238 +10,21 @@ class LocalFolder {
   final int createdAt;
   final int updatedAt;
   final int? deletedAt;
-
-  const LocalFolder({
-    required this.id,
-    this.parentId,
-    required this.name,
-    required this.createdAt,
-    required this.updatedAt,
-    this.deletedAt,
-  });
-
-  factory LocalFolder.fromMap(Map<String, Object?> map) => LocalFolder(
-        id: map['id']! as String,
-        parentId: map['parent_id'] as String?,
-        name: map['name']! as String,
-        createdAt: (map['created_at']! as num).toInt(),
-        updatedAt: (map['updated_at']! as num).toInt(),
-        deletedAt: (map['deleted_at'] as num?)?.toInt(),
-      );
-
-  Map<String, Object?> toRemote(String userId) => {
-        'id': id,
-        'user_id': userId,
-        'parent_id': parentId,
-        'name': name,
-        'created_at': DateTime.fromMillisecondsSinceEpoch(createdAt)
-            .toUtc()
-            .toIso8601String(),
-        'updated_at': DateTime.fromMillisecondsSinceEpoch(updatedAt)
-            .toUtc()
-            .toIso8601String(),
-        'deleted_at': deletedAt == null
-            ? null
-            : DateTime.fromMillisecondsSinceEpoch(deletedAt!)
-                .toUtc()
-                .toIso8601String(),
-      };
+  const LocalFolder({required this.id, this.parentId, required this.name, required this.createdAt, required this.updatedAt, this.deletedAt});
+  factory LocalFolder.fromMap(Map<String,Object?> map)=>LocalFolder(id:map['id']! as String,parentId:map['parent_id'] as String?,name:map['name']! as String,createdAt:(map['created_at']! as num).toInt(),updatedAt:(map['updated_at']! as num).toInt(),deletedAt:(map['deleted_at'] as num?)?.toInt());
+  Map<String,Object?> toExport()=>{'id':id,'parentId':parentId,'name':name,'createdAt':createdAt,'updatedAt':updatedAt};
 }
 
 class FolderRepository {
-  static const _uuid = Uuid();
-
-  Future<Database> get _db => SnoteDatabase.open();
-
-  Future<LocalFolder> create({
-    required String name,
-    String? parentId,
-  }) async {
-    final trimmed = name.trim();
-    if (trimmed.isEmpty) {
-      throw ArgumentError.value(name, 'name', 'Folder name cannot be empty.');
-    }
-
-    final now = DateTime.now().millisecondsSinceEpoch;
-
-    final folder = LocalFolder(
-      id: _uuid.v4(),
-      parentId: parentId,
-      name: trimmed,
-      createdAt: now,
-      updatedAt: now,
-    );
-
-    final db = await _db;
-
-    await db.transaction((tx) async {
-      await tx.insert('folders', {
-        'id': folder.id,
-        'owner_id': SnoteAccountScope.ownerId,
-        'parent_id': folder.parentId,
-        'name': folder.name,
-        'created_at': folder.createdAt,
-        'updated_at': folder.updatedAt,
-        'deleted_at': null,
-      });
-      await _queue(tx, folder.id, 'upsert');
-    });
-
-    return folder;
-  }
-
-  Future<List<LocalFolder>> list({String? parentId}) async {
-    final db = await _db;
-
-    final rows = await db.query(
-      'folders',
-      where: parentId == null
-          ? 'owner_id = ? AND parent_id IS NULL AND deleted_at IS NULL'
-          : 'owner_id = ? AND parent_id = ? AND deleted_at IS NULL',
-      whereArgs: parentId == null
-          ? [SnoteAccountScope.ownerId]
-          : [SnoteAccountScope.ownerId, parentId],
-      orderBy: 'name COLLATE NOCASE ASC',
-    );
-
-    return rows.map(LocalFolder.fromMap).toList();
-  }
-
-  Future<LocalFolder?> get(String id) async {
-    final db = await _db;
-
-    final rows = await db.query(
-      'folders',
-      where: 'id = ? AND owner_id = ?',
-      whereArgs: [id, SnoteAccountScope.ownerId],
-      limit: 1,
-    );
-
-    if (rows.isEmpty) return null;
-    return LocalFolder.fromMap(rows.first);
-  }
-
-  Future<void> rename(String id, String name) async {
-    final trimmed = name.trim();
-    if (trimmed.isEmpty) return;
-
-    final db = await _db;
-
-    await db.transaction((tx) async {
-      await tx.update(
-        'folders',
-        {
-          'name': trimmed,
-          'updated_at': DateTime.now().millisecondsSinceEpoch,
-        },
-        where: 'id = ? AND owner_id = ?',
-        whereArgs: [id, SnoteAccountScope.ownerId],
-      );
-      await _queue(tx, id, 'upsert');
-    });
-  }
-
-  Future<void> delete(String id) async {
-    final db = await _db;
-
-    await db.transaction((tx) async {
-      final now = DateTime.now().millisecondsSinceEpoch;
-
-      await tx.update(
-        'folders',
-        {'deleted_at': now, 'updated_at': now},
-        where: 'id = ? AND owner_id = ?',
-        whereArgs: [id, SnoteAccountScope.ownerId],
-      );
-      await _queue(tx, id, 'delete');
-
-      final childFolders = await tx.query(
-        'folders',
-        columns: ['id'],
-        where: 'owner_id = ? AND parent_id = ? AND deleted_at IS NULL',
-        whereArgs: [SnoteAccountScope.ownerId, id],
-      );
-
-      for (final child in childFolders) {
-        final childId = child['id'] as String;
-        await tx.update(
-          'folders',
-          {'deleted_at': now, 'updated_at': now},
-          where: 'id = ? AND owner_id = ?',
-          whereArgs: [childId, SnoteAccountScope.ownerId],
-        );
-        await _queue(tx, childId, 'delete');
-      }
-
-      final childNotes = await tx.query(
-        'notes',
-        columns: ['id'],
-        where: 'owner_id = ? AND folder_id = ? AND deleted_at IS NULL',
-        whereArgs: [SnoteAccountScope.ownerId, id],
-      );
-
-      for (final note in childNotes) {
-        final noteId = note['id'] as String;
-        await tx.update(
-          'notes',
-          {
-            'deleted_at': now,
-            'updated_at': now,
-            'sync_state': 'pending',
-          },
-          where: 'id = ? AND owner_id = ?',
-          whereArgs: [noteId, SnoteAccountScope.ownerId],
-        );
-        await _queue(tx, noteId, 'delete');
-      }
-    });
-  }
-
-  Future<void> _queue(
-    DatabaseExecutor db,
-    String id,
-    String operation,
-  ) async {
-    await db.delete(
-      'sync_queue',
-      where: 'entity_type = ? AND entity_id = ? AND owner_id = ?',
-      whereArgs: ['folder', id, SnoteAccountScope.ownerId],
-    );
-    await db.insert(
-      'sync_queue',
-      {
-        'id': _uuid.v4(),
-        'owner_id': SnoteAccountScope.ownerId,
-        'entity_type': 'folder',
-        'entity_id': id,
-        'operation': operation,
-        'created_at': DateTime.now().millisecondsSinceEpoch,
-        'attempts': 0,
-      },
-    );
-  }
-
-  Future<void> queueNote(
-    DatabaseExecutor db,
-    String noteId,
-    String operation,
-  ) async {
-    await db.delete(
-      'sync_queue',
-      where: 'entity_type = ? AND entity_id = ? AND owner_id = ?',
-      whereArgs: ['note', noteId, SnoteAccountScope.ownerId],
-    );
-    await db.insert(
-      'sync_queue',
-      {
-        'id': _uuid.v4(),
-        'owner_id': SnoteAccountScope.ownerId,
-        'entity_type': 'note',
-        'entity_id': noteId,
-        'operation': operation,
-        'created_at': DateTime.now().millisecondsSinceEpoch,
-        'attempts': 0,
-      },
-    );
-  }
+  static const _uuid=Uuid();
+  Future<Database> get _db=>SnoteDatabase.open();
+  Future<LocalFolder> create({required String name,String? parentId}) async { final n=name.trim(); if(n.isEmpty) throw ArgumentError.value(name,'name','Folder name cannot be empty.'); final now=DateTime.now().millisecondsSinceEpoch; final f=LocalFolder(id:_uuid.v4(),parentId:parentId,name:n,createdAt:now,updatedAt:now); final db=await _db; await db.transaction((tx) async{ await tx.insert('folders',{'id':f.id,'owner_id':SnoteAccountScope.ownerId,'parent_id':parentId,'name':n,'created_at':now,'updated_at':now,'deleted_at':null}); await _queue(tx,f.id,'upsert');}); return f; }
+  Future<List<LocalFolder>> list({String? parentId}) async { final db=await _db; final rows=await db.query('folders',where:parentId==null?'owner_id=? AND parent_id IS NULL AND deleted_at IS NULL':'owner_id=? AND parent_id=? AND deleted_at IS NULL',whereArgs:parentId==null?[SnoteAccountScope.ownerId]:[SnoteAccountScope.ownerId,parentId],orderBy:'name COLLATE NOCASE ASC'); return rows.map(LocalFolder.fromMap).toList(); }
+  Future<List<LocalFolder>> listAllVisible() async { final db=await _db; final rows=await db.query('folders',where:'owner_id=? AND deleted_at IS NULL',whereArgs:[SnoteAccountScope.ownerId],orderBy:'name COLLATE NOCASE ASC'); return rows.map(LocalFolder.fromMap).toList(); }
+  Future<LocalFolder?> get(String id) async { final db=await _db; final rows=await db.query('folders',where:'id=? AND owner_id=?',whereArgs:[id,SnoteAccountScope.ownerId],limit:1); return rows.isEmpty?null:LocalFolder.fromMap(rows.first); }
+  Future<void> rename(String id,String name) async { final n=name.trim(); if(n.isEmpty)return; final db=await _db; await db.transaction((tx) async{ await tx.update('folders',{'name':n,'updated_at':DateTime.now().millisecondsSinceEpoch},where:'id=? AND owner_id=?',whereArgs:[id,SnoteAccountScope.ownerId]); await _queue(tx,id,'upsert');}); }
+  Future<void> delete(String id) async { final db=await _db; await db.transaction((tx) async{ final now=DateTime.now().millisecondsSinceEpoch; await _deleteRecursive(tx,id,now); await tx.update('notes',{'folder_id':null,'updated_at':now,'sync_state':'pending'},where:'owner_id=? AND folder_id=? AND deleted_at IS NULL',whereArgs:[SnoteAccountScope.ownerId,id]); }); }
+  Future<void> _deleteRecursive(DatabaseExecutor tx,String id,int now) async { final kids=await tx.query('folders',columns:['id'],where:'owner_id=? AND parent_id=? AND deleted_at IS NULL',whereArgs:[SnoteAccountScope.ownerId,id]); for(final k in kids) await _deleteRecursive(tx,k['id']! as String,now); await tx.update('folders',{'deleted_at':now,'updated_at':now},where:'id=? AND owner_id=?',whereArgs:[id,SnoteAccountScope.ownerId]); await _queue(tx,id,'delete'); }
+  Future<void> _queue(DatabaseExecutor db,String id,String operation) async { await db.delete('sync_queue',where:'entity_type=? AND entity_id=? AND owner_id=?',whereArgs:['folder',id,SnoteAccountScope.ownerId]); await db.insert('sync_queue',{'id':_uuid.v4(),'owner_id':SnoteAccountScope.ownerId,'entity_type':'folder','entity_id':id,'operation':operation,'created_at':DateTime.now().millisecondsSinceEpoch,'attempts':0}); }
+  Future<void> queueNote(DatabaseExecutor db,String noteId,String operation) async { await db.delete('sync_queue',where:'entity_type=? AND entity_id=? AND owner_id=?',whereArgs:['note',noteId,SnoteAccountScope.ownerId]); await db.insert('sync_queue',{'id':_uuid.v4(),'owner_id':SnoteAccountScope.ownerId,'entity_type':'note','entity_id':noteId,'operation':operation,'created_at':DateTime.now().millisecondsSinceEpoch,'attempts':0}); }
 }
