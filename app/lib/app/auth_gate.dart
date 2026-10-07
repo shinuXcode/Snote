@@ -17,7 +17,7 @@ class AuthGate extends StatelessWidget {
       return const NotesHomePage(localOnly: true);
     }
 
-    final client = SnoteSupabase.client!
+    final client = SnoteSupabase.client!;
     return StreamBuilder<AuthState>(
       stream: client.auth.onAuthStateChange,
       builder: (context, _) {
