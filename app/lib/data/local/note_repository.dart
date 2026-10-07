@@ -4,6 +4,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import 'database.dart';
+import '../../core/config/account_scope.dart';
 
 class LocalNote {
   final String id;
@@ -30,6 +31,7 @@ class LocalNote {
 
   Map<String, Object?> toMap() => {
         'id': id,
+        'owner_id': SnoteAccountScope.ownerId,
         'title': title,
         'folder_id': folderId,
         'note_type': noteType,
@@ -110,8 +112,8 @@ class NoteRepository {
     final db = await _db;
     final rows = await db.query(
       'notes',
-      where: 'id = ?',
-      whereArgs: [id],
+      where: 'id = ? AND owner_id = ?',
+      whereArgs: [id, SnoteAccountScope.ownerId],
       limit: 1,
     );
 
@@ -122,8 +124,8 @@ class NoteRepository {
   Future<List<LocalNote>> list({String? folderId}) async {
     final db = await _db;
 
-    final whereParts = <String>['deleted_at IS NULL'];
-    final args = <Object?>[];
+    final whereParts = <String>['owner_id = ?', 'deleted_at IS NULL'];
+    final args = <Object?>[SnoteAccountScope.ownerId];
 
     if (folderId == null) {
       whereParts.add('folder_id IS NULL');
@@ -146,7 +148,8 @@ class NoteRepository {
     final db = await _db;
     final rows = await db.query(
       'notes',
-      where: 'deleted_at IS NULL',
+      where: 'owner_id = ? AND deleted_at IS NULL',
+      whereArgs: [SnoteAccountScope.ownerId],
       orderBy: 'updated_at DESC',
     );
     return rows.map(LocalNote.fromMap).toList();
@@ -162,8 +165,8 @@ class NoteRepository {
       final rows = await tx.query(
         'notes',
         columns: ['version'],
-        where: 'id = ?',
-        whereArgs: [id],
+        where: 'id = ? AND owner_id = ?',
+        whereArgs: [id, SnoteAccountScope.ownerId],
         limit: 1,
       );
       if (rows.isEmpty) return;
@@ -174,14 +177,15 @@ class NoteRepository {
       await tx.update(
         'notes',
         {
+          'owner_id': SnoteAccountScope.ownerId,
           'content_json': jsonEncode(content),
           'updated_at': DateTime.now().millisecondsSinceEpoch,
           'version': currentVersion + 1,
           'sync_state': 'pending',
           'deleted_at': null,
         },
-        where: 'id = ?',
-        whereArgs: [id],
+        where: 'id = ? AND owner_id = ?',
+        whereArgs: [id, SnoteAccountScope.ownerId],
       );
 
       await _queue(tx, id, 'upsert');
@@ -267,8 +271,8 @@ class NoteRepository {
       );
       await tx.delete(
         'sync_queue',
-        where: 'entity_type = ? AND entity_id = ?',
-        whereArgs: ['note', noteId],
+        where: 'entity_type = ? AND entity_id = ? AND owner_id = ?',
+        whereArgs: ['note', noteId, SnoteAccountScope.ownerId],
       );
     });
   }
@@ -299,6 +303,7 @@ class NoteRepository {
       'notes',
       {
         'id': id,
+        'owner_id': SnoteAccountScope.ownerId,
         'title': remote['title']?.toString() ?? 'Untitled note',
         'folder_id': remote['folder_id']?.toString(),
         'note_type':
@@ -338,6 +343,7 @@ class NoteRepository {
       'sync_queue',
       {
         'id': _uuid.v4(),
+        'owner_id': SnoteAccountScope.ownerId,
         'entity_type': 'note',
         'entity_id': id,
         'operation': operation,
