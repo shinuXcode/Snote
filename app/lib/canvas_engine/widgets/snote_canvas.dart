@@ -239,21 +239,46 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
         onPointerMove: _pointerMove,
         onPointerUp: _pointerUp,
         onPointerCancel: _pointerCancel,
-        child: CustomPaint(
-          painter: SnoteCanvasPainter(
-            strokes: _strokes,
-            activeStroke: _activeStroke,
-            activePoints: _activePoints,
-            activePen: _activePen,
-            activeTool: _activeTool,
-            activeFill: widget.shapeFill,
-            activeCustomSides: widget.customShapeSides,
-            activeStickerText: _activeSticker,
-            selectedIds: _selected,
-            lassoPath: _lassoPath,
-            repaint: _repaint,
-          ),
-          child: const SizedBox.expand(),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            CustomPaint(
+              painter: SnoteCanvasPainter(
+                // Historical ink is painted only when the widget tree changes
+                // (stroke committed/undo/selection). Pointer movement never
+                // repaints this layer.
+                strokes: List<Stroke>.unmodifiable(_strokes),
+                activeStroke: null,
+                activePoints: const <StrokePoint>[],
+                activePen: null,
+                activeTool: null,
+                activeFill: false,
+                activeCustomSides: widget.customShapeSides,
+                activeStickerText: null,
+                selectedIds: Set<String>.unmodifiable(_selected),
+                lassoPath: const <Offset>[],
+                drawStrokes: true,
+                drawActive: false,
+              ),
+            ),
+            CustomPaint(
+              painter: SnoteCanvasPainter(
+                strokes: const <Stroke>[],
+                activeStroke: _activeStroke,
+                activePoints: _activePoints,
+                activePen: _activePen,
+                activeTool: _activeTool,
+                activeFill: widget.shapeFill,
+                activeCustomSides: widget.customShapeSides,
+                activeStickerText: _activeSticker,
+                selectedIds: const <String>{},
+                lassoPath: _lassoPath,
+                drawStrokes: false,
+                drawActive: true,
+                repaint: _repaint,
+              ),
+            ),
+          ],
         ),
       ),
     );
