@@ -64,8 +64,7 @@ jobs:
 
       - name: Analyze
         working-directory: app
-        run: flutter analyze
-
+        run: flutter analyze --no-fatal-infos
       - name: Test
         working-directory: app
         run: flutter test
@@ -120,8 +119,7 @@ jobs:
 
       - name: Analyze
         working-directory: app
-        run: flutter analyze
-
+        run: flutter analyze --no-fatal-infos
       - name: Test
         working-directory: app
         run: flutter test

@@ -3,6 +3,10 @@ import MotionHero from "../components/MotionHero";
 import Reveal from "../components/Reveal";
 
 const features=[
+  ["00","Folders","Nested folders live outside the note editor so notebooks stay organized."],
+  ["05","Floating tools","Move the pen palette anywhere and snap it to an edge like a dock."],
+  ["06","Secure notes","Per-note passwords stay separate from the device lock."],
+  ["07","E-Ink comfort","Warm-paper, grayscale and reduced-motion reading modes."],
   ["01","Stylus engine","Pressure-aware vector strokes, velocity-based fountain ink, pencil texture and palm rejection."],
   ["02","Paper & canvas","A calm page system with lined, grid, dotted and Cornell templates plus zoomable workspaces."],
   ["03","PDF workspace","Keep annotation content separate from the source document so your handwriting remains editable."],

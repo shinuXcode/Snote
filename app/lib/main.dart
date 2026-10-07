@@ -4,6 +4,7 @@ import 'package:flutter_quill/flutter_quill.dart';
 
 import 'app/auth_gate.dart';
 import 'app/theme_controller.dart';
+import 'core/settings/app_settings.dart';
 import 'data/remote/supabase_service.dart';
 import 'ui/snote_theme.dart';
 
@@ -11,46 +12,36 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SnoteSupabase.initialize();
   await SnoteThemeController.instance.load();
+  await SnoteSettings.instance.load();
   runApp(const SnoteApp());
 }
 
 class SnoteApp extends StatefulWidget {
   const SnoteApp({super.key});
-
-  @override
-  State<SnoteApp> createState() => _SnoteAppState();
+  @override State<SnoteApp> createState() => _SnoteAppState();
 }
 
 class _SnoteAppState extends State<SnoteApp> {
   final _theme = SnoteThemeController.instance;
-
   @override
-  void initState() {
-    super.initState();
-    _theme.addListener(_refresh);
-  }
-
-  void _refresh() {
-    if (mounted) setState(() {});
-  }
+  void initState() { super.initState(); _theme.addListener(_refresh); }
+  void _refresh() { if (mounted) setState(() {}); }
 
   @override
   Widget build(BuildContext context) {
-    final baseLight = SnoteTheme.light();
-    final baseDark = SnoteTheme.dark();
-    return MaterialApp(
+    final light = SnoteTheme.light();
+    final dark = SnoteTheme.dark();
+    final app = MaterialApp(
       title: 'Snote',
       debugShowCheckedModeBanner: false,
       theme: _theme.eInk
-          ? baseLight.copyWith(
-              colorScheme: ColorScheme.fromSeed(
-                seedColor: const Color(0xFF77746D),
-                brightness: Brightness.light,
-              ),
-              scaffoldBackgroundColor: const Color(0xFFF1EEE7),
+          ? light.copyWith(
+              scaffoldBackgroundColor: const Color(0xfff2efe7),
+              colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff77746d)),
+              pageTransitionsTheme: _theme.reduceMotion ? const PageTransitionsTheme(builders: {}) : null,
             )
-          : baseLight,
-      darkTheme: _theme.eInk ? baseDark : baseDark,
+          : light,
+      darkTheme: dark,
       themeMode: ThemeMode.system,
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
@@ -61,11 +52,20 @@ class _SnoteAppState extends State<SnoteApp> {
       supportedLocales: const [Locale('en'), Locale('hi')],
       home: const AuthGate(),
     );
+    if (_theme.eInk && _theme.grayscale) {
+      return ColorFiltered(
+        colorFilter: const ColorFilter.matrix(<double>[
+          .2126, .7152, .0722, 0, 0,
+          .2126, .7152, .0722, 0, 0,
+          .2126, .7152, .0722, 0, 0,
+          0, 0, 0, 1, 0,
+        ]),
+        child: app,
+      );
+    }
+    return app;
   }
 
   @override
-  void dispose() {
-    _theme.removeListener(_refresh);
-    super.dispose();
-  }
+  void dispose() { _theme.removeListener(_refresh); super.dispose(); }
 }

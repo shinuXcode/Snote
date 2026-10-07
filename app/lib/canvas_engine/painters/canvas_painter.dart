@@ -1,65 +1,95 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import '../models/stroke.dart';
-import '../models/pen_config.dart';
 import '../algorithms/velocity_calculator.dart';
+import '../models/pen_config.dart';
+import '../models/stroke.dart';
 
 class SnoteCanvasPainter extends CustomPainter {
   final List<Stroke> strokes;
   final Stroke? activeStroke;
+  final List<StrokePoint> activePoints;
+  final PenConfig? activePen;
+  final CanvasTool? activeTool;
+  final bool activeFill;
+  final int activeCustomSides;
+  final String? activeStickerText;
   final Set<String> selectedIds;
   final List<Offset> lassoPath;
 
-  const SnoteCanvasPainter({
+  SnoteCanvasPainter({
     required this.strokes,
     required this.activeStroke,
-    this.selectedIds = const {},
-    this.lassoPath = const [],
-  });
+    required this.activePoints,
+    required this.activePen,
+    required this.activeTool,
+    required this.activeFill,
+    required this.activeCustomSides,
+    required this.activeStickerText,
+    required this.selectedIds,
+    required this.lassoPath,
+    Listenable? repaint,
+  }) : super(repaint: repaint);
 
   @override
   void paint(Canvas canvas, Size size) {
     for (final stroke in strokes) {
       _drawStroke(canvas, stroke, selectedIds.contains(stroke.id));
     }
-    if (activeStroke != null) _drawStroke(canvas, activeStroke!, false);
+    if (activeStroke != null) {
+      _drawStroke(canvas, activeStroke!, false);
+    } else if (activePoints.isNotEmpty && activePen != null && activeTool != null) {
+      _drawActive(canvas);
+    }
 
     if (lassoPath.length > 1) {
       final p = Paint()
-        ..color = const Color(0xff3f6df6)
+        ..color = const Color(0xff4f6df6)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2
+        ..strokeWidth = 1.6
         ..strokeCap = StrokeCap.round;
-      final path = Path()..moveTo(lassoPath.first.dx, lassoPath.first.dy);
-      for (final point in lassoPath.skip(1)) { path.lineTo(point.dx, point.dy); }
-      canvas.drawPath(path, p);
+      for (var i = 1; i < lassoPath.length; i++) {
+        canvas.drawLine(lassoPath[i - 1], lassoPath[i], p);
+      }
     }
   }
 
+  void _drawActive(Canvas canvas) {
+    final stroke = Stroke(
+      id: 'active',
+      points: activePoints,
+      pen: activePen!,
+      shape: activeTool!.isShape ? activeTool!.name : null,
+      fill: activeFill,
+      customSides: activeCustomSides,
+      stickerText: activeStickerText,
+    );
+    _drawStroke(canvas, stroke, false);
+  }
+
   void _drawStroke(Canvas canvas, Stroke stroke, bool selected) {
+    if (stroke.stickerText != null) {
+      _drawSticker(canvas, stroke.points.first.position, stroke.stickerText!);
+      return;
+    }
+
     final points = stroke.points;
     if (points.isEmpty) return;
-    final color = stroke.pen.color.withValues(alpha: stroke.pen.opacity);
+    final color = stroke.pen.color.withValues(alpha: stroke.pen.opacity.clamp(0, 1));
+
     final paint = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
       ..strokeWidth = stroke.pen.size
       ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
+      ..strokeJoin = StrokeJoin.round
+      ..isAntiAlias = true;
 
     if (selected) {
       final bounds = _bounds(points);
-      final selectPaint = Paint()
-        ..color = const Color(0xff3f6df6).withValues(alpha: .22)
-        ..style = PaintingStyle.fill;
       canvas.drawRRect(
-        RRect.fromRectAndRadius(bounds.inflate(8), const Radius.circular(8)),
-        selectPaint,
+        RRect.fromRectAndRadius(bounds.inflate(9), const Radius.circular(9)),
+        Paint()..color = const Color(0xff4f6df6).withValues(alpha: .16),
       );
-    }
-
-    if (points.length == 1) {
-      canvas.drawCircle(points.first.position, stroke.pen.size / 2, Paint()..color = color);
-      return;
     }
 
     if (stroke.shape != null) {
@@ -67,40 +97,59 @@ class SnoteCanvasPainter extends CustomPainter {
       return;
     }
 
+    if (points.length == 1) {
+      canvas.drawCircle(points.first.position, math.max(1, stroke.pen.size / 2), Paint()..color = color);
+      return;
+    }
+
     for (var i = 1; i < points.length; i++) {
       final a = points[i - 1];
       final b = points[i];
-      var width = stroke.pen.size;
+      var width = stroke.pen.size.clamp(.5, 60).toDouble();
       if (stroke.pen.type == PenType.fountain) {
-        final dt = (b.timestamp - a.timestamp).clamp(0.5, 250.0);
-        final velocity = dt <= 0 ? 0.0 : (b.position - a.position).distance / dt;
-        width = fountainWidth(
-          baseWidth: stroke.pen.size,
-          velocity: velocity,
-          pressure: b.pressure,
-        );
+        final dt = (b.timestamp - a.timestamp).clamp(.5, 250.0);
+        final velocity = (b.position - a.position).distance / dt;
+        width = fountainWidth(baseWidth: width, velocity: velocity, pressure: b.pressure);
+      } else if (stroke.pen.type == PenType.pencil) {
+        width *= .78 + b.pressure.clamp(0, 1) * .32;
       } else {
-        width *= .75 + b.pressure.clamp(0, 1) * .25;
+        width *= .82 + b.pressure.clamp(0, 1) * .22;
       }
-      paint.strokeWidth =
-          stroke.pen.type == PenType.highlighter ? width * 1.8 : width;
-      paint.blendMode = stroke.pen.type == PenType.highlighter
-          ? BlendMode.multiply
-          : BlendMode.srcOver;
 
-      // Draw the complete sampled segment. The previous implementation only
-      // rendered to the midpoint, leaving visible gaps between samples.
-      final path = Path()
-        ..moveTo(a.position.dx, a.position.dy)
-        ..lineTo(b.position.dx, b.position.dy);
-      canvas.drawPath(path, paint);
+      paint.strokeWidth = stroke.pen.type == PenType.highlighter ? width * 2.05 : width;
+      paint.blendMode = stroke.pen.type == PenType.highlighter ? BlendMode.multiply : BlendMode.srcOver;
+
+      canvas.drawLine(a.position, b.position, paint);
     }
   }
 
   void _drawShape(Canvas canvas, Stroke stroke, Paint paint) {
+    if (stroke.points.length < 2) return;
     final a = stroke.points.first.position;
     final b = stroke.points.last.position;
     final rect = Rect.fromPoints(a, b);
+    final shapePaint = Paint()
+      ..color = paint.color
+      ..style = paint.style
+      ..strokeWidth = paint.strokeWidth
+      ..strokeCap = paint.strokeCap
+      ..strokeJoin = paint.strokeJoin
+      ..isAntiAlias = true;
+
+    if (stroke.fill) {
+      final fill = Paint()
+        ..color = stroke.pen.color.withValues(alpha: stroke.fillOpacity.clamp(0, 1))
+        ..style = PaintingStyle.fill
+        ..isAntiAlias = true;
+      _drawShapePath(canvas, stroke, fill, rect);
+    }
+    _drawShapePath(canvas, stroke, shapePaint, rect);
+  }
+
+  void _drawShapePath(Canvas canvas, Stroke stroke, Paint paint, Rect rect) {
+    final a = stroke.points.first.position;
+    final b = stroke.points.last.position;
+    final center = rect.center;
     switch (stroke.shape) {
       case 'line':
         canvas.drawLine(a, b, paint);
@@ -110,22 +159,76 @@ class SnoteCanvasPainter extends CustomPainter {
         if (direction.distance > 1) {
           final unit = direction / direction.distance;
           final normal = Offset(-unit.dy, unit.dx);
-          final tip = b - unit * 14;
-          final p1 = tip + normal * 6;
-          final p2 = tip - normal * 6;
-          canvas.drawLine(b, p1, paint);
-          canvas.drawLine(b, p2, paint);
+          final tip = b - unit * 16;
+          canvas.drawLine(b, tip + normal * 7, paint);
+          canvas.drawLine(b, tip - normal * 7, paint);
         }
       case 'rectangle':
-        canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(4)), paint);
+        canvas.drawRect(rect, paint);
+      case 'roundedRectangle':
+        canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(12)), paint);
       case 'ellipse':
-        canvas.drawOval(rect, paint);
+      case 'circle':
+        final size = math.min(rect.width.abs(), rect.height.abs());
+        final square = Rect.fromCenter(center: center, width: size, height: size);
+        canvas.drawOval(stroke.shape == 'circle' ? square : rect, paint);
       case 'triangle':
-        final top = Offset(rect.center.dx, rect.top);
-        final left = Offset(rect.left, rect.bottom);
-        final right = Offset(rect.right, rect.bottom);
-        canvas.drawPath(Path()..moveTo(top.dx, top.dy)..lineTo(right.dx, right.dy)..lineTo(left.dx, left.dy)..close(), paint);
+        canvas.drawPath(_regularPolygon(center, rect.width.abs().clamp(1, double.infinity).toDouble(), 3, -math.pi / 2), paint);
+      case 'diamond':
+        final path = Path()
+          ..moveTo(center.dx, rect.top)
+          ..lineTo(rect.right, center.dy)
+          ..lineTo(center.dx, rect.bottom)
+          ..lineTo(rect.left, center.dy)
+          ..close();
+        canvas.drawPath(path, paint);
+      case 'hexagon':
+        canvas.drawPath(_regularPolygon(center, math.min(rect.width.abs(), rect.height.abs()) / 2, 6, math.pi / 6), paint);
+      case 'star':
+        canvas.drawPath(_star(center, math.min(rect.width.abs(), rect.height.abs()) / 2, 5), paint);
+      case 'customPolygon':
+        canvas.drawPath(_regularPolygon(center, math.min(rect.width.abs(), rect.height.abs()) / 2, stroke.customSides, -math.pi / 2), paint);
     }
+  }
+
+  Path _regularPolygon(Offset center, double radius, int sides, double rotation) {
+    final path = Path();
+    for (var i = 0; i < sides; i++) {
+      final angle = rotation + (math.pi * 2 * i / sides);
+      final point = Offset(center.dx + math.cos(angle) * radius, center.dy + math.sin(angle) * radius);
+      if (i == 0) {
+        path.moveTo(point.dx, point.dy);
+      } else {
+        path.lineTo(point.dx, point.dy);
+      }
+    }
+    path.close();
+    return path;
+  }
+
+  Path _star(Offset center, double radius, int points) {
+    final path = Path();
+    final inner = radius * .44;
+    for (var i = 0; i < points * 2; i++) {
+      final r = i.isEven ? radius : inner;
+      final angle = -math.pi / 2 + math.pi * i / points;
+      final point = Offset(center.dx + math.cos(angle) * r, center.dy + math.sin(angle) * r);
+      if (i == 0) {
+        path.moveTo(point.dx, point.dy);
+      } else {
+        path.lineTo(point.dx, point.dy);
+      }
+    }
+    path.close();
+    return path;
+  }
+
+  void _drawSticker(Canvas canvas, Offset position, String text) {
+    final tp = TextPainter(
+      text: TextSpan(text: text, style: const TextStyle(fontSize: 42)),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(canvas, position - Offset(tp.width / 2, tp.height / 2));
   }
 
   Rect _bounds(List<StrokePoint> points) {
@@ -143,9 +246,16 @@ class SnoteCanvasPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant SnoteCanvasPainter oldDelegate) =>
-      !identical(oldDelegate.strokes, strokes) ||
-      oldDelegate.activeStroke != activeStroke ||
-      oldDelegate.selectedIds != selectedIds ||
-      oldDelegate.lassoPath != lassoPath;
+  bool shouldRepaint(covariant SnoteCanvasPainter oldDelegate) {
+    return !identical(oldDelegate.strokes, strokes) ||
+        !identical(oldDelegate.activePoints, activePoints) ||
+        oldDelegate.activeStroke != activeStroke ||
+        oldDelegate.activePen != activePen ||
+        oldDelegate.activeTool != activeTool ||
+        oldDelegate.activeFill != activeFill ||
+        oldDelegate.activeCustomSides != activeCustomSides ||
+        oldDelegate.activeStickerText != activeStickerText ||
+        !identical(oldDelegate.selectedIds, selectedIds) ||
+        !identical(oldDelegate.lassoPath, lassoPath);
+  }
 }
