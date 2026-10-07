@@ -31,8 +31,8 @@ class NoteSyncService {
         if (processed) {
           await db.delete(
             'sync_queue',
-            where: 'id = ?',
-            whereArgs: [item['id']],
+            where: 'id = ? AND owner_id = ?',
+            whereArgs: [item['id'], SnoteAccountScope.ownerId],
           );
         }
       } catch (e) {
@@ -43,8 +43,8 @@ class NoteSyncService {
                 ((item['attempts'] as num?)?.toInt() ?? 0) + 1,
             'last_error': e.toString(),
           },
-          where: 'id = ?',
-          whereArgs: [item['id']],
+          where: 'id = ? AND owner_id = ?',
+          whereArgs: [item['id'], SnoteAccountScope.ownerId],
         );
       }
     }
@@ -123,8 +123,8 @@ class NoteSyncService {
     if (deleted != null) {
       await db.delete(
         'notes',
-        where: 'id = ? AND deleted_at IS NOT NULL',
-        whereArgs: [id],
+        where: 'id = ? AND owner_id = ? AND deleted_at IS NOT NULL',
+        whereArgs: [id, SnoteAccountScope.ownerId],
       );
     } else {
       await db.update(
