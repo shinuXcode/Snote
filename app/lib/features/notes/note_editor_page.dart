@@ -264,51 +264,221 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     padding:const EdgeInsets.all(5),child:CircleAvatar(radius:_color==c?13:11,backgroundColor:c,
       child:_color==c?const Icon(Icons.check,size:14,color:Colors.white):null)));
 
-  void _sizePicker()=>showModalBottomSheet(context:context,showDragHandle:true,builder:(_)=>StatefulBuilder(
-    builder:(context,setModal)=>Padding(padding:const EdgeInsets.all(22),child:Column(mainAxisSize:MainAxisSize.min,children:[
-      Text('Stroke '+_size.toStringAsFixed(1)+' px',style:const TextStyle(fontWeight:FontWeight.w800)),
-      Slider(min:1,max:14,divisions:26,value:_size,onChanged:(v){setModal((){});setState(()=>_size=v);}),
-    ])));
+  void _sizePicker() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModal) => Padding(
+          padding: const EdgeInsets.all(22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Stroke ' + _size.toStringAsFixed(1) + ' px',
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+              Slider(
+                min: 1,
+                max: 14,
+                divisions: 26,
+                value: _size,
+                onChanged: (v) {
+                  setModal(() {});
+                  setState(() => _size = v);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-  Widget _shapeBox()=>Positioned(right:18,bottom:92,child:Material(
-    elevation:14,borderRadius:BorderRadius.circular(20),color:Theme.of(context).colorScheme.surface,
-    child:Padding(padding:const EdgeInsets.all(8),child:Column(children:[
-      _shape(CanvasTool.line,Icons.horizontal_rule_rounded),_shape(CanvasTool.arrow,Icons.arrow_forward_rounded),
-      _shape(CanvasTool.rectangle,Icons.crop_square_rounded),_shape(CanvasTool.ellipse,Icons.circle_outlined),
-      _shape(CanvasTool.triangle,Icons.change_history_outlined),
-    ]))));
+  Widget _shapeBox() {
+    return Positioned(
+      right: 18,
+      bottom: 92,
+      child: Material(
+        elevation: 14,
+        borderRadius: BorderRadius.circular(20),
+        color: Theme.of(context).colorScheme.surface,
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Column(
+            children: [
+              _shape(CanvasTool.line, Icons.horizontal_rule_rounded),
+              _shape(CanvasTool.arrow, Icons.arrow_forward_rounded),
+              _shape(CanvasTool.rectangle, Icons.crop_square_rounded),
+              _shape(CanvasTool.ellipse, Icons.circle_outlined),
+              _shape(CanvasTool.triangle, Icons.change_history_outlined),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-  Widget _shape(CanvasTool t,IconData i)=>IconButton(tooltip:t.label,onPressed:()=>_toolSelect(t),
-    style:IconButton.styleFrom(backgroundColor:_tool==t?Theme.of(context).colorScheme.primaryContainer:null),icon:Icon(i));
+  Widget _shape(CanvasTool tool, IconData icon) {
+    return IconButton(
+      tooltip: tool.label,
+      onPressed: () => _toolSelect(tool),
+      style: IconButton.styleFrom(
+        backgroundColor: _tool == tool
+            ? Theme.of(context).colorScheme.primaryContainer
+            : null,
+      ),
+      icon: Icon(icon),
+    );
+  }
 
-  Widget _selectionBar()=>Positioned(left:0,right:0,bottom:90,child:Center(child:Material(
-    elevation:12,borderRadius:BorderRadius.circular(22),child:Padding(padding:const EdgeInsets.symmetric(horizontal:8,vertical:4),
-      child:Row(mainAxisSize:MainAxisSize.min,children:[
-        Text(_selected.toString()+' selected',style:const TextStyle(fontWeight:FontWeight.w700)),
-        IconButton(tooltip:'Left',onPressed:()=>_canvas.moveSelection(-8,0),icon:const Icon(Icons.arrow_back_rounded)),
-        IconButton(tooltip:'Right',onPressed:()=>_canvas.moveSelection(8,0),icon:const Icon(Icons.arrow_forward_rounded)),
-        IconButton(tooltip:'Duplicate',onPressed:_canvas.duplicateSelection,icon:const Icon(Icons.copy_rounded)),
-        IconButton(tooltip:'Delete',onPressed:_canvas.deleteSelection,icon:const Icon(Icons.delete_outline_rounded)),
-        IconButton(tooltip:'Close',onPressed:_canvas.clearSelection,icon:const Icon(Icons.close_rounded)),
-      ])))));
+  Widget _selectionBar() {
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 90,
+      child: Center(
+        child: Material(
+          elevation: 12,
+          borderRadius: BorderRadius.circular(22),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _selected.toString() + ' selected',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                IconButton(
+                  tooltip: 'Move left',
+                  onPressed: () => _canvas.moveSelection(-8, 0),
+                  icon: const Icon(Icons.arrow_back_rounded),
+                ),
+                IconButton(
+                  tooltip: 'Move right',
+                  onPressed: () => _canvas.moveSelection(8, 0),
+                  icon: const Icon(Icons.arrow_forward_rounded),
+                ),
+                IconButton(
+                  tooltip: 'Duplicate',
+                  onPressed: _canvas.duplicateSelection,
+                  icon: const Icon(Icons.copy_rounded),
+                ),
+                IconButton(
+                  tooltip: 'Delete',
+                  onPressed: _canvas.deleteSelection,
+                  icon: const Icon(Icons.delete_outline_rounded),
+                ),
+                IconButton(
+                  tooltip: 'Close',
+                  onPressed: _canvas.clearSelection,
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
-  Widget _previewRail()=>Positioned(left:0,top:0,bottom:0,width:116,child:Material(
-    elevation:16,color:Theme.of(context).colorScheme.surface,child:SafeArea(child:Column(children:[
-      const SizedBox(height:10),const Text('Pages',style:TextStyle(fontWeight:FontWeight.w800)),const SizedBox(height:8),
-      Expanded(child:ListView.builder(padding:const EdgeInsets.all(8),itemCount:_pages.length,itemBuilder:(_,i)=>Padding(
-        padding:const EdgeInsets.only(bottom:8),child:InkWell(onTap:()=>_selectPage(i),child:AspectRatio(aspectRatio:210/297,
-          child:Container(decoration:BoxDecoration(color:Colors.white,borderRadius:BorderRadius.circular(9),
-            border:Border.all(color:i==_page?Theme.of(context).colorScheme.primary:Colors.black12,width:i==_page?2:1)),
-            child:Center(child:Text((i+1).toString(),style:const TextStyle(fontWeight:FontWeight.w800))))))))),
-      IconButton(tooltip:'Add page',onPressed:_addPage,icon:const Icon(Icons.add_box_outlined)),
-    ])));
+  Widget _previewRail() {
+    return Positioned(
+      left: 0,
+      top: 0,
+      bottom: 0,
+      width: 116,
+      child: Material(
+        elevation: 16,
+        color: Theme.of(context).colorScheme.surface,
+        child: SafeArea(
+          child: Column(
+            children: [
+              const SizedBox(height: 10),
+              const Text('Pages', style: TextStyle(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 8),
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.all(8),
+                  itemCount: _pages.length,
+                  itemBuilder: (_, i) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: InkWell(
+                      onTap: () => _selectPage(i),
+                      child: AspectRatio(
+                        aspectRatio: 210 / 297,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(9),
+                            border: Border.all(
+                              color: i == _page
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Colors.black12,
+                              width: i == _page ? 2 : 1,
+                            ),
+                          ),
+                          child: Center(
+                            child: Text(
+                              (i + 1).toString(),
+                              style: const TextStyle(fontWeight: FontWeight.w800),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Add page',
+                onPressed: _addPage,
+                icon: const Icon(Icons.add_box_outlined),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-  Widget _lockedView()=>Center(child:Card(child:Padding(padding:const EdgeInsets.all(28),child:Column(mainAxisSize:MainAxisSize.min,children:[
-    const Icon(Icons.lock_rounded,size:60),const SizedBox(height:14),const Text('Note locked',style:TextStyle(fontSize:22,fontWeight:FontWeight.w800)),
-    const SizedBox(height:8),const Text('Authenticate on this device to open the note.',textAlign:TextAlign.center),const SizedBox(height:18),
-    FilledButton.icon(onPressed:()async{final ok=await _lock.authenticate();if(!mounted)return;setState(()=>_unlocked=ok);if(ok)await _load();},
-      icon:const Icon(Icons.fingerprint_rounded),label:const Text('Unlock')),
-  ])));
+  Widget _lockedView() {
+    return Center(
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.lock_rounded, size: 60),
+              const SizedBox(height: 14),
+              const Text(
+                'Note locked',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Authenticate on this device to open the note.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 18),
+              FilledButton.icon(
+                onPressed: () async {
+                  final ok = await _lock.authenticate();
+                  if (!mounted) return;
+                  setState(() => _unlocked = ok);
+                  if (ok) await _load();
+                },
+                icon: const Icon(Icons.fingerprint_rounded),
+                label: const Text('Unlock'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   @override void dispose(){
     _saveTimer?.cancel();if(!_locked||_unlocked)unawaited(_save());
