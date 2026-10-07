@@ -6,6 +6,7 @@ class StrokeCodec {
   static Map<String, Object?> strokeToJson(Stroke s) => {
     'id': s.id, 'shape': s.shape, 'fill': s.fill, 'fillOpacity': s.fillOpacity,
     'customSides': s.customSides, 'stickerText': s.stickerText,
+    'dashed': s.dashed, 'fillColor': s.fillColor?.toARGB32(),
     'pen': {'type': s.pen.type.name, 'color': s.pen.color.toARGB32(), 'size': s.pen.size, 'opacity': s.pen.opacity},
     'points': s.points.map((p) => {'x': p.position.dx, 'y': p.position.dy, 'pressure': p.pressure, 'timestamp': p.timestamp}).toList(),
   };
@@ -29,6 +30,8 @@ class StrokeCodec {
         fillOpacity: ((raw['fillOpacity'] as num?)?.toDouble() ?? .18).clamp(0, 1),
         customSides: ((raw['customSides'] as num?)?.toInt() ?? 6).clamp(3, 24),
         stickerText: raw['stickerText']?.toString(), points: points,
+        dashed: raw['dashed'] == true,
+        fillColor: raw['fillColor'] is num ? Color((raw['fillColor'] as num).toInt()) : null,
         pen: PenConfig(
           type: type,
           color: Color((penMap['color'] as num?)?.toInt() ?? 0xff111111),
