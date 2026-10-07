@@ -225,7 +225,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    name: Publish v0.5.0
+    name: Publish release
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -240,10 +240,11 @@ jobs:
       - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: v0.5.0
         run: |
+          VERSION=$(sed -n 's/^version: \([^+]*\).*/\1/p' app/pubspec.yaml)
+          TAG="v$VERSION"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"
           else
-            gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --title "Snote 0.5.0" --generate-notes --latest
+            gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --title "Snote $VERSION" --generate-notes --latest
           fi
