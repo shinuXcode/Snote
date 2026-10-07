@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter/services.dart';
@@ -390,7 +391,12 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
               Positioned.fill(
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onHorizontalDragEnd: _pageSwipe,
+                  supportedDevices: const {
+                    PointerDeviceKind.touch,
+                    PointerDeviceKind.trackpad,
+                  },
+                  onHorizontalDragEnd: _pan ? null : _pageSwipe,
+                  onDoubleTap: () => setState(() => _toolbar = !_toolbar),
                   child: _pageView(),
                 ),
               ),
