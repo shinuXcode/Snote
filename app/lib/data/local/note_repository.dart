@@ -206,8 +206,8 @@ class NoteRepository {
           'updated_at': DateTime.now().millisecondsSinceEpoch,
           'sync_state': 'pending',
         },
-        where: 'id = ?',
-        whereArgs: [id],
+        where: 'id = ? AND owner_id = ?',
+        whereArgs: [id, SnoteAccountScope.ownerId],
       );
       await _queue(tx, id, 'upsert');
     });
@@ -254,6 +254,8 @@ class NoteRepository {
     final db = await _db;
     return db.query(
       'sync_queue',
+      where: 'owner_id = ?',
+      whereArgs: [SnoteAccountScope.ownerId],
       orderBy: 'created_at ASC',
       limit: 100,
     );
@@ -266,8 +268,8 @@ class NoteRepository {
       await tx.update(
         'notes',
         {'sync_state': 'synced'},
-        where: 'id = ?',
-        whereArgs: [noteId],
+        where: 'id = ? AND owner_id = ?',
+        whereArgs: [noteId, SnoteAccountScope.ownerId],
       );
       await tx.delete(
         'sync_queue',
@@ -323,8 +325,8 @@ class NoteRepository {
 
     await db.delete(
       'sync_queue',
-      where: 'entity_type = ? AND entity_id = ?',
-      whereArgs: ['note', id],
+      where: 'entity_type = ? AND entity_id = ? AND owner_id = ?',
+      whereArgs: ['note', id, SnoteAccountScope.ownerId],
     );
   }
 
@@ -335,8 +337,8 @@ class NoteRepository {
   ) async {
     await db.delete(
       'sync_queue',
-      where: 'entity_type = ? AND entity_id = ?',
-      whereArgs: ['note', id],
+      where: 'entity_type = ? AND entity_id = ? AND owner_id = ?',
+      whereArgs: ['note', id, SnoteAccountScope.ownerId],
     );
 
     await db.insert(
