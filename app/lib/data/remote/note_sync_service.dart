@@ -106,7 +106,7 @@ class NoteSyncService {
         .eq('user_id', userId)
         .limit(1);
 
-    if (remoteRows is List && remoteRows.isNotEmpty) {
+    if (remoteRows.isNotEmpty) {
       final remote = Map<String, dynamic>.from(remoteRows.first as Map);
       final remoteUpdated = DateTime.tryParse(
         remote['updated_at']?.toString() ?? '',
@@ -194,7 +194,7 @@ class NoteSyncService {
         .eq('user_id', userId)
         .limit(1);
 
-    if (remoteRows is List && remoteRows.isNotEmpty) {
+    if (remoteRows.isNotEmpty) {
       final remote = Map<String, dynamic>.from(remoteRows.first as Map);
       final remoteUpdated = DateTime.tryParse(
         remote['updated_at']?.toString() ?? '',
