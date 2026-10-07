@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import '../lib/core/config/account_scope.dart';
+import 'package:snote/core/config/account_scope.dart';
 
 void main() {
   test('local mode is isolated from authenticated account mode', () {
