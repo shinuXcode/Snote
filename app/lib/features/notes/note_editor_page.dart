@@ -1074,7 +1074,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
           child: SafeArea(
             child: Column(children: [
               Row(children: [
-                const Expanded(child: Padding(padding: EdgeInsets.only(left: 12), child: Text('Pages', style: TextStyle(fontWeight: FontWeight.w900))),
+                const Expanded(child: Padding(padding: EdgeInsets.only(left: 12), child: Text('Pages', style: TextStyle(fontWeight: FontWeight.w900)))),
                 IconButton(onPressed: () => setState(() => _preview = false), icon: const Icon(Icons.close_rounded)),
               ]),
               Expanded(
