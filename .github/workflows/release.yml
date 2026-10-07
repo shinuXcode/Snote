@@ -225,8 +225,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: v0.4.0
         run: |
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/* --clobber
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"
           else
-            gh release create "$TAG" dist/* --title "Snote 0.4.0" --generate-notes --latest
+            gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --title "Snote 0.4.0" --generate-notes --latest
           fi
