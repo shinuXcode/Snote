@@ -246,8 +246,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         _toolButton(CanvasTool.pencil,Icons.brush_rounded),_toolButton(CanvasTool.highlighter,Icons.highlight_rounded),
         _toolButton(CanvasTool.eraser,Icons.auto_fix_normal_rounded),_toolButton(CanvasTool.lasso,Icons.gesture_rounded),
         IconButton.filledTonal(tooltip:'Shapes',onPressed:()=>setState(()=>_shapes=!_shapes),icon:const Icon(Icons.category_outlined)),
-        _colorDot(const Color(0xff263238)),_color(const Color(0xff2563eb)),_color(const Color(0xffdc2626)),
-        _color(const Color(0xff16a34a)),_color(const Color(0xff7c3aed)),
+        _colorDot(const Color(0xff263238)),_colorDot(const Color(0xff2563eb)),_colorDot(const Color(0xffdc2626)),
+        _colorDot(const Color(0xff16a34a)),_colorDot(const Color(0xff7c3aed)),
         IconButton(tooltip:'Stroke size',onPressed:_sizePicker,icon:const Icon(Icons.line_weight_rounded)),
         IconButton(tooltip:'Hand / pan',onPressed:()=>setState(()=>_pan=!_pan),icon:Icon(_pan?Icons.pan_tool_rounded:Icons.pan_tool_outlined)),
         IconButton(tooltip:'Text mode',onPressed:()=>setState(()=>_drawing=false),icon:const Icon(Icons.text_fields_rounded)),
@@ -276,7 +276,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       _shape(CanvasTool.line,Icons.horizontal_rule_rounded),_shape(CanvasTool.arrow,Icons.arrow_forward_rounded),
       _shape(CanvasTool.rectangle,Icons.crop_square_rounded),_shape(CanvasTool.ellipse,Icons.circle_outlined),
       _shape(CanvasTool.triangle,Icons.change_history_outlined),
-    ])));
+    ]))));
 
   Widget _shape(CanvasTool t,IconData i)=>IconButton(tooltip:t.label,onPressed:()=>_toolSelect(t),
     style:IconButton.styleFrom(backgroundColor:_tool==t?Theme.of(context).colorScheme.primaryContainer:null),icon:Icon(i));
