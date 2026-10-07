@@ -749,18 +749,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         ),
       );
 
-  IconData _toolIcon(CanvasTool tool) {
-    switch (tool) {
-      case CanvasTool.ballpoint: return Icons.edit_rounded;
-      case CanvasTool.fountain: return Icons.gesture_rounded;
-      case CanvasTool.pencil: return Icons.brush_rounded;
-      case CanvasTool.highlighter: return Icons.highlight_rounded;
-      case CanvasTool.eraser: return Icons.auto_fix_normal_rounded;
-      case CanvasTool.lasso: return Icons.gesture_rounded;
-      case CanvasTool.sticker: return Icons.emoji_emotions_outlined;
-      default: return Icons.category_outlined;
-    }
-  }
 
   Widget _shapePanelWidget() {
     final entries = [
