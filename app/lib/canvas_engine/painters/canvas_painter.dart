@@ -74,16 +74,25 @@ class SnoteCanvasPainter extends CustomPainter {
       if (stroke.pen.type == PenType.fountain) {
         final dt = (b.timestamp - a.timestamp).clamp(0.5, 250.0);
         final velocity = dt <= 0 ? 0.0 : (b.position - a.position).distance / dt;
-        width = fountainWidth(baseWidth: stroke.pen.size, velocity: velocity, pressure: b.pressure);
+        width = fountainWidth(
+          baseWidth: stroke.pen.size,
+          velocity: velocity,
+          pressure: b.pressure,
+        );
       } else {
         width *= .75 + b.pressure.clamp(0, 1) * .25;
       }
-      paint.strokeWidth = stroke.pen.type == PenType.highlighter ? width * 1.8 : width;
-      paint.blendMode = stroke.pen.type == PenType.highlighter ? BlendMode.multiply : BlendMode.srcOver;
-      final midpoint = Offset((a.position.dx + b.position.dx) / 2, (a.position.dy + b.position.dy) / 2);
+      paint.strokeWidth =
+          stroke.pen.type == PenType.highlighter ? width * 1.8 : width;
+      paint.blendMode = stroke.pen.type == PenType.highlighter
+          ? BlendMode.multiply
+          : BlendMode.srcOver;
+
+      // Draw the complete sampled segment. The previous implementation only
+      // rendered to the midpoint, leaving visible gaps between samples.
       final path = Path()
         ..moveTo(a.position.dx, a.position.dy)
-        ..quadraticBezierTo(a.position.dx, a.position.dy, midpoint.dx, midpoint.dy);
+        ..lineTo(b.position.dx, b.position.dy);
       canvas.drawPath(path, paint);
     }
   }
