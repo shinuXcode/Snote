@@ -244,9 +244,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       alignment:WrapAlignment.center,crossAxisAlignment:WrapCrossAlignment.center,spacing:3,children:[
         _toolButton(CanvasTool.ballpoint,Icons.edit_rounded),_toolButton(CanvasTool.fountain,Icons.gesture_rounded),
         _toolButton(CanvasTool.pencil,Icons.brush_rounded),_toolButton(CanvasTool.highlighter,Icons.highlight_rounded),
-        _toolButton(CanvasTool.eraser,Icons.auto_fix_normal_rounded),_toolButton(CanvasTool.lasso,Icons.lasso_rounded),
+        _toolButton(CanvasTool.eraser,Icons.auto_fix_normal_rounded),_toolButton(CanvasTool.lasso,Icons.gesture_rounded),
         IconButton.filledTonal(tooltip:'Shapes',onPressed:()=>setState(()=>_shapes=!_shapes),icon:const Icon(Icons.category_outlined)),
-        _color(const Color(0xff263238)),_color(const Color(0xff2563eb)),_color(const Color(0xffdc2626)),
+        _colorDot(const Color(0xff263238)),_color(const Color(0xff2563eb)),_color(const Color(0xffdc2626)),
         _color(const Color(0xff16a34a)),_color(const Color(0xff7c3aed)),
         IconButton(tooltip:'Stroke size',onPressed:_sizePicker,icon:const Icon(Icons.line_weight_rounded)),
         IconButton(tooltip:'Hand / pan',onPressed:()=>setState(()=>_pan=!_pan),icon:Icon(_pan?Icons.pan_tool_rounded:Icons.pan_tool_outlined)),
@@ -260,7 +260,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     style:IconButton.styleFrom(backgroundColor:_tool==tool?Theme.of(context).colorScheme.primaryContainer:null),
     icon:Icon(icon));
 
-  Widget _color(Color c)=>InkWell(borderRadius:BorderRadius.circular(20),onTap:()=>setState(()=>_color=c),child:Padding(
+  Widget _colorDot(Color c)=>InkWell(borderRadius:BorderRadius.circular(20),onTap:()=>setState(()=>_color=c),child:Padding(
     padding:const EdgeInsets.all(5),child:CircleAvatar(radius:_color==c?13:11,backgroundColor:c,
       child:_color==c?const Icon(Icons.check,size:14,color:Colors.white):null)));
 
