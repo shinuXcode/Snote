@@ -607,45 +607,49 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
   Widget _toolbarWidget() {
     final size = MediaQuery.sizeOf(context);
-    if (_toolbarY == 0) _toolbarY = size.height - 100;
-
     if (_docked) {
       final vertical = _dockSide == 'left' || _dockSide == 'right';
       return Positioned(
         left: _dockSide == 'left' ? 0 : null,
         right: _dockSide == 'right' ? 0 : null,
-        top: _dockSide == 'top' ? 58 : (_dockSide == 'bottom' ? null : 58),
+        top: _dockSide == 'top' ? 58 : null,
         bottom: _dockSide == 'bottom' ? 0 : null,
-        child: SafeArea(
-          child: Material(
-            elevation: SnoteThemeController.instance.eInk ? 1 : 14,
-            color: Theme.of(context).colorScheme.surface.withValues(alpha: .98),
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(_dockSide == 'left' || _dockSide == 'top' ? 20 : 0),
-              topRight: Radius.circular(_dockSide == 'right' || _dockSide == 'top' ? 20 : 0),
-              bottomLeft: Radius.circular(_dockSide == 'left' || _dockSide == 'bottom' ? 20 : 0),
-              bottomRight: Radius.circular(_dockSide == 'right' || _dockSide == 'bottom' ? 20 : 0),
-            ),
-            child: _toolbarContent(vertical ? Axis.vertical : Axis.horizontal, docked: true),
-          ),
-        ),
+        child: SafeArea(child: _toolbarSurface(_toolbarContent(vertical ? Axis.vertical : Axis.horizontal, docked: true))),
       );
     }
 
-    return Positioned(
-      left: _toolbarX.clamp(8, math.max(8, size.width - 120)),
-      top: _toolbarY.clamp(60, math.max(60, size.height - 80)),
-      child: GestureDetector(
-        onPanUpdate: (d) => setState(() {
-          _toolbarX = (_toolbarX + d.delta.dx).clamp(8, math.max(8, size.width - 120));
-          _toolbarY = (_toolbarY + d.delta.dy).clamp(60, math.max(60, size.height - 80));
-        }),
-        onPanEnd: (_) => _snapToolbar(size),
+    return ValueListenableBuilder<Offset>(
+      valueListenable: _toolbarOffset,
+      builder: (_, offset, child) {
+        final y = offset.dy == 0 ? size.height - 112 : offset.dy;
+        return Positioned(
+          left: offset.dx.clamp(8, math.max(8, size.width - 160)),
+          top: y.clamp(60, math.max(60, size.height - 92)),
+          child: GestureDetector(
+            onPanUpdate: (d) {
+              _toolbarX = (_toolbarX + d.delta.dx).clamp(8, math.max(8, size.width - 160));
+              _toolbarY = ((_toolbarY == 0 ? y : _toolbarY) + d.delta.dy).clamp(60, math.max(60, size.height - 92));
+              _toolbarOffset.value = Offset(_toolbarX, _toolbarY);
+            },
+            onPanEnd: (_) => _snapToolbar(size),
+            child: child,
+          ),
+        );
+      },
+      child: _toolbarSurface(_toolbarContent(Axis.horizontal, docked: false)),
+    );
+  }
+
+  Widget _toolbarSurface(Widget child) {
+    final blur = SnoteThemeController.instance.eInk ? 0.0 : 12.0;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: blur, sigmaY: blur),
         child: Material(
-          elevation: SnoteThemeController.instance.eInk ? 1 : 16,
-          color: Theme.of(context).colorScheme.surface.withValues(alpha: .98),
-          borderRadius: BorderRadius.circular(24),
-          child: _toolbarContent(Axis.horizontal, docked: false),
+          elevation: SnoteThemeController.instance.eInk ? 0 : 8,
+          color: Theme.of(context).colorScheme.surface.withValues(alpha: .70),
+          child: child,
         ),
       ),
     );
