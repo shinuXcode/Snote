@@ -78,6 +78,24 @@ jobs:
           esac
           rm -f test/widget_test.dart
 
+      - name: Configure Windows C++ compatibility
+        if: matrix.target == 'windows'
+        working-directory: app
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('windows/CMakeLists.txt')
+          s = p.read_text()
+          definition = 'add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)'
+          anchor = 'include(flutter/generated_plugins.cmake)'
+          if definition not in s:
+              if anchor not in s:
+                  raise SystemExit('Flutter Windows generated_plugins CMake anchor not found')
+              s = s.replace(anchor, definition + '\n' + anchor, 1)
+              p.write_text(s)
+          PY
+
       - name: Configure Android
         if: matrix.target == 'android'
         working-directory: app
