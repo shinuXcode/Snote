@@ -8,6 +8,7 @@ class SnoteCanvasPainter extends CustomPainter {
   final List<Stroke> strokes;
   final Stroke? activeStroke;
   final List<StrokePoint> activePoints;
+  final Path? activePath;
   final PenConfig? activePen;
   final CanvasTool? activeTool;
   final bool activeFill;
@@ -22,6 +23,7 @@ class SnoteCanvasPainter extends CustomPainter {
     required this.strokes,
     required this.activeStroke,
     required this.activePoints,
+    this.activePath,
     required this.activePen,
     required this.activeTool,
     required this.activeFill,
@@ -43,6 +45,8 @@ class SnoteCanvasPainter extends CustomPainter {
     }
     if (drawActive && activeStroke != null) {
       _drawStroke(canvas, activeStroke!, false);
+    } else if (drawActive && activePath != null && activePen != null && activeTool != null) {
+      _drawLivePath(canvas);
     } else if (drawActive && activePoints.isNotEmpty && activePen != null && activeTool != null) {
       _drawActive(canvas);
     }
@@ -56,6 +60,26 @@ class SnoteCanvasPainter extends CustomPainter {
       for (var i = 1; i < lassoPath.length; i++) {
         canvas.drawLine(lassoPath[i - 1], lassoPath[i], p);
       }
+    }
+  }
+
+  void _drawLivePath(Canvas canvas) {
+    if (activePath == null || activePen == null || activeTool == null) return;
+    final opacity = activePen!.type == PenType.highlighter
+        ? activePen!.opacity.clamp(.08, .55)
+        : activePen!.opacity.clamp(.05, 1);
+    final paint = Paint()
+      ..color = activePen!.color.withValues(alpha: opacity)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = (activePen!.type == PenType.highlighter ? activePen!.size * 2.05 : activePen!.size).clamp(.5, 60).toDouble()
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..isAntiAlias = true
+      ..blendMode = activePen!.type == PenType.highlighter ? BlendMode.multiply : BlendMode.srcOver;
+    canvas.drawPath(activePath!, paint);
+    if (activePoints.isNotEmpty) {
+      final last = activePoints.last.position;
+      canvas.drawCircle(last, math.max(.6, paint.strokeWidth / 2), Paint()..color = paint.color);
     }
   }
 
@@ -149,7 +173,11 @@ class SnoteCanvasPainter extends CustomPainter {
         ..isAntiAlias = true;
       _drawShapePath(canvas, stroke, fill, rect);
     }
-    _drawShapePath(canvas, stroke, shapePaint, rect);
+    if (stroke.dashed) {
+      _drawDashedShape(canvas, stroke, shapePaint, rect);
+    } else {
+      _drawShapePath(canvas, stroke, shapePaint, rect);
+    }
   }
 
   void _drawShapePath(Canvas canvas, Stroke stroke, Paint paint, Rect rect) {
@@ -194,6 +222,51 @@ class SnoteCanvasPainter extends CustomPainter {
         canvas.drawPath(_star(center, math.min(rect.width.abs(), rect.height.abs()) / 2, 5), paint);
       case 'customPolygon':
         canvas.drawPath(_regularPolygon(center, math.min(rect.width.abs(), rect.height.abs()) / 2, stroke.customSides, -math.pi / 2), paint);
+    }
+  }
+
+
+  void _drawDashedShape(Canvas canvas, Stroke stroke, Paint paint, Rect rect) {
+    final path = Path();
+    final a = stroke.points.first.position;
+    final b = stroke.points.last.position;
+    switch (stroke.shape) {
+      case 'line':
+      case 'arrow':
+        path.moveTo(a.dx, a.dy);
+        path.lineTo(b.dx, b.dy);
+        break;
+      case 'rectangle':
+        path.addRect(rect);
+        break;
+      case 'roundedRectangle':
+        path.addRRect(RRect.fromRectAndRadius(rect, const Radius.circular(12)));
+        break;
+      case 'ellipse':
+      case 'circle':
+        final size = math.min(rect.width.abs(), rect.height.abs());
+        final square = Rect.fromCenter(center: rect.center, width: size, height: size);
+        path.addOval(stroke.shape == 'circle' ? square : rect);
+        break;
+      default:
+        _drawShapePath(canvas, stroke, paint, rect);
+        return;
+    }
+    for (final metric in path.computeMetrics()) {
+      for (double d = 0; d < metric.length; d += 14) {
+        final end = math.min(d + 8, metric.length);
+        canvas.drawPath(metric.extractPath(d, end), paint);
+      }
+    }
+    if (stroke.shape == 'arrow') {
+      final direction = b - a;
+      if (direction.distance > 1) {
+        final unit = direction / direction.distance;
+        final normal = Offset(-unit.dy, unit.dx);
+        final tip = b - unit * 16;
+        canvas.drawLine(b, tip + normal * 7, paint);
+        canvas.drawLine(b, tip - normal * 7, paint);
+      }
     }
   }
 
@@ -257,6 +330,7 @@ class SnoteCanvasPainter extends CustomPainter {
         !identical(oldDelegate.activePoints, activePoints) ||
         oldDelegate.activeStroke != activeStroke ||
         oldDelegate.activePen != activePen ||
+        oldDelegate.activePath != activePath ||
         oldDelegate.activeTool != activeTool ||
         oldDelegate.activeFill != activeFill ||
         oldDelegate.activeCustomSides != activeCustomSides ||
