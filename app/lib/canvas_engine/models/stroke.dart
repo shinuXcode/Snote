@@ -23,6 +23,7 @@ class Stroke {
   const Stroke({
     required this.id, required this.points, required this.pen, this.shape,
     this.fill = false, this.fillOpacity = .18, this.customSides = 6, this.stickerText,
+    this.dashed = false, this.fillColor,
   });
 
   Stroke copyWith({
