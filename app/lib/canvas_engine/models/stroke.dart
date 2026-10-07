@@ -18,12 +18,20 @@ class Stroke {
   final List<StrokePoint> points;
   final PenConfig pen;
   final String? shape;
+  final bool fill;
+  final double fillOpacity;
+  final int customSides;
+  final String? stickerText;
 
   const Stroke({
     required this.id,
     required this.points,
     required this.pen,
     this.shape,
+    this.fill = false,
+    this.fillOpacity = .18,
+    this.customSides = 6,
+    this.stickerText,
   });
 
   Stroke copyWith({
@@ -31,10 +39,20 @@ class Stroke {
     List<StrokePoint>? points,
     PenConfig? pen,
     String? shape,
-  }) => Stroke(
-        id: id ?? this.id,
-        points: points ?? this.points,
-        pen: pen ?? this.pen,
-        shape: shape ?? this.shape,
-      );
+    bool? fill,
+    double? fillOpacity,
+    int? customSides,
+    String? stickerText,
+  }) {
+    return Stroke(
+      id: id ?? this.id,
+      points: points ?? this.points,
+      pen: pen ?? this.pen,
+      shape: shape ?? this.shape,
+      fill: fill ?? this.fill,
+      fillOpacity: fillOpacity ?? this.fillOpacity,
+      customSides: customSides ?? this.customSides,
+      stickerText: stickerText ?? this.stickerText,
+    );
+  }
 }
