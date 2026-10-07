@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:file_picker/file_picker.dart';
 import 'folder_repository.dart';
@@ -50,10 +51,46 @@ class NotebookTransferService {
     );
   }
 
+  Future<Uri?> exportMarkdownPicked() async {
+    final notes = await repository.listAllVisible();
+    final buffer = StringBuffer('# Snote notebook\n\n');
+    for (final note in notes) {
+      buffer.writeln('## ' + note.title);
+      buffer.writeln();
+      if (note.contentJson != null && note.contentJson!.isNotEmpty) {
+        buffer.writeln('```json');
+        buffer.writeln(note.contentJson);
+        buffer.writeln('```');
+      }
+      buffer.writeln();
+    }
+    return FilePicker.saveFile(
+      fileName: 'snote-notebook.md',
+      bytes: Uint8List.fromList(utf8.encode(buffer.toString())),
+      mimeType: 'text/markdown',
+    );
+  }
+
+  Future<Uri?> exportTextPicked() async {
+    final notes = await repository.listAllVisible();
+    final buffer = StringBuffer();
+    for (final note in notes) {
+      buffer.writeln(note.title);
+      buffer.writeln('=' * note.title.length);
+      buffer.writeln(note.contentJson ?? '');
+      buffer.writeln();
+    }
+    return FilePicker.saveFile(
+      fileName: 'snote-notebook.txt',
+      bytes: Uint8List.fromList(utf8.encode(buffer.toString())),
+      mimeType: 'text/plain',
+    );
+  }
+
   Future<int> importPicked() async {
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['json', 'snote', 'zip', 'goodnotes', 'touchnotes'],
+      allowedExtensions: ['json', 'snote', 'zip', 'goodnotes', 'touchnotes', 'md', 'txt', 'csv', 'tsv'],
     );
     if (result.isEmpty) return 0;
 
@@ -67,6 +104,9 @@ class NotebookTransferService {
       } catch (_) {}
     }
 
+    if (name.endsWith('.md') || name.endsWith('.txt') || name.endsWith('.csv') || name.endsWith('.tsv')) {
+      return _importText(file.name, utf8.decode(bytes));
+    }
     if (name.endsWith('.zip') || name.endsWith('.goodnotes') || name.endsWith('.touchnotes')) {
       return _importArchive(bytes);
     }
@@ -118,6 +158,36 @@ class NotebookTransferService {
     return imported;
   }
 
+  Future<int> _importText(String filename, String raw) async {
+    final title = filename.replaceFirst(RegExp(r'\.[^.]+
+    final archive = ZipDecoder().decodeBytes(bytes);
+    var imported = 0;
+
+    for (final file in archive) {
+      if (!file.isFile || !file.name.toLowerCase().endsWith('.json')) continue;
+      final data = file.readBytes();
+      if (data == null) continue;
+      try {
+        imported += await _importJson(utf8.decode(data));
+      } catch (_) {}
+    }
+
+    return imported;
+  }
+}
+), '').trim();
+    if (title.isEmpty || raw.trim().isEmpty) return 0;
+    final note = await repository.create(title: title);
+    await repository.saveContent(note.id, {
+      'version': 5,
+      'pages': <Map<String, Object?>>[],
+      'text_delta': <Map<String, Object?>>[
+        <String, Object?>{'insert': raw + '\n'},
+      ],
+      'importedText': true,
+    });
+    return 1;
+  }
   Future<int> _importArchive(List<int> bytes) async {
     final archive = ZipDecoder().decodeBytes(bytes);
     var imported = 0;
