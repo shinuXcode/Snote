@@ -244,6 +244,33 @@ class NoteRepository {
     return rows.map(LocalNote.fromMap).toList();
   }
 
+
+  Future<void> permanentlyDelete(String id) async {
+    final db = await _db;
+    await db.transaction((tx) async {
+      await tx.delete(
+        'sync_queue',
+        where: 'entity_id = ? AND owner_id = ?',
+        whereArgs: [id, SnoteAccountScope.ownerId],
+      );
+      await tx.delete(
+        'attachments',
+        where: 'note_id = ?',
+        whereArgs: [id],
+      );
+      await tx.delete(
+        'pages',
+        where: 'note_id = ?',
+        whereArgs: [id],
+      );
+      await tx.delete(
+        'notes',
+        where: 'id = ? AND owner_id = ?',
+        whereArgs: [id, SnoteAccountScope.ownerId],
+      );
+    });
+  }
+
   Future<void> restore(String id) async {
     final db = await _db;
     await db.transaction((tx) async {
