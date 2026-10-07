@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import 'database.dart';
+import '../../core/config/account_scope.dart';
 
 class LocalFolder {
   final String id;
@@ -77,6 +78,7 @@ class FolderRepository {
     await db.transaction((tx) async {
       await tx.insert('folders', {
         'id': folder.id,
+        'owner_id': SnoteAccountScope.ownerId,
         'parent_id': folder.parentId,
         'name': folder.name,
         'created_at': folder.createdAt,
@@ -95,9 +97,11 @@ class FolderRepository {
     final rows = await db.query(
       'folders',
       where: parentId == null
-          ? 'parent_id IS NULL AND deleted_at IS NULL'
-          : 'parent_id = ? AND deleted_at IS NULL',
-      whereArgs: parentId == null ? null : [parentId],
+          ? 'owner_id = ? AND parent_id IS NULL AND deleted_at IS NULL'
+          : 'owner_id = ? AND parent_id = ? AND deleted_at IS NULL',
+      whereArgs: parentId == null
+          ? [SnoteAccountScope.ownerId]
+          : [SnoteAccountScope.ownerId, parentId],
       orderBy: 'name COLLATE NOCASE ASC',
     );
 
@@ -109,8 +113,8 @@ class FolderRepository {
 
     final rows = await db.query(
       'folders',
-      where: 'id = ?',
-      whereArgs: [id],
+      where: 'id = ? AND owner_id = ?',
+      whereArgs: [id, SnoteAccountScope.ownerId],
       limit: 1,
     );
 
@@ -131,8 +135,8 @@ class FolderRepository {
           'name': trimmed,
           'updated_at': DateTime.now().millisecondsSinceEpoch,
         },
-        where: 'id = ?',
-        whereArgs: [id],
+        where: 'id = ? AND owner_id = ?',
+        whereArgs: [id, SnoteAccountScope.ownerId],
       );
       await _queue(tx, id, 'upsert');
     });
@@ -155,8 +159,8 @@ class FolderRepository {
       final childFolders = await tx.query(
         'folders',
         columns: ['id'],
-        where: 'parent_id = ? AND deleted_at IS NULL',
-        whereArgs: [id],
+        where: 'owner_id = ? AND parent_id = ? AND deleted_at IS NULL',
+        whereArgs: [SnoteAccountScope.ownerId, id],
       );
 
       for (final child in childFolders) {
@@ -173,8 +177,8 @@ class FolderRepository {
       final childNotes = await tx.query(
         'notes',
         columns: ['id'],
-        where: 'folder_id = ? AND deleted_at IS NULL',
-        whereArgs: [id],
+        where: 'owner_id = ? AND folder_id = ? AND deleted_at IS NULL',
+        whereArgs: [SnoteAccountScope.ownerId, id],
       );
 
       for (final note in childNotes) {
@@ -201,13 +205,14 @@ class FolderRepository {
   ) async {
     await db.delete(
       'sync_queue',
-      where: 'entity_type = ? AND entity_id = ?',
-      whereArgs: ['folder', id],
+      where: 'entity_type = ? AND entity_id = ? AND owner_id = ?',
+      whereArgs: ['folder', id, SnoteAccountScope.ownerId],
     );
     await db.insert(
       'sync_queue',
       {
         'id': _uuid.v4(),
+        'owner_id': SnoteAccountScope.ownerId,
         'entity_type': 'folder',
         'entity_id': id,
         'operation': operation,
@@ -224,13 +229,14 @@ class FolderRepository {
   ) async {
     await db.delete(
       'sync_queue',
-      where: 'entity_type = ? AND entity_id = ?',
-      whereArgs: ['note', noteId],
+      where: 'entity_type = ? AND entity_id = ? AND owner_id = ?',
+      whereArgs: ['note', noteId, SnoteAccountScope.ownerId],
     );
     await db.insert(
       'sync_queue',
       {
         'id': _uuid.v4(),
+        'owner_id': SnoteAccountScope.ownerId,
         'entity_type': 'note',
         'entity_id': noteId,
         'operation': operation,
