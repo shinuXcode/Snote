@@ -62,6 +62,14 @@ jobs:
         working-directory: app
         run: dart run launcher_icons
 
+      - name: Clean
+        working-directory: app
+        run: flutter clean
+
+      - name: Format
+        working-directory: app
+        run: dart format .
+
       - name: Analyze
         working-directory: app
         run: flutter analyze --no-fatal-infos

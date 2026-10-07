@@ -2,16 +2,21 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:uuid/uuid.dart';
 
+import '../input/ink_input_pipeline.dart';
 import '../input/palm_rejection.dart';
 import '../models/pen_config.dart';
 import '../models/stroke.dart';
 import '../models/stroke_codec.dart';
 import '../painters/canvas_painter.dart';
+import '../performance/writing_performance.dart';
 import 'snote_canvas_controller.dart';
 
-class _CanvasRepaint extends ChangeNotifier { void repaint() => notifyListeners(); }
+class _CanvasRepaint extends ChangeNotifier {
+  void repaint() => notifyListeners();
+}
 
 class SnoteCanvas extends StatefulWidget {
   final PenConfig pen;
@@ -34,6 +39,8 @@ class SnoteCanvas extends StatefulWidget {
   final bool eraseMark;
   final bool dashed;
   final Color? fillColor;
+  final double smoothing;
+  final bool showPerformanceOverlay;
 
   const SnoteCanvas({
     super.key,
@@ -57,6 +64,8 @@ class SnoteCanvas extends StatefulWidget {
     this.eraseMark = true,
     this.dashed = false,
     this.fillColor,
+    this.smoothing = .72,
+    this.showPerformanceOverlay = false,
   });
 
   @override
@@ -67,33 +76,40 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
   final _uuid = const Uuid();
   final _palmRejection = PalmRejection();
   final _repaint = _CanvasRepaint();
+  final _performance = WritingPerformanceStats(
+    enabled: const bool.fromEnvironment('SNOTE_PERF'),
+  );
   final List<Stroke> _strokes = [];
   final List<List<Stroke>> _history = [];
   final List<List<Stroke>> _redo = [];
   final Set<String> _selected = <String>{};
   final List<Offset> _lassoPath = <Offset>[];
-  final List<StrokePoint> _activePoints = <StrokePoint>[];
-  Path? _activePath;
-  Offset? _liveLastPoint;
+  final List<StrokePoint> _activeRealPoints = <StrokePoint>[];
+  final List<StrokePoint> _activeLivePoints = <StrokePoint>[];
+
+  InkInputPipeline? _input;
   Offset? _eraserPoint;
   double _eraserRadius = 0;
   bool _temporaryEraser = false;
-
-  Stroke? _activeStroke;
-  PenConfig? _activePen;
   CanvasTool? _activeTool;
+  PenConfig? _activePen;
   String? _activeSticker;
   int _activePointer = -1;
   bool _ignorePointer = false;
   bool _eraseSnapshotTaken = false;
   DateTime? _lastStylusTap;
   Offset? _lastStylusPosition;
+  DateTime? _lastInputWallClock;
+
+  bool get _perfEnabled => _performance.enabled;
 
   @override
   void initState() {
     super.initState();
+    _input = InkInputPipeline(smoothing: widget.smoothing);
     _replaceDocument(widget.initialDocument);
     _bindController();
+    _performance.attachScheduler();
   }
 
   @override
@@ -103,6 +119,9 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       oldWidget.controller?.unbind();
       _bindController();
     }
+    if (oldWidget.smoothing != widget.smoothing) {
+      _input = InkInputPipeline(smoothing: widget.smoothing);
+    }
     if (!identical(oldWidget.initialDocument, widget.initialDocument)) {
       _replaceDocument(widget.initialDocument, clearHistory: false);
     }
@@ -110,12 +129,17 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
 
   @override
   void dispose() {
+    _performance.detachScheduler();
     widget.controller?.unbind();
     _repaint.dispose();
+    _performance.dispose();
     super.dispose();
   }
 
-  void _replaceDocument(Map<String, Object?>? document, {bool clearHistory = true}) {
+  void _replaceDocument(
+    Map<String, Object?>? document, {
+    bool clearHistory = true,
+  }) {
     _strokes
       ..clear()
       ..addAll(StrokeCodec.documentToStrokes(document));
@@ -127,21 +151,25 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     }
     if (mounted) setState(() {});
     _notifySelection();
+    _performance.setDocumentStats(
+      strokes: _strokes.length,
+      visible: _strokes.length,
+    );
   }
 
   void _bindController() => widget.controller?.bind(
-    undo: undo,
-    redo: redo,
-    clear: clear,
-    deleteSelection: deleteSelection,
-    duplicateSelection: duplicateSelection,
-    moveSelection: moveSelection,
-    selectAll: selectAll,
-    clearSelection: clearSelection,
-    canUndo: _history.isNotEmpty,
-    canRedo: _redo.isNotEmpty,
-    selectionCount: _selected.length,
-  );
+        undo: undo,
+        redo: redo,
+        clear: clear,
+        deleteSelection: deleteSelection,
+        duplicateSelection: duplicateSelection,
+        moveSelection: moveSelection,
+        selectAll: selectAll,
+        clearSelection: clearSelection,
+        canUndo: _history.isNotEmpty,
+        canRedo: _redo.isNotEmpty,
+        selectionCount: _selected.length,
+      );
 
   void _snapshot() {
     _history.add(List<Stroke>.of(_strokes));
@@ -152,7 +180,9 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
   void undo() {
     if (_history.isEmpty) return;
     _redo.add(List<Stroke>.of(_strokes));
-    _strokes..clear()..addAll(_history.removeLast());
+    _strokes
+      ..clear()
+      ..addAll(_history.removeLast());
     _selected.clear();
     _notifyAndRefresh();
   }
@@ -160,7 +190,9 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
   void redo() {
     if (_redo.isEmpty) return;
     _history.add(List<Stroke>.of(_strokes));
-    _strokes..clear()..addAll(_redo.removeLast());
+    _strokes
+      ..clear()
+      ..addAll(_redo.removeLast());
     _selected.clear();
     _notifyAndRefresh();
   }
@@ -187,17 +219,23 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     final copies = <Stroke>[];
     for (final s in _strokes) {
       if (!_selected.contains(s.id)) continue;
-      copies.add(s.copyWith(
-        id: _uuid.v4(),
-        points: s.points.map((p) => StrokePoint(
-          position: p.position + const Offset(18, 18),
-          pressure: p.pressure,
-          timestamp: p.timestamp,
-        )).toList(),
-      ));
+      copies.add(
+        s.copyWith(
+          id: _uuid.v4(),
+          points: s.points
+              .map(
+                (p) => p.copyWith(
+                  position: p.position + const Offset(18, 18),
+                ),
+              )
+              .toList(),
+        ),
+      );
     }
     _strokes.addAll(copies);
-    _selected..clear()..addAll(copies.map((s) => s.id));
+    _selected
+      ..clear()
+      ..addAll(copies.map((s) => s.id));
     _notifyAndRefresh();
   }
 
@@ -208,18 +246,18 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       final s = _strokes[i];
       if (!_selected.contains(s.id)) continue;
       _strokes[i] = s.copyWith(
-        points: s.points.map((p) => StrokePoint(
-          position: p.position + Offset(dx, dy),
-          pressure: p.pressure,
-          timestamp: p.timestamp,
-        )).toList(),
+        points: s.points
+            .map((p) => p.copyWith(position: p.position + Offset(dx, dy)))
+            .toList(),
       );
     }
     _notifyAndRefresh();
   }
 
   void selectAll() {
-    _selected..clear()..addAll(_strokes.map((s) => s.id));
+    _selected
+      ..clear()
+      ..addAll(_strokes.map((s) => s.id));
     _notifySelection();
   }
 
@@ -240,83 +278,110 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _bindController();
     widget.onChanged?.call(StrokeCodec.strokesToDocument(_strokes));
     widget.onSelectionChanged?.call(_selected.length);
+    _performance.setDocumentStats(
+      strokes: _strokes.length,
+      visible: _strokes.length,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
       color: widget.backgroundColor,
-      child: Listener(
-        behavior: HitTestBehavior.opaque,
-        onPointerDown: _pointerDown,
-        onPointerMove: _pointerMove,
-        onPointerUp: _pointerUp,
-        onPointerCancel: _pointerCancel,
-        onPointerHover: _pointerHover,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            CustomPaint(
-              painter: SnoteCanvasPainter(
-                // Historical ink is painted only when the widget tree changes
-                // (stroke committed/undo/selection). Pointer movement never
-                // repaints this layer.
-                strokes: List<Stroke>.unmodifiable(_strokes),
-                activeStroke: null,
-                activePoints: const <StrokePoint>[],
-                activePen: null,
-                activeTool: null,
-                activeFill: false,
-                activeCustomSides: widget.customShapeSides,
-                activeStickerText: null,
-                selectedIds: Set<String>.unmodifiable(_selected),
-                lassoPath: const <Offset>[],
-                drawStrokes: true,
-                drawActive: false,
-              ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Listener(
+            behavior: HitTestBehavior.opaque,
+            onPointerDown: _pointerDown,
+            onPointerMove: _pointerMove,
+            onPointerUp: _pointerUp,
+            onPointerCancel: _pointerCancel,
+            onPointerHover: _pointerHover,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                RepaintBoundary(
+                  child: CustomPaint(
+                    painter: SnoteCanvasPainter(
+                      strokes: List<Stroke>.unmodifiable(_strokes),
+                      activeStroke: null,
+                      activePoints: const <StrokePoint>[],
+                      activePen: null,
+                      activeTool: null,
+                      activeFill: false,
+                      activeCustomSides: widget.customShapeSides,
+                      activeStickerText: null,
+                      selectedIds: Set<String>.unmodifiable(_selected),
+                      lassoPath: const <Offset>[],
+                      drawStrokes: true,
+                      drawActive: false,
+                    ),
+                  ),
+                ),
+                CustomPaint(
+                  painter: SnoteCanvasPainter(
+                    strokes: const <Stroke>[],
+                    activeStroke: null,
+                    activePoints: _activeLivePoints,
+                    activePen: _activePen,
+                    activeTool: _activeTool,
+                    activeFill: widget.shapeFill,
+                    activeCustomSides: widget.customShapeSides,
+                    activeStickerText: _activeSticker,
+                    selectedIds: const <String>{},
+                    lassoPath: _lassoPath,
+                    eraserPoint: _eraserPoint,
+                    eraserRadius: _eraserRadius,
+                    showEraserMark: widget.eraseMark,
+                    drawStrokes: false,
+                    drawActive: true,
+                    repaint: _repaint,
+                  ),
+                ),
+              ],
             ),
-            CustomPaint(
-              painter: SnoteCanvasPainter(
-                strokes: const <Stroke>[],
-                activeStroke: _activeStroke,
-                activePoints: _activePoints,
-                activePen: _activePen,
-                activeTool: _activeTool,
-                activeFill: widget.shapeFill,
-                activeCustomSides: widget.customShapeSides,
-                activeStickerText: _activeSticker,
-                selectedIds: const <String>{},
-                lassoPath: _lassoPath,
-                activePath: _activePath,
-                eraserPoint: _eraserPoint,
-                eraserRadius: _eraserRadius,
-                showEraserMark: widget.eraseMark,
-                drawStrokes: false,
-                drawActive: true,
-                repaint: _repaint,
-              ),
-            ),
-          ],
-        ),
+          ),
+          if (widget.showPerformanceOverlay && _perfEnabled)
+            WritingPerformanceOverlay(stats: _performance),
+        ],
       ),
     );
   }
 
   bool _accept(PointerEvent event) => _palmRejection.accepts(event);
 
+  void _recordInput() {
+    if (!_perfEnabled) return;
+    _performance.pointerEvent();
+    _lastInputWallClock = DateTime.now();
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      final inputAt = _lastInputWallClock;
+      if (mounted && inputAt != null) {
+        _performance.setLatency(inputAt);
+      }
+    });
+  }
+
   void _pointerDown(PointerDownEvent event) {
+    _recordInput();
     if (!_accept(event) || _activePointer != -1) return;
     _ignorePointer = false;
-    _temporaryEraser = widget.eraseWithStylusButton &&
-        event.kind == PointerDeviceKind.stylus &&
-        (event.buttons & kSecondaryButton) != 0;
+
+    final stylusButtonErase =
+        (event.buttons & kSecondaryStylusButton) != 0;
+    _temporaryEraser =
+        widget.eraseWithStylusButton &&
+        (event.kind == PointerDeviceKind.invertedStylus ||
+            (event.kind == PointerDeviceKind.stylus && stylusButtonErase));
 
     if (event.kind == PointerDeviceKind.stylus &&
         widget.onStylusDoubleTap != null &&
         widget.tool == CanvasTool.ballpoint) {
       final now = DateTime.now();
       if (_lastStylusTap != null &&
-          now.difference(_lastStylusTap!) < const Duration(milliseconds: 270) &&
+          now.difference(_lastStylusTap!) <
+              const Duration(milliseconds: 270) &&
           _lastStylusPosition != null &&
           (event.localPosition - _lastStylusPosition!).distance < 30) {
         _ignorePointer = true;
@@ -327,45 +392,46 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     }
 
     _activePointer = event.pointer;
-    final point = event.localPosition;
 
-    if (_temporaryEraser) {
+    if (_temporaryEraser || widget.tool == CanvasTool.eraser ||
+        widget.tool == CanvasTool.pixelEraser) {
       _activeTool = CanvasTool.eraser;
       _activePen = widget.pen;
-      _eraserPoint = point;
+      _eraserPoint = event.localPosition;
       _eraserRadius = _eraseRadius(event.pressure);
       if (!_eraseSnapshotTaken) {
         _snapshot();
         _eraseSnapshotTaken = true;
       }
-      _eraseAt(point, pressure: event.pressure, snapshotAlreadyTaken: true);
+      _eraseAt(
+        event.localPosition,
+        pressure: event.pressure,
+        snapshotAlreadyTaken: true,
+      );
       _repaint.repaint();
       return;
     }
 
     if (widget.tool == CanvasTool.lasso) {
-      _lassoPath..clear()..add(point);
+      _lassoPath
+        ..clear()
+        ..add(event.localPosition);
       _repaint.repaint();
-      return;
-    }
-
-    if (widget.tool == CanvasTool.eraser) {
-      if (!_eraseSnapshotTaken) {
-        _snapshot();
-        _eraseSnapshotTaken = true;
-      }
-      _eraseAt(point, pressure: event.pressure, snapshotAlreadyTaken: true);
       return;
     }
 
     _activeTool = widget.tool;
     _activePen = widget.pen;
-    _activePath = Path()..moveTo(point.dx, point.dy);
-    _liveLastPoint = point;
-    _activeSticker = widget.tool == CanvasTool.sticker ? widget.stickerText : null;
-    _activePoints
+    _activeSticker =
+        widget.tool == CanvasTool.sticker ? widget.stickerText : null;
+    final frame = _input!.begin(event);
+    _activeRealPoints
       ..clear()
-      ..add(_sample(point, event.pressure, event.timeStamp));
+      ..addAll(frame.realPoints);
+    _activeLivePoints
+      ..clear()
+      ..addAll(frame.livePoints);
+
     if (widget.tool == CanvasTool.sticker) {
       _commitActive();
     } else {
@@ -373,46 +439,44 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     }
   }
 
-  StrokePoint _sample(Offset position, double pressure, Duration timeStamp) {
-    return StrokePoint(
-      position: position,
-      pressure: pressure.isNaN ? 1 : pressure.clamp(0, 1),
-      timestamp: timeStamp.inMicroseconds / 1000,
-    );
-  }
-
   void _pointerMove(PointerMoveEvent event) {
     if (event.pointer != _activePointer || _ignorePointer) return;
+    _recordInput();
 
-    if (widget.tool == CanvasTool.eraser || _temporaryEraser) {
+    if (_activeTool == CanvasTool.eraser ||
+        _activeTool == CanvasTool.pixelEraser ||
+        _temporaryEraser) {
       _eraserPoint = event.localPosition;
       _eraserRadius = _eraseRadius(event.pressure);
-      _eraseAt(event.localPosition, pressure: event.pressure, snapshotAlreadyTaken: _eraseSnapshotTaken);
+      _eraseAt(
+        event.localPosition,
+        pressure: event.pressure,
+        snapshotAlreadyTaken: _eraseSnapshotTaken,
+      );
       _repaint.repaint();
       return;
     }
+
     if (widget.tool == CanvasTool.lasso) {
       _lassoPath.add(event.localPosition);
       _repaint.repaint();
       return;
     }
+
     if (_activePen == null || _activeTool == null) return;
 
-    final position = event.localPosition;
-    if (_activePoints.isNotEmpty &&
-        (position - _activePoints.last.position).distance < .7) {
-      return;
-    }
+    final frame = _input!.update(event);
+    _activeRealPoints
+      ..clear()
+      ..addAll(frame.realPoints);
+    _activeLivePoints
+      ..clear()
+      ..addAll(frame.livePoints);
 
-    _activePoints.add(_sample(position, event.pressure, event.timeStamp));
-    final previous = _liveLastPoint ?? _activePoints[_activePoints.length - 2].position;
-    final midpoint = Offset(
-      (previous.dx + position.dx) / 2,
-      (previous.dy + position.dy) / 2,
-    );
-    _activePath ??= Path()..moveTo(previous.dx, previous.dy);
-    _activePath!.quadraticBezierTo(previous.dx, previous.dy, midpoint.dx, midpoint.dy);
-    _liveLastPoint = position;
+    if (_perfEnabled) {
+      _performance.rendered(_activeLivePoints.length);
+      _performance.setPredictionHorizon(frame.predictionHorizonMs);
+    }
     _repaint.repaint();
   }
 
@@ -425,6 +489,8 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       return;
     }
 
+    _recordInput();
+
     if (_temporaryEraser) {
       _eraseSnapshotTaken = false;
       _temporaryEraser = false;
@@ -433,14 +499,20 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       _cancelActive();
     } else if (widget.tool == CanvasTool.lasso) {
       _finishLasso();
-    } else if (widget.tool != CanvasTool.eraser && widget.tool != CanvasTool.sticker) {
-      if (_activePoints.isNotEmpty) _commitActive();
-    }
-
-    if (widget.tool == CanvasTool.eraser) {
+    } else if (_activeTool == CanvasTool.eraser ||
+        _activeTool == CanvasTool.pixelEraser) {
       _eraseSnapshotTaken = false;
       _eraserPoint = null;
       _eraserRadius = 0;
+      _cancelActive();
+    } else if (widget.tool != CanvasTool.sticker) {
+      _activeRealPoints
+        ..clear()
+        ..addAll(_input!.finish(event));
+      _activeLivePoints
+        ..clear()
+        ..addAll(_activeRealPoints);
+      if (_activeRealPoints.isNotEmpty) _commitActive();
     }
 
     if (event.kind == PointerDeviceKind.stylus) {
@@ -452,30 +524,33 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
 
   void _pointerCancel(PointerCancelEvent event) {
     if (event.pointer != _activePointer) return;
-    if (widget.tool == CanvasTool.eraser || _temporaryEraser) {
+    if (_activeTool == CanvasTool.eraser ||
+        _activeTool == CanvasTool.pixelEraser ||
+        _temporaryEraser) {
       _eraseSnapshotTaken = false;
       _temporaryEraser = false;
       _eraserPoint = null;
       _eraserRadius = 0;
     }
     _cancelActive();
+    _input?.reset();
     _activePointer = -1;
   }
 
   void _cancelActive() {
-    _activeStroke = null;
     _activePen = null;
     _activeTool = null;
     _activeSticker = null;
-    _activePoints.clear();
-    _activePath = null;
-    _liveLastPoint = null;
+    _activeRealPoints.clear();
+    _activeLivePoints.clear();
     _lassoPath.clear();
     _repaint.repaint();
   }
 
   void _commitActive() {
-    if (_activePoints.isEmpty || _activePen == null || _activeTool == null) {
+    if (_activeRealPoints.isEmpty ||
+        _activePen == null ||
+        _activeTool == null) {
       _cancelActive();
       return;
     }
@@ -483,10 +558,13 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _snapshot();
     final recognizedShape = _activeTool!.isShape
         ? _activeTool!.name
-        : (widget.autoRecognition ? _recognizeShape(_activePoints) : null);
+        : (widget.autoRecognition
+              ? _recognizeShape(_activeRealPoints)
+              : null);
+
     final stroke = Stroke(
       id: _uuid.v4(),
-      points: List<StrokePoint>.of(_activePoints),
+      points: List<StrokePoint>.of(_activeRealPoints),
       pen: _activePen!,
       shape: recognizedShape,
       fill: widget.shapeFill && recognizedShape != null,
@@ -496,11 +574,13 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       fillColor: widget.fillColor,
     );
     _strokes.add(stroke);
-    _activeStroke = null;
-    _activePoints.clear();
     _activePen = null;
     _activeTool = null;
     _activeSticker = null;
+    _activeRealPoints.clear();
+    _activeLivePoints.clear();
+    _input?.reset();
+    _repaint.repaint();
     _notifyAndRefresh();
   }
 
@@ -509,29 +589,35 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     final first = points.first.position;
     final last = points.last.position;
     final closed = (last - first).distance < 28;
-    var left = first.dx, right = first.dx, top = first.dy, bottom = first.dy;
+    var left = first.dx;
+    var right = first.dx;
+    var top = first.dy;
+    var bottom = first.dy;
+
     for (final p in points.skip(1)) {
       left = math.min(left, p.position.dx);
       right = math.max(right, p.position.dx);
       top = math.min(top, p.position.dy);
       bottom = math.max(bottom, p.position.dy);
     }
+
     final width = right - left;
     final height = bottom - top;
     if (width < 20 || height < 20) {
-      final start = points.first.position;
-      final end = points.last.position;
-      final line = end - start;
+      final line = last - first;
       if (line.distance < 20) return null;
       var maxDistance = 0.0;
       for (final p in points) {
-        final distance = ((p.position.dx - start.dx) * line.dy -
-                (p.position.dy - start.dy) * line.dx).abs() /
+        final distance =
+            ((p.position.dx - first.dx) * line.dy -
+                    (p.position.dy - first.dy) * line.dx)
+                .abs() /
             line.distance;
         maxDistance = math.max(maxDistance, distance);
       }
       return maxDistance < 12 ? 'line' : null;
     }
+
     if (!closed) return null;
     final ratio = width / height;
     if (ratio > .72 && ratio < 1.38) return 'rectangle';
@@ -547,7 +633,9 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
   }
 
   void _pointerHover(PointerHoverEvent event) {
-    if (event.kind != PointerDeviceKind.stylus) return;
+    if (!_accept(event) || event.kind != PointerDeviceKind.stylus) {
+      return;
+    }
     _eraserPoint = event.localPosition;
     _eraserRadius = _eraseRadius(event.pressure);
     _repaint.repaint();
@@ -558,27 +646,36 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     double pressure = 1,
     bool snapshotAlreadyTaken = false,
   }) {
-    final normalizedPressure = pressure.isNaN ? 1.0 : pressure.clamp(0, 1);
-    if (widget.pressureErase && normalizedPressure < widget.pressureEraseThreshold) {
+    final normalizedPressure =
+        pressure.isNaN ? 1.0 : pressure.clamp(0, 1).toDouble();
+    if (widget.pressureErase &&
+        normalizedPressure < widget.pressureEraseThreshold) {
       return;
     }
-    final baseRadius = (widget.pen.size * 3.3).clamp(16, 44).toDouble();
+
+    final baseRadius =
+        (widget.pen.size * 3.3).clamp(16, 44).toDouble();
     final radius = widget.pressureErase && widget.pressureEraseArea
         ? baseRadius * (.65 + normalizedPressure * .75)
         : baseRadius;
+
     final hit = _strokes.indexWhere((s) {
       for (final p in s.points) {
         if ((p.position - point).distance <= radius) return true;
       }
       return false;
     });
+
     if (hit < 0) {
       widget.onEraserMiss?.call();
       return;
     }
+
     if (!snapshotAlreadyTaken) _snapshot();
     _strokes.removeAt(hit);
-    _selected.removeWhere((id) => !_strokes.any((s) => s.id == id));
+    _selected.removeWhere(
+      (id) => !_strokes.any((s) => s.id == id),
+    );
     _notifyAndRefresh();
   }
 
@@ -589,26 +686,43 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       _notifySelection();
       return;
     }
+
     final polygon = List<Offset>.of(_lassoPath);
     _selected.clear();
+
     for (final stroke in _strokes) {
-      if (stroke.points.any((p) => _pointInPolygon(p.position, polygon))) {
+      if (stroke.points
+          .any((p) => _pointInPolygon(p.position, polygon))) {
         _selected.add(stroke.id);
       }
     }
+
     _lassoPath.clear();
     _notifySelection();
+    _repaint.repaint();
   }
 
-  bool _pointInPolygon(Offset point, List<Offset> polygon) {
+  bool _pointInPolygon(
+    Offset point,
+    List<Offset> polygon,
+  ) {
     var inside = false;
-    for (var i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    for (
+      var i = 0, j = polygon.length - 1;
+      i < polygon.length;
+      j = i++
+    ) {
       final a = polygon[i];
       final b = polygon[j];
-      final intersects = ((a.dy > point.dy) != (b.dy > point.dy)) &&
-          point.dx < (b.dx - a.dx) * (point.dy - a.dy) /
-              ((b.dy - a.dy).abs() < .0001 ? .0001 : (b.dy - a.dy)) +
-              a.dx;
+      final intersects =
+          ((a.dy > point.dy) != (b.dy > point.dy)) &&
+          point.dx <
+              (b.dx - a.dx) *
+                      (point.dy - a.dy) /
+                      ((b.dy - a.dy).abs() < .0001
+                          ? .0001
+                          : (b.dy - a.dy)) +
+                  a.dx;
       if (intersects) inside = !inside;
     }
     return inside;

@@ -1,10 +1,14 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show compute;
+
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import 'database.dart';
 import '../../core/config/account_scope.dart';
+
+String _encodeNoteContent(Map<String, Object?> content) => jsonEncode(content);
 
 class LocalNote {
   final String id;
@@ -159,6 +163,7 @@ class NoteRepository {
     String id,
     Map<String, Object?> content,
   ) async {
+    final encoded = await compute(_encodeNoteContent, content);
     final db = await _db;
 
     await db.transaction((tx) async {
@@ -178,7 +183,7 @@ class NoteRepository {
         'notes',
         {
           'owner_id': SnoteAccountScope.ownerId,
-          'content_json': jsonEncode(content),
+          'content_json': encoded,
           'updated_at': DateTime.now().millisecondsSinceEpoch,
           'version': currentVersion + 1,
           'sync_state': 'pending',

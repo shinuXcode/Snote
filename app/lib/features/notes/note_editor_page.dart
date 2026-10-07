@@ -12,6 +12,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../app/theme_controller.dart';
 import '../../canvas_engine/models/pen_config.dart';
 import '../../canvas_engine/widgets/page_background.dart';
+import '../../canvas_engine/widgets/notebook_viewport.dart';
 import '../../canvas_engine/widgets/snote_canvas.dart';
 import '../../canvas_engine/widgets/snote_canvas_controller.dart';
 import '../../core/security/note_lock_service.dart';
@@ -26,7 +27,7 @@ class NoteEditorPage extends StatefulWidget {
   State<NoteEditorPage> createState() => _NoteEditorPageState();
 }
 
-class _NoteEditorPageState extends State<NoteEditorPage> {
+class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObserver {
   final _repo = NoteRepository();
   final _canvas = SnoteCanvasController();
   final _quill = QuillController.basic();
@@ -69,21 +70,41 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   bool _saveInFlight = false;
 
   Map<String, Object?> get pageData => _pages[_page];
-  PenConfig get pen => PenConfig(
-        type: _tool.penType,
-        color: _penColor,
-        size: _penSize,
-        opacity: _tool == CanvasTool.highlighter ? _opacity.clamp(.08, .55) : _opacity,
-        pressureSensitivity: _pressureSensitivity,
-        velocitySensitivity: _velocitySensitivity,
-      );
+  PenConfig get pen {
+    final curve = PressureCurve.values.firstWhere(
+      (value) => value.name == _settings.getString('pressureCurve'),
+      orElse: () => PressureCurve.linear,
+    );
+    return PenConfig(
+      type: _tool.penType,
+      color: _penColor,
+      size: _penSize,
+      opacity: _tool == CanvasTool.highlighter
+          ? _opacity.clamp(.08, .55)
+          : _opacity,
+      pressureSensitivity: _pressureSensitivity,
+      velocitySensitivity: _velocitySensitivity,
+      pressureCurve: curve,
+      customPressureExponent: _settings.getDouble('pressureExponent'),
+    );
+  }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _title.text = widget.note.title;
     _quill.addListener(_scheduleSave);
     _prepare();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      unawaited(_flushSave());
+    }
   }
 
   Future<void> _prepare() async {
@@ -263,6 +284,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
   void _selectPage(int value) {
     if (value < 0 || value >= _pages.length) return;
+    unawaited(_save(force: true));
     setState(() {
       _page = value;
       _selected = 0;
@@ -368,6 +390,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _saveTimer?.cancel();
     _quill.removeListener(_scheduleSave);
     _quill.dispose();
@@ -515,6 +538,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                   eraseMark: true,
                   dashed: _dashed,
                   fillColor: _fillColor,
+                  smoothing: _settings.getDouble('strokeSmoothing'),
+                  showPerformanceOverlay: const bool.fromEnvironment('SNOTE_PERF'),
                 ),
               )
               else
@@ -534,8 +559,12 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         ),
       ),
     );
-    if (!_pan) return child;
-    return InteractiveViewer(minScale: .5, maxScale: 4, boundaryMargin: const EdgeInsets.all(350), child: child);
+    return NotebookViewport(
+      allowSingleFingerPan: _pan,
+      minScale: .5,
+      maxScale: 4,
+      child: child,
+    );
   }
 
   PageTemplate _template() {
@@ -662,7 +691,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       CanvasTool.fountain,
       CanvasTool.pencil,
       CanvasTool.highlighter,
+      CanvasTool.marker,
+      CanvasTool.brush,
       CanvasTool.eraser,
+      CanvasTool.pixelEraser,
       CanvasTool.lasso,
     ];
     final pencaseTools = defaultTools.where((tool) => configured.contains(tool.name)).toList();
@@ -741,7 +773,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       case CanvasTool.fountain: return Icons.gesture_rounded;
       case CanvasTool.pencil: return Icons.brush_rounded;
       case CanvasTool.highlighter: return Icons.highlight_rounded;
+      case CanvasTool.marker: return Icons.border_color_rounded;
+      case CanvasTool.brush: return Icons.brush_rounded;
       case CanvasTool.eraser: return Icons.auto_fix_normal_rounded;
+      case CanvasTool.pixelEraser: return Icons.auto_fix_high_rounded;
       case CanvasTool.lasso: return Icons.gesture_rounded;
       case CanvasTool.line: return Icons.horizontal_rule_rounded;
       case CanvasTool.arrow: return Icons.arrow_forward_rounded;
@@ -838,7 +873,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   Future<void> _pencaseSheet() async {
     const tools = <CanvasTool>[
       CanvasTool.ballpoint, CanvasTool.fountain, CanvasTool.pencil,
-      CanvasTool.highlighter, CanvasTool.eraser, CanvasTool.lasso,
+      CanvasTool.highlighter, CanvasTool.marker, CanvasTool.brush,
+      CanvasTool.eraser, CanvasTool.pixelEraser, CanvasTool.lasso,
       CanvasTool.line, CanvasTool.arrow, CanvasTool.rectangle,
     ];
     final selected = _settings.getString('pencaseTools').split(',').where((v) => v.isNotEmpty).toSet();

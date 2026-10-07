@@ -5,7 +5,30 @@ class StrokePoint {
   final Offset position;
   final double pressure;
   final double timestamp;
-  const StrokePoint({required this.position, this.pressure = 1, this.timestamp = 0});
+  final double tilt;
+  final double orientation;
+
+  const StrokePoint({
+    required this.position,
+    this.pressure = 1,
+    this.timestamp = 0,
+    this.tilt = 0,
+    this.orientation = 0,
+  });
+
+  StrokePoint copyWith({
+    Offset? position,
+    double? pressure,
+    double? timestamp,
+    double? tilt,
+    double? orientation,
+  }) => StrokePoint(
+    position: position ?? this.position,
+    pressure: pressure ?? this.pressure,
+    timestamp: timestamp ?? this.timestamp,
+    tilt: tilt ?? this.tilt,
+    orientation: orientation ?? this.orientation,
+  );
 }
 
 class Stroke {
@@ -21,19 +44,39 @@ class Stroke {
   final Color? fillColor;
 
   const Stroke({
-    required this.id, required this.points, required this.pen, this.shape,
-    this.fill = false, this.fillOpacity = .18, this.customSides = 6, this.stickerText,
-    this.dashed = false, this.fillColor,
+    required this.id,
+    required this.points,
+    required this.pen,
+    this.shape,
+    this.fill = false,
+    this.fillOpacity = .18,
+    this.customSides = 6,
+    this.stickerText,
+    this.dashed = false,
+    this.fillColor,
   });
 
   Stroke copyWith({
-    String? id, List<StrokePoint>? points, PenConfig? pen, String? shape,
-    bool? fill, double? fillOpacity, int? customSides, String? stickerText,
-    bool? dashed, Color? fillColor,
+    String? id,
+    List<StrokePoint>? points,
+    PenConfig? pen,
+    String? shape,
+    bool? fill,
+    double? fillOpacity,
+    int? customSides,
+    String? stickerText,
+    bool? dashed,
+    Color? fillColor,
   }) => Stroke(
-    id: id ?? this.id, points: points ?? this.points, pen: pen ?? this.pen,
-    shape: shape ?? this.shape, fill: fill ?? this.fill, fillOpacity: fillOpacity ?? this.fillOpacity,
-    customSides: customSides ?? this.customSides, stickerText: stickerText ?? this.stickerText,
-    dashed: dashed ?? this.dashed, fillColor: fillColor ?? this.fillColor,
+    id: id ?? this.id,
+    points: points ?? this.points,
+    pen: pen ?? this.pen,
+    shape: shape ?? this.shape,
+    fill: fill ?? this.fill,
+    fillOpacity: fillOpacity ?? this.fillOpacity,
+    customSides: customSides ?? this.customSides,
+    stickerText: stickerText ?? this.stickerText,
+    dashed: dashed ?? this.dashed,
+    fillColor: fillColor ?? this.fillColor,
   );
 }
