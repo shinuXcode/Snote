@@ -58,7 +58,7 @@ class NotebookTransferService {
     if (result.isEmpty) return 0;
 
     final file = result.first;
-    final bytes = file.bytes ?? await file.readAsBytes();
+    final bytes = await file.readAsBytes();
     final name = file.name.toLowerCase();
 
     if (name.endsWith('.json') || (name.endsWith('.snote') && !name.endsWith('.snote.zip'))) {
