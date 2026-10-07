@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/foundation.dart';
 
 class SnoteCanvasController extends ChangeNotifier {
