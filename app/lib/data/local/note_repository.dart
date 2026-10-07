@@ -231,6 +231,46 @@ class NoteRepository {
     });
   }
 
+
+  Future<List<LocalNote>> listTrash() async {
+    final db = await _db;
+    await purgeExpiredTrash();
+    final rows = await db.query(
+      'notes',
+      where: 'owner_id = ? AND deleted_at IS NOT NULL',
+      whereArgs: [SnoteAccountScope.ownerId],
+      orderBy: 'deleted_at DESC',
+    );
+    return rows.map(LocalNote.fromMap).toList();
+  }
+
+  Future<void> restore(String id) async {
+    final db = await _db;
+    await db.transaction((tx) async {
+      await tx.update(
+        'notes',
+        {
+          'deleted_at': null,
+          'updated_at': DateTime.now().millisecondsSinceEpoch,
+          'sync_state': 'pending',
+        },
+        where: 'id = ? AND owner_id = ?',
+        whereArgs: [id, SnoteAccountScope.ownerId],
+      );
+      await _queue(tx, id, 'upsert');
+    });
+  }
+
+  Future<void> purgeExpiredTrash() async {
+    final db = await _db;
+    final cutoff = DateTime.now().subtract(const Duration(days: 30)).millisecondsSinceEpoch;
+    await db.delete(
+      'notes',
+      where: 'owner_id = ? AND deleted_at IS NOT NULL AND deleted_at < ?',
+      whereArgs: [SnoteAccountScope.ownerId, cutoff],
+    );
+  }
+
   Future<void> delete(String id) async {
     final db = await _db;
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -243,8 +283,8 @@ class NoteRepository {
           'updated_at': now,
           'sync_state': 'pending',
         },
-        where: 'id = ?',
-        whereArgs: [id],
+        where: 'id = ? AND owner_id = ?',
+        whereArgs: [id, SnoteAccountScope.ownerId],
       );
       await _queue(tx, id, 'delete');
     });
