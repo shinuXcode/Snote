@@ -54,8 +54,31 @@ class PenConfig {
   final Color color;
   final double size;
   final double opacity;
-  const PenConfig({required this.type, required this.color, this.size = 3, this.opacity = 1});
+  final double pressureSensitivity;
+  final double velocitySensitivity;
+  const PenConfig({
+    required this.type,
+    required this.color,
+    this.size = 3,
+    this.opacity = 1,
+    this.pressureSensitivity = .55,
+    this.velocitySensitivity = .65,
+  });
 
-  PenConfig copyWith({PenType? type, Color? color, double? size, double? opacity}) =>
-      PenConfig(type: type ?? this.type, color: color ?? this.color, size: size ?? this.size, opacity: opacity ?? this.opacity);
+  PenConfig copyWith({
+    PenType? type,
+    Color? color,
+    double? size,
+    double? opacity,
+    double? pressureSensitivity,
+    double? velocitySensitivity,
+  }) =>
+      PenConfig(
+        type: type ?? this.type,
+        color: color ?? this.color,
+        size: size ?? this.size,
+        opacity: opacity ?? this.opacity,
+        pressureSensitivity: pressureSensitivity ?? this.pressureSensitivity,
+        velocitySensitivity: velocitySensitivity ?? this.velocitySensitivity,
+      );
 }
