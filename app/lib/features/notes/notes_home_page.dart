@@ -8,6 +8,7 @@ import '../folders/folders_page.dart';
 import '../pdf/pdf_annotation_page.dart';
 import '../settings/settings_page.dart';
 import '../share/qr_import_page.dart';
+import '../trash/trash_page.dart';
 import 'note_editor_page.dart';
 
 class NotesHomePage extends StatefulWidget {
@@ -130,6 +131,10 @@ class _NotesHomePageState extends State<NotesHomePage> {
     }
     if (action == 'import') {
       await navigator.push(MaterialPageRoute(builder: (_) => const QrImportPage()));
+      await _load();
+    }
+    if (action == 'trash') {
+      await navigator.push(MaterialPageRoute(builder: (_) => const TrashPage()));
       await _load();
     }
   }
@@ -306,6 +311,7 @@ class _ToolsSheet extends StatelessWidget {
     _ToolTile(icon: Icons.folder_copy_rounded, title: 'Folders', subtitle: 'Organize notebooks', value: 'folders'),
     _ToolTile(icon: Icons.picture_as_pdf_rounded, title: 'PDF annotation', subtitle: 'Write directly on PDFs', value: 'pdf'),
     _ToolTile(icon: Icons.qr_code_2_rounded, title: 'Private transfer', subtitle: 'Move notes without cloud', value: 'import'),
+    _ToolTile(icon: Icons.delete_outline_rounded, title: 'Bin', subtitle: 'Recently deleted • 30 days', value: 'trash'),
   ]));
 }
 
