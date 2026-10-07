@@ -74,7 +74,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         if (d is Map<String,dynamic>) {
           final raw = d['pages'];
           if (raw is List) {
-            for (final p in raw) if (p is Map) pages.add(p.cast<String,Object?>());
+            for (final p in raw) { if (p is Map) { pages.add(p.cast<String,Object?>()); } }
           }
           if (pages.isEmpty) pages.add(d.cast<String,Object?>());
           if (d['text_delta'] is List) {
@@ -230,10 +230,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     color:Theme.of(context).colorScheme.surface.withValues(alpha:.94),
     child:SizedBox(height:38,child:ListView.separated(
       padding:const EdgeInsets.symmetric(horizontal:10),scrollDirection:Axis.horizontal,
-      itemCount:_pages.length+1,separatorBuilder:(_,__)=>const SizedBox(width:5),
+      itemCount:_pages.length+1,separatorBuilder:(_,_)=>const SizedBox(width:5),
       itemBuilder:(_,i)=>i==_pages.length
         ? IconButton(tooltip:'Add page',onPressed:_addPage,icon:const Icon(Icons.add_rounded,size:20))
-        : ChoiceChip(label:Text('Page '+(i+1).toString()),selected:i==_page,onSelected:(_)=>_selectPage(i),
+        : ChoiceChip(label:Text('Page \${i + 1}'),selected:i==_page,onSelected:(_)=>_selectPage(i),
             visualDensity:VisualDensity.compact),
     )),
   ));
