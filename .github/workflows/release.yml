@@ -30,7 +30,7 @@ jobs:
           - os: ubuntu-latest
             target: linux
             artifact: Snote-Linux.tar.gz
-          - os: windows-latest
+          - os: windows-2022
             target: windows
             artifact: Snote-Windows.zip
           - os: macos-latest
