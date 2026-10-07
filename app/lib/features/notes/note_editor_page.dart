@@ -182,7 +182,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
               if (_drawing) IgnorePointer(
                 ignoring: _pan,
                 child: SnoteCanvas(
-                  key: ValueKey(widget.note.id + '-' + _page.toString()),
+                  key: ValueKey(Object.hash(widget.note.id, _page)),
                   pen: _pen, tool: _tool, controller: _canvas, initialDocument: _current,
                   backgroundColor: Colors.transparent, onChanged: _canvasChanged,
                   onSelectionChanged: (n) => setState(() => _selected = n),
