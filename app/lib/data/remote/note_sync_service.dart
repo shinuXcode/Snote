@@ -99,6 +99,25 @@ class NoteSyncService {
             (n['deleted_at']! as num).toInt(),
           ).toUtc();
 
+    final remoteRows = await client
+        .from('notes')
+        .select()
+        .eq('id', id)
+        .eq('user_id', userId)
+        .limit(1);
+
+    if (remoteRows is List && remoteRows.isNotEmpty) {
+      final remote = Map<String, dynamic>.from(remoteRows.first as Map);
+      final remoteUpdated = DateTime.tryParse(
+        remote['updated_at']?.toString() ?? '',
+      );
+      if (remoteUpdated != null &&
+          remoteUpdated.millisecondsSinceEpoch > updatedAt.millisecondsSinceEpoch) {
+        await _applyRemoteNote(db, remote);
+        return true;
+      }
+    }
+
     final payload = {
       'id': id,
       'user_id': userId,
@@ -167,6 +186,25 @@ class NoteSyncService {
         : DateTime.fromMillisecondsSinceEpoch(
             (folder['deleted_at']! as num).toInt(),
           ).toUtc();
+
+    final remoteRows = await client
+        .from('folders')
+        .select()
+        .eq('id', id)
+        .eq('user_id', userId)
+        .limit(1);
+
+    if (remoteRows is List && remoteRows.isNotEmpty) {
+      final remote = Map<String, dynamic>.from(remoteRows.first as Map);
+      final remoteUpdated = DateTime.tryParse(
+        remote['updated_at']?.toString() ?? '',
+      );
+      if (remoteUpdated != null &&
+          remoteUpdated.millisecondsSinceEpoch > updatedAt.millisecondsSinceEpoch) {
+        await _applyRemoteFolder(db, remote);
+        return true;
+      }
+    }
 
     await client.from('folders').upsert(
       {
@@ -268,6 +306,12 @@ class NoteSyncService {
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+
+    await db.delete(
+      'sync_queue',
+      where: 'entity_type = ? AND entity_id = ? AND owner_id = ?',
+      whereArgs: ['note', id, SnoteAccountScope.ownerId],
+    );
   }
 
   Future<void> _applyRemoteFolder(
@@ -316,6 +360,12 @@ class NoteSyncService {
             : parseDate(remote['deleted_at'])?.millisecondsSinceEpoch,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+
+    await db.delete(
+      'sync_queue',
+      where: 'entity_type = ? AND entity_id = ? AND owner_id = ?',
+      whereArgs: ['folder', id, SnoteAccountScope.ownerId],
     );
   }
 
