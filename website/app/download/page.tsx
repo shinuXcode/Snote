@@ -1,9 +1,9 @@
 import Link from "next/link";
 import Reveal from "../../components/Reveal";
 
-const version = "0.5.0";
-const releasePage = "https://github.com/shinuXcode/Snote/releases/tag/v0.5.0";
-const assetBase = "https://github.com/shinuXcode/Snote/releases/download/v0.5.0";
+const version = "0.6.0";
+const releasePage = "https://github.com/shinuXcode/Snote/releases/tag/v0.6.0";
+const assetBase = "https://github.com/shinuXcode/Snote/releases/download/v0.6.0";
 const web = process.env.NEXT_PUBLIC_SNOTE_WEB_APP_URL || assetBase + "/Snote-Web.tar.gz";
 
 const builds = [
@@ -31,7 +31,7 @@ export default function Page() {
           <div className="eyebrow">Release status</div>
           <h2>Verified builds only.</h2>
           <p className="muted">
-            Downloads are linked directly to the verified v0.5.0 release assets.
+            Downloads are linked directly to the verified v0.6.0 release assets.
           </p>
           <a className="cta" href={releasePage}>
             Open Snote releases
