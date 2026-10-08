@@ -227,6 +227,8 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
   bool _ignorePointer = false;
   bool _temporaryEraser = false;
   bool _eraseSnapshotTaken = false;
+  final Set<int> _touchPointers = <int>{};
+  bool _multiTouchGesture = false;
   bool _latencyScheduled = false;
   DateTime? _lastInputWallClock;
   DateTime? _lastStylusTap;
@@ -274,6 +276,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _commitQueue?.dispose();
     _input?.reset();
     _lock.reset();
+    _touchPointers.clear();
     widget.controller?.unbind();
     _documentPicture?.dispose();
     _repaint.dispose();
@@ -559,6 +562,34 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
 
   void _pointerDown(PointerDownEvent event) {
     _recordInput();
+
+    if (event.kind == PointerDeviceKind.touch) {
+      _touchPointers.add(event.pointer);
+      if (_touchPointers.length >= 2) {
+        _multiTouchGesture = true;
+        if (_activePointer != -1 &&
+            _activeTool != null &&
+            (_activeTool == CanvasTool.ballpoint ||
+                _activeTool == CanvasTool.fountain ||
+                _activeTool == CanvasTool.calligraphy ||
+                _activeTool == CanvasTool.pencil ||
+                _activeTool == CanvasTool.highlighter ||
+                _activeTool == CanvasTool.marker ||
+                _activeTool == CanvasTool.brush)) {
+          _activePointer = -1;
+          _activePen = null;
+          _activeTool = null;
+          _activeSticker = null;
+          _real = const <StrokePoint>[];
+          _live = const <StrokePoint>[];
+          _input?.reset();
+          _repaint.repaint();
+        }
+        return;
+      }
+      if (_multiTouchGesture) return;
+    }
+
     if (!_accept(event) || _activePointer != -1) return;
 
     _ignorePointer = false;
@@ -687,6 +718,14 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
   }
 
   void _pointerUp(PointerUpEvent event) {
+    if (event.kind == PointerDeviceKind.touch) {
+      _touchPointers.remove(event.pointer);
+      if (_multiTouchGesture) {
+        if (_touchPointers.isEmpty) _multiTouchGesture = false;
+        return;
+      }
+    }
+
     if (event.pointer != _activePointer) return;
 
     if (_ignorePointer) {
