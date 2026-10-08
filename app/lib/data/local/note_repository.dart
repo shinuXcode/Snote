@@ -230,7 +230,7 @@ class NoteRepository {
     var count = 0;
     for (final row in rows) {
       final raw = row['content_json']?.toString();
-      if (raw == null || raw.isEmpty) continue;
+      if (raw == null || raw.isEmpty || SnoteE2EEncryption.instance.isEncryptedText(raw)) continue;
       final encrypted = await SnoteE2EEncryption.instance.encryptText(raw);
       if (encrypted == raw) continue;
       await db.update('notes', {
