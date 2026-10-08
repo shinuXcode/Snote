@@ -1,10 +1,13 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:uuid/uuid.dart';
 
+import '../input/ink_gesture_policy.dart';
 import '../input/ink_input_pipeline.dart';
 import '../input/palm_rejection.dart';
 import '../input/stylus_gesture_lock.dart';
@@ -13,12 +16,125 @@ import '../models/pen_config.dart';
 import '../models/stroke.dart';
 import '../models/stroke_codec.dart';
 import '../painters/canvas_painter.dart';
-import '../performance/writing_performance.dart';
 import '../performance/stroke_spatial_index.dart';
+import '../performance/writing_performance.dart';
 import 'snote_canvas_controller.dart';
 
 class _CanvasRepaint extends ChangeNotifier {
   void repaint() => notifyListeners();
+}
+
+/// Cached immutable document layer. It is rebuilt only after a logical
+/// document mutation (stroke commit, erase, move, undo/redo, ...).
+class _PicturePainter extends CustomPainter {
+  final ui.Picture? picture;
+
+  const _PicturePainter(this.picture);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = picture;
+    if (p != null) canvas.drawPicture(p);
+  }
+
+  @override
+  bool shouldRepaint(covariant _PicturePainter oldDelegate) =>
+      !identical(oldDelegate.picture, picture);
+}
+
+/// High-frequency active layer. The painter is driven by a Listenable instead
+/// of widget-tree rebuilds, so pointer moves invalidate paint only.
+class _LiveInkPainter extends CustomPainter {
+  final List<StrokePoint> points;
+  final PenConfig? pen;
+  final CanvasTool? tool;
+  final bool fill;
+  final int customSides;
+  final String? sticker;
+  final List<Offset> lassoPath;
+  final Offset? eraserPoint;
+  final double eraserRadius;
+  final bool showEraser;
+  final Color? fillColor;
+
+  const _LiveInkPainter({
+    required this.points,
+    required this.pen,
+    required this.tool,
+    required this.fill,
+    required this.customSides,
+    required this.sticker,
+    required this.lassoPath,
+    required this.eraserPoint,
+    required this.eraserRadius,
+    required this.showEraser,
+    required this.fillColor,
+    super.repaint,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.isNotEmpty && pen != null && tool != null) {
+      final t = tool!;
+      final synthetic = Stroke(
+        id: 'live',
+        points: points,
+        pen: pen!,
+        shape: t.isShape ? t.name : null,
+        fill: fill,
+        customSides: customSides,
+        stickerText: sticker,
+        fillColor: fillColor,
+      );
+
+      // Reuse the same drawing code as the document layer. Because this
+      // painter is isolated, only the active ink is repainted.
+      SnoteCanvasPainter(
+        strokes: const <Stroke>[],
+        activeStroke: synthetic,
+        activePoints: points,
+        activePen: pen,
+        activeTool: tool,
+        activeFill: fill,
+        activeCustomSides: customSides,
+        activeStickerText: sticker,
+        selectedIds: const <String>{},
+        lassoPath: lassoPath,
+        eraserPoint: eraserPoint,
+        eraserRadius: eraserRadius,
+        showEraserMark: showEraser,
+        drawStrokes: false,
+        drawActive: true,
+      ).paint(canvas, size);
+    }
+
+    if (points.isEmpty && lassoPath.length <= 1 && !showEraser) {
+      return;
+    }
+
+    // Handles lasso/eraser visuals even when there is no active stroke.
+    if (lassoPath.length > 1) {
+      final p = Paint()
+        ..color = const Color(0xff4f6df6)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.6
+        ..strokeCap = StrokeCap.round;
+      for (var i = 1; i < lassoPath.length; i++) {
+        canvas.drawLine(lassoPath[i - 1], lassoPath[i], p);
+      }
+    }
+
+    if (showEraser && eraserPoint != null && eraserRadius > 0) {
+      final p = Paint()
+        ..color = const Color(0xff4f6df6).withValues(alpha: .55)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4;
+      canvas.drawCircle(eraserPoint!, eraserRadius, p);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _LiveInkPainter oldDelegate) => false;
 }
 
 class SnoteCanvas extends StatefulWidget {
@@ -44,6 +160,7 @@ class SnoteCanvas extends StatefulWidget {
   final Color? fillColor;
   final double smoothing;
   final bool showPerformanceOverlay;
+  final InkGesturePolicy gesturePolicy;
 
   const SnoteCanvas({
     super.key,
@@ -69,6 +186,7 @@ class SnoteCanvas extends StatefulWidget {
     this.fillColor,
     this.smoothing = .72,
     this.showPerformanceOverlay = false,
+    this.gesturePolicy = const InkGesturePolicy(),
   });
 
   @override
@@ -77,50 +195,60 @@ class SnoteCanvas extends StatefulWidget {
 
 class _SnoteCanvasState extends State<SnoteCanvas> {
   final _uuid = const Uuid();
-  final _palmRejection = PalmRejection();
-  final _spatialIndex = StrokeSpatialIndex();
-  final _stylusLock = StylusGestureLock();
+  final _palm = PalmRejection();
+  final _lock = StylusGestureLock();
+  final _spatial = StrokeSpatialIndex();
   final _repaint = _CanvasRepaint();
-  late final InkCommitQueue<Map<String, Object?>> _commitQueue;
-  final _performance = WritingPerformanceStats(
+  final _perf = WritingPerformanceStats(
     enabled: const bool.fromEnvironment('SNOTE_PERF'),
   );
-  final List<Stroke> _strokes = [];
-  final List<List<Stroke>> _history = [];
-  final List<List<Stroke>> _redo = [];
-  final Set<String> _selected = <String>{};
-  final List<Offset> _lassoPath = <Offset>[];
-
-  List<StrokePoint> _activeRealPoints = const <StrokePoint>[];
-  List<StrokePoint> _activeLivePoints = const <StrokePoint>[];
+  final _strokes = <Stroke>[];
+  final _history = <List<Stroke>>[];
+  final _redo = <List<Stroke>>[];
+  final _selected = <String>{};
+  final _lasso = <Offset>[];
 
   InkInputPipeline? _input;
+  InkCommitQueue<Map<String, Object?>>? _commitQueue;
+
+  List<StrokePoint> _real = const <StrokePoint>[];
+  List<StrokePoint> _live = const <StrokePoint>[];
+  PenConfig? _activePen;
+  CanvasTool? _activeTool;
+  String? _activeSticker;
+
+  ui.Picture? _documentPicture;
+
   Offset? _eraserPoint;
   double _eraserRadius = 0;
-  bool _temporaryEraser = false;
-  CanvasTool? _activeTool;
-  PenConfig? _activePen;
-  String? _activeSticker;
   int _activePointer = -1;
   bool _ignorePointer = false;
+  bool _temporaryEraser = false;
   bool _eraseSnapshotTaken = false;
-  bool _latencyCallbackScheduled = false;
+  bool _latencyScheduled = false;
+  DateTime? _lastInputWallClock;
   DateTime? _lastStylusTap;
   Offset? _lastStylusPosition;
-  DateTime? _lastInputWallClock;
 
-  bool get _perfEnabled => _performance.enabled;
+  bool get _perfEnabled => _perf.enabled;
 
   @override
   void initState() {
     super.initState();
-    _input = InkInputPipeline(smoothing: widget.smoothing);
+    _createPipeline();
     _commitQueue = InkCommitQueue<Map<String, Object?>>(
       onCommit: (document) => widget.onChanged?.call(document),
     );
     _replaceDocument(widget.initialDocument);
     _bindController();
-    _performance.attachScheduler();
+    _perf.attachScheduler();
+  }
+
+  void _createPipeline() {
+    _input = InkInputPipeline(
+      smoothing: widget.smoothing,
+      maxSamples: 16384,
+    );
   }
 
   @override
@@ -131,7 +259,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       _bindController();
     }
     if (oldWidget.smoothing != widget.smoothing) {
-      _input = InkInputPipeline(smoothing: widget.smoothing);
+      _createPipeline();
     }
     if (!identical(oldWidget.initialDocument, widget.initialDocument)) {
       _replaceDocument(widget.initialDocument, clearHistory: false);
@@ -140,12 +268,14 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
 
   @override
   void dispose() {
-    _performance.detachScheduler();
-    _commitQueue.dispose();
-    _stylusLock.reset();
+    _perf.detachScheduler();
+    _commitQueue?.dispose();
+    _input?.reset();
+    _lock.reset();
     widget.controller?.unbind();
+    _documentPicture?.dispose();
     _repaint.dispose();
-    _performance.dispose();
+    _perf.dispose();
     super.dispose();
   }
 
@@ -156,38 +286,73 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _strokes
       ..clear()
       ..addAll(StrokeCodec.documentToStrokes(document));
-    _spatialIndex.rebuild(_strokes);
+    _spatial.rebuild(_strokes);
     _selected.clear();
-    _lassoPath.clear();
+    _lasso.clear();
     if (clearHistory) {
       _history.clear();
       _redo.clear();
     }
-    if (mounted) setState(() {});
-    _notifySelection();
-    _performance.setDocumentStats(
+    _recordDocumentPicture();
+    _perf.setDocumentStats(
       strokes: _strokes.length,
       visible: _strokes.length,
     );
+    if (mounted) {
+      setState(() {});
+    }
+    _notifySelection();
   }
 
-  void _bindController() => widget.controller?.bind(
-        undo: undo,
-        redo: redo,
-        clear: clear,
-        deleteSelection: deleteSelection,
-        duplicateSelection: duplicateSelection,
-        moveSelection: moveSelection,
-        selectAll: selectAll,
-        clearSelection: clearSelection,
-        canUndo: _history.isNotEmpty,
-        canRedo: _redo.isNotEmpty,
-        selectionCount: _selected.length,
-      );
+  void _recordDocumentPicture() {
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    SnoteCanvasPainter(
+      strokes: List<Stroke>.unmodifiable(_strokes),
+      activeStroke: null,
+      activePoints: const <StrokePoint>[],
+      activePen: null,
+      activeTool: null,
+      activeFill: false,
+      activeCustomSides: 6,
+      activeStickerText: null,
+      selectedIds: Set<String>.unmodifiable(_selected),
+      lassoPath: const <Offset>[],
+      drawStrokes: true,
+      drawActive: false,
+    ).paint(canvas, Size.zero);
+
+    final next = recorder.endRecording();
+    _documentPicture?.dispose();
+    _documentPicture = next;
+  }
+
+  void _bindController() {
+    widget.controller?.bind(
+      undo: undo,
+      redo: redo,
+      clear: clear,
+      deleteSelection: deleteSelection,
+      duplicateSelection: duplicateSelection,
+      moveSelection: moveSelection,
+      selectAll: selectAll,
+      clearSelection: clearSelection,
+      canUndo: _history.isNotEmpty,
+      canRedo: _redo.isNotEmpty,
+      selectionCount: _selected.length,
+      changeColor: changeSelectedColor,
+      changeSize: changeSelectedSize,
+      toggleFill: toggleSelectedFill,
+      bringToFront: bringSelectionToFront,
+      sendToBack: sendSelectionToBack,
+    );
+  }
 
   void _snapshot() {
     _history.add(List<Stroke>.of(_strokes));
-    if (_history.length > 80) _history.removeAt(0);
+    if (_history.length > 80) {
+      _history.removeAt(0);
+    }
     _redo.clear();
   }
 
@@ -197,9 +362,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _strokes
       ..clear()
       ..addAll(_history.removeLast());
-    _spatialIndex.rebuild(_strokes);
-    _selected.clear();
-    _notifyAndRefresh();
+    _finishDocumentMutation();
   }
 
   void redo() {
@@ -208,42 +371,40 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _strokes
       ..clear()
       ..addAll(_redo.removeLast());
-    _spatialIndex.rebuild(_strokes);
-    _selected.clear();
-    _notifyAndRefresh();
+    _finishDocumentMutation();
   }
 
   void clear() {
     if (_strokes.isEmpty) return;
     _snapshot();
     _strokes.clear();
-    _spatialIndex.rebuild(_strokes);
     _selected.clear();
-    _notifyAndRefresh();
+    _finishDocumentMutation();
+    _notifySelection();
   }
 
   void deleteSelection() {
     if (_selected.isEmpty) return;
     _snapshot();
-    _strokes.removeWhere((s) => _selected.contains(s.id));
-    _spatialIndex.rebuild(_strokes);
+    _strokes.removeWhere((stroke) => _selected.contains(stroke.id));
     _selected.clear();
-    _notifyAndRefresh();
+    _finishDocumentMutation();
+    _notifySelection();
   }
 
   void duplicateSelection() {
     if (_selected.isEmpty) return;
     _snapshot();
     final copies = <Stroke>[];
-    for (final s in _strokes) {
-      if (!_selected.contains(s.id)) continue;
+    for (final stroke in _strokes) {
+      if (!_selected.contains(stroke.id)) continue;
       copies.add(
-        s.copyWith(
+        stroke.copyWith(
           id: _uuid.v4(),
-          points: s.points
+          points: stroke.points
               .map(
-                (p) => p.copyWith(
-                  position: p.position + const Offset(18, 18),
+                (point) => point.copyWith(
+                  position: point.position + const Offset(18, 18),
                 ),
               )
               .toList(),
@@ -251,181 +412,165 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       );
     }
     _strokes.addAll(copies);
-    _spatialIndex.rebuild(_strokes);
     _selected
       ..clear()
-      ..addAll(copies.map((s) => s.id));
-    _notifyAndRefresh();
+      ..addAll(copies.map((stroke) => stroke.id));
+    _finishDocumentMutation();
+    _notifySelection();
   }
 
   void moveSelection(double dx, double dy) {
     if (_selected.isEmpty) return;
     _snapshot();
     for (var i = 0; i < _strokes.length; i++) {
-      final s = _strokes[i];
-      if (!_selected.contains(s.id)) continue;
-      _strokes[i] = s.copyWith(
-        points: s.points
-            .map((p) => p.copyWith(position: p.position + Offset(dx, dy)))
+      final stroke = _strokes[i];
+      if (!_selected.contains(stroke.id)) continue;
+      _strokes[i] = stroke.copyWith(
+        points: stroke.points
+            .map((point) => point.copyWith(
+                  position: point.position + Offset(dx, dy),
+                ))
             .toList(),
       );
     }
-    _notifyAndRefresh();
+    _finishDocumentMutation();
+  }
+
+  void changeSelectedColor(Color color) {
+    if (_selected.isEmpty) return;
+    _snapshot();
+    for (var i = 0; i < _strokes.length; i++) {
+      final stroke = _strokes[i];
+      if (_selected.contains(stroke.id)) {
+        _strokes[i] = stroke.copyWith(
+          pen: stroke.pen.copyWith(color: color),
+          fillColor: color,
+        );
+      }
+    }
+    _finishDocumentMutation();
+  }
+
+  void changeSelectedSize(double size) {
+    if (_selected.isEmpty) return;
+    _snapshot();
+    for (var i = 0; i < _strokes.length; i++) {
+      final stroke = _strokes[i];
+      if (_selected.contains(stroke.id)) {
+        _strokes[i] = stroke.copyWith(
+          pen: stroke.pen.copyWith(size: size.clamp(.5, 60).toDouble()),
+        );
+      }
+    }
+    _finishDocumentMutation();
+  }
+
+  void toggleSelectedFill() {
+    if (_selected.isEmpty) return;
+    _snapshot();
+    for (var i = 0; i < _strokes.length; i++) {
+      final stroke = _strokes[i];
+      if (_selected.contains(stroke.id) && stroke.shape != null) {
+        _strokes[i] = stroke.copyWith(fill: !stroke.fill);
+      }
+    }
+    _finishDocumentMutation();
+  }
+
+  void bringSelectionToFront() {
+    if (_selected.isEmpty) return;
+    _snapshot();
+    final chosen = _strokes.where((s) => _selected.contains(s.id)).toList();
+    _strokes.removeWhere((s) => _selected.contains(s.id));
+    _strokes.addAll(chosen);
+    _finishDocumentMutation();
+  }
+
+  void sendSelectionToBack() {
+    if (_selected.isEmpty) return;
+    _snapshot();
+    final chosen = _strokes.where((s) => _selected.contains(s.id)).toList();
+    _strokes.removeWhere((s) => _selected.contains(s.id));
+    _strokes.insertAll(0, chosen);
+    _finishDocumentMutation();
   }
 
   void selectAll() {
     _selected
       ..clear()
-      ..addAll(_strokes.map((s) => s.id));
+      ..addAll(_strokes.map((stroke) => stroke.id));
+    _recordDocumentPicture();
     _notifySelection();
   }
 
   void clearSelection() {
     _selected.clear();
+    _recordDocumentPicture();
     _notifySelection();
   }
 
   void _notifySelection() {
-    if (mounted) setState(() {});
-    _bindController();
     widget.onSelectionChanged?.call(_selected.length);
+    _bindController();
+    if (mounted) setState(() {});
   }
 
-  void _notifyAndRefresh() {
-    if (!mounted) return;
-    setState(() {});
-    _bindController();
-    _commitQueue.enqueue(StrokeCodec.strokesToDocument(_strokes));
-    widget.onSelectionChanged?.call(_selected.length);
-    _performance.setDocumentStats(
+  void _finishDocumentMutation() {
+    _spatial.rebuild(_strokes);
+    _recordDocumentPicture();
+    _perf.setDocumentStats(
       strokes: _strokes.length,
       visible: _strokes.length,
     );
+    if (mounted) {
+      setState(() {});
+    }
+    _commitQueue?.enqueue(StrokeCodec.strokesToDocument(_strokes));
   }
-
-  @override
-  Widget build(BuildContext context) {
-    return ColoredBox(
-      color: widget.backgroundColor,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Listener(
-            behavior: HitTestBehavior.opaque,
-            onPointerDown: _pointerDown,
-            onPointerMove: _pointerMove,
-            onPointerUp: _pointerUp,
-            onPointerCancel: _pointerCancel,
-            onPointerHover: _pointerHover,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                RepaintBoundary(
-                  child: CustomPaint(
-                    isComplex: true,
-                    willChange: false,
-                    painter: SnoteCanvasPainter(
-                      strokes: List<Stroke>.unmodifiable(_strokes),
-                      activeStroke: null,
-                      activePoints: const <StrokePoint>[],
-                      activePen: null,
-                      activeTool: null,
-                      activeFill: false,
-                      activeCustomSides: widget.customShapeSides,
-                      activeStickerText: null,
-                      selectedIds:
-                          Set<String>.unmodifiable(_selected),
-                      lassoPath: const <Offset>[],
-                      drawStrokes: true,
-                      drawActive: false,
-                    ),
-                  ),
-                ),
-                RepaintBoundary(
-                  child: CustomPaint(
-                  willChange: true,
-                  painter: SnoteCanvasPainter(
-                    strokes: const <Stroke>[],
-                    activeStroke: null,
-                    activePoints: _activeLivePoints,
-                    activePen: _activePen,
-                    activeTool: _activeTool,
-                    activeFill: widget.shapeFill,
-                    activeCustomSides: widget.customShapeSides,
-                    activeStickerText: _activeSticker,
-                    selectedIds: const <String>{},
-                    lassoPath: _lassoPath,
-                    eraserPoint: _eraserPoint,
-                    eraserRadius: _eraserRadius,
-                    showEraserMark: widget.eraseMark,
-                    drawStrokes: false,
-                    drawActive: true,
-                    repaint: _repaint,
-                  ),
-                ),
-                ),
-              ],
-            ),
-          ),
-          if (widget.showPerformanceOverlay && _perfEnabled)
-            WritingPerformanceOverlay(stats: _performance),
-        ],
-      ),
-    );
-  }
-
-  bool _accept(PointerEvent event) =>
-      _palmRejection.accepts(event);
 
   void _recordInput() {
     if (!_perfEnabled) return;
-    _performance.pointerEvent();
-    _lastInputWallClock = DateTime.now();
-    if (_latencyCallbackScheduled) return;
-    _latencyCallbackScheduled = true;
+    _perf.pointerEvent();
+    final now = DateTime.now();
+    _lastInputWallClock = now;
+    if (_latencyScheduled) return;
+    _latencyScheduled = true;
     SchedulerBinding.instance.addPostFrameCallback((_) {
-      _latencyCallbackScheduled = false;
-      final inputAt = _lastInputWallClock;
-      if (mounted && inputAt != null) {
-        _performance.setLatency(inputAt);
-      }
+      _latencyScheduled = false;
+      final input = _lastInputWallClock;
+      if (input != null) _perf.setLatency(input);
     });
+  }
+
+  bool _accept(PointerEvent event) {
+    if (!_palm.accepts(event)) return false;
+    if (event.kind == PointerDeviceKind.stylus ||
+        event.kind == PointerDeviceKind.invertedStylus) {
+      return widget.gesturePolicy.isStylus(event.kind);
+    }
+    return event.kind == PointerDeviceKind.mouse;
   }
 
   void _pointerDown(PointerDownEvent event) {
     _recordInput();
     if (!_accept(event) || _activePointer != -1) return;
+
     _ignorePointer = false;
+    final isStylus = widget.gesturePolicy.isStylus(event.kind);
 
-    final isStylus = event.kind == PointerDeviceKind.stylus ||
-        event.kind == PointerDeviceKind.invertedStylus;
-    if (isStylus && !_stylusLock.begin(event)) return;
+    if (isStylus && !_lock.begin(event)) return;
 
-    final stylusButtonErase =
-        (event.buttons & kSecondaryStylusButton) != 0;
-    _temporaryEraser =
-        widget.eraseWithStylusButton &&
-        (event.kind == PointerDeviceKind.invertedStylus ||
-            (event.kind == PointerDeviceKind.stylus &&
-                stylusButtonErase));
-
-    if (event.kind == PointerDeviceKind.stylus &&
-        widget.onStylusDoubleTap != null &&
-        widget.tool == CanvasTool.ballpoint) {
-      final now = DateTime.now();
-      if (_lastStylusTap != null &&
-          now.difference(_lastStylusTap!) <
-              const Duration(milliseconds: 270) &&
-          _lastStylusPosition != null &&
-          (event.localPosition - _lastStylusPosition!).distance < 30) {
-        _ignorePointer = true;
-        _lastStylusTap = null;
-        widget.onStylusDoubleTap!();
-        return;
-      }
+    if (isStylus && _isStylusDoubleTap(event)) {
+      _ignorePointer = true;
+      widget.onStylusDoubleTap?.call();
+      return;
     }
 
     _activePointer = event.pointer;
+    _temporaryEraser = widget.eraseWithStylusButton &&
+        (event.kind == PointerDeviceKind.invertedStylus ||
+            (event.kind == PointerDeviceKind.stylus &&
+                (event.buttons & kSecondaryStylusButton) != 0));
 
     if (_temporaryEraser ||
         widget.tool == CanvasTool.eraser ||
@@ -458,7 +603,9 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     }
 
     if (widget.tool == CanvasTool.lasso) {
-      _lassoPath
+      _activeTool = CanvasTool.lasso;
+      _activePen = widget.pen;
+      _lasso
         ..clear()
         ..add(event.localPosition);
       _repaint.repaint();
@@ -468,26 +615,27 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _activeTool = widget.tool;
     _activePen = widget.pen;
     _activeSticker =
-        widget.tool == CanvasTool.sticker
-            ? widget.stickerText
-            : null;
+        widget.tool == CanvasTool.sticker ? widget.stickerText : null;
 
     final frame = _input!.begin(event);
-    _activeRealPoints = frame.realPoints;
-    _activeLivePoints = frame.livePoints;
+    _real = frame.realPoints;
+    _live = frame.livePoints;
+    _repaint.repaint();
 
     if (widget.tool == CanvasTool.sticker) {
       _commitActive();
-    } else {
-      _repaint.repaint();
     }
   }
 
+  bool _isStylusDoubleTap(PointerDownEvent event) {
+    if (_lastStylusTap == null || _lastStylusPosition == null) return false;
+    final elapsed = DateTime.now().difference(_lastStylusTap!);
+    return elapsed <= const Duration(milliseconds: 350) &&
+        (_lastStylusPosition! - event.localPosition).distance <= 28;
+  }
+
   void _pointerMove(PointerMoveEvent event) {
-    if (event.pointer != _activePointer ||
-        _ignorePointer) {
-      return;
-    }
+    if (event.pointer != _activePointer || _ignorePointer) return;
     _recordInput();
 
     if (_activeTool == CanvasTool.eraser ||
@@ -512,23 +660,22 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       return;
     }
 
-    if (widget.tool == CanvasTool.lasso) {
-      _lassoPath.add(event.localPosition);
+    if (_activeTool == CanvasTool.lasso) {
+      if (_lasso.isEmpty ||
+          (_lasso.last - event.localPosition).distanceSquared > .35) {
+        _lasso.add(event.localPosition);
+      }
       _repaint.repaint();
       return;
     }
 
     if (_activePen == null || _activeTool == null) return;
-
     final frame = _input!.update(event);
-    _activeRealPoints = frame.realPoints;
-    _activeLivePoints = frame.livePoints;
-
+    _real = frame.realPoints;
+    _live = frame.livePoints;
     if (_perfEnabled) {
-      _performance.rendered(_activeLivePoints.length);
-      _performance.setPredictionHorizon(
-        frame.predictionHorizonMs,
-      );
+      _perf.rendered(_live.length);
+      _perf.setPredictionHorizon(frame.predictionHorizonMs);
     }
     _repaint.repaint();
   }
@@ -538,7 +685,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
 
     if (_ignorePointer) {
       _ignorePointer = false;
-      _stylusLock.end(event);
+      _lock.end(event);
       _activePointer = -1;
       return;
     }
@@ -548,258 +695,153 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     if (_temporaryEraser) {
       _eraseSnapshotTaken = false;
       _temporaryEraser = false;
-      _eraserPoint = null;
-      _eraserRadius = 0;
-      _cancelActive();
-    } else if (widget.tool == CanvasTool.lasso) {
+      _clearActiveState();
+    } else if (_activeTool == CanvasTool.lasso) {
       _finishLasso();
     } else if (_activeTool == CanvasTool.eraser ||
         _activeTool == CanvasTool.pixelEraser) {
       _eraseSnapshotTaken = false;
-      _eraserPoint = null;
-      _eraserRadius = 0;
-      _cancelActive();
-    } else if (widget.tool != CanvasTool.sticker) {
-      _activeRealPoints = _input!.finish(event);
-      _activeLivePoints = _activeRealPoints;
-      if (_activeRealPoints.isNotEmpty) {
-        _commitActive();
-      }
+      _clearActiveState();
+    } else if (_activeTool != CanvasTool.sticker) {
+      _real = _input!.finish(event);
+      _live = _real;
+      if (_real.isNotEmpty) _commitActive();
     }
 
     if (event.kind == PointerDeviceKind.stylus) {
       _lastStylusTap = DateTime.now();
       _lastStylusPosition = event.localPosition;
     }
-    _stylusLock.end(event);
+    _lock.end(event);
     _activePointer = -1;
   }
 
   void _pointerCancel(PointerCancelEvent event) {
     if (event.pointer != _activePointer) return;
-    if (_activeTool == CanvasTool.eraser ||
-        _activeTool == CanvasTool.pixelEraser ||
-        _temporaryEraser) {
-      _eraseSnapshotTaken = false;
-      _temporaryEraser = false;
-      _eraserPoint = null;
-      _eraserRadius = 0;
-    }
-    _cancelActive();
+    _eraseSnapshotTaken = false;
+    _temporaryEraser = false;
+    _clearActiveState();
     _input?.reset();
-    _stylusLock.end(event);
+    _lock.end(event);
     _activePointer = -1;
   }
 
-  void _cancelActive() {
+  void _clearActiveState() {
     _activePen = null;
     _activeTool = null;
     _activeSticker = null;
-    _activeRealPoints = const <StrokePoint>[];
-    _activeLivePoints = const <StrokePoint>[];
-    _lassoPath.clear();
+    _real = const <StrokePoint>[];
+    _live = const <StrokePoint>[];
+    _eraserPoint = null;
+    _eraserRadius = 0;
+    _lasso.clear();
+    _input?.reset();
     _repaint.repaint();
   }
 
   void _commitActive() {
-    if (_activeRealPoints.isEmpty ||
-        _activePen == null ||
-        _activeTool == null) {
-      _cancelActive();
+    if (_real.isEmpty || _activePen == null || _activeTool == null) {
+      _clearActiveState();
       return;
     }
 
     _snapshot();
-    final recognizedShape = _activeTool!.isShape
+    final shape = _activeTool!.isShape
         ? _activeTool!.name
-        : (widget.autoRecognition
-              ? _recognizeShape(_activeRealPoints)
-              : null);
+        : (widget.autoRecognition ? _recognizeShape(_real) : null);
 
     final stroke = Stroke(
       id: _uuid.v4(),
-      points: List<StrokePoint>.of(_activeRealPoints),
+      points: List<StrokePoint>.of(_real),
       pen: _activePen!,
-      shape: recognizedShape,
-      fill: widget.shapeFill && recognizedShape != null,
+      shape: shape,
+      fill: widget.shapeFill && shape != null,
       customSides: widget.customShapeSides,
       stickerText: _activeSticker,
       dashed: widget.dashed,
       fillColor: widget.fillColor,
     );
+
     _strokes.add(stroke);
-    _spatialIndex.rebuild(_strokes);
+    _real = const <StrokePoint>[];
+    _live = const <StrokePoint>[];
     _activePen = null;
     _activeTool = null;
     _activeSticker = null;
-    _activeRealPoints = const <StrokePoint>[];
-    _activeLivePoints = const <StrokePoint>[];
     _input?.reset();
+    _finishDocumentMutation();
     _repaint.repaint();
-    _notifyAndRefresh();
   }
 
   String? _recognizeShape(List<StrokePoint> points) {
-    if (points.length < 4) return null;
+    if (points.length < 8) return null;
     final first = points.first.position;
     final last = points.last.position;
-    final closed = (last - first).distance < 28;
-    var left = first.dx;
-    var right = first.dx;
-    var top = first.dy;
-    var bottom = first.dy;
+    final width = (last.dx - first.dx).abs();
+    final height = (last.dy - first.dy).abs();
+    final distance = (last - first).distance;
 
-    for (final p in points.skip(1)) {
-      left = math.min(left, p.position.dx);
-      right = math.max(right, p.position.dx);
-      top = math.min(top, p.position.dy);
-      bottom = math.max(bottom, p.position.dy);
-    }
-
-    final width = right - left;
-    final height = bottom - top;
-    if (width < 20 || height < 20) {
+    if (distance > 0 && width > 24 && height < width * .24) {
+      var maxDeviation = 0.0;
       final line = last - first;
-      if (line.distance < 20) return null;
-      var maxDistance = 0.0;
-      for (final p in points) {
-        final distance =
-            ((p.position.dx - first.dx) * line.dy -
-                    (p.position.dy - first.dy) * line.dx)
-                .abs() /
-            line.distance;
-        maxDistance = math.max(maxDistance, distance);
+      for (final point in points) {
+        final v = point.position - first;
+        final cross = (v.dx * line.dy - v.dy * line.dx).abs() /
+            distance;
+        maxDeviation = math.max(maxDeviation, cross);
       }
-      return maxDistance < 12 ? 'line' : null;
+      if (maxDeviation < math.max(8, width * .08)) return 'line';
     }
 
-    if (!closed) return null;
-    final ratio = width / height;
-    if (ratio > .72 && ratio < 1.38) return 'rectangle';
-    return 'ellipse';
+    final bounds = _bounds(points);
+    if (bounds.width < 20 || bounds.height < 20) return null;
+
+    final perimeter = 2 * (bounds.width + bounds.height);
+    if (perimeter <= 0) return null;
+
+    var pathLength = 0.0;
+    for (var i = 1; i < points.length; i++) {
+      pathLength +=
+          (points[i].position - points[i - 1].position).distance;
+    }
+
+    final closure = (points.last.position - first).distance;
+    final rectangularity =
+        pathLength / math.max(1, perimeter);
+    if (closure < math.max(18, math.min(bounds.width, bounds.height) * .35) &&
+        rectangularity > .72 &&
+        rectangularity < 2.2) {
+      final aspect = bounds.width / math.max(1, bounds.height);
+      if (aspect > .65 && aspect < 1.55) return 'rectangle';
+      return 'ellipse';
+    }
+
+    return null;
+  }
+
+  Rect _bounds(List<StrokePoint> points) {
+    var left = points.first.position.dx;
+    var right = left;
+    var top = points.first.position.dy;
+    var bottom = top;
+    for (final point in points.skip(1)) {
+      left = math.min(left, point.position.dx);
+      right = math.max(right, point.position.dx);
+      top = math.min(top, point.position.dy);
+      bottom = math.max(bottom, point.position.dy);
+    }
+    return Rect.fromLTRB(left, top, right, bottom);
   }
 
   double _eraseRadius(double pressure) {
-    final p =
+    final normalized =
         pressure.isNaN ? 1.0 : pressure.clamp(0, 1).toDouble();
-    final base =
-        (widget.pen.size * 3.3).clamp(16, 44).toDouble();
-    return widget.pressureErase && widget.pressureEraseArea
-        ? base * (.65 + p * .75)
-        : base;
-  }
-
-  void _pointerHover(PointerHoverEvent event) {
-    if (!_accept(event) ||
-        event.kind != PointerDeviceKind.stylus) {
-      return;
+    final base = (widget.pen.size * 3.3).clamp(16, 44).toDouble();
+    if (widget.pressureErase && widget.pressureEraseArea) {
+      return base *
+          (0.65 + normalized.clamp(widget.pressureEraseThreshold, 1) * .75);
     }
-    _eraserPoint = event.localPosition;
-    _eraserRadius = _eraseRadius(event.pressure);
-    _repaint.repaint();
-  }
-
-  void _erasePixelAt(
-    Offset point, {
-    double pressure = 1,
-    bool snapshotAlreadyTaken = false,
-  }) {
-    final normalizedPressure =
-        pressure.isNaN ? 1.0 : pressure.clamp(0, 1).toDouble();
-    if (widget.pressureErase &&
-        normalizedPressure < widget.pressureEraseThreshold) {
-      return;
-    }
-
-    final baseRadius =
-        (widget.pen.size * 3.3).clamp(16, 44).toDouble();
-    final radius = widget.pressureErase &&
-            widget.pressureEraseArea
-        ? baseRadius * (.65 + normalizedPressure * .75)
-        : baseRadius;
-
-    var changed = false;
-    for (var i = _strokes.length - 1; i >= 0; i--) {
-      final stroke = _strokes[i];
-      if (stroke.shape != null || stroke.stickerText != null) {
-        if (stroke.points.any(
-          (p) => (p.position - point).distance <= radius,
-        )) {
-          if (!snapshotAlreadyTaken && !changed) _snapshot();
-          _strokes.removeAt(i);
-          changed = true;
-        }
-        continue;
-      }
-
-      final pieces = <List<StrokePoint>>[];
-      var current = <StrokePoint>[];
-      var hit = false;
-      for (var p = 0; p < stroke.points.length; p++) {
-        final currentPoint = stroke.points[p];
-        final pointHit =
-            (currentPoint.position - point).distance <= radius;
-        final segmentHit = p > 0 &&
-            _distanceToSegment(
-                  point,
-                  stroke.points[p - 1].position,
-                  currentPoint.position,
-                ) <=
-                radius;
-        if (pointHit || segmentHit) {
-          hit = true;
-          if (current.isNotEmpty) pieces.add(current);
-          current = <StrokePoint>[];
-        } else {
-          current.add(currentPoint);
-        }
-      }
-      if (current.isNotEmpty) pieces.add(current);
-
-      if (!hit) continue;
-      if (!snapshotAlreadyTaken && !changed) _snapshot();
-      _strokes.removeAt(i);
-      for (var p = pieces.length - 1; p >= 0; p--) {
-        final piece = pieces[p];
-        if (piece.isEmpty) continue;
-        _strokes.insert(
-          i,
-          stroke.copyWith(
-            id: p == 0 ? stroke.id : _uuid.v4(),
-            points: piece,
-          ),
-        );
-      }
-      changed = true;
-    }
-
-    if (!changed) {
-      widget.onEraserMiss?.call();
-      return;
-    }
-    _notifyAndRefresh();
-  }
-
-  double _distanceToSegment(
-    Offset point,
-    Offset a,
-    Offset b,
-  ) {
-    final vector = b - a;
-    final lengthSquared =
-        vector.dx * vector.dx + vector.dy * vector.dy;
-    if (lengthSquared <= .0001) {
-      return (point - a).distance;
-    }
-    final projection = ((point.dx - a.dx) * vector.dx +
-            (point.dy - a.dy) * vector.dy) /
-        lengthSquared;
-    final t = projection.clamp(0, 1).toDouble();
-    final closest = Offset(
-      a.dx + vector.dx * t,
-      a.dy + vector.dy * t,
-    );
-    return (point - closest).distance;
+    return base;
   }
 
   void _eraseAt(
@@ -807,90 +849,191 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     double pressure = 1,
     bool snapshotAlreadyTaken = false,
   }) {
-    final normalizedPressure =
-        pressure.isNaN ? 1.0 : pressure.clamp(0, 1).toDouble();
     if (widget.pressureErase &&
-        normalizedPressure < widget.pressureEraseThreshold) {
+        pressure.isFinite &&
+        pressure < widget.pressureEraseThreshold) {
       return;
     }
 
-    final baseRadius =
-        (widget.pen.size * 3.3).clamp(16, 44).toDouble();
-    final radius = widget.pressureErase &&
-            widget.pressureEraseArea
-        ? baseRadius * (.65 + normalizedPressure * .75)
-        : baseRadius;
-
-    var hit = -1;
-    for (final candidate in _spatialIndex.candidates(point, radius)) {
-      if (candidate < 0 || candidate >= _strokes.length) continue;
-      final stroke = _strokes[candidate];
-      if (stroke.points.any((p) => (p.position - point).distance <= radius)) {
-        hit = candidate;
-        break;
+    final radius = _eraseRadius(pressure);
+    final candidates = _spatial.candidates(point, radius);
+    for (final index in candidates) {
+      if (index < 0 || index >= _strokes.length) continue;
+      final stroke = _strokes[index];
+      if (stroke.points.any(
+        (p) => (p.position - point).distance <= radius,
+      )) {
+        if (!snapshotAlreadyTaken && !_eraseSnapshotTaken) {
+          _snapshot();
+          _eraseSnapshotTaken = true;
+        }
+        _strokes.removeAt(index);
+        _finishDocumentMutation();
+        return;
       }
     }
+    widget.onEraserMiss?.call();
+  }
 
-    if (hit < 0) {
-      widget.onEraserMiss?.call();
+  void _erasePixelAt(
+    Offset point, {
+    double pressure = 1,
+    bool snapshotAlreadyTaken = false,
+  }) {
+    if (widget.pressureErase &&
+        pressure.isFinite &&
+        pressure < widget.pressureEraseThreshold) {
       return;
     }
 
-    if (!snapshotAlreadyTaken) _snapshot();
-    _strokes.removeAt(hit);
-    _spatialIndex.rebuild(_strokes);
-    _selected.removeWhere(
-      (id) => !_strokes.any((s) => s.id == id),
-    );
-    _notifyAndRefresh();
+    final radius = _eraseRadius(pressure);
+    final candidates = _spatial.candidates(point, radius);
+    final sorted = candidates.toList()..sort((a, b) => b.compareTo(a));
+
+    for (final index in sorted) {
+      if (index < 0 || index >= _strokes.length) continue;
+      final stroke = _strokes[index];
+      if (stroke.shape != null || stroke.stickerText != null) {
+        if (stroke.points.any(
+          (p) => (p.position - point).distance <= radius,
+        )) {
+          if (!snapshotAlreadyTaken && !_eraseSnapshotTaken) {
+            _snapshot();
+            _eraseSnapshotTaken = true;
+          }
+          _strokes.removeAt(index);
+          _finishDocumentMutation();
+          return;
+        }
+        continue;
+      }
+
+      final pieces = <List<StrokePoint>>[];
+      var current = <StrokePoint>[];
+      for (final sample in stroke.points) {
+        final hit = (sample.position - point).distance <= radius;
+        if (hit) {
+          if (current.isNotEmpty) {
+            pieces.add(current);
+            current = <StrokePoint>[];
+          }
+        } else {
+          current.add(sample);
+        }
+      }
+      if (current.isNotEmpty) pieces.add(current);
+
+      if (pieces.length == 1 &&
+          pieces.first.length == stroke.points.length) {
+        continue;
+      }
+
+      if (!snapshotAlreadyTaken && !_eraseSnapshotTaken) {
+        _snapshot();
+        _eraseSnapshotTaken = true;
+      }
+      _strokes.removeAt(index);
+
+      for (var part = pieces.length - 1; part >= 0; part--) {
+        final segment = pieces[part];
+        if (segment.isEmpty) continue;
+        _strokes.insert(
+          index,
+          stroke.copyWith(
+            id: part == 0 ? stroke.id : _uuid.v4(),
+            points: segment,
+          ),
+        );
+      }
+      _finishDocumentMutation();
+      return;
+    }
+
+    widget.onEraserMiss?.call();
   }
 
   void _finishLasso() {
-    if (_lassoPath.length < 3) {
-      _lassoPath.clear();
-      _repaint.repaint();
-      _notifySelection();
+    if (_lasso.length < 3) {
+      _clearActiveState();
       return;
     }
 
-    final polygon = List<Offset>.of(_lassoPath);
     _selected.clear();
-
     for (final stroke in _strokes) {
-      if (stroke.points
-          .any((p) => _pointInPolygon(p.position, polygon))) {
+      if (stroke.points.any(
+        (point) => _pointInPolygon(point.position, _lasso),
+      )) {
         _selected.add(stroke.id);
       }
     }
 
-    _lassoPath.clear();
+    _recordDocumentPicture();
     _notifySelection();
+    _clearActiveState();
     _repaint.repaint();
   }
 
-  bool _pointInPolygon(
-    Offset point,
-    List<Offset> polygon,
-  ) {
+  bool _pointInPolygon(Offset point, List<Offset> polygon) {
     var inside = false;
-    for (
-      var i = 0, j = polygon.length - 1;
-      i < polygon.length;
-      j = i++
-    ) {
+    for (var i = 0, j = polygon.length - 1;
+        i < polygon.length;
+        j = i++) {
       final a = polygon[i];
       final b = polygon[j];
-      final intersects =
-          ((a.dy > point.dy) != (b.dy > point.dy)) &&
-          point.dx <
-              (b.dx - a.dx) *
-                      (point.dy - a.dy) /
-                      ((b.dy - a.dy).abs() < .0001
-                          ? .0001
-                          : (b.dy - a.dy)) +
-                  a.dx;
-      if (intersects) inside = !inside;
+      final crosses = (a.dy > point.dy) != (b.dy > point.dy);
+      if (!crosses) continue;
+      final x = (b.dx - a.dx) * (point.dy - a.dy) /
+              math.max(.000001, b.dy - a.dy) +
+          a.dx;
+      if (point.dx < x) inside = !inside;
     }
     return inside;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: _pointerDown,
+      onPointerMove: _pointerMove,
+      onPointerUp: _pointerUp,
+      onPointerCancel: _pointerCancel,
+      onPointerHover: (_) => _recordInput(),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          RepaintBoundary(
+            child: CustomPaint(
+              painter: _PicturePainter(_documentPicture),
+              child: const SizedBox.expand(),
+            ),
+          ),
+          RepaintBoundary(
+            child: CustomPaint(
+              painter: _LiveInkPainter(
+                points: _live,
+                pen: _activePen,
+                tool: _activeTool,
+                fill: widget.shapeFill,
+                customSides: widget.customShapeSides,
+                sticker: _activeSticker,
+                lassoPath: _lasso,
+                eraserPoint: _eraserPoint,
+                eraserRadius: _eraserRadius,
+                showEraser: widget.eraseMark &&
+                    (_activeTool == CanvasTool.eraser ||
+                        _activeTool == CanvasTool.pixelEraser ||
+                        _temporaryEraser),
+                fillColor: widget.fillColor,
+                repaint: _repaint,
+              ),
+              child: const SizedBox.expand(),
+            ),
+          ),
+          if (widget.showPerformanceOverlay && _perfEnabled)
+            WritingPerformanceOverlay(stats: _perf),
+        ],
+      ),
+    );
   }
 }
