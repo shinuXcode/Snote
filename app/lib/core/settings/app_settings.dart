@@ -27,6 +27,7 @@ class SnoteSettings extends ChangeNotifier {
     'pressureEraseThreshold': .35,
     'strokeSmoothing': .72,
     'velocitySensitivity': .65,
+    'pressureExponent': 1.0,
   };
 
   static const stringDefaults = <String, String>{
@@ -36,7 +37,8 @@ class SnoteSettings extends ChangeNotifier {
     'eInkProfile': 'physical',
     'defaultPageTemplate': 'dotted',
     'defaultPaperPalette': 'paper-white',
-    'pencaseTools': 'ballpoint,fountain,pencil,highlighter,eraser,lasso',
+    'pencaseTools': 'ballpoint,fountain,pencil,highlighter,marker,brush,eraser,pixelEraser,lasso',
+    'pressureCurve': 'linear',
   };
 
   bool getBool(String key) => (_values[key] as bool?) ?? boolDefaults[key] ?? false;
