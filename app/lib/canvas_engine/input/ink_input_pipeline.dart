@@ -60,7 +60,7 @@ class InkInputPipeline {
     reset();
     final sample = InkSample.fromEvent(event);
     final point = sample.toStrokePoint();
-    _buffer.add(point);
+    _append(sample, point);
     _livePoints.add(point);
     _lastTimestamp = sample.timestampMs;
 
@@ -86,7 +86,7 @@ class InkInputPipeline {
     }
     _previousPrediction = null;
 
-    final appended = _append(sample);
+    final appended = _append(sample, actual);
     if (!appended || _buffer.last == null) {
       return _frame(null, actual);
     }
@@ -116,7 +116,7 @@ class InkInputPipeline {
     }
     _previousPrediction = null;
 
-    _append(sample);
+    _append(sample, actual);
 
     final result = _stabilizer.finalize(_buffer.points);
     if (result.isNotEmpty) {
@@ -135,11 +135,11 @@ class InkInputPipeline {
     );
   }
 
-  bool _append(InkSample sample) {
+  bool _append(InkSample sample, [StrokePoint? point]) {
     final timestamp = sample.timestampMs;
     if (_lastTimestamp != null && timestamp < _lastTimestamp!) return false;
-    final point = sample.toStrokePoint();
-    final added = _buffer.add(point);
+    final canonical = point ?? sample.toStrokePoint();
+    final added = _buffer.add(canonical);
     if (added) _lastTimestamp = timestamp;
     return added;
   }
