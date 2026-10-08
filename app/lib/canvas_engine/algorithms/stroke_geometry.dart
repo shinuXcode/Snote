@@ -1,29 +1,42 @@
 import 'dart:ui';
+
 import '../models/stroke.dart';
 
+/// Continuous cubic centerline geometry used by both live and final ink.
 class StrokeGeometry {
   static Path buildPath(List<StrokePoint> points) {
     final path = Path();
     if (points.isEmpty) return path;
-    path.moveTo(points.first.position.dx, points.first.position.dy);
-    if (points.length == 1) return path;
+    if (points.length == 1) {
+      path.moveTo(points.first.position.dx, points.first.position.dy);
+      return path;
+    }
     if (points.length == 2) {
-      path.lineTo(points.last.position.dx, points.last.position.dy);
+      path
+        ..moveTo(points.first.position.dx, points.first.position.dy)
+        ..lineTo(points.last.position.dx, points.last.position.dy);
       return path;
     }
 
-    for (var i = 1; i < points.length - 1; i++) {
-      final current = points[i].position;
-      final next = points[i + 1].position;
-      final midpoint = Offset(
-        (current.dx + next.dx) * .5,
-        (current.dy + next.dy) * .5,
-      );
-      path.quadraticBezierTo(current.dx, current.dy, midpoint.dx, midpoint.dy);
-    }
+    path.moveTo(points.first.position.dx, points.first.position.dy);
 
-    final last = points.last.position;
-    path.quadraticBezierTo(last.dx, last.dy, last.dx, last.dy);
+    for (var i = 0; i < points.length - 1; i++) {
+      final p0 = points[i == 0 ? i : i - 1].position;
+      final p1 = points[i].position;
+      final p2 = points[i + 1].position;
+      final p3 = points[i + 2 < points.length ? i + 2 : i + 1].position;
+
+      final c1 = p1 + (p2 - p0) / 6;
+      final c2 = p2 - (p3 - p1) / 6;
+      path.cubicTo(
+        c1.dx,
+        c1.dy,
+        c2.dx,
+        c2.dy,
+        p2.dx,
+        p2.dy,
+      );
+    }
     return path;
   }
 
@@ -36,6 +49,7 @@ class StrokeGeometry {
     if (points.isEmpty) return;
 
     if (points.length == 1) {
+      paint.strokeWidth = widthForSegment(points.first, points.first);
       canvas.drawCircle(
         points.first.position,
         (paint.strokeWidth * .5).clamp(.5, 30),
@@ -50,45 +64,27 @@ class StrokeGeometry {
       return;
     }
 
-    final firstMid = Offset(
-      (points[0].position.dx + points[1].position.dx) * .5,
-      (points[0].position.dy + points[1].position.dy) * .5,
-    );
-    final initial = Path()
-      ..moveTo(points.first.position.dx, points.first.position.dy)
-      ..lineTo(firstMid.dx, firstMid.dy);
-    paint.strokeWidth = widthForSegment(points.first, points[1]);
-    canvas.drawPath(initial, paint);
+    for (var i = 0; i < points.length - 1; i++) {
+      final p0 = points[i == 0 ? i : i - 1].position;
+      final p1 = points[i].position;
+      final p2 = points[i + 1].position;
+      final p3 = points[i + 2 < points.length ? i + 2 : i + 1].position;
 
-    for (var i = 1; i < points.length - 1; i++) {
-      final start = Offset(
-        (points[i - 1].position.dx + points[i].position.dx) * .5,
-        (points[i - 1].position.dy + points[i].position.dy) * .5,
-      );
-      final end = Offset(
-        (points[i].position.dx + points[i + 1].position.dx) * .5,
-        (points[i].position.dy + points[i + 1].position.dy) * .5,
-      );
-      final segment = Path()
-        ..moveTo(start.dx, start.dy)
-        ..quadraticBezierTo(
-          points[i].position.dx,
-          points[i].position.dy,
-          end.dx,
-          end.dy,
-        );
+      final c1 = p1 + (p2 - p0) / 6;
+      final c2 = p2 - (p3 - p1) / 6;
+
       paint.strokeWidth = widthForSegment(points[i], points[i + 1]);
-      canvas.drawPath(segment, paint);
+      final path = Path()
+        ..moveTo(p1.dx, p1.dy)
+        ..cubicTo(
+          c1.dx,
+          c1.dy,
+          c2.dx,
+          c2.dy,
+          p2.dx,
+          p2.dy,
+        );
+      canvas.drawPath(path, paint);
     }
-
-    final lastMid = Offset(
-      (points[points.length - 2].position.dx + points.last.position.dx) * .5,
-      (points[points.length - 2].position.dy + points.last.position.dy) * .5,
-    );
-    final finalPath = Path()
-      ..moveTo(lastMid.dx, lastMid.dy)
-      ..lineTo(points.last.position.dx, points.last.position.dy);
-    paint.strokeWidth = widthForSegment(points[points.length - 2], points.last);
-    canvas.drawPath(finalPath, paint);
   }
 }
