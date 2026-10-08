@@ -5,26 +5,53 @@ import 'package:snote/canvas_engine/input/viewport_transform.dart';
 import 'dart:ui';
 
 void main() {
-  test('prediction is transient and never enters real points', () {
+  test('live stroke follows the physical pointer without filtered lag', () {
     final pipeline = InkInputPipeline(smoothing: .72);
     pipeline.begin(
       const PointerDownEvent(
         pointer: 1,
+        kind: PointerDeviceKind.stylus,
         position: Offset(10, 10),
       ),
     );
 
+    final frame = pipeline.update(
+      const PointerMoveEvent(
+        pointer: 1,
+        kind: PointerDeviceKind.stylus,
+        position: Offset(100, 40),
+        timeStamp: Duration(milliseconds: 8),
+      ),
+    );
+
+    expect(frame.realPoints.last.position, const Offset(100, 40));
+    expect(frame.livePoints.firstWhere(
+      (point) => identical(point, frame.realPoints.last),
+    ).position, const Offset(100, 40));
+  });
+
+  test('prediction is transient and never enters final points', () {
+    final pipeline = InkInputPipeline(smoothing: .72);
+    pipeline.begin(
+      const PointerDownEvent(
+        pointer: 1,
+        kind: PointerDeviceKind.stylus,
+        position: Offset(0, 0),
+      ),
+    );
     pipeline.update(
       const PointerMoveEvent(
         pointer: 1,
-        position: Offset(20, 10),
+        kind: PointerDeviceKind.stylus,
+        position: Offset(30, 0),
         timeStamp: Duration(milliseconds: 10),
       ),
     );
     final frame = pipeline.update(
       const PointerMoveEvent(
         pointer: 1,
-        position: Offset(30, 10),
+        kind: PointerDeviceKind.stylus,
+        position: Offset(60, 0),
         timeStamp: Duration(milliseconds: 20),
       ),
     );
@@ -32,19 +59,23 @@ void main() {
     expect(frame.livePoints.length, greaterThanOrEqualTo(frame.realPoints.length));
     if (frame.predictedPoint != null) {
       expect(
-        frame.predictedPoint!.position,
-        isNot(frame.realPoints.last.position),
-      );
-      expect(
-        pipeline.realPoints.any(
-          (p) => identical(p, frame.predictedPoint),
-        ),
+        pipeline.realPoints.any((p) => identical(p, frame.predictedPoint)),
         isFalse,
       );
     }
+
+    final finalPoints = pipeline.finish(
+      const PointerUpEvent(
+        pointer: 1,
+        kind: PointerDeviceKind.stylus,
+        position: Offset(60, 0),
+        timeStamp: Duration(milliseconds: 21),
+      ),
+    );
+    expect(finalPoints.last.position, const Offset(60, 0));
   });
 
-  test('finalize uses real input and includes pointer-up point', () {
+  test('finalize preserves the physical pointer-up endpoint', () {
     final pipeline = InkInputPipeline(smoothing: .72);
     pipeline.begin(
       const PointerDownEvent(
@@ -68,8 +99,7 @@ void main() {
       ),
     );
 
-    expect(result.last.position.dx, isNot(40));
-    expect(result.last.position.dy, isNot(40));
+    expect(result.last.position, const Offset(40, 40));
     expect(result.length, 3);
   });
 
