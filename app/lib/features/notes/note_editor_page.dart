@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' as ui;
+import 'dart:typed_data';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -19,6 +20,7 @@ import '../../canvas_engine/widgets/snote_canvas_controller.dart';
 import '../../core/security/note_lock_service.dart';
 import '../../core/settings/app_settings.dart';
 import '../../data/local/note_repository.dart';
+import '../../data/local/file_document_repository.dart';
 import '../settings/settings_page.dart';
 
 class NoteEditorPage extends StatefulWidget {
@@ -30,6 +32,7 @@ class NoteEditorPage extends StatefulWidget {
 
 class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObserver {
   final _repo = NoteRepository();
+  final _files = FileDocumentRepository();
   final _canvas = SnoteCanvasController();
   final _quill = QuillController.basic();
   final _focus = FocusNode();
@@ -69,6 +72,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   Timer? _saveTimer;
   bool _savePending = false;
   bool _saveInFlight = false;
+  Uint8List? _pageBackgroundBytes;
+  String? _pageBackgroundAssetId;
+  int _backgroundRequest = 0;
 
   Map<String, Object?> get pageData => _pages[_page];
   PenConfig get pen {
@@ -147,6 +153,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       _loading = false;
     });
     _restoreToolbar();
+    unawaited(_loadPageBackground());
     await _keepAwake();
   }
 
@@ -175,6 +182,23 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         'orientation': 'vertical',
         'strokes': <Object?>[],
       };
+
+  Future<void> _loadPageBackground() async {
+    final id = pageData['backgroundAssetId']?.toString();
+    final request = ++_backgroundRequest;
+    if (id == null || id.isEmpty) {
+      if (mounted) setState(() { _pageBackgroundAssetId = null; _pageBackgroundBytes = null; });
+      return;
+    }
+    try {
+      final assets = await _files.listForNote(widget.note.id);
+      final asset = assets.cast<DocumentAsset?>().firstWhere((a) => a?.id == id, orElse: () => null);
+      if (asset == null) return;
+      final bytes = await _files.readBytes(asset);
+      if (!mounted || request != _backgroundRequest) return;
+      setState(() { _pageBackgroundAssetId = id; _pageBackgroundBytes = bytes; });
+    } catch (_) {}
+  }
 
   void _restoreToolbar() {
     final x = pageData['toolbarX'];
@@ -291,6 +315,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       _selected = 0;
     });
     _restoreToolbar();
+    unawaited(_loadPageBackground());
   }
 
   void _pageSwipe(DragEndDetails d) {
@@ -515,6 +540,12 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   ),
                 ),
               ),
+              if (_pageBackgroundBytes != null && _pageBackgroundAssetId == pageData['backgroundAssetId']?.toString())
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Image.memory(_pageBackgroundBytes!, fit: BoxFit.fill, filterQuality: FilterQuality.medium),
+                  ),
+                ),
               if (_draw)
                 RepaintBoundary(
                   child: SnoteCanvas(
