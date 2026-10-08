@@ -34,7 +34,6 @@ class InkInputPipeline {
 
   final List<StrokePoint> _livePoints = <StrokePoint>[];
   StrokePoint? _previousPrediction;
-  StrokePoint? _lastLiveReal;
   double? _lastTimestamp;
 
   InkInputPipeline({
@@ -53,7 +52,6 @@ class InkInputPipeline {
     _buffer.clear();
     _livePoints.clear();
     _previousPrediction = null;
-    _lastLiveReal = null;
     _lastTimestamp = null;
     _predictor.reset();
   }
@@ -64,7 +62,6 @@ class InkInputPipeline {
     final point = sample.toStrokePoint();
     _buffer.add(point);
     _livePoints.add(point);
-    _lastLiveReal = point;
     _lastTimestamp = sample.timestampMs;
 
     return InkFrame(
@@ -94,8 +91,10 @@ class InkInputPipeline {
       return _frame(null, actual);
     }
 
-    final filtered = _filterTail(actual);
-    _livePoints.add(filtered);
+    // The newest real sample is always the visible endpoint. Continuous
+    // ribbon geometry smooths the path without moving the tip away from the
+    // physical stylus location.
+    _livePoints.add(actual);
 
     final prediction = _predictor.predict(_buffer.points);
     if (prediction != null) {
@@ -134,35 +133,6 @@ class InkInputPipeline {
       predictionHorizonMs:
           prediction == null ? 0 : prediction.timestamp - actual.timestamp,
     );
-  }
-
-  StrokePoint _filterTail(StrokePoint actual) {
-    final previous = _lastLiveReal;
-    if (previous == null) {
-      _lastLiveReal = actual;
-      return actual;
-    }
-
-    final dt = (actual.timestamp - previous.timestamp).clamp(.5, 250.0);
-    final speed = (actual.position - previous.position).distance / dt;
-
-    // Higher alpha at speed gives the stylus immediate authority; slower
-    // movement gets slightly more stabilization against sensor jitter.
-    final normalizedSpeed = (speed / 2.4).clamp(0, 1).toDouble();
-    final base = (1 - smoothing.clamp(.05, .9).toDouble() * .22)
-        .clamp(.66, .94)
-        .toDouble();
-    final alpha = (base + normalizedSpeed * .16).clamp(.66, .98).toDouble();
-
-    final position = Offset.lerp(
-      previous.position,
-      actual.position,
-      alpha,
-    )!;
-
-    final filtered = actual.copyWith(position: position);
-    _lastLiveReal = filtered;
-    return filtered;
   }
 
   bool _append(InkSample sample) {
