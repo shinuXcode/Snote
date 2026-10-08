@@ -1267,7 +1267,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       useSafeArea: true,
       showDragHandle: true,
       builder: (_) => DefaultTabController(
-        length: 3,
+        length: 4,
         child: SizedBox(
           height: MediaQuery.sizeOf(context).height * .88,
           child: Column(children: [
