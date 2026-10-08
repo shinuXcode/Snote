@@ -31,7 +31,7 @@ export default function Page() {
           <div className="eyebrow">Release status</div>
           <h2>Verified builds only.</h2>
           <p className="muted">
-            Downloads become active automatically when the v0.7.0 release finishes its production verification.
+            Downloads become active automatically when the v0.8.0 release finishes its production verification.
           </p>
           <a className="cta" href={releasePage}>
             Open Snote releases
