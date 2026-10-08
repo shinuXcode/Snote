@@ -104,8 +104,9 @@ class PdfWorkspaceService {
 
   Future<Uint8List> drawSnoteInk(
     Uint8List bytes,
-    Map<int, List<Stroke>> strokesByPage,
-  ) async {
+    Map<int, List<Stroke>> strokesByPage, {
+    Map<int, Size> sourceSizes = const <int, Size>{},
+  }) async {
     final document = PdfDocument(inputBytes: bytes);
     for (final entry in strokesByPage.entries) {
       final pageIndex = entry.key - 1;
@@ -120,7 +121,7 @@ class PdfWorkspaceService {
             final radius = stroke.pen.size.clamp(.4, 40) / 2;
             final pen = PdfPen(_color(stroke.pen.color), width: math.max(.7, radius * 2));
             page.graphics.drawEllipse(
-              Rect.fromCircle(center: Offset(p.dx * size.width / 1000, p.dy * size.height / 1400), radius: radius),
+              Rect.fromCircle(center: _mapPoint(p, sourceSizes[entry.key], size), radius: radius),
               pen: pen,
             );
             continue;
@@ -131,14 +132,8 @@ class PdfWorkspaceService {
           final pressure = ((a.pressure + b.pressure) / 2).clamp(.05, 1);
           final width = (stroke.pen.size * (.68 + pressure * .72)).clamp(.5, 30);
           final pen = PdfPen(_color(stroke.pen.color), width: width);
-          final p1 = Offset(
-            a.position.dx * size.width / 1000,
-            a.position.dy * size.height / 1400,
-          );
-          final p2 = Offset(
-            b.position.dx * size.width / 1000,
-            b.position.dy * size.height / 1400,
-          );
+          final p1 = _mapPoint(a.position, sourceSizes[entry.key], size);
+          final p2 = _mapPoint(b.position, sourceSizes[entry.key], size);
           page.graphics.drawLine(p1, p2, pen: pen);
         }
       }
@@ -146,6 +141,15 @@ class PdfWorkspaceService {
     final output = Uint8List.fromList(await document.save());
     document.dispose();
     return output;
+  }
+
+  Offset _mapPoint(Offset point, Size? source, Size target) {
+    final width = source?.width ?? 1000;
+    final height = source?.height ?? 1400;
+    return Offset(
+      point.dx * target.width / width,
+      point.dy * target.height / height,
+    );
   }
 
   PdfColor _color(Color color) {
