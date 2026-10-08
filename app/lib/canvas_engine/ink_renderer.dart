@@ -7,9 +7,14 @@ import 'algorithms/velocity_calculator.dart';
 import 'models/pen_config.dart';
 import 'models/stroke.dart';
 
-/// Dedicated ink renderer. It is intentionally independent from widget build
-/// and is called from CustomPainter's paint phase.
+/// Snote's retained-mode ink compositor.
+///
+/// All tools share the same centerline/ribbon renderer so live and finalized
+/// ink have identical geometry. The document layer is cached separately from
+/// the active stroke layer by SnoteCanvas.
 class InkRenderer {
+  const InkRenderer._();
+
   static void drawInk(
     Canvas canvas,
     List<StrokePoint> points,
@@ -24,63 +29,83 @@ class InkRenderer {
 
     final paint = Paint()
       ..color = pen.color.withValues(alpha: opacity)
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.fill
       ..isAntiAlias = true
-      ..blendMode = pen.type == PenType.highlighter ||
-              pen.type == PenType.marker
+      ..blendMode = pen.type == PenType.highlighter
           ? BlendMode.multiply
-          : BlendMode.srcOver;
+          : pen.type == PenType.marker
+              ? BlendMode.multiply
+              : BlendMode.srcOver;
 
-    final widthMultiplier = switch (pen.type) {
-      PenType.pencil => .82,
-      PenType.marker => 1.45,
-      PenType.brush => 1.12,
-      PenType.highlighter => 2.05,
-      _ => 1.0,
-    };
+    final path = StrokeGeometry.buildRibbonPath(
+      points,
+      (point, index) => _radiusFor(points, index, pen),
+    );
+    canvas.drawPath(path, paint);
 
-    double widthFor(StrokePoint a, StrokePoint b) {
-      final pressure = curvePressure(
-        b.pressure.clamp(0, 1).toDouble(),
-        pen,
-      );
-      var width = pen.size.clamp(.5, 60).toDouble();
+    // A narrow center pass makes tiny handwriting strokes read crisply at
+    // fractional device-pixel positions without changing the stored geometry.
+    if (pen.size <= 2.2 && points.length > 1) {
+      final centerPaint = Paint()
+        ..color = pen.color.withValues(alpha: opacity * .16)
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..strokeWidth = (pen.size * .28).clamp(.25, .8)
+        ..isAntiAlias = true;
+      canvas.drawPath(StrokeGeometry.buildPath(points), centerPaint);
+    }
+  }
 
+  static double _radiusFor(
+    List<StrokePoint> points,
+    int index,
+    PenConfig pen,
+  ) {
+    final point = points[index];
+    final pressure = curvePressure(
+      point.pressure.clamp(0, 1).toDouble(),
+      pen,
+    );
+    var width = pen.size.clamp(.5, 60).toDouble();
+
+    if (index > 0) {
+      final previous = points[index - 1];
+      final dt = (point.timestamp - previous.timestamp).clamp(.5, 250.0);
+      final velocity =
+          (point.position - previous.position).distance / dt;
       if (pen.type == PenType.fountain) {
-        final dt = (b.timestamp - a.timestamp).clamp(.5, 250.0);
-        final velocity = (b.position - a.position).distance / dt;
         width = fountainWidth(
           baseWidth: width,
           velocity: velocity * (.55 + pen.velocitySensitivity * 1.45),
           pressure: .45 + pressure * (.55 + pen.pressureSensitivity * .45),
         );
       } else {
+        final velocityFactor = 1 -
+            (velocity / 3.2).clamp(0, 1).toDouble() *
+            pen.velocitySensitivity *
+            .22;
+        width *= velocityFactor;
         width *= .82 + pressure * (.18 + pen.pressureSensitivity * .34);
       }
-
-      // Tilt changes brush/pencil footprint only; it never moves the centerline.
-      if (pen.type == PenType.pencil || pen.type == PenType.brush) {
-        width *= 1.0 + (b.tilt.clamp(0, math.pi / 2) / (math.pi / 2)) * .12;
-      }
-
-      return (width * widthMultiplier).clamp(.5, 120).toDouble();
+    } else {
+      width *= .82 + pressure * (.18 + pen.pressureSensitivity * .34);
     }
 
-    StrokeGeometry.drawVariableWidth(
-      canvas,
-      points,
-      paint,
-      widthFor,
-    );
+    final multiplier = switch (pen.type) {
+      PenType.pencil => .82,
+      PenType.marker => 1.45,
+      PenType.brush => 1.16,
+      PenType.highlighter => 2.05,
+      _ => 1.0,
+    };
+    width *= multiplier;
 
-    if (points.length == 1) {
-      canvas.drawCircle(
-        points.first.position,
-        math.max(.6, paint.strokeWidth * .5),
-        Paint()..color = paint.color,
-      );
+    if (pen.type == PenType.pencil || pen.type == PenType.brush) {
+      final tilt = point.tilt.clamp(0, math.pi / 2).toDouble();
+      width *= 1 + (tilt / (math.pi / 2)) * .14;
     }
+
+    return (width * .5).clamp(.25, 60).toDouble();
   }
 }
