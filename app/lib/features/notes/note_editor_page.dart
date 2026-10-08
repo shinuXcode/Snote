@@ -689,6 +689,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     final defaultTools = <CanvasTool>[
       CanvasTool.ballpoint,
       CanvasTool.fountain,
+      CanvasTool.calligraphy,
       CanvasTool.pencil,
       CanvasTool.highlighter,
       CanvasTool.marker,
@@ -771,6 +772,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     switch (tool) {
       case CanvasTool.ballpoint: return Icons.edit_rounded;
       case CanvasTool.fountain: return Icons.gesture_rounded;
+      case CanvasTool.calligraphy: return Icons.format_italic_rounded;
       case CanvasTool.pencil: return Icons.brush_rounded;
       case CanvasTool.highlighter: return Icons.highlight_rounded;
       case CanvasTool.marker: return Icons.border_color_rounded;
