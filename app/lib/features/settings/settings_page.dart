@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../app/theme_controller.dart';
 import '../../core/settings/app_settings.dart';
+import '../../core/security/e2e_encryption_service.dart';
 import '../../data/local/notebook_transfer_service.dart';
 import '../../data/local/note_repository.dart';
 import '../updates/update_center_page.dart';
@@ -156,7 +157,22 @@ class _SettingsPageState extends State<SettingsPage> {
           child: ListTile(
             leading: const Icon(Icons.lock_outline_rounded),
             title: const Text('Custom note password', style: TextStyle(fontWeight: FontWeight.w800)),
-            subtitle: const Text('Each note can have its own password. This is not your device screen lock and does not use biometric authentication.'),
+            subtitle: const Text('Each note can have its own password.'),
+          ),
+        ),
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.shield_outlined),
+            title: const Text('End-to-end encryption', style: TextStyle(fontWeight: FontWeight.w800)),
+            subtitle: const Text('Encrypt note payloads before local storage and cloud sync. The recovery passphrase stays on your device.'),
+            trailing: FutureBuilder<bool>(
+              future: SnoteE2EEncryption.instance.enabled,
+              builder: (_, snapshot) => Switch(
+                value: snapshot.data ?? false,
+                onChanged: (value) => value ? _enableE2E() : _disableE2E(),
+              ),
+            ),
+            onTap: _enableE2E,
           ),
         ),
       ]),
@@ -182,14 +198,76 @@ class _SettingsPageState extends State<SettingsPage> {
         Card(
           child: ListTile(
             leading: const Icon(Icons.info_outline_rounded),
-            title: const Text('Snote 0.7.0', style: TextStyle(fontWeight: FontWeight.w900)),
+            title: const Text('Snote 1.1.0', style: TextStyle(fontWeight: FontWeight.w900)),
             subtitle: const Text('Offline-first handwriting and rich-text notes.'),
-            onTap: () => showAboutDialog(context: context, applicationName: 'Snote', applicationVersion: '1.0.0'),
+            onTap: () => showAboutDialog(context: context, applicationName: 'Snote', applicationVersion: '1.1.0'),
           ),
         ),
       ]),
     ],
   );
+
+  Future<void> _enableE2E() async {
+    final controller = TextEditingController();
+    final recovery = TextEditingController();
+    final existing = await SnoteE2EEncryption.instance.configured;
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text(existing ? 'Update encryption passphrase' : 'Enable end-to-end encryption'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: controller,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'Passphrase', helperText: 'Use at least 8 characters.'),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: recovery,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'Repeat passphrase'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialog), child: const Text('Cancel')),
+          FilledButton(onPressed: () {
+            if (controller.text != recovery.text) return;
+            Navigator.pop(dialog, controller.text);
+          }, child: const Text('Enable')),
+        ],
+      ),
+    );
+    recovery.dispose();
+    controller.dispose();
+    if (value == null || value.isEmpty) return;
+
+    try {
+      await SnoteE2EEncryption.instance.enable(value);
+      await NoteRepository().encryptExistingNotes();
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Encryption enabled. Keep your recovery passphrase safe.')));
+      }
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Encryption setup failed: $error')));
+    }
+  }
+
+  Future<void> _disableE2E() async {
+    try {
+      await NoteRepository().decryptExistingNotes();
+      await SnoteE2EEncryption.instance.disable();
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Encryption disabled for future saves. Existing notes were returned to local plaintext.')));
+      }
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not disable encryption: $error')));
+    }
+  }
 
   Widget _themeStyleSelector() => Card(
     margin: const EdgeInsets.only(bottom: 8),
