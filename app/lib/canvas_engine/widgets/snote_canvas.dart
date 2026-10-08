@@ -11,6 +11,7 @@ import '../input/ink_gesture_policy.dart';
 import '../input/ink_input_pipeline.dart';
 import '../input/palm_rejection.dart';
 import '../input/stylus_gesture_lock.dart';
+import '../ink_renderer.dart';
 import '../persistence/ink_commit_queue.dart';
 import '../models/pen_config.dart';
 import '../models/stroke.dart';
@@ -76,36 +77,37 @@ class _LiveInkPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (points.isNotEmpty && pen != null && tool != null) {
       final t = tool!;
-      final synthetic = Stroke(
-        id: 'live',
-        points: points,
-        pen: pen!,
-        shape: t.isShape ? t.name : null,
-        fill: fill,
-        customSides: customSides,
-        stickerText: sticker,
-        fillColor: fillColor,
-      );
-
-      // Reuse the same drawing code as the document layer. Because this
-      // painter is isolated, only the active ink is repainted.
-      SnoteCanvasPainter(
-        strokes: const <Stroke>[],
-        activeStroke: synthetic,
-        activePoints: points,
-        activePen: pen,
-        activeTool: tool,
-        activeFill: fill,
-        activeCustomSides: customSides,
-        activeStickerText: sticker,
-        selectedIds: const <String>{},
-        lassoPath: lassoPath,
-        eraserPoint: eraserPoint,
-        eraserRadius: eraserRadius,
-        showEraserMark: showEraser,
-        drawStrokes: false,
-        drawActive: true,
-      ).paint(canvas, size);
+      if (t.isShape || sticker != null) {
+        final synthetic = Stroke(
+          id: 'live',
+          points: points,
+          pen: pen!,
+          shape: t.isShape ? t.name : null,
+          fill: fill,
+          customSides: customSides,
+          stickerText: sticker,
+          fillColor: fillColor,
+        );
+        SnoteCanvasPainter(
+          strokes: const <Stroke>[],
+          activeStroke: synthetic,
+          activePoints: points,
+          activePen: pen,
+          activeTool: tool,
+          activeFill: fill,
+          activeCustomSides: customSides,
+          activeStickerText: sticker,
+          selectedIds: const <String>{},
+          lassoPath: const <Offset>[],
+          eraserPoint: null,
+          eraserRadius: 0,
+          showEraserMark: false,
+          drawStrokes: false,
+          drawActive: true,
+        ).paint(canvas, size);
+      } else {
+        InkRenderer.drawInk(canvas, points, pen!);
+      }
     }
 
     if (points.isEmpty && lassoPath.length <= 1 && !showEraser) {
@@ -548,6 +550,9 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     if (event.kind == PointerDeviceKind.stylus ||
         event.kind == PointerDeviceKind.invertedStylus) {
       return widget.gesturePolicy.isStylus(event.kind);
+    }
+    if (event.kind == PointerDeviceKind.touch) {
+      return widget.gesturePolicy.allowsFingerInk();
     }
     return event.kind == PointerDeviceKind.mouse;
   }
