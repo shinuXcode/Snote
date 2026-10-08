@@ -345,6 +345,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       toggleFill: toggleSelectedFill,
       bringToFront: bringSelectionToFront,
       sendToBack: sendSelectionToBack,
+      strokesReader: () => List<Stroke>.of(_strokes),
     );
   }
 
