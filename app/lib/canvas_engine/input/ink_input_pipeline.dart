@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/gestures.dart';
 
 import '../algorithms/adaptive_stabilizer.dart';

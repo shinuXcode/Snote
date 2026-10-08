@@ -1,6 +1,4 @@
 import 'dart:math' as math;
-import 'dart:ui';
-
 import '../models/stroke.dart';
 
 /// Conservative short-horizon predictor used only for transient live ink.
