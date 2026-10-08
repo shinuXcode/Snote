@@ -184,7 +184,7 @@ class _SettingsPageState extends State<SettingsPage> {
             leading: const Icon(Icons.info_outline_rounded),
             title: const Text('Snote 0.7.0', style: TextStyle(fontWeight: FontWeight.w900)),
             subtitle: const Text('Offline-first handwriting and rich-text notes.'),
-            onTap: () => showAboutDialog(context: context, applicationName: 'Snote', applicationVersion: '0.7.0'),
+            onTap: () => showAboutDialog(context: context, applicationName: 'Snote', applicationVersion: '1.0.0'),
           ),
         ),
       ]),
