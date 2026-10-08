@@ -14,6 +14,7 @@ import '../models/stroke.dart';
 import '../models/stroke_codec.dart';
 import '../painters/canvas_painter.dart';
 import '../performance/writing_performance.dart';
+import '../performance/stroke_spatial_index.dart';
 import 'snote_canvas_controller.dart';
 
 class _CanvasRepaint extends ChangeNotifier {
@@ -77,6 +78,7 @@ class SnoteCanvas extends StatefulWidget {
 class _SnoteCanvasState extends State<SnoteCanvas> {
   final _uuid = const Uuid();
   final _palmRejection = PalmRejection();
+  final _spatialIndex = StrokeSpatialIndex();
   final _stylusLock = StylusGestureLock();
   final _repaint = _CanvasRepaint();
   late final InkCommitQueue<Map<String, Object?>> _commitQueue;
@@ -154,6 +156,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _strokes
       ..clear()
       ..addAll(StrokeCodec.documentToStrokes(document));
+    _spatialIndex.rebuild(_strokes);
     _selected.clear();
     _lassoPath.clear();
     if (clearHistory) {
@@ -194,6 +197,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _strokes
       ..clear()
       ..addAll(_history.removeLast());
+    _spatialIndex.rebuild(_strokes);
     _selected.clear();
     _notifyAndRefresh();
   }
@@ -204,6 +208,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _strokes
       ..clear()
       ..addAll(_redo.removeLast());
+    _spatialIndex.rebuild(_strokes);
     _selected.clear();
     _notifyAndRefresh();
   }
@@ -212,6 +217,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     if (_strokes.isEmpty) return;
     _snapshot();
     _strokes.clear();
+    _spatialIndex.rebuild(_strokes);
     _selected.clear();
     _notifyAndRefresh();
   }
@@ -220,6 +226,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     if (_selected.isEmpty) return;
     _snapshot();
     _strokes.removeWhere((s) => _selected.contains(s.id));
+    _spatialIndex.rebuild(_strokes);
     _selected.clear();
     _notifyAndRefresh();
   }
@@ -244,6 +251,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       );
     }
     _strokes.addAll(copies);
+    _spatialIndex.rebuild(_strokes);
     _selected
       ..clear()
       ..addAll(copies.map((s) => s.id));
@@ -314,6 +322,8 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
               children: [
                 RepaintBoundary(
                   child: CustomPaint(
+                    isComplex: true,
+                    willChange: false,
                     painter: SnoteCanvasPainter(
                       strokes: List<Stroke>.unmodifiable(_strokes),
                       activeStroke: null,
@@ -331,7 +341,8 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
                     ),
                   ),
                 ),
-                CustomPaint(
+                RepaintBoundary(
+                  child: CustomPaint(
                   willChange: true,
                   painter: SnoteCanvasPainter(
                     strokes: const <Stroke>[],
@@ -351,6 +362,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
                     drawActive: true,
                     repaint: _repaint,
                   ),
+                ),
                 ),
               ],
             ),
@@ -616,6 +628,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       fillColor: widget.fillColor,
     );
     _strokes.add(stroke);
+    _spatialIndex.rebuild(_strokes);
     _activePen = null;
     _activeTool = null;
     _activeSticker = null;
@@ -808,14 +821,15 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
         ? baseRadius * (.65 + normalizedPressure * .75)
         : baseRadius;
 
-    final hit = _strokes.indexWhere((s) {
-      for (final p in s.points) {
-        if ((p.position - point).distance <= radius) {
-          return true;
-        }
+    var hit = -1;
+    for (final candidate in _spatialIndex.candidates(point, radius)) {
+      if (candidate < 0 || candidate >= _strokes.length) continue;
+      final stroke = _strokes[candidate];
+      if (stroke.points.any((p) => (p.position - point).distance <= radius)) {
+        hit = candidate;
+        break;
       }
-      return false;
-    });
+    }
 
     if (hit < 0) {
       widget.onEraserMiss?.call();
@@ -824,6 +838,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
 
     if (!snapshotAlreadyTaken) _snapshot();
     _strokes.removeAt(hit);
+    _spatialIndex.rebuild(_strokes);
     _selected.removeWhere(
       (id) => !_strokes.any((s) => s.id == id),
     );

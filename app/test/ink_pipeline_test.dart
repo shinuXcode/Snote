@@ -1,4 +1,5 @@
 import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snote/canvas_engine/algorithms/adaptive_stabilizer.dart';
 import 'package:snote/canvas_engine/input/ink_input_pipeline.dart';

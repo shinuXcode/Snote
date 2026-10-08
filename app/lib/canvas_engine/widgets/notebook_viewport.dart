@@ -2,12 +2,14 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:vector_math/vector_math_64.dart' show Matrix4;
 import '../input/viewport_transform.dart';
+import '../input/ink_gesture_policy.dart';
 
 class NotebookViewport extends StatefulWidget {
   final Widget child;
   final bool allowSingleFingerPan;
   final double minScale;
   final double maxScale;
+  final InkGesturePolicy gesturePolicy;
 
   const NotebookViewport({
     super.key,
@@ -15,6 +17,7 @@ class NotebookViewport extends StatefulWidget {
     this.allowSingleFingerPan = false,
     this.minScale = .5,
     this.maxScale = 4,
+    this.gesturePolicy = const InkGesturePolicy(),
   });
 
   @override
@@ -42,7 +45,7 @@ class _NotebookViewportState extends State<NotebookViewport> {
   }
 
   bool get _gestureAllowed =>
-      widget.allowSingleFingerPan || _touchCount >= 2;
+      widget.gesturePolicy.allowsSingleFingerPan() || _touchCount >= 2;
 
   void _onScaleStart(ScaleStartDetails details) {
     _gestureStart = _transform;
@@ -85,6 +88,7 @@ class _NotebookViewportState extends State<NotebookViewport> {
         },
         onScaleStart: _onScaleStart,
         onScaleUpdate: _onScaleUpdate,
+        onDoubleTap: () => setState(() => _transform = const ViewportTransform()),
         child: ClipRect(
           child: Transform(
             alignment: Alignment.topLeft,
