@@ -1235,10 +1235,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         child: SizedBox(
           height: MediaQuery.sizeOf(context).height * .88,
           child: Column(children: [
-            const TabBar(tabs: [Tab(text: 'Paper'), Tab(text: 'Featured'), Tab(text: 'Custom')]),
+            const TabBar(tabs: [Tab(text: 'Paper'), Tab(text: 'Smart'), Tab(text: 'Featured'), Tab(text: 'Custom')]),
             Expanded(child: TabBarView(children: [
               _paperTab([PageTemplate.grid, PageTemplate.lined, PageTemplate.dotted, PageTemplate.blank, PageTemplate.cornell]),
-              _paperTab([PageTemplate.dotGrid, PageTemplate.isometric, PageTemplate.planner, PageTemplate.music, PageTemplate.checklist]),
+              _smartTemplateTab(),
+              _paperTab([PageTemplate.dotGrid, PageTemplate.isometric, PageTemplate.planner, PageTemplate.music, PageTemplate.checklist, PageTemplate.study, PageTemplate.math, PageTemplate.lecture, PageTemplate.meeting, PageTemplate.revision, PageTemplate.daily]),
               _customPaper(),
             ])),
           ]),
@@ -1307,6 +1308,38 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           }, child: const Text('Apply All Pages')),
         ],
       );
+
+  Widget _smartTemplateTab() {
+    const entries = <Map<String, Object>>[
+      {'name': 'Study', 'icon': Icons.school_outlined, 'template': PageTemplate.study},
+      {'name': 'Math', 'icon': Icons.functions_rounded, 'template': PageTemplate.math},
+      {'name': 'Lecture', 'icon': Icons.menu_book_outlined, 'template': PageTemplate.lecture},
+      {'name': 'Meeting', 'icon': Icons.groups_outlined, 'template': PageTemplate.meeting},
+      {'name': 'Revision', 'icon': Icons.replay_circle_filled_outlined, 'template': PageTemplate.revision},
+      {'name': 'Daily', 'icon': Icons.today_outlined, 'template': PageTemplate.daily},
+    ];
+    return ListView(
+      padding: const EdgeInsets.all(18),
+      children: [
+        const Text('Smart Templates', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+        const SizedBox(height: 6),
+        const Text('Study and work layouts ready in one tap.'),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: entries.map((entry) {
+            final template = entry['template'] as PageTemplate;
+            return ActionChip(
+              avatar: Icon(entry['icon'] as IconData, size: 18),
+              label: Text(entry['name'].toString()),
+              onPressed: () => _applyTemplate(template),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
 
   Widget _customPaper() => ListView(
         padding: const EdgeInsets.all(18),
@@ -1422,7 +1455,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           padding: const EdgeInsets.all(22),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             const Align(alignment: Alignment.centerLeft, child: Text('Tool customization', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900))),
-            ListTile(title: Text('Stroke size ' + size.toStringAsFixed(1)), subtitle: Slider(value: size, min: .7, max: 18, divisions: 68, onChanged: (v) => setModal(() => size = v))),
+            ListTile(title: Text('Stroke size ' + size.toStringAsFixed(1)), subtitle: Slider(value: size, min: .5, max: 32, divisions: 126, onChanged: (v) => setModal(() => size = v))),
             ListTile(title: Text('Opacity ' + (opacity * 100).round().toString() + '%'), subtitle: Slider(value: opacity, min: .05, max: 1, onChanged: (v) => setModal(() => opacity = v))),
             SwitchListTile(contentPadding: EdgeInsets.zero, value: fill, onChanged: (v) => setModal(() => fill = v), title: const Text('Fill shapes')),
             if (_tool == CanvasTool.customPolygon)
