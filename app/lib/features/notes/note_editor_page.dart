@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'writing_gesture_layer.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -422,18 +423,22 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           child: Stack(
             children: [
               Positioned.fill(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  supportedDevices: const {
-                    PointerDeviceKind.touch,
-                    PointerDeviceKind.trackpad,
-                  },
-                  onHorizontalDragEnd: _pan ? null : _pageSwipe,
-                  onDoubleTap: () => setState(() => _toolbar = !_toolbar),
-                  onLongPress: _settings.getBool('fingerLongPressSelection')
-                      ? () => _selectTool(CanvasTool.lasso)
-                      : null,
-                  child: _pageView(),
+                child: WritingGestureLayer(
+                  onTwoFingerTap: () => _canvas.undo(),
+                  onTwoFingerSwipeUp: () => _confirmPageClear(),
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    supportedDevices: const {
+                      PointerDeviceKind.touch,
+                      PointerDeviceKind.trackpad,
+                    },
+                    onHorizontalDragEnd: _pan ? null : _pageSwipe,
+                    onDoubleTap: () => setState(() => _toolbar = !_toolbar),
+                    onLongPress: _settings.getBool('fingerLongPressSelection')
+                        ? () => _selectTool(CanvasTool.lasso)
+                        : null,
+                    child: _pageView(),
+                  ),
                 ),
               ),
               if (!_full) _header(),
@@ -1339,6 +1344,30 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         ),
       ],
     );
+  }
+
+  void _applyTemplate(PageTemplate template) {
+    final page = _pages[_page];
+    setState(() => page['template'] = template.name);
+    _scheduleSave();
+  }
+
+  Future<void> _confirmPageClear() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Clear current page?'),
+        content: const Text('Current handwriting will be removed and can be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialog, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(dialog, true), child: const Text('Clear page')),
+        ],
+      ),
+    );
+    if (ok == true && mounted) {
+      _canvas.clear();
+      _scheduleSave();
+    }
   }
 
   Widget _customPaper() => ListView(
