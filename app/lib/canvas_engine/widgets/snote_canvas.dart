@@ -513,6 +513,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
   void _notifySelection() {
     widget.onSelectionChanged?.call(_selected.length);
     _bindController();
+    if (mounted) setState(() {});
   }
 
   void _finishDocumentMutation() {
@@ -924,7 +925,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       if (current.isNotEmpty) pieces.add(current);
 
       if (pieces.length == 1 &&
-          identical(pieces.first.length, stroke.points.length)) {
+          pieces.first.length == stroke.points.length) {
         continue;
       }
 
@@ -998,7 +999,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       onPointerMove: _pointerMove,
       onPointerUp: _pointerUp,
       onPointerCancel: _pointerCancel,
-      onPointerHover: _recordInput,
+      onPointerHover: (_) => _recordInput(),
       child: Stack(
         fit: StackFit.expand,
         children: [

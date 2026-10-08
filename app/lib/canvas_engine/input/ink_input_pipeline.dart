@@ -89,13 +89,13 @@ class InkInputPipeline {
     }
     _previousPrediction = null;
 
-    _append(sample);
-    if (_buffer.last == null) {
+    final appended = _append(sample);
+    if (!appended || _buffer.last == null) {
       return _frame(null, actual);
     }
 
     final filtered = _filterTail(actual);
-    _replaceLastLiveReal(filtered);
+    _livePoints.add(filtered);
 
     final prediction = _predictor.predict(_buffer.points);
     if (prediction != null) {
@@ -165,19 +165,12 @@ class InkInputPipeline {
     return filtered;
   }
 
-  void _replaceLastLiveReal(StrokePoint point) {
-    if (_livePoints.isEmpty) {
-      _livePoints.add(point);
-      return;
-    }
-    _livePoints[_livePoints.length - 1] = point;
-  }
-
-  void _append(InkSample sample) {
+  bool _append(InkSample sample) {
     final timestamp = sample.timestampMs;
-    if (_lastTimestamp != null && timestamp < _lastTimestamp!) return;
+    if (_lastTimestamp != null && timestamp < _lastTimestamp!) return false;
     final point = sample.toStrokePoint();
-    _buffer.add(point);
-    _lastTimestamp = timestamp;
+    final added = _buffer.add(point);
+    if (added) _lastTimestamp = timestamp;
+    return added;
   }
 }
