@@ -76,7 +76,9 @@ class _NotesHomePageState extends State<NotesHomePage> {
 
   bool _matchesSearch(LocalNote note) {
     final q = _search.text.trim().toLowerCase();
-    return q.isEmpty || note.title.toLowerCase().contains(q);
+    if (q.isEmpty) return true;
+    if (note.title.toLowerCase().contains(q)) return true;
+    return _noteTags(note).toLowerCase().contains(q);
   }
 
   List<LocalNote> get _filteredNotes => _noteList.where(_matchesSearch).toList();
@@ -499,7 +501,7 @@ class _HierarchyPanel extends StatelessWidget {
   final List<LocalFolder> folderList;
   final List<LocalNote> notes;
   final LocalNote? selected;
-  final bool loading, compact;
+  final bool loading, compact, gridView;
   final VoidCallback onNewFolder, onNewNote;
   final ValueChanged<LocalFolder> onFolder, onRenameFolder, onDeleteFolder;
   final ValueChanged<LocalNote> onOpenNote, onRenameNote, onDeleteNote;
