@@ -47,6 +47,10 @@ class SnoteE2EEncryption {
     await _storage.write(key: _enabledKey, value: 'false');
   }
 
+  bool isEncryptedText(String text) => _isEnvelope(text);
+
+  bool isEncryptedBytes(List<int> bytes) => _isBinaryEnvelope(bytes);
+
   Future<String> encryptText(String text) async {
     if (!(await enabled)) return text;
     final passphrase = await _storage.read(key: _passphraseKey);
