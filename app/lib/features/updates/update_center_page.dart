@@ -12,7 +12,7 @@ class UpdateCenterPage extends StatefulWidget {
 }
 
 class _UpdateCenterPageState extends State<UpdateCenterPage> {
-  static const currentVersion = '0.7.0';
+  static const currentVersion = '1.1.0';
   static final _releaseUri = Uri.parse('https://github.com/shinuXcode/Snote/releases/latest');
   static final _apiUri = Uri.parse('https://api.github.com/repos/shinuXcode/Snote/releases/latest');
 
@@ -127,7 +127,7 @@ class _UpdateCenterPageState extends State<UpdateCenterPage> {
                     ],
                   ),
                   const SizedBox(height: 10),
-                  const Text('Installed version: 0.7.0'),
+                  const Text('Installed version: 1.1.0'),
                   const SizedBox(height: 5),
                   if (_loading)
                     const LinearProgressIndicator()
@@ -160,6 +160,29 @@ class _UpdateCenterPageState extends State<UpdateCenterPage> {
                     icon: const Icon(Icons.open_in_new_rounded),
                     label: const Text('Open release page'),
                   ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Card(
+            child: Padding(
+              padding: EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.new_releases_outlined),
+                      SizedBox(width: 10),
+                      Text('What’s new in 1.1.0', style: TextStyle(fontWeight: FontWeight.w900)),
+                    ],
+                  ),
+                  SizedBox(height: 12),
+                  Text('• Pro PDF workspace with thumbnails, text search, highlight, underline, strikeout and page editing.'),
+                  Text('• Live vector ink with fountain and calligraphy tools, pressure-aware erasing and expanded pen controls.'),
+                  Text('• Smart Templates and two-finger writing gestures.'),
+                  Text('• Optional end-to-end encryption for note content and local attachments.'),
                 ],
               ),
             ),

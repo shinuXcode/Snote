@@ -93,6 +93,7 @@ class InkRenderer {
     }
 
     final multiplier = switch (pen.type) {
+      PenType.calligraphy => 1.1,
       PenType.pencil => .82,
       PenType.marker => 1.45,
       PenType.brush => 1.16,
@@ -100,6 +101,12 @@ class InkRenderer {
       _ => 1.0,
     };
     width *= multiplier;
+
+    if (pen.type == PenType.calligraphy) {
+      final tilt = point.tilt.clamp(0, math.pi / 2).toDouble();
+      final angleFactor = 1 - (tilt / (math.pi / 2)) * .18;
+      width *= angleFactor.clamp(.72, 1.0).toDouble();
+    }
 
     if (pen.type == PenType.pencil || pen.type == PenType.brush) {
       final tilt = point.tilt.clamp(0, math.pi / 2).toDouble();

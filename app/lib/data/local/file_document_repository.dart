@@ -5,6 +5,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import 'database.dart';
+import '../../core/security/e2e_encryption_service.dart';
 import 'local_file_store.dart';
 
 class DocumentAsset {
@@ -62,10 +63,13 @@ class FileDocumentRepository {
     Map<String, dynamic>? metadata,
   }) async {
     final id = _uuid.v4();
-    final path = await writeLocalFile(id, name, bytes);
+    final encryption = SnoteE2EEncryption.instance;
+    final encrypted = await encryption.encryptBytes(bytes);
+    final path = await writeLocalFile(id, name, encrypted);
     final data = <String, dynamic>{
       ...(metadata ?? <String, dynamic>{}),
       'name': name,
+      'e2e': encrypted.length != bytes.length || await encryption.enabled,
     };
     final db = await _db;
     await db.insert('attachments', {
@@ -101,7 +105,31 @@ class FileDocumentRepository {
     return rows.map(DocumentAsset.fromRow).toList();
   }
 
-  Future<Uint8List> readBytes(DocumentAsset asset) => readLocalFile(asset.localPath);
+  Future<Uint8List> readBytes(DocumentAsset asset) async {
+    final bytes = await readLocalFile(asset.localPath);
+    return Uint8List.fromList(await SnoteE2EEncryption.instance.decryptBytes(bytes));
+  }
+
+  Future<DocumentAsset?> replaceBytes(DocumentAsset asset, List<int> bytes) async {
+    final path = await writeLocalFile(asset.id, asset.name, await SnoteE2EEncryption.instance.encryptBytes(bytes));
+    final db = await _db;
+    await db.update(
+      'attachments',
+      {'local_path': path, 'size': bytes.length, 'metadata_json': jsonEncode({...asset.metadata, 'name': asset.name, 'updatedAt': DateTime.now().millisecondsSinceEpoch})},
+      where: 'id = ?',
+      whereArgs: [asset.id],
+    );
+    return DocumentAsset(
+      id: asset.id,
+      noteId: asset.noteId,
+      type: asset.type,
+      localPath: path,
+      name: asset.name,
+      size: bytes.length,
+      isCover: asset.isCover,
+      metadata: {...asset.metadata, 'name': asset.name, 'updatedAt': DateTime.now().millisecondsSinceEpoch},
+    );
+  }
 
   Future<void> setCover(String id, bool value) async {
     final db = await _db;

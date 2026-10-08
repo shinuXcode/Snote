@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/local/folder_repository.dart';
 import '../../data/local/note_repository.dart';
@@ -8,8 +10,9 @@ import '../../data/local/notebook_transfer_service.dart';
 import '../../sync/sync_engine.dart';
 import '../../ui/snote_logo.dart';
 import '../auth/login_page.dart';
-import '../pdf/pdf_annotation_page.dart';
+import '../pdf/pdf_pro_workspace_page.dart';
 import '../settings/settings_page.dart';
+import '../updates/update_center_page.dart';
 import '../share/qr_import_page.dart';
 import '../trash/trash_page.dart';
 import '../tools/flashcard_page.dart';
@@ -39,6 +42,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
   LocalNote? _selected;
   bool _loading = true;
   bool _syncing = false;
+  bool _gridView = false;
 
   @override
   void initState() {
@@ -72,7 +76,9 @@ class _NotesHomePageState extends State<NotesHomePage> {
 
   bool _matchesSearch(LocalNote note) {
     final q = _search.text.trim().toLowerCase();
-    return q.isEmpty || note.title.toLowerCase().contains(q);
+    if (q.isEmpty) return true;
+    if (note.title.toLowerCase().contains(q)) return true;
+    return _noteTags(note).toLowerCase().contains(q);
   }
 
   List<LocalNote> get _filteredNotes => _noteList.where(_matchesSearch).toList();
@@ -240,7 +246,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
           await _createFolder();
           break;
         case 'pdf':
-          await Navigator.push(context, MaterialPageRoute(builder: (_) => PdfAnnotationPage(folderId: _folderId)));
+          await Navigator.push(context, MaterialPageRoute(builder: (_) => PdfProWorkspacePage(folderId: _folderId)));
           await _load();
           break;
         case 'import':
@@ -314,7 +320,8 @@ class _NotesHomePageState extends State<NotesHomePage> {
                 localOnly: widget.localOnly,
                 onSync: _syncNow,
               ),
-              _Breadcrumbs(items: _breadcrumbs, onBack: _goBackFolder, onRoot: () {
+              Row(children: [
+                Expanded(child: _Breadcrumbs(items: _breadcrumbs, onBack: _goBackFolder, onRoot: () {
                 setState(() {
                   _breadcrumbs.clear();
                   _folderId = null;
@@ -322,6 +329,9 @@ class _NotesHomePageState extends State<NotesHomePage> {
                 });
                 unawaited(_load());
               }),
+                )),
+                IconButton(tooltip: _gridView ? 'List view' : 'Grid view', onPressed: () => setState(() => _gridView = !_gridView), icon: Icon(_gridView ? Icons.view_list_rounded : Icons.grid_view_rounded)),
+              ]),
               Expanded(
                 child: Row(
                   children: [
@@ -329,6 +339,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
                       folderList: _folderList,
                       notes: _filteredNotes,
                       selected: _selected,
+                      gridView: _gridView,
                       loading: _loading,
                       onFolder: _openFolder,
                       onNewFolder: _createFolder,
@@ -361,6 +372,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
               const SnoteLogo(size: 34),
               const Spacer(),
               IconButton(onPressed: _syncNow, tooltip: widget.localOnly ? 'Account' : 'Sync', icon: Icon(widget.localOnly ? Icons.cloud_outlined : Icons.sync_rounded)),
+              IconButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UpdateCenterPage())), tooltip: 'Notifications', icon: const Icon(Icons.notifications_none_rounded)),
               IconButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage())), tooltip: 'Settings', icon: const Icon(Icons.tune_rounded)),
             ],
           ),
@@ -381,11 +393,15 @@ class _NotesHomePageState extends State<NotesHomePage> {
           unawaited(_load());
         }),
         Expanded(
-          child: _HierarchyPanel(
+          child: Column(
+            children: [
+              const _FrontNoticeCard(),
+              Expanded(child: _HierarchyPanel(
             compact: true,
             folderList: _folderList,
             notes: _filteredNotes,
             selected: _selected,
+            gridView: _gridView,
             loading: _loading,
             onFolder: _openFolder,
             onNewFolder: _createFolder,
@@ -395,7 +411,8 @@ class _NotesHomePageState extends State<NotesHomePage> {
             onOpenNote: _openNote,
             onRenameNote: _renameNote,
             onDeleteNote: _deleteNote,
-          ),
+              )),
+          ],
         ),
       ],
     );
@@ -428,6 +445,7 @@ class _SideRail extends StatelessWidget {
         ListTile(leading: const Icon(Icons.auto_stories_rounded), title: const Text('Notebook'), selected: true, onTap: () {}),
         ListTile(leading: const Icon(Icons.person_outline_rounded), title: Text(localOnly ? 'Sign in & sync' : 'Account'), onTap: onAccount),
         ListTile(leading: const Icon(Icons.settings_outlined), title: const Text('Settings'), onTap: onSettings),
+        ListTile(leading: const Icon(Icons.notifications_none_rounded), title: const Text('Notifications'), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UpdateCenterPage()))),
         const Spacer(),
         ListTile(
           leading: Icon(localOnly ? Icons.offline_bolt_rounded : Icons.cloud_done_rounded),
@@ -483,7 +501,7 @@ class _HierarchyPanel extends StatelessWidget {
   final List<LocalFolder> folderList;
   final List<LocalNote> notes;
   final LocalNote? selected;
-  final bool loading, compact;
+  final bool loading, compact, gridView;
   final VoidCallback onNewFolder, onNewNote;
   final ValueChanged<LocalFolder> onFolder, onRenameFolder, onDeleteFolder;
   final ValueChanged<LocalNote> onOpenNote, onRenameNote, onDeleteNote;
@@ -493,6 +511,7 @@ class _HierarchyPanel extends StatelessWidget {
     required this.notes,
     required this.selected,
     required this.loading,
+    this.gridView = false,
     this.compact = false,
     required this.onFolder,
     required this.onNewFolder,
@@ -532,7 +551,7 @@ class _HierarchyPanel extends StatelessWidget {
           ),
         ...folderList.map((folder) => Card(
           child: ListTile(
-            leading: const Icon(Icons.folder_rounded),
+            leading: CircleAvatar(backgroundColor: _folderColor(folder.id).withValues(alpha: .18), foregroundColor: _folderColor(folder.id), child: const Icon(Icons.folder_rounded)),
             title: Text(folder.name, style: const TextStyle(fontWeight: FontWeight.w800)),
             subtitle: const Text('Open folder'),
             trailing: PopupMenuButton<String>(
@@ -546,7 +565,21 @@ class _HierarchyPanel extends StatelessWidget {
           ),
         )),
         if (notes.isNotEmpty) const Padding(padding: EdgeInsets.fromLTRB(4, 18, 4, 8), child: Text('Notes', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900))),
-        ...notes.map((note) => _HomeNoteTile(note: note, selected: selected?.id == note.id, onOpen: () => onOpenNote(note), onRename: () => onRenameNote(note), onDelete: () => onDeleteNote(note))),
+        if (gridView && notes.isNotEmpty)
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: compact ? 2 : 3,
+              mainAxisExtent: 112,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+            ),
+            itemCount: notes.length,
+            itemBuilder: (_, index) => _HomeNoteTile(note: notes[index], selected: selected?.id == notes[index].id, onOpen: () => onOpenNote(notes[index]), onRename: () => onRenameNote(notes[index]), onDelete: () => onDeleteNote(notes[index]), compactCard: true),
+          )
+        else
+          ...notes.map((note) => _HomeNoteTile(note: note, selected: selected?.id == note.id, onOpen: () => onOpenNote(note), onRename: () => onRenameNote(note), onDelete: () => onDeleteNote(note))),
         const SizedBox(height: 8),
         FilledButton.tonalIcon(onPressed: onNewNote, icon: const Icon(Icons.note_add_outlined), label: const Text('New note here')),
       ],
@@ -558,14 +591,17 @@ class _HomeNoteTile extends StatelessWidget {
   final LocalNote note;
   final bool selected;
   final VoidCallback onOpen, onRename, onDelete;
-  const _HomeNoteTile({required this.note, required this.selected, required this.onOpen, required this.onRename, required this.onDelete});
+  final bool compactCard;
+  const _HomeNoteTile({required this.note, required this.selected, required this.onOpen, required this.onRename, required this.onDelete, this.compactCard = false});
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Card(
       color: selected ? scheme.primaryContainer.withValues(alpha: .6) : null,
-      child: ListTile(
+      child: compactCard
+          ? InkWell(onTap: onOpen, child: Padding(padding: const EdgeInsets.all(10), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(Icons.description_outlined, color: scheme.primary), const Spacer(), Text(note.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)), const SizedBox(height: 2), Text(_noteTags(note), maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall)])))
+          : ListTile(
         leading: const Icon(Icons.description_outlined),
         title: Text(note.title, style: const TextStyle(fontWeight: FontWeight.w800)),
         subtitle: Text(note.noteType),
@@ -580,6 +616,26 @@ class _HomeNoteTile extends StatelessWidget {
       ),
     );
   }
+}
+
+String _noteTags(LocalNote note) {
+  final raw = note.contentJson;
+  if (raw == null || raw.isEmpty) return note.noteType;
+  try {
+    final value = jsonDecode(raw);
+    if (value is Map && value['tags'] is List) {
+      final tags = (value['tags'] as List).map((e) => e.toString()).where((e) => e.isNotEmpty).take(3).join('  #');
+      if (tags.isNotEmpty) return '#$tags';
+    }
+  } catch (_) {}
+  return note.noteType;
+}
+
+Color _folderColor(String id) {
+  const palette = <Color>[Color(0xff2563eb), Color(0xff7c3aed), Color(0xffdb2777), Color(0xffea580c), Color(0xff16a34a), Color(0xff0891b2)];
+  var hash = 0;
+  for (final code in id.codeUnits) hash = (hash * 31 + code) & 0x7fffffff;
+  return palette[hash % palette.length];
 }
 
 class _WorkspaceEmpty extends StatelessWidget {
@@ -647,4 +703,42 @@ class _ActionChip extends StatelessWidget {
     label: Text(label),
     onPressed: () => Navigator.pop(context, value),
   );
+}
+
+class _FrontNoticeCard extends StatelessWidget {
+  const _FrontNoticeCard();
+
+  Future<void> _instagram() async {
+    final uri = Uri.parse('https://instagram.com/');
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
+      child: Card(
+        child: ListTile(
+          leading: const CircleAvatar(child: Icon(Icons.notifications_active_outlined)),
+          title: const Text('Snote 1.1.0 is here', style: TextStyle(fontWeight: FontWeight.w900)),
+          subtitle: const Text('PDF workspace, live ink, Smart Templates and optional E2E encryption.'),
+          trailing: Wrap(
+            spacing: 2,
+            children: [
+              IconButton(
+                tooltip: 'Open notifications',
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UpdateCenterPage())),
+                icon: const Icon(Icons.chevron_right_rounded),
+              ),
+              IconButton(
+                tooltip: 'Instagram',
+                onPressed: _instagram,
+                icon: const Icon(Icons.camera_alt_outlined),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

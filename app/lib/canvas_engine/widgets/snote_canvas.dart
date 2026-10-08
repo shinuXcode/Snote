@@ -11,6 +11,7 @@ import '../input/ink_gesture_policy.dart';
 import '../input/ink_input_pipeline.dart';
 import '../input/palm_rejection.dart';
 import '../input/stylus_gesture_lock.dart';
+import '../ink_renderer.dart';
 import '../persistence/ink_commit_queue.dart';
 import '../models/pen_config.dart';
 import '../models/stroke.dart';
@@ -76,36 +77,37 @@ class _LiveInkPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (points.isNotEmpty && pen != null && tool != null) {
       final t = tool!;
-      final synthetic = Stroke(
-        id: 'live',
-        points: points,
-        pen: pen!,
-        shape: t.isShape ? t.name : null,
-        fill: fill,
-        customSides: customSides,
-        stickerText: sticker,
-        fillColor: fillColor,
-      );
-
-      // Reuse the same drawing code as the document layer. Because this
-      // painter is isolated, only the active ink is repainted.
-      SnoteCanvasPainter(
-        strokes: const <Stroke>[],
-        activeStroke: synthetic,
-        activePoints: points,
-        activePen: pen,
-        activeTool: tool,
-        activeFill: fill,
-        activeCustomSides: customSides,
-        activeStickerText: sticker,
-        selectedIds: const <String>{},
-        lassoPath: lassoPath,
-        eraserPoint: eraserPoint,
-        eraserRadius: eraserRadius,
-        showEraserMark: showEraser,
-        drawStrokes: false,
-        drawActive: true,
-      ).paint(canvas, size);
+      if (t.isShape || sticker != null) {
+        final synthetic = Stroke(
+          id: 'live',
+          points: points,
+          pen: pen!,
+          shape: t.isShape ? t.name : null,
+          fill: fill,
+          customSides: customSides,
+          stickerText: sticker,
+          fillColor: fillColor,
+        );
+        SnoteCanvasPainter(
+          strokes: const <Stroke>[],
+          activeStroke: synthetic,
+          activePoints: points,
+          activePen: pen,
+          activeTool: tool,
+          activeFill: fill,
+          activeCustomSides: customSides,
+          activeStickerText: sticker,
+          selectedIds: const <String>{},
+          lassoPath: const <Offset>[],
+          eraserPoint: null,
+          eraserRadius: 0,
+          showEraserMark: false,
+          drawStrokes: false,
+          drawActive: true,
+        ).paint(canvas, size);
+      } else {
+        InkRenderer.drawInk(canvas, points, pen!);
+      }
     }
 
     if (points.isEmpty && lassoPath.length <= 1 && !showEraser) {
@@ -225,6 +227,8 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
   bool _ignorePointer = false;
   bool _temporaryEraser = false;
   bool _eraseSnapshotTaken = false;
+  final Set<int> _touchPointers = <int>{};
+  bool _multiTouchGesture = false;
   bool _latencyScheduled = false;
   DateTime? _lastInputWallClock;
   DateTime? _lastStylusTap;
@@ -272,6 +276,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _commitQueue?.dispose();
     _input?.reset();
     _lock.reset();
+    _touchPointers.clear();
     widget.controller?.unbind();
     _documentPicture?.dispose();
     _repaint.dispose();
@@ -345,6 +350,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       toggleFill: toggleSelectedFill,
       bringToFront: bringSelectionToFront,
       sendToBack: sendSelectionToBack,
+      strokesReader: () => List<Stroke>.of(_strokes),
     );
   }
 
@@ -548,11 +554,42 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
         event.kind == PointerDeviceKind.invertedStylus) {
       return widget.gesturePolicy.isStylus(event.kind);
     }
+    if (event.kind == PointerDeviceKind.touch) {
+      return widget.gesturePolicy.allowsFingerInk();
+    }
     return event.kind == PointerDeviceKind.mouse;
   }
 
   void _pointerDown(PointerDownEvent event) {
     _recordInput();
+
+    if (event.kind == PointerDeviceKind.touch) {
+      _touchPointers.add(event.pointer);
+      if (_touchPointers.length >= 2) {
+        _multiTouchGesture = true;
+        if (_activePointer != -1 &&
+            _activeTool != null &&
+            (_activeTool == CanvasTool.ballpoint ||
+                _activeTool == CanvasTool.fountain ||
+                _activeTool == CanvasTool.calligraphy ||
+                _activeTool == CanvasTool.pencil ||
+                _activeTool == CanvasTool.highlighter ||
+                _activeTool == CanvasTool.marker ||
+                _activeTool == CanvasTool.brush)) {
+          _activePointer = -1;
+          _activePen = null;
+          _activeTool = null;
+          _activeSticker = null;
+          _real = const <StrokePoint>[];
+          _live = const <StrokePoint>[];
+          _input?.reset();
+          _repaint.repaint();
+        }
+        return;
+      }
+      if (_multiTouchGesture) return;
+    }
+
     if (!_accept(event) || _activePointer != -1) return;
 
     _ignorePointer = false;
@@ -681,6 +718,14 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
   }
 
   void _pointerUp(PointerUpEvent event) {
+    if (event.kind == PointerDeviceKind.touch) {
+      _touchPointers.remove(event.pointer);
+      if (_multiTouchGesture) {
+        if (_touchPointers.isEmpty) _multiTouchGesture = false;
+        return;
+      }
+    }
+
     if (event.pointer != _activePointer) return;
 
     if (_ignorePointer) {

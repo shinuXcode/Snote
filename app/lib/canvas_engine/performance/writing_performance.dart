@@ -25,6 +25,15 @@ class WritingPerformanceStats extends ChangeNotifier {
   double get renderedPointsPerSecond => _lastWindowPoints.toDouble();
   double get fps => _lastWindowFrames.toDouble();
 
+  double get refreshRate {
+    final views = PlatformDispatcher.instance.views;
+    if (views.isEmpty) return 60;
+    final rate = views.first.display.refreshRate;
+    return rate.isFinite && rate > 1 ? rate : 60;
+  }
+
+  double get frameBudgetMs => 1000 / refreshRate;
+
   double get frameTimeMs {
     if (_frameDurations.isEmpty) return 0;
     final sum = _frameDurations.fold<int>(
@@ -158,7 +167,7 @@ class WritingPerformanceOverlay extends StatelessWidget {
                 ),
                 child: Text(
                   'Snote Writing Perf\n'
-                  'FPS ${stats.fps.toStringAsFixed(0)}  '
+                  'FPS ${stats.fps.toStringAsFixed(0)} / ${stats.refreshRate.toStringAsFixed(0)}  '
                   'Frame ${stats.frameTimeMs.toStringAsFixed(1)} ms\n'
                   'Ptr/s ${stats.pointerEventsPerSecond.toStringAsFixed(0)}  '
                   'Pts/s ${stats.renderedPointsPerSecond.toStringAsFixed(0)}\n'

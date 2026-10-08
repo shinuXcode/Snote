@@ -2,9 +2,11 @@ import 'dart:math' as math;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' as ui;
+import 'dart:typed_data';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'writing_gesture_layer.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -18,6 +20,7 @@ import '../../canvas_engine/widgets/snote_canvas_controller.dart';
 import '../../core/security/note_lock_service.dart';
 import '../../core/settings/app_settings.dart';
 import '../../data/local/note_repository.dart';
+import '../../data/local/file_document_repository.dart';
 import '../settings/settings_page.dart';
 
 class NoteEditorPage extends StatefulWidget {
@@ -29,6 +32,7 @@ class NoteEditorPage extends StatefulWidget {
 
 class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObserver {
   final _repo = NoteRepository();
+  final _files = FileDocumentRepository();
   final _canvas = SnoteCanvasController();
   final _quill = QuillController.basic();
   final _focus = FocusNode();
@@ -64,10 +68,14 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   int _sides = 6;
   bool _shapePanel = false;
   String? _sticker;
+  final List<String> _tags = <String>[];
   int _selected = 0;
   Timer? _saveTimer;
   bool _savePending = false;
   bool _saveInFlight = false;
+  Uint8List? _pageBackgroundBytes;
+  String? _pageBackgroundAssetId;
+  int _backgroundRequest = 0;
 
   Map<String, Object?> get pageData => _pages[_page];
   PenConfig get pen {
@@ -131,6 +139,12 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
               if (item is Map) parsed.add(_normalize(item.cast<String, Object?>()));
             }
           }
+          final rawTags = json['tags'];
+          if (rawTags is List) {
+            _tags
+              ..clear()
+              ..addAll(rawTags.map((v) => v.toString().trim()).where((v) => v.isNotEmpty).take(12));
+          }
           final delta = json['text_delta'];
           if (delta is List) {
             try { _quill.document = Document.fromJson(delta); } catch (_) {}
@@ -146,6 +160,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       _loading = false;
     });
     _restoreToolbar();
+    unawaited(_loadPageBackground());
     await _keepAwake();
   }
 
@@ -174,6 +189,23 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         'orientation': 'vertical',
         'strokes': <Object?>[],
       };
+
+  Future<void> _loadPageBackground() async {
+    final id = pageData['backgroundAssetId']?.toString();
+    final request = ++_backgroundRequest;
+    if (id == null || id.isEmpty) {
+      if (mounted) setState(() { _pageBackgroundAssetId = null; _pageBackgroundBytes = null; });
+      return;
+    }
+    try {
+      final assets = await _files.listForNote(widget.note.id);
+      final asset = assets.cast<DocumentAsset?>().firstWhere((a) => a?.id == id, orElse: () => null);
+      if (asset == null) return;
+      final bytes = await _files.readBytes(asset);
+      if (!mounted || request != _backgroundRequest) return;
+      setState(() { _pageBackgroundAssetId = id; _pageBackgroundBytes = bytes; });
+    } catch (_) {}
+  }
 
   void _restoreToolbar() {
     final x = pageData['toolbarX'];
@@ -213,6 +245,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         'version': 5,
         'pages': _pages,
         'text_delta': _quill.document.toDelta().toJson(),
+        'tags': List<String>.unmodifiable(_tags),
       });
       final title = _title.text.trim();
       if (title.isNotEmpty && title != widget.note.title) {
@@ -290,6 +323,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       _selected = 0;
     });
     _restoreToolbar();
+    unawaited(_loadPageBackground());
   }
 
   void _pageSwipe(DragEndDetails d) {
@@ -422,18 +456,22 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           child: Stack(
             children: [
               Positioned.fill(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  supportedDevices: const {
-                    PointerDeviceKind.touch,
-                    PointerDeviceKind.trackpad,
-                  },
-                  onHorizontalDragEnd: _pan ? null : _pageSwipe,
-                  onDoubleTap: () => setState(() => _toolbar = !_toolbar),
-                  onLongPress: _settings.getBool('fingerLongPressSelection')
-                      ? () => _selectTool(CanvasTool.lasso)
-                      : null,
-                  child: _pageView(),
+                child: WritingGestureLayer(
+                  onTwoFingerTap: () => _canvas.undo(),
+                  onTwoFingerSwipeUp: () => _confirmPageClear(),
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    supportedDevices: const {
+                      PointerDeviceKind.touch,
+                      PointerDeviceKind.trackpad,
+                    },
+                    onHorizontalDragEnd: _pan ? null : _pageSwipe,
+                    onDoubleTap: () => setState(() => _toolbar = !_toolbar),
+                    onLongPress: _settings.getBool('fingerLongPressSelection')
+                        ? () => _selectTool(CanvasTool.lasso)
+                        : null,
+                    child: _pageView(),
+                  ),
                 ),
               ),
               if (!_full) _header(),
@@ -510,6 +548,12 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   ),
                 ),
               ),
+              if (_pageBackgroundBytes != null && _pageBackgroundAssetId == pageData['backgroundAssetId']?.toString())
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Image.memory(_pageBackgroundBytes!, fit: BoxFit.fill, filterQuality: FilterQuality.medium),
+                  ),
+                ),
               if (_draw)
                 RepaintBoundary(
                   child: SnoteCanvas(
@@ -582,6 +626,36 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     return v is num ? v.toDouble() : fallback;
   }
 
+  Future<void> _tagSheet() async {
+    final controller = TextEditingController(text: _tags.join(', '));
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Note tags'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'math, physics, revision',
+            helperText: 'Separate tags with commas.',
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialog), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(dialog, controller.text), child: const Text('Save')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (value == null) return;
+    setState(() {
+      _tags
+        ..clear()
+        ..addAll(value.split(',').map((v) => v.trim().toLowerCase()).where((v) => v.isNotEmpty).toSet().take(12));
+    });
+    _scheduleSave();
+  }
+
   Widget _header() => Positioned(
         left: 0,
         right: 0,
@@ -593,6 +667,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
             child: Row(children: [
               IconButton(onPressed: () async { await _flushSave(); if (mounted) Navigator.maybePop(context); }, icon: const Icon(Icons.arrow_back_rounded)),
               Expanded(child: TextField(controller: _title, decoration: const InputDecoration(border: InputBorder.none, hintText: 'Untitled note'), onSubmitted: (_) => _save())),
+              IconButton(tooltip: 'Tags', onPressed: _tagSheet, icon: const Icon(Icons.local_offer_outlined)),
               IconButton(tooltip: 'Pages', onPressed: () => setState(() => _preview = !_preview), icon: const Icon(Icons.view_sidebar_outlined)),
               IconButton(tooltip: 'Paper', onPressed: _paperSheet, icon: const Icon(Icons.grid_4x4_rounded)),
               IconButton(tooltip: _locked ? 'Unlock' : 'Lock', onPressed: _lockNote, icon: Icon(_locked ? Icons.lock_rounded : Icons.lock_outline_rounded)),
@@ -689,6 +764,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     final defaultTools = <CanvasTool>[
       CanvasTool.ballpoint,
       CanvasTool.fountain,
+      CanvasTool.calligraphy,
       CanvasTool.pencil,
       CanvasTool.highlighter,
       CanvasTool.marker,
@@ -771,6 +847,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     switch (tool) {
       case CanvasTool.ballpoint: return Icons.edit_rounded;
       case CanvasTool.fountain: return Icons.gesture_rounded;
+      case CanvasTool.calligraphy: return Icons.format_italic_rounded;
       case CanvasTool.pencil: return Icons.brush_rounded;
       case CanvasTool.highlighter: return Icons.highlight_rounded;
       case CanvasTool.marker: return Icons.border_color_rounded;
@@ -1229,14 +1306,15 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       useSafeArea: true,
       showDragHandle: true,
       builder: (_) => DefaultTabController(
-        length: 3,
+        length: 4,
         child: SizedBox(
           height: MediaQuery.sizeOf(context).height * .88,
           child: Column(children: [
-            const TabBar(tabs: [Tab(text: 'Paper'), Tab(text: 'Featured'), Tab(text: 'Custom')]),
+            const TabBar(tabs: [Tab(text: 'Paper'), Tab(text: 'Smart'), Tab(text: 'Featured'), Tab(text: 'Custom')]),
             Expanded(child: TabBarView(children: [
               _paperTab([PageTemplate.grid, PageTemplate.lined, PageTemplate.dotted, PageTemplate.blank, PageTemplate.cornell]),
-              _paperTab([PageTemplate.dotGrid, PageTemplate.isometric, PageTemplate.planner, PageTemplate.music, PageTemplate.checklist]),
+              _smartTemplateTab(),
+              _paperTab([PageTemplate.dotGrid, PageTemplate.isometric, PageTemplate.planner, PageTemplate.music, PageTemplate.checklist, PageTemplate.study, PageTemplate.math, PageTemplate.lecture, PageTemplate.meeting, PageTemplate.revision, PageTemplate.daily]),
               _customPaper(),
             ])),
           ]),
@@ -1305,6 +1383,62 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           }, child: const Text('Apply All Pages')),
         ],
       );
+
+  Widget _smartTemplateTab() {
+    const entries = <Map<String, Object>>[
+      {'name': 'Study', 'icon': Icons.school_outlined, 'template': PageTemplate.study},
+      {'name': 'Math', 'icon': Icons.functions_rounded, 'template': PageTemplate.math},
+      {'name': 'Lecture', 'icon': Icons.menu_book_outlined, 'template': PageTemplate.lecture},
+      {'name': 'Meeting', 'icon': Icons.groups_outlined, 'template': PageTemplate.meeting},
+      {'name': 'Revision', 'icon': Icons.replay_circle_filled_outlined, 'template': PageTemplate.revision},
+      {'name': 'Daily', 'icon': Icons.today_outlined, 'template': PageTemplate.daily},
+    ];
+    return ListView(
+      padding: const EdgeInsets.all(18),
+      children: [
+        const Text('Smart Templates', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+        const SizedBox(height: 6),
+        const Text('Study and work layouts ready in one tap.'),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: entries.map((entry) {
+            final template = entry['template'] as PageTemplate;
+            return ActionChip(
+              avatar: Icon(entry['icon'] as IconData, size: 18),
+              label: Text(entry['name'].toString()),
+              onPressed: () => _applyTemplate(template),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  void _applyTemplate(PageTemplate template) {
+    final page = _pages[_page];
+    setState(() => page['template'] = template.name);
+    _scheduleSave();
+  }
+
+  Future<void> _confirmPageClear() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Clear current page?'),
+        content: const Text('Current handwriting will be removed and can be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialog, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(dialog, true), child: const Text('Clear page')),
+        ],
+      ),
+    );
+    if (ok == true && mounted) {
+      _canvas.clear();
+      _scheduleSave();
+    }
+  }
 
   Widget _customPaper() => ListView(
         padding: const EdgeInsets.all(18),
@@ -1420,7 +1554,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           padding: const EdgeInsets.all(22),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             const Align(alignment: Alignment.centerLeft, child: Text('Tool customization', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900))),
-            ListTile(title: Text('Stroke size ' + size.toStringAsFixed(1)), subtitle: Slider(value: size, min: .7, max: 18, divisions: 68, onChanged: (v) => setModal(() => size = v))),
+            ListTile(title: Text('Stroke size ' + size.toStringAsFixed(1)), subtitle: Slider(value: size, min: .5, max: 32, divisions: 126, onChanged: (v) => setModal(() => size = v))),
             ListTile(title: Text('Opacity ' + (opacity * 100).round().toString() + '%'), subtitle: Slider(value: opacity, min: .05, max: 1, onChanged: (v) => setModal(() => opacity = v))),
             SwitchListTile(contentPadding: EdgeInsets.zero, value: fill, onChanged: (v) => setModal(() => fill = v), title: const Text('Fill shapes')),
             if (_tool == CanvasTool.customPolygon)

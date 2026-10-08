@@ -20,7 +20,7 @@ class SnoteSettings extends ChangeNotifier {
     'horizontalContinuousScroll': true, 'showPenFloatSettings': true, 'autoSyncNote': true,
     'autoBackupLocal': true, 'writingPostureRightHand': true, 'disableBackGesture': false,
     'turnOffPush': false, 'pageSwipe': true, 'autoAddPage': true,
-    'securePagePreviews': true, 'eInk': false, 'grayscaleEInk': true, 'reduceMotion': false,
+    'securePagePreviews': true, 'eInk': false, 'grayscaleEInk': true, 'reduceMotion': false, 'twoFingerUndo': true, 'swipeClear': true,
   };
 
   static const doubleDefaults = <String, double>{
@@ -37,7 +37,7 @@ class SnoteSettings extends ChangeNotifier {
     'eInkProfile': 'physical',
     'defaultPageTemplate': 'dotted',
     'defaultPaperPalette': 'paper-white',
-    'pencaseTools': 'ballpoint,fountain,pencil,highlighter,marker,brush,eraser,pixelEraser,lasso',
+    'pencaseTools': 'ballpoint,fountain,calligraphy,pencil,highlighter,marker,brush,eraser,pixelEraser,lasso',
     'pressureCurve': 'linear',
   };
 

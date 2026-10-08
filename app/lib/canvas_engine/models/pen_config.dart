@@ -1,13 +1,14 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
-enum PenType { ballpoint, fountain, pencil, highlighter, pointer, marker, brush }
+enum PenType { ballpoint, fountain, calligraphy, pencil, highlighter, pointer, marker, brush }
 
 enum PressureCurve { soft, linear, firm, custom }
 
 enum CanvasTool {
   ballpoint,
   fountain,
+  calligraphy,
   pencil,
   highlighter,
   marker,
@@ -33,6 +34,7 @@ extension CanvasToolX on CanvasTool {
   bool get isPen => {
     CanvasTool.ballpoint,
     CanvasTool.fountain,
+    CanvasTool.calligraphy,
     CanvasTool.pencil,
     CanvasTool.highlighter,
     CanvasTool.marker,
@@ -56,6 +58,7 @@ extension CanvasToolX on CanvasTool {
   PenType get penType {
     switch (this) {
       case CanvasTool.fountain: return PenType.fountain;
+      case CanvasTool.calligraphy: return PenType.calligraphy;
       case CanvasTool.pencil: return PenType.pencil;
       case CanvasTool.highlighter: return PenType.highlighter;
       case CanvasTool.marker: return PenType.marker;
@@ -68,6 +71,7 @@ extension CanvasToolX on CanvasTool {
     switch (this) {
       case CanvasTool.ballpoint: return 'Pen';
       case CanvasTool.fountain: return 'Fountain';
+      case CanvasTool.calligraphy: return 'Calligraphy';
       case CanvasTool.pencil: return 'Pencil';
       case CanvasTool.highlighter: return 'Highlighter';
       case CanvasTool.marker: return 'Marker';
