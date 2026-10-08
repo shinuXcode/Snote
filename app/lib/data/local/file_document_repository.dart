@@ -110,6 +110,27 @@ class FileDocumentRepository {
     return Uint8List.fromList(await SnoteE2EEncryption.instance.decryptBytes(bytes));
   }
 
+  Future<DocumentAsset?> replaceBytes(DocumentAsset asset, List<int> bytes) async {
+    final path = await writeLocalFile(asset.id, asset.name, await SnoteE2EEncryption.instance.encryptBytes(bytes));
+    final db = await _db;
+    await db.update(
+      'attachments',
+      {'local_path': path, 'size': bytes.length, 'metadata_json': jsonEncode({...asset.metadata, 'name': asset.name, 'updatedAt': DateTime.now().millisecondsSinceEpoch})},
+      where: 'id = ?',
+      whereArgs: [asset.id],
+    );
+    return DocumentAsset(
+      id: asset.id,
+      noteId: asset.noteId,
+      type: asset.type,
+      localPath: path,
+      name: asset.name,
+      size: bytes.length,
+      isCover: asset.isCover,
+      metadata: {...asset.metadata, 'name': asset.name, 'updatedAt': DateTime.now().millisecondsSinceEpoch},
+    );
+  }
+
   Future<void> setCover(String id, bool value) async {
     final db = await _db;
     final rows = await db.query('attachments', where: 'id = ?', whereArgs: [id], limit: 1);
