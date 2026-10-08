@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 
 import 'database.dart';
 import '../../core/config/account_scope.dart';
+import '../../core/security/e2e_encryption_service.dart';
 
 String _encodeNoteContent(Map<String, Object?> content) => jsonEncode(content);
 
@@ -122,7 +123,7 @@ class NoteRepository {
     );
 
     if (rows.isEmpty) return null;
-    return LocalNote.fromMap(rows.first);
+    return _hydrate(rows.first);
   }
 
   Future<List<LocalNote>> list({String? folderId}) async {
@@ -145,7 +146,7 @@ class NoteRepository {
       orderBy: 'updated_at DESC',
     );
 
-    return rows.map(LocalNote.fromMap).toList();
+    return Future.wait(rows.map(_hydrate));
   }
 
   Future<List<LocalNote>> listAllVisible() async {
@@ -159,11 +160,31 @@ class NoteRepository {
     return rows.map(LocalNote.fromMap).toList();
   }
 
+  Future<LocalNote> _hydrate(Map<String, Object?> row) async {
+    final note = LocalNote.fromMap(row);
+    final content = note.contentJson;
+    if (content == null || content.isEmpty) return note;
+    final decrypted = await SnoteE2EEncryption.instance.decryptText(content);
+    if (identical(decrypted, content)) return note;
+    return LocalNote(
+      id: note.id,
+      title: note.title,
+      folderId: note.folderId,
+      noteType: note.noteType,
+      contentJson: decrypted,
+      createdAt: note.createdAt,
+      updatedAt: note.updatedAt,
+      deletedAt: note.deletedAt,
+      version: note.version,
+    );
+  }
+
   Future<void> saveContent(
     String id,
     Map<String, Object?> content,
   ) async {
     final encoded = await compute(_encodeNoteContent, content);
+    final stored = await SnoteE2EEncryption.instance.encryptText(encoded);
     final db = await _db;
 
     await db.transaction((tx) async {
@@ -183,7 +204,7 @@ class NoteRepository {
         'notes',
         {
           'owner_id': SnoteAccountScope.ownerId,
-          'content_json': encoded,
+          'content_json': stored,
           'updated_at': DateTime.now().millisecondsSinceEpoch,
           'version': currentVersion + 1,
           'sync_state': 'pending',
@@ -195,6 +216,57 @@ class NoteRepository {
 
       await _queue(tx, id, 'upsert');
     });
+  }
+
+  Future<int> encryptExistingNotes() async {
+    if (!(await SnoteE2EEncryption.instance.enabled)) return 0;
+    final db = await _db;
+    final rows = await db.query(
+      'notes',
+      columns: ['id', 'content_json'],
+      where: 'owner_id = ? AND content_json IS NOT NULL',
+      whereArgs: [SnoteAccountScope.ownerId],
+    );
+    var count = 0;
+    for (final row in rows) {
+      final raw = row['content_json']?.toString();
+      if (raw == null || raw.isEmpty) continue;
+      final encrypted = await SnoteE2EEncryption.instance.encryptText(raw);
+      if (encrypted == raw) continue;
+      await db.update('notes', {
+        'content_json': encrypted,
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+        'sync_state': 'pending',
+      }, where: 'id = ? AND owner_id = ?', whereArgs: [row['id'], SnoteAccountScope.ownerId]);
+      await _queue(db, row['id']!.toString(), 'upsert');
+      count++;
+    }
+    return count;
+  }
+
+  Future<int> decryptExistingNotes() async {
+    final db = await _db;
+    final rows = await db.query(
+      'notes',
+      columns: ['id', 'content_json'],
+      where: 'owner_id = ? AND content_json IS NOT NULL',
+      whereArgs: [SnoteAccountScope.ownerId],
+    );
+    var count = 0;
+    for (final row in rows) {
+      final raw = row['content_json']?.toString();
+      if (raw == null || raw.isEmpty) continue;
+      final plain = await SnoteE2EEncryption.instance.decryptText(raw);
+      if (plain == raw) continue;
+      await db.update('notes', {
+        'content_json': plain,
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+        'sync_state': 'pending',
+      }, where: 'id = ? AND owner_id = ?', whereArgs: [row['id'], SnoteAccountScope.ownerId]);
+      await _queue(db, row['id']!.toString(), 'upsert');
+      count++;
+    }
+    return count;
   }
 
   Future<void> rename(String id, String title) async {
