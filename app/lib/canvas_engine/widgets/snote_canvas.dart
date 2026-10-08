@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:uuid/uuid.dart';
 
-import '../algorithms/ink_dynamics.dart';
 import '../input/ink_gesture_policy.dart';
 import '../input/ink_input_pipeline.dart';
 import '../input/palm_rejection.dart';
