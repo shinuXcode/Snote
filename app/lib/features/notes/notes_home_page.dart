@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/local/folder_repository.dart';
 import '../../data/local/note_repository.dart';
@@ -10,6 +11,7 @@ import '../../ui/snote_logo.dart';
 import '../auth/login_page.dart';
 import '../pdf/pdf_pro_workspace_page.dart';
 import '../settings/settings_page.dart';
+import '../updates/update_center_page.dart';
 import '../share/qr_import_page.dart';
 import '../trash/trash_page.dart';
 import '../tools/flashcard_page.dart';
@@ -361,6 +363,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
               const SnoteLogo(size: 34),
               const Spacer(),
               IconButton(onPressed: _syncNow, tooltip: widget.localOnly ? 'Account' : 'Sync', icon: Icon(widget.localOnly ? Icons.cloud_outlined : Icons.sync_rounded)),
+              IconButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UpdateCenterPage())), tooltip: 'Notifications', icon: const Icon(Icons.notifications_none_rounded)),
               IconButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage())), tooltip: 'Settings', icon: const Icon(Icons.tune_rounded)),
             ],
           ),
@@ -381,7 +384,10 @@ class _NotesHomePageState extends State<NotesHomePage> {
           unawaited(_load());
         }),
         Expanded(
-          child: _HierarchyPanel(
+          child: Column(
+            children: [
+              const _FrontNoticeCard(),
+              Expanded(child: _HierarchyPanel(
             compact: true,
             folderList: _folderList,
             notes: _filteredNotes,
@@ -395,7 +401,8 @@ class _NotesHomePageState extends State<NotesHomePage> {
             onOpenNote: _openNote,
             onRenameNote: _renameNote,
             onDeleteNote: _deleteNote,
-          ),
+              )),
+          ],
         ),
       ],
     );
@@ -428,6 +435,7 @@ class _SideRail extends StatelessWidget {
         ListTile(leading: const Icon(Icons.auto_stories_rounded), title: const Text('Notebook'), selected: true, onTap: () {}),
         ListTile(leading: const Icon(Icons.person_outline_rounded), title: Text(localOnly ? 'Sign in & sync' : 'Account'), onTap: onAccount),
         ListTile(leading: const Icon(Icons.settings_outlined), title: const Text('Settings'), onTap: onSettings),
+        ListTile(leading: const Icon(Icons.notifications_none_rounded), title: const Text('Notifications'), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UpdateCenterPage()))),
         const Spacer(),
         ListTile(
           leading: Icon(localOnly ? Icons.offline_bolt_rounded : Icons.cloud_done_rounded),
@@ -647,4 +655,42 @@ class _ActionChip extends StatelessWidget {
     label: Text(label),
     onPressed: () => Navigator.pop(context, value),
   );
+}
+
+class _FrontNoticeCard extends StatelessWidget {
+  const _FrontNoticeCard();
+
+  Future<void> _instagram() async {
+    final uri = Uri.parse('https://instagram.com/');
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
+      child: Card(
+        child: ListTile(
+          leading: const CircleAvatar(child: Icon(Icons.notifications_active_outlined)),
+          title: const Text('Snote 1.1.0 is here', style: TextStyle(fontWeight: FontWeight.w900)),
+          subtitle: const Text('PDF workspace, live ink, Smart Templates and optional E2E encryption.'),
+          trailing: Wrap(
+            spacing: 2,
+            children: [
+              IconButton(
+                tooltip: 'Open notifications',
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UpdateCenterPage())),
+                icon: const Icon(Icons.chevron_right_rounded),
+              ),
+              IconButton(
+                tooltip: 'Instagram',
+                onPressed: _instagram,
+                icon: const Icon(Icons.camera_alt_outlined),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
