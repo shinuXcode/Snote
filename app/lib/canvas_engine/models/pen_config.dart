@@ -34,6 +34,7 @@ extension CanvasToolX on CanvasTool {
   bool get isPen => {
     CanvasTool.ballpoint,
     CanvasTool.fountain,
+    CanvasTool.calligraphy,
     CanvasTool.pencil,
     CanvasTool.highlighter,
     CanvasTool.marker,
