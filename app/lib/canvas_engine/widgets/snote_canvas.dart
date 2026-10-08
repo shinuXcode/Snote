@@ -7,6 +7,8 @@ import 'package:uuid/uuid.dart';
 
 import '../input/ink_input_pipeline.dart';
 import '../input/palm_rejection.dart';
+import '../input/stylus_gesture_lock.dart';
+import '../persistence/ink_commit_queue.dart';
 import '../models/pen_config.dart';
 import '../models/stroke.dart';
 import '../models/stroke_codec.dart';
@@ -75,7 +77,9 @@ class SnoteCanvas extends StatefulWidget {
 class _SnoteCanvasState extends State<SnoteCanvas> {
   final _uuid = const Uuid();
   final _palmRejection = PalmRejection();
+  final _stylusLock = StylusGestureLock();
   final _repaint = _CanvasRepaint();
+  late final InkCommitQueue<Map<String, Object?>> _commitQueue;
   final _performance = WritingPerformanceStats(
     enabled: const bool.fromEnvironment('SNOTE_PERF'),
   );
@@ -109,6 +113,9 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
   void initState() {
     super.initState();
     _input = InkInputPipeline(smoothing: widget.smoothing);
+    _commitQueue = InkCommitQueue<Map<String, Object?>>(
+      onCommit: (document) => widget.onChanged?.call(document),
+    );
     _replaceDocument(widget.initialDocument);
     _bindController();
     _performance.attachScheduler();
@@ -132,6 +139,8 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
   @override
   void dispose() {
     _performance.detachScheduler();
+    _commitQueue.dispose();
+    _stylusLock.reset();
     widget.controller?.unbind();
     _repaint.dispose();
     _performance.dispose();
@@ -278,7 +287,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     if (!mounted) return;
     setState(() {});
     _bindController();
-    widget.onChanged?.call(StrokeCodec.strokesToDocument(_strokes));
+    _commitQueue.enqueue(StrokeCodec.strokesToDocument(_strokes));
     widget.onSelectionChanged?.call(_selected.length);
     _performance.setDocumentStats(
       strokes: _strokes.length,
@@ -323,6 +332,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
                   ),
                 ),
                 CustomPaint(
+                  willChange: true,
                   painter: SnoteCanvasPainter(
                     strokes: const <Stroke>[],
                     activeStroke: null,
@@ -374,6 +384,10 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _recordInput();
     if (!_accept(event) || _activePointer != -1) return;
     _ignorePointer = false;
+
+    final isStylus = event.kind == PointerDeviceKind.stylus ||
+        event.kind == PointerDeviceKind.invertedStylus;
+    if (isStylus && !_stylusLock.begin(event)) return;
 
     final stylusButtonErase =
         (event.buttons & kSecondaryStylusButton) != 0;
@@ -512,6 +526,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
 
     if (_ignorePointer) {
       _ignorePointer = false;
+      _stylusLock.end(event);
       _activePointer = -1;
       return;
     }
@@ -544,6 +559,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       _lastStylusTap = DateTime.now();
       _lastStylusPosition = event.localPosition;
     }
+    _stylusLock.end(event);
     _activePointer = -1;
   }
 
@@ -559,6 +575,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     }
     _cancelActive();
     _input?.reset();
+    _stylusLock.end(event);
     _activePointer = -1;
   }
 
