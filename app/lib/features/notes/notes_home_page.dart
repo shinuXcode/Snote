@@ -8,7 +8,7 @@ import '../../data/local/notebook_transfer_service.dart';
 import '../../sync/sync_engine.dart';
 import '../../ui/snote_logo.dart';
 import '../auth/login_page.dart';
-import '../pdf/pdf_annotation_page.dart';
+import '../pdf/pdf_pro_workspace_page.dart';
 import '../settings/settings_page.dart';
 import '../share/qr_import_page.dart';
 import '../trash/trash_page.dart';
@@ -240,7 +240,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
           await _createFolder();
           break;
         case 'pdf':
-          await Navigator.push(context, MaterialPageRoute(builder: (_) => PdfAnnotationPage(folderId: _folderId)));
+          await Navigator.push(context, MaterialPageRoute(builder: (_) => PdfProWorkspacePage(folderId: _folderId)));
           await _load();
           break;
         case 'import':
