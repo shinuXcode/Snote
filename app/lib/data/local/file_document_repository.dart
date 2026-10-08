@@ -5,6 +5,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import 'database.dart';
+import '../../core/security/e2e_encryption_service.dart';
 import 'local_file_store.dart';
 
 class DocumentAsset {
@@ -62,10 +63,13 @@ class FileDocumentRepository {
     Map<String, dynamic>? metadata,
   }) async {
     final id = _uuid.v4();
-    final path = await writeLocalFile(id, name, bytes);
+    final encryption = SnoteE2EEncryption.instance;
+    final encrypted = await encryption.encryptBytes(bytes);
+    final path = await writeLocalFile(id, name, encrypted);
     final data = <String, dynamic>{
       ...(metadata ?? <String, dynamic>{}),
       'name': name,
+      'e2e': encrypted.length != bytes.length || await encryption.enabled,
     };
     final db = await _db;
     await db.insert('attachments', {
@@ -101,7 +105,10 @@ class FileDocumentRepository {
     return rows.map(DocumentAsset.fromRow).toList();
   }
 
-  Future<Uint8List> readBytes(DocumentAsset asset) => readLocalFile(asset.localPath);
+  Future<Uint8List> readBytes(DocumentAsset asset) async {
+    final bytes = await readLocalFile(asset.localPath);
+    return Uint8List.fromList(await SnoteE2EEncryption.instance.decryptBytes(bytes));
+  }
 
   Future<void> setCover(String id, bool value) async {
     final db = await _db;
