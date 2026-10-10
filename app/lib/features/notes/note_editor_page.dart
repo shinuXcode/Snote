@@ -164,17 +164,35 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     return p;
   }
 
-  Map<String, Object?> _newPage() => {
-        'id': DateTime.now().microsecondsSinceEpoch.toString(),
-        'template': PageTemplate.dotted.name,
-        'paperColor': 0xffffffff,
-        'lineColor': 0xffd8dee8,
-        'lineOpacity': .85,
-        'spacing': 28.0,
-        'cornellAssist': false,
-        'orientation': 'vertical',
-        'strokes': <Object?>[],
-      };
+  Map<String, Object?> _newPage() {
+    // Continue with the current paper when adding a page. On initial load,
+    // respect the configured default instead of forcing every new page to dots.
+    final inheritedTemplate = _pages.isNotEmpty
+        ? (pageData['template']?.toString() ?? _settings.getString('defaultPageTemplate'))
+        : _settings.getString('defaultPageTemplate');
+    final knownTemplate = PageTemplate.values.any((template) => template.name == inheritedTemplate)
+        ? inheritedTemplate
+        : PageTemplate.dotted.name;
+    final inheritedColor = _pages.isNotEmpty ? _pageColor().toARGB32() : 0xffffffff;
+    final inheritedLineColor = _pages.isNotEmpty
+        ? (pageData['lineColor'] is num ? (pageData['lineColor'] as num).toInt() : 0xffd8dee8)
+        : 0xffd8dee8;
+    final inheritedOpacity = _pages.isNotEmpty ? _pageDouble('lineOpacity', .85) : .85;
+    final inheritedSpacing = _pages.isNotEmpty ? _pageDouble('spacing', 28) : 28.0;
+    final inheritedCornell = _pages.isNotEmpty && pageData['cornellAssist'] == true;
+    final inheritedOrientation = _pages.isNotEmpty ? (pageData['orientation']?.toString() ?? 'vertical') : 'vertical';
+    return {
+      'id': DateTime.now().microsecondsSinceEpoch.toString(),
+      'template': knownTemplate,
+      'paperColor': inheritedColor,
+      'lineColor': inheritedLineColor,
+      'lineOpacity': inheritedOpacity,
+      'spacing': inheritedSpacing,
+      'cornellAssist': inheritedCornell,
+      'orientation': inheritedOrientation,
+      'strokes': <Object?>[],
+    };
+  }
 
   void _restoreToolbar() {
     final x = pageData['toolbarX'];
