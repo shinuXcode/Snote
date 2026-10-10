@@ -215,13 +215,12 @@ class _FolderTreeViewState extends State<FolderTreeView> {
             trailing: PopupMenuButton<String>(
               tooltip: 'Folder actions',
               onSelected: (value) {
-                switch (value) {
-                  case 'appearance':
-                    widget.onAppearance(folder);
-                  case 'rename':
-                    widget.onRename(folder);
-                  case 'delete':
-                    widget.onDelete(folder);
+                if (value == 'appearance') {
+                  widget.onAppearance(folder);
+                } else if (value == 'rename') {
+                  widget.onRename(folder);
+                } else if (value == 'delete') {
+                  widget.onDelete(folder);
                 }
               },
               itemBuilder: (_) => const [
