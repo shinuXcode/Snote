@@ -71,7 +71,7 @@ class NotificationRepository {
       where: 'owner_id = ?',
       whereArgs: [SnoteAccountScope.ownerId],
       orderBy: 'created_at DESC',
-      limit: limit.clamp(1, 500),
+      limit: limit.clamp(1, 500).toInt(),
     );
     return rows.map(AppNotification.fromMap).toList();
   }
