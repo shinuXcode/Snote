@@ -6,6 +6,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import 'database.dart';
+import 'local_file_store.dart';
 import '../../core/config/account_scope.dart';
 import '../../core/security/e2e_encryption_service.dart';
 
@@ -324,28 +325,52 @@ class NoteRepository {
 
   Future<void> permanentlyDelete(String id) async {
     final db = await _db;
+    final localPaths = <String>[];
+
     await db.transaction((tx) async {
-      await tx.delete(
-        'sync_queue',
-        where: 'entity_id = ? AND owner_id = ?',
-        whereArgs: [id, SnoteAccountScope.ownerId],
+      final owned = await tx.query(
+        'notes',
+        columns: <String>['id'],
+        where: 'id = ? AND owner_id = ?',
+        whereArgs: <Object?>[id, SnoteAccountScope.ownerId],
+        limit: 1,
       );
+      if (owned.isEmpty) return;
+
+      final attachments = await tx.query(
+        'attachments',
+        columns: <String>['local_path'],
+        where: 'note_id = ?',
+        whereArgs: <Object?>[id],
+      );
+      localPaths.addAll(
+        attachments
+            .map((row) => row['local_path']?.toString())
+            .whereType<String>()
+            .where((path) => path.isNotEmpty),
+      );
+
+      await _queuePurge(tx, id);
       await tx.delete(
         'attachments',
         where: 'note_id = ?',
-        whereArgs: [id],
+        whereArgs: <Object?>[id],
       );
       await tx.delete(
         'pages',
         where: 'note_id = ?',
-        whereArgs: [id],
+        whereArgs: <Object?>[id],
       );
       await tx.delete(
         'notes',
         where: 'id = ? AND owner_id = ?',
-        whereArgs: [id, SnoteAccountScope.ownerId],
+        whereArgs: <Object?>[id, SnoteAccountScope.ownerId],
       );
     });
+
+    for (final path in localPaths) {
+      await deleteLocalFile(path);
+    }
   }
 
   Future<void> restore(String id) async {
@@ -367,12 +392,63 @@ class NoteRepository {
 
   Future<void> purgeExpiredTrash() async {
     final db = await _db;
-    final cutoff = DateTime.now().subtract(const Duration(days: 30)).millisecondsSinceEpoch;
-    await db.delete(
-      'notes',
-      where: 'owner_id = ? AND deleted_at IS NOT NULL AND deleted_at < ?',
-      whereArgs: [SnoteAccountScope.ownerId, cutoff],
-    );
+    final cutoff = DateTime.now()
+        .subtract(const Duration(days: 30))
+        .millisecondsSinceEpoch;
+    final localPaths = <String>[];
+
+    await db.transaction((tx) async {
+      final expiredRows = await tx.query(
+        'notes',
+        columns: <String>['id'],
+        where: 'owner_id = ? AND deleted_at IS NOT NULL AND deleted_at < ?',
+        whereArgs: <Object?>[SnoteAccountScope.ownerId, cutoff],
+      );
+      final ids = expiredRows
+          .map((row) => row['id']?.toString())
+          .whereType<String>()
+          .where((id) => id.isNotEmpty)
+          .toList();
+      if (ids.isEmpty) return;
+
+      final placeholders = List<String>.filled(ids.length, '?').join(',');
+      final attachments = await tx.query(
+        'attachments',
+        columns: <String>['local_path'],
+        where: 'note_id IN ($placeholders)',
+        whereArgs: ids,
+      );
+      localPaths.addAll(
+        attachments
+            .map((row) => row['local_path']?.toString())
+            .whereType<String>()
+            .where((path) => path.isNotEmpty),
+      );
+
+      for (final id in ids) {
+        await _queuePurge(tx, id);
+      }
+
+      await tx.delete(
+        'attachments',
+        where: 'note_id IN ($placeholders)',
+        whereArgs: ids,
+      );
+      await tx.delete(
+        'pages',
+        where: 'note_id IN ($placeholders)',
+        whereArgs: ids,
+      );
+      await tx.delete(
+        'notes',
+        where: 'owner_id = ? AND id IN ($placeholders)',
+        whereArgs: <Object?>[SnoteAccountScope.ownerId, ...ids],
+      );
+    });
+
+    for (final path in localPaths) {
+      await deleteLocalFile(path);
+    }
   }
 
   Future<void> delete(String id) async {
@@ -445,6 +521,18 @@ class NoteRepository {
 
     final db = await _db;
 
+    final incomingContent = remote['content_json'];
+    String? storedContent;
+    if (incomingContent != null) {
+      final encoded = incomingContent is String
+          ? incomingContent
+          : jsonEncode(incomingContent);
+      final encryption = SnoteE2EEncryption.instance;
+      storedContent = encryption.isEncryptedText(encoded)
+          ? encoded
+          : await encryption.encryptText(encoded);
+    }
+
     await db.insert(
       'notes',
       {
@@ -454,9 +542,7 @@ class NoteRepository {
         'folder_id': remote['folder_id']?.toString(),
         'note_type':
             remote['note_type']?.toString() ?? 'handwriting',
-        'content_json': remote['content_json'] == null
-            ? null
-            : jsonEncode(remote['content_json']),
+        'content_json': storedContent,
         'created_at': local?.createdAt ?? created,
         'updated_at': updated,
         'deleted_at': deleted,
@@ -493,6 +579,29 @@ class NoteRepository {
         'entity_type': 'note',
         'entity_id': id,
         'operation': operation,
+        'created_at': DateTime.now().millisecondsSinceEpoch,
+        'attempts': 0,
+      },
+    );
+  }
+
+  Future<void> _queuePurge(DatabaseExecutor db, String id) async {
+    // Remove stale upserts so a permanent deletion cannot be undone by sync.
+    await db.delete(
+      'sync_queue',
+      where: 'entity_id = ? AND owner_id = ?',
+      whereArgs: <Object?>[id, SnoteAccountScope.ownerId],
+    );
+    if (!SnoteAccountScope.isCloudAccount) return;
+
+    await db.insert(
+      'sync_queue',
+      <String, Object?>{
+        'id': _uuid.v4(),
+        'owner_id': SnoteAccountScope.ownerId,
+        'entity_type': 'note-purge',
+        'entity_id': id,
+        'operation': 'delete',
         'created_at': DateTime.now().millisecondsSinceEpoch,
         'attempts': 0,
       },
