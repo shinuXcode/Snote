@@ -107,8 +107,8 @@ class SnoteE2EEncryption {
     final raw = utf8.decode(bytes, allowMalformed: false);
     // Accept the original escaped-separator format as well as the canonical
     // newline format so files created by earlier Snote builds remain readable.
-    final canonicalStart = raw.indexOf('\\n');
-    final legacyStart = raw.indexOf(r'\\n');
+    final canonicalStart = raw.indexOf('\n');
+    final legacyStart = raw.indexOf(r'\n');
     final payloadStart = canonicalStart >= 0
         ? canonicalStart + 1
         : legacyStart >= 0
