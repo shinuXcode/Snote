@@ -264,6 +264,29 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _disableE2E() async {
+    final shouldDisable = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Disable end-to-end encryption?'),
+        content: const Text(
+          'Snote will decrypt stored note content and attachments on this device. '
+          'If cloud sync is enabled, the next sync may upload that content without '
+          'end-to-end encryption. Continue only if that is intended.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialog, true),
+            child: const Text('Decrypt and disable'),
+          ),
+        ],
+      ),
+    );
+    if (shouldDisable != true || !mounted) return;
+
     try {
       // Keep the key available until every stored encrypted payload has been
       // successfully decrypted; otherwise a single failed attachment could
