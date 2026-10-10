@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snote/canvas_engine/models/pen_config.dart';
+import 'package:snote/canvas_engine/models/stroke.dart';
 import 'package:snote/canvas_engine/widgets/snote_canvas.dart';
 import 'package:snote/canvas_engine/widgets/snote_canvas_controller.dart';
 import 'package:snote/canvas_engine/models/stroke_codec.dart';
