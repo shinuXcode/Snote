@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:uuid/uuid.dart';
 
+import '../algorithms/ink_hit_testing.dart';
 import '../input/ink_gesture_policy.dart';
 import '../input/ink_input_pipeline.dart';
 import '../input/palm_rejection.dart';
@@ -919,12 +920,15 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     }
 
     final radius = _eraseRadius(pressure);
-    final candidates = _spatial.candidates(point, radius);
+    final candidates = _spatial.candidates(point, radius + 30);
     for (final index in candidates) {
       if (index < 0 || index >= _strokes.length) continue;
       final stroke = _strokes[index];
-      if (stroke.points.any(
-        (p) => (p.position - point).distance <= radius,
+      final hitRadius = radius + stroke.pen.size / 2;
+      if (InkHitTesting.polylineTouchesCircle(
+        stroke.points,
+        point,
+        hitRadius,
       )) {
         if (!snapshotAlreadyTaken && !_eraseSnapshotTaken) {
           _snapshot();
@@ -950,15 +954,18 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     }
 
     final radius = _eraseRadius(pressure);
-    final candidates = _spatial.candidates(point, radius);
+    final candidates = _spatial.candidates(point, radius + 30);
     final sorted = candidates.toList()..sort((a, b) => b.compareTo(a));
 
     for (final index in sorted) {
       if (index < 0 || index >= _strokes.length) continue;
       final stroke = _strokes[index];
+      final hitRadius = radius + stroke.pen.size / 2;
       if (stroke.shape != null || stroke.stickerText != null) {
-        if (stroke.points.any(
-          (p) => (p.position - point).distance <= radius,
+        if (InkHitTesting.polylineTouchesCircle(
+          stroke.points,
+          point,
+          hitRadius,
         )) {
           if (!snapshotAlreadyTaken && !_eraseSnapshotTaken) {
             _snapshot();
@@ -971,25 +978,19 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
         continue;
       }
 
-      final pieces = <List<StrokePoint>>[];
-      var current = <StrokePoint>[];
-      for (final sample in stroke.points) {
-        final hit = (sample.position - point).distance <= radius;
-        if (hit) {
-          if (current.isNotEmpty) {
-            pieces.add(current);
-            current = <StrokePoint>[];
-          }
-        } else {
-          current.add(sample);
-        }
-      }
-      if (current.isNotEmpty) pieces.add(current);
-
-      if (pieces.length == 1 &&
-          pieces.first.length == stroke.points.length) {
+      if (!InkHitTesting.polylineTouchesCircle(
+        stroke.points,
+        point,
+        hitRadius,
+      )) {
         continue;
       }
+
+      final pieces = InkHitTesting.subtractCircle(
+        stroke.points,
+        point,
+        hitRadius,
+      );
 
       if (!snapshotAlreadyTaken && !_eraseSnapshotTaken) {
         _snapshot();
@@ -1023,9 +1024,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
 
     _selected.clear();
     for (final stroke in _strokes) {
-      if (stroke.points.any(
-        (point) => _pointInPolygon(point.position, _lasso),
-      )) {
+      if (InkHitTesting.polylineIntersectsPolygon(stroke.points, _lasso)) {
         _selected.add(stroke.id);
       }
     }
@@ -1034,23 +1033,6 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _notifySelection();
     _clearActiveState();
     _repaint.repaint();
-  }
-
-  bool _pointInPolygon(Offset point, List<Offset> polygon) {
-    var inside = false;
-    for (var i = 0, j = polygon.length - 1;
-        i < polygon.length;
-        j = i++) {
-      final a = polygon[i];
-      final b = polygon[j];
-      final crosses = (a.dy > point.dy) != (b.dy > point.dy);
-      if (!crosses) continue;
-      final x = (b.dx - a.dx) * (point.dy - a.dy) /
-              math.max(.000001, b.dy - a.dy) +
-          a.dx;
-      if (point.dx < x) inside = !inside;
-    }
-    return inside;
   }
 
   @override
