@@ -188,7 +188,12 @@ class SnoteCanvasPainter extends CustomPainter {
     if (stroke.points.length < 2) return;
     final a = stroke.points.first.position;
     final b = stroke.points.last.position;
-    final rect = Rect.fromPoints(a, b);
+    // Auto-recognized circles/rectangles retain their original samples, so
+    // use the complete stroke bounds for vector reconstruction. Straight
+    // lines and arrows still use their actual endpoints.
+    final rect = stroke.shape == 'line' || stroke.shape == 'arrow'
+        ? Rect.fromPoints(a, b)
+        : _bounds(stroke.points);
     final shapePaint = Paint()
       ..color = paint.color
       ..style = paint.style
