@@ -848,7 +848,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         child: SafeArea(child: FloatingActionButton.small(heroTag: 'full-exit', onPressed: _toggleFullscreen, child: const Icon(Icons.fullscreen_exit_rounded))),
       );
 
-  Widget _toolbarWidget() {
+  Widget _floatingToolbarWidget() {
     final size = MediaQuery.sizeOf(context);
     if (_docked) {
       final vertical = _dockSide == 'left' || _dockSide == 'right';
@@ -880,6 +880,117 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         );
       },
       child: _toolbarSurface(_toolbarContent(Axis.horizontal, docked: false)),
+    );
+  }
+
+  /// TouchNotes-inspired fixed tool rail. Keep the high-frequency canvas tools
+  /// pinned to the left while the existing toolbox remains movable/dockable.
+  Widget _toolbarWidget() => Positioned.fill(
+        child: Stack(
+          children: [
+            Positioned(
+              left: 0,
+              top: 46,
+              bottom: 0,
+              width: 46,
+              child: SafeArea(
+                top: false,
+                child: Material(
+                  color: Theme.of(context).colorScheme.surface.withValues(alpha: .96),
+                  elevation: 2,
+                  child: SingleChildScrollView(
+                    physics: const ClampingScrollPhysics(),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _railButton(Icons.edit_rounded, 'Pen', () => _selectTool(CanvasTool.ballpoint), _tool == CanvasTool.ballpoint),
+                        _railButton(Icons.gesture_rounded, 'Fountain pen', () => _selectTool(CanvasTool.fountain), _tool == CanvasTool.fountain),
+                        _railButton(Icons.brush_rounded, 'Pencil', () => _selectTool(CanvasTool.pencil), _tool == CanvasTool.pencil),
+                        _railButton(Icons.highlight_rounded, 'Highlighter', () => _selectTool(CanvasTool.highlighter), _tool == CanvasTool.highlighter),
+                        _railButton(Icons.border_color_rounded, 'Marker', () => _selectTool(CanvasTool.marker), _tool == CanvasTool.marker),
+                        const Divider(height: 8, indent: 7, endIndent: 7),
+                        _railButton(Icons.auto_fix_normal_rounded, 'Eraser', () => _selectTool(CanvasTool.eraser), _tool == CanvasTool.eraser),
+                        _railButton(Icons.gesture_outlined, 'Lasso select', () => _selectTool(CanvasTool.lasso), _tool == CanvasTool.lasso),
+                        _railButton(Icons.text_fields_rounded, 'Text / drawing', () => setState(() => _draw = !_draw), !_draw),
+                        _railButton(Icons.category_outlined, 'Shapes and diagrams', () => setState(() => _shapePanel = !_shapePanel), _shapePanel),
+                        _railButton(Icons.color_lens_outlined, 'Pen color', _colorSheet, false),
+                        _railButton(Icons.tune_rounded, 'Pen thickness and pressure', _styleSheet, false),
+                        _railButton(Icons.inventory_2_outlined, 'Pen presets', _pencaseSheet, false),
+                        const Divider(height: 8, indent: 7, endIndent: 7),
+                        _railButton(Icons.undo_rounded, 'Undo', _canvas.undo, false),
+                        _railButton(Icons.redo_rounded, 'Redo', _canvas.redo, false),
+                        _railButton(Icons.pan_tool_outlined, 'Pan and zoom', () => setState(() => _pan = !_pan), _pan),
+                        _railButton(Icons.description_outlined, 'Paper templates', _paperSheet, false),
+                        _railButton(Icons.add_box_outlined, 'Add page', _addPage, false),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            if (_toolbar && _draw) _floatingToolbarWidget(),
+            Positioned(
+              right: 0,
+              top: 88,
+              bottom: 24,
+              width: 42,
+              child: SafeArea(
+                child: Material(
+                  color: Theme.of(context).colorScheme.surface.withValues(alpha: .86),
+                  borderRadius: const BorderRadius.horizontal(left: Radius.circular(14)),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        tooltip: 'Previous page',
+                        onPressed: _previousPage,
+                        icon: const Icon(Icons.keyboard_arrow_up_rounded),
+                      ),
+                      Text('${_page + 1}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                      const Text('/', style: TextStyle(fontSize: 10)),
+                      Text('${_pages.length}', style: const TextStyle(fontSize: 12)),
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        tooltip: 'Next page',
+                        onPressed: _nextPage,
+                        icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                      ),
+                      const Divider(height: 6),
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        tooltip: 'Page thumbnails and management',
+                        onPressed: () => setState(() => _preview = !_preview),
+                        icon: Icon(_preview ? Icons.layers_rounded : Icons.layers_outlined),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+
+  Widget _railButton(IconData icon, String tooltip, VoidCallback onPressed, bool selected) {
+    final colors = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: tooltip,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 1),
+        child: IconButton(
+          visualDensity: VisualDensity.compact,
+          constraints: const BoxConstraints.tightFor(width: 42, height: 40),
+          padding: EdgeInsets.zero,
+          style: IconButton.styleFrom(
+            foregroundColor: selected ? colors.primary : colors.onSurfaceVariant,
+            backgroundColor: selected ? colors.primaryContainer : Colors.transparent,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+          onPressed: onPressed,
+          icon: Icon(icon, size: 21),
+        ),
+      ),
     );
   }
 
