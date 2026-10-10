@@ -320,18 +320,33 @@ class _NotesHomePageState extends State<NotesHomePage> {
                 localOnly: widget.localOnly,
                 onSync: _syncNow,
               ),
-              Row(children: [
-                Expanded(child: _Breadcrumbs(items: _breadcrumbs, onBack: _goBackFolder, onRoot: () {
-                setState(() {
-                  _breadcrumbs.clear();
-                  _folderId = null;
-                  _selected = null;
-                });
-                unawaited(_load());
-              }),
-                ),
-                IconButton(tooltip: _gridView ? 'List view' : 'Grid view', onPressed: () => setState(() => _gridView = !_gridView), icon: Icon(_gridView ? Icons.view_list_rounded : Icons.grid_view_rounded)),
-              ]),
+              Row(
+                children: [
+                  Expanded(
+                    child: _Breadcrumbs(
+                      items: _breadcrumbs,
+                      onBack: _goBackFolder,
+                      onRoot: () {
+                        setState(() {
+                          _breadcrumbs.clear();
+                          _folderId = null;
+                          _selected = null;
+                        });
+                        unawaited(_load());
+                      },
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: _gridView ? 'List view' : 'Grid view',
+                    onPressed: () => setState(() => _gridView = !_gridView),
+                    icon: Icon(
+                      _gridView
+                          ? Icons.view_list_rounded
+                          : Icons.grid_view_rounded,
+                    ),
+                  ),
+                ],
+              ),
               Expanded(
                 child: Row(
                   children: [
