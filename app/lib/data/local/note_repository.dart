@@ -171,7 +171,14 @@ class NoteRepository {
       // The editor presents the recovery-passphrase flow before parsing content.
       return note;
     }
-    final decrypted = await encryption.decryptText(content);
+    String decrypted;
+    try {
+      decrypted = await encryption.decryptText(content);
+    } catch (_) {
+      // Keep the note list usable when this device has not yet been given the
+      // correct recovery passphrase. The editor offers an explicit unlock flow.
+      return note;
+    }
     if (identical(decrypted, content)) return note;
     return LocalNote(
       id: note.id,
