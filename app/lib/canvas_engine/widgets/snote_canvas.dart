@@ -310,7 +310,6 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
   double _eraserRadius = 0;
   int _activePointer = -1;
   String? _selectionTransformMode;
-  String? _selectionTransformHandle;
   Offset? _selectionTransformStart;
   Offset? _selectionTransformAnchor;
   Offset? _selectionTransformStartHandle;
@@ -1124,7 +1123,6 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     if (!isResize && !bounds.contains(event.localPosition)) return false;
 
     _selectionTransformMode = isResize ? 'resize' : 'move';
-    _selectionTransformHandle = handle;
     _selectionTransformStart = event.localPosition;
     _selectionTransformStartHandle = handlePoint;
     _selectionTransformStartBounds = bounds;
@@ -1241,7 +1239,6 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
 
   void _clearSelectionTransformState() {
     _selectionTransformMode = null;
-    _selectionTransformHandle = null;
     _selectionTransformStart = null;
     _selectionTransformAnchor = null;
     _selectionTransformStartHandle = null;
