@@ -165,7 +165,13 @@ class NoteRepository {
     final note = LocalNote.fromMap(row);
     final content = note.contentJson;
     if (content == null || content.isEmpty) return note;
-    final decrypted = await SnoteE2EEncryption.instance.decryptText(content);
+    final encryption = SnoteE2EEncryption.instance;
+    if (encryption.isEncryptedText(content) && !await encryption.configured) {
+      // Keep encrypted notes visible in the notebook list on a second device.
+      // The editor presents the recovery-passphrase flow before parsing content.
+      return note;
+    }
+    final decrypted = await encryption.decryptText(content);
     if (identical(decrypted, content)) return note;
     return LocalNote(
       id: note.id,
@@ -512,7 +518,7 @@ class NoteRepository {
     final updated = updatedDate.millisecondsSinceEpoch;
     final local = await get(id);
 
-    if (local != null && local.updatedAt > updated) return;
+    if (local != null && local.updatedAt >= updated) return;
 
     final created =
         parseDate(remote['created_at'])?.millisecondsSinceEpoch ?? updated;
@@ -522,15 +528,19 @@ class NoteRepository {
     final db = await _db;
 
     final incomingContent = remote['content_json'];
+    final encryption = SnoteE2EEncryption.instance;
     String? storedContent;
+    var needsEncryptedCloudWrite = false;
     if (incomingContent != null) {
       final encoded = incomingContent is String
           ? incomingContent
           : jsonEncode(incomingContent);
-      final encryption = SnoteE2EEncryption.instance;
-      storedContent = encryption.isEncryptedText(encoded)
+      final alreadyEncrypted = encryption.isEncryptedText(encoded);
+      storedContent = alreadyEncrypted
           ? encoded
           : await encryption.encryptText(encoded);
+      needsEncryptedCloudWrite =
+          !alreadyEncrypted && await encryption.enabled;
     }
 
     await db.insert(
@@ -548,7 +558,7 @@ class NoteRepository {
         'deleted_at': deleted,
         'version':
             (remote['version'] as num?)?.toInt() ?? 1,
-        'sync_state': 'synced',
+        'sync_state': needsEncryptedCloudWrite ? 'pending' : 'synced',
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
@@ -558,6 +568,9 @@ class NoteRepository {
       where: 'entity_type = ? AND entity_id = ? AND owner_id = ?',
       whereArgs: ['note', id, SnoteAccountScope.ownerId],
     );
+    if (needsEncryptedCloudWrite) {
+      await _queue(db, id, 'upsert');
+    }
   }
 
   Future<void> _queue(
