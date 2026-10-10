@@ -24,6 +24,18 @@ import '../performance/writing_performance.dart';
 import 'snote_canvas_controller.dart';
 
 class _CanvasRepaint extends ChangeNotifier {
+  List<StrokePoint> _livePoints = const <StrokePoint>[];
+
+  List<StrokePoint> get livePoints => _livePoints;
+
+  /// Keep active samples in the repaint source. Replacing the list reference
+  /// on pointer-down otherwise leaves the painter holding a stale empty list
+  /// until a widget rebuild occurs (often not until pen-up).
+  void updateLivePoints(List<StrokePoint> value) {
+    _livePoints = value;
+    notifyListeners();
+  }
+
   void repaint() => notifyListeners();
 }
 
@@ -48,7 +60,7 @@ class _PicturePainter extends CustomPainter {
 /// High-frequency active layer. The painter is driven by a Listenable instead
 /// of widget-tree rebuilds, so pointer moves invalidate paint only.
 class _LiveInkPainter extends CustomPainter {
-  final List<StrokePoint> points;
+  final _CanvasRepaint liveState;
   final PenConfig? pen;
   final CanvasTool? tool;
   final bool fill;
@@ -61,7 +73,7 @@ class _LiveInkPainter extends CustomPainter {
   final Color? fillColor;
 
   const _LiveInkPainter({
-    required this.points,
+    required this.liveState,
     required this.pen,
     required this.tool,
     required this.fill,
@@ -72,11 +84,13 @@ class _LiveInkPainter extends CustomPainter {
     required this.eraserRadius,
     required this.showEraser,
     required this.fillColor,
-    super.repaint,
-  });
+  }) : super(repaint: liveState);
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Read current samples at paint time rather than retaining a stale list
+    // reference from the original empty painter delegate.
+    final points = liveState.livePoints;
     if (points.isNotEmpty && pen != null && tool != null) {
       final currentTool = tool!;
 
@@ -673,7 +687,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     final frame = _input!.begin(event);
     _real = frame.realPoints;
     _live = frame.livePoints;
-    _repaint.repaint();
+    _repaint.updateLivePoints(_live);
 
     if (widget.tool == CanvasTool.sticker) {
       _commitActive();
@@ -730,7 +744,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       _perf.rendered(_live.length);
       _perf.setPredictionHorizon(frame.predictionHorizonMs);
     }
-    _repaint.repaint();
+    _repaint.updateLivePoints(_live);
   }
 
   void _pointerUp(PointerUpEvent event) {
@@ -758,6 +772,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     } else if (_activeTool != CanvasTool.sticker) {
       _real = _input!.finish(event);
       _live = _real;
+      _repaint.updateLivePoints(_live);
       if (_real.isNotEmpty) _commitActive();
     }
 
@@ -785,6 +800,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _activeSticker = null;
     _real = const <StrokePoint>[];
     _live = const <StrokePoint>[];
+    _repaint.updateLivePoints(_live);
     _eraserPoint = null;
     _eraserRadius = 0;
     _lasso.clear();
@@ -818,6 +834,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _strokes.add(stroke);
     _real = const <StrokePoint>[];
     _live = const <StrokePoint>[];
+    _repaint.updateLivePoints(_live);
     _activePen = null;
     _activeTool = null;
     _activeSticker = null;
@@ -989,7 +1006,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
           RepaintBoundary(
             child: CustomPaint(
               painter: _LiveInkPainter(
-                points: _live,
+                liveState: _repaint,
                 pen: _activePen,
                 tool: _activeTool,
                 fill: widget.shapeFill,
