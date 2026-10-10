@@ -819,21 +819,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     if (confirmed == true) _deletePage(_page);
   }
 
-  Widget _pageControls() => Positioned(
-        right: 12,
-        top: 72,
-        child: Material(
-          elevation: 8,
-          borderRadius: BorderRadius.circular(18),
-          child: Column(children: [
-            IconButton(onPressed: _page > 0 ? _previousPage : null, icon: const Icon(Icons.keyboard_arrow_up_rounded)),
-            Padding(padding: const EdgeInsets.symmetric(horizontal: 7), child: Text((_page + 1).toString() + '/' + _pages.length.toString(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800))),
-            IconButton(onPressed: _nextPage, icon: const Icon(Icons.keyboard_arrow_down_rounded)),
-            IconButton(onPressed: _addPage, icon: const Icon(Icons.add_rounded)),
-          ]),
-        ),
-      );
-
   Widget _toolbarOpen() => Positioned(
         right: 8,
         top: MediaQuery.sizeOf(context).height * .45,
