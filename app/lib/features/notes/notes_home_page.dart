@@ -323,9 +323,14 @@ class _NotesHomePageState extends State<NotesHomePage> {
     );
     if (ok != true) return;
     await _folders.delete(folder.id);
-    if (_folderId == folder.id) {
-      _goBackFolder();
-      return;
+    final breadcrumbIndex =
+        _breadcrumbs.indexWhere((item) => item.id == folder.id);
+    if (breadcrumbIndex >= 0) {
+      setState(() {
+        _breadcrumbs.removeRange(breadcrumbIndex, _breadcrumbs.length);
+        _folderId = _breadcrumbs.isEmpty ? null : _breadcrumbs.last.id;
+        _selected = null;
+      });
     }
     await _load();
   }
