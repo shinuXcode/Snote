@@ -201,7 +201,6 @@ class _PdfProWorkspacePageState extends State<PdfProWorkspacePage> {
   void _setMarkup(_Markup mode) {
     final viewer = _viewer;
     if (viewer == null) return;
-    setState(() => _markup = mode);
     viewer.annotationMode = switch (mode) {
       _Markup.highlight => PdfAnnotationMode.highlight,
       _Markup.underline => PdfAnnotationMode.underline,
