@@ -9,6 +9,7 @@ class SnoteDatabase {
 
   static Future<Database> open() async {
     if (_db?.isOpen == true) return _db!;
+
     final dir = await getApplicationDocumentsDirectory();
     _db = await openDatabase(
       p.join(dir.path, 'snote.db'),
@@ -53,14 +54,25 @@ class SnoteDatabase {
         }
       },
       onOpen: (db) async {
-        await db.execute('CREATE INDEX IF NOT EXISTS idx_notes_folder ON notes(folder_id, updated_at)');
-        await db.execute('CREATE INDEX IF NOT EXISTS idx_folders_parent ON folders(parent_id, name)');
-        await db.execute('CREATE INDEX IF NOT EXISTS idx_attachments_note ON attachments(note_id, created_at)');
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_notes_folder ON notes(folder_id, updated_at)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_folders_parent '
+          'ON folders(parent_id, sort_order, name)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_attachments_note '
+          'ON attachments(note_id, created_at)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_app_notifications_owner_created '
+          'ON app_notifications(owner_id, created_at DESC)',
+        );
       },
     );
     return _db!;
   }
-}
 
   static Future<void> _addColumnIfMissing(
     DatabaseExecutor db, {
@@ -72,3 +84,4 @@ class SnoteDatabase {
     if (columns.any((row) => row['name'] == column)) return;
     await db.execute('ALTER TABLE $table ADD COLUMN $column $declaration');
   }
+}
