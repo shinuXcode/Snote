@@ -1667,9 +1667,19 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   }
 
   void _applyTemplate(PageTemplate template) {
-    final page = _pages[_page];
-    setState(() => page['template'] = template.name);
+    setState(() {
+      _pages[_page]['template'] = template.name;
+    });
     _scheduleSave();
+    // The template sheet is a separate route; dismiss it so the user sees
+    // the new paper immediately instead of leaving the preview grid stale.
+    Navigator.of(context).pop();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${template.name} paper applied to this page'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   Future<void> _confirmPageClear() async {
@@ -1730,8 +1740,19 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       );
 
   void _setTemplate(PageTemplate template) {
-    setState(() => pageData['template'] = template.name);
+    setState(() {
+      pageData['template'] = template.name;
+    });
     _scheduleSave();
+    // Close the independent modal route after selection so the live page
+    // background is visible immediately.
+    Navigator.of(context).pop();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${template.name} paper applied to this page'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   Future<void> _paperColorPicker() async {
