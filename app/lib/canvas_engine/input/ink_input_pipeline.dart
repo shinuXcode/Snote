@@ -88,6 +88,14 @@ class InkInputPipeline {
 
     final appended = _append(sample, actual);
     if (!appended || _buffer.last == null) {
+      // Redundant samples stay out of the canonical buffer, but the live tip
+      // still tracks the physical pointer so sub-pixel motion never looks
+      // frozen. Pointer-up supplies the final canonical endpoint.
+      if (_livePoints.isNotEmpty) {
+        _livePoints[_livePoints.length - 1] = actual;
+      } else {
+        _livePoints.add(actual);
+      }
       return _frame(null, actual);
     }
 
