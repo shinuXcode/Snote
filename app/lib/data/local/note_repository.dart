@@ -232,6 +232,45 @@ class NoteRepository {
     });
   }
 
+  /// Stores an already-encrypted Snote envelope without encrypting it a
+  /// second time. Used by secure notebook imports when the recovery key is not
+  /// currently available on this device.
+  Future<void> saveEncryptedContent(String id, String envelope) async {
+    final encryption = SnoteE2EEncryption.instance;
+    if (!encryption.isEncryptedText(envelope)) {
+      throw const FormatException('Invalid Snote encrypted note envelope.');
+    }
+
+    final db = await _db;
+    await db.transaction((tx) async {
+      final rows = await tx.query(
+        'notes',
+        columns: <String>['version'],
+        where: 'id = ? AND owner_id = ?',
+        whereArgs: <Object?>[id, SnoteAccountScope.ownerId],
+        limit: 1,
+      );
+      if (rows.isEmpty) {
+        throw StateError('Cannot save content for a note that does not exist.');
+      }
+
+      final version = (rows.first['version'] as num?)?.toInt() ?? 1;
+      await tx.update(
+        'notes',
+        <String, Object?>{
+          'content_json': envelope,
+          'updated_at': DateTime.now().millisecondsSinceEpoch,
+          'version': version + 1,
+          'sync_state': 'pending',
+          'deleted_at': null,
+        },
+        where: 'id = ? AND owner_id = ?',
+        whereArgs: <Object?>[id, SnoteAccountScope.ownerId],
+      );
+      await _queue(tx, id, 'upsert');
+    });
+  }
+
   Future<int> encryptExistingNotes() async {
     if (!(await SnoteE2EEncryption.instance.enabled)) return 0;
     final db = await _db;
