@@ -81,8 +81,8 @@ class SnoteCanvasPainter extends CustomPainter {
   void _drawLivePath(Canvas canvas) {
     if (activePath == null || activePen == null || activeTool == null) return;
     final opacity = activePen!.type == PenType.highlighter
-        ? activePen!.opacity.clamp(.08, .55)
-        : activePen!.opacity.clamp(.05, 1);
+        ? activePen!.opacity.clamp(.08, .55).toDouble()
+        : activePen!.opacity.clamp(.05, 1).toDouble();
     final paint = Paint()
       ..color = activePen!.color.withValues(alpha: opacity)
       ..style = PaintingStyle.stroke
