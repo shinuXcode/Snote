@@ -38,18 +38,47 @@ class ShapeRecognizer {
     final expectedPerimeter = 2 * (bounds.width + bounds.height);
     final perimeterRatio = pathLength / math.max(1, expectedPerimeter);
 
-    if (closure > math.max(14, smallerSide * .22) ||
-        perimeterRatio < .62 ||
-        perimeterRatio > 1.6) {
-      return null;
+    if (closure > math.max(14, smallerSide * .22)) return null;
+
+    // Rectangles keep most samples close to one of their four bounding edges.
+    // A perimeter ratio alone misclassifies triangles and irregular polygons.
+    final edgeTolerance = math.max(3, smallerSide * .08);
+    var edgeSamples = 0;
+    for (final sample in points) {
+      final point = sample.position;
+      final nearHorizontalEdge =
+          (point.dy - bounds.top).abs() <= edgeTolerance ||
+          (point.dy - bounds.bottom).abs() <= edgeTolerance;
+      final nearVerticalEdge =
+          (point.dx - bounds.left).abs() <= edgeTolerance ||
+          (point.dx - bounds.right).abs() <= edgeTolerance;
+      if (nearHorizontalEdge || nearVerticalEdge) edgeSamples++;
+    }
+    final edgeRatio = edgeSamples / points.length;
+    if (perimeterRatio >= .82 &&
+        perimeterRatio <= 1.4 &&
+        edgeRatio >= .68) {
+      return 'rectangle';
     }
 
-    final aspect = bounds.width / bounds.height;
-    if (aspect >= .72 && aspect <= 1.38 && perimeterRatio < .9) {
+    // Ellipse samples stay close to unit radius after normalizing around the
+    // bounding box. This avoids snapping triangular/irregular loops to ovals.
+    var radialError = 0.0;
+    final center = bounds.center;
+    final radiusX = bounds.width / 2;
+    final radiusY = bounds.height / 2;
+    for (final sample in points) {
+      final dx = (sample.position.dx - center.dx) / radiusX;
+      final dy = (sample.position.dy - center.dy) / radiusY;
+      radialError += (math.sqrt(dx * dx + dy * dy) - 1).abs();
+    }
+    radialError /= points.length;
+
+    if (perimeterRatio >= .62 &&
+        perimeterRatio <= .92 &&
+        radialError <= .18) {
       return 'ellipse';
     }
-    if (perimeterRatio >= .9 && perimeterRatio <= 1.6) return 'rectangle';
-    if (perimeterRatio >= .62 && perimeterRatio < .9) return 'ellipse';
     return null;
   }
 
