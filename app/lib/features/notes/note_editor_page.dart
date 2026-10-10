@@ -13,6 +13,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../app/theme_controller.dart';
 import '../../canvas_engine/models/pen_config.dart';
+import '../../canvas_engine/input/ink_gesture_policy.dart';
 import '../../canvas_engine/widgets/page_background.dart';
 import '../../canvas_engine/widgets/notebook_viewport.dart';
 import '../../canvas_engine/widgets/snote_canvas.dart';
@@ -584,6 +585,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   fillColor: _fillColor,
                   smoothing: _settings.getDouble('strokeSmoothing'),
                   showPerformanceOverlay: const bool.fromEnvironment('SNOTE_PERF'),
+                  gesturePolicy: InkGesturePolicy(
+                    allowSingleFingerPan: _pan,
+                    allowFingerInk: !_pan,
+                  ),
                 ),
               )
               else
