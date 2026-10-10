@@ -549,13 +549,19 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
   }
 
   bool _accept(PointerEvent event) {
+    // Touch is intentionally rejected by PalmRejection for stylus-first
+    // devices, but this canvas also supports finger writing when enabled.
+    // Resolve the configured touch policy before applying stylus palm rules.
+    if (event.kind == PointerDeviceKind.touch) {
+      if (_lock.isLocked && widget.gesturePolicy.stylusWinsOverTouch) {
+        return false;
+      }
+      return widget.gesturePolicy.allowsFingerInk();
+    }
     if (!_palm.accepts(event)) return false;
     if (event.kind == PointerDeviceKind.stylus ||
         event.kind == PointerDeviceKind.invertedStylus) {
       return widget.gesturePolicy.isStylus(event.kind);
-    }
-    if (event.kind == PointerDeviceKind.touch) {
-      return widget.gesturePolicy.allowsFingerInk();
     }
     return event.kind == PointerDeviceKind.mouse;
   }
