@@ -26,6 +26,40 @@ enum CanvasTool {
   hexagon,
   star,
   customPolygon,
+  // Mathematical diagrams.
+  coordinateAxes,
+  parabola,
+  sineWave,
+  angle,
+  vectorArrow,
+  projectilePath,
+  // Physics / optics / circuits.
+  rayDiagram,
+  convexLens,
+  concaveLens,
+  planeMirror,
+  forceDiagram,
+  pulley,
+  circuitResistor,
+  circuitBattery,
+  capacitor,
+  circuitSwitch,
+  circuitLamp,
+  // Chemistry diagrams.
+  atom,
+  molecule,
+  benzeneRing,
+  beaker,
+  testTube,
+  conicalFlask,
+  orbital,
+  // Biology diagrams.
+  animalCell,
+  plantCell,
+  dnaHelix,
+  neuron,
+  leaf,
+  microscope,
   sticker,
 }
 
@@ -51,6 +85,36 @@ extension CanvasToolX on CanvasTool {
     CanvasTool.hexagon,
     CanvasTool.star,
     CanvasTool.customPolygon,
+    CanvasTool.coordinateAxes,
+    CanvasTool.parabola,
+    CanvasTool.sineWave,
+    CanvasTool.angle,
+    CanvasTool.vectorArrow,
+    CanvasTool.projectilePath,
+    CanvasTool.rayDiagram,
+    CanvasTool.convexLens,
+    CanvasTool.concaveLens,
+    CanvasTool.planeMirror,
+    CanvasTool.forceDiagram,
+    CanvasTool.pulley,
+    CanvasTool.circuitResistor,
+    CanvasTool.circuitBattery,
+    CanvasTool.capacitor,
+    CanvasTool.circuitSwitch,
+    CanvasTool.circuitLamp,
+    CanvasTool.atom,
+    CanvasTool.molecule,
+    CanvasTool.benzeneRing,
+    CanvasTool.beaker,
+    CanvasTool.testTube,
+    CanvasTool.conicalFlask,
+    CanvasTool.orbital,
+    CanvasTool.animalCell,
+    CanvasTool.plantCell,
+    CanvasTool.dnaHelix,
+    CanvasTool.neuron,
+    CanvasTool.leaf,
+    CanvasTool.microscope,
   }.contains(this);
 
   PenType get penType {
@@ -86,6 +150,36 @@ extension CanvasToolX on CanvasTool {
       case CanvasTool.hexagon: return 'Hexagon';
       case CanvasTool.star: return 'Star';
       case CanvasTool.customPolygon: return 'Custom polygon';
+      case CanvasTool.coordinateAxes: return 'Coordinate axes';
+      case CanvasTool.parabola: return 'Parabola graph';
+      case CanvasTool.sineWave: return 'Sine wave';
+      case CanvasTool.angle: return 'Angle';
+      case CanvasTool.vectorArrow: return 'Vector arrow';
+      case CanvasTool.projectilePath: return 'Projectile path';
+      case CanvasTool.rayDiagram: return 'Ray diagram';
+      case CanvasTool.convexLens: return 'Convex lens';
+      case CanvasTool.concaveLens: return 'Concave lens';
+      case CanvasTool.planeMirror: return 'Plane mirror';
+      case CanvasTool.forceDiagram: return 'Force diagram';
+      case CanvasTool.pulley: return 'Pulley';
+      case CanvasTool.circuitResistor: return 'Resistor';
+      case CanvasTool.circuitBattery: return 'Battery';
+      case CanvasTool.capacitor: return 'Capacitor';
+      case CanvasTool.circuitSwitch: return 'Circuit switch';
+      case CanvasTool.circuitLamp: return 'Circuit lamp';
+      case CanvasTool.atom: return 'Atom';
+      case CanvasTool.molecule: return 'Molecule';
+      case CanvasTool.benzeneRing: return 'Benzene ring';
+      case CanvasTool.beaker: return 'Beaker';
+      case CanvasTool.testTube: return 'Test tube';
+      case CanvasTool.conicalFlask: return 'Conical flask';
+      case CanvasTool.orbital: return 'Atomic orbital';
+      case CanvasTool.animalCell: return 'Animal cell';
+      case CanvasTool.plantCell: return 'Plant cell';
+      case CanvasTool.dnaHelix: return 'DNA helix';
+      case CanvasTool.neuron: return 'Neuron';
+      case CanvasTool.leaf: return 'Leaf';
+      case CanvasTool.microscope: return 'Microscope';
       case CanvasTool.sticker: return 'Sticker';
     }
   }
