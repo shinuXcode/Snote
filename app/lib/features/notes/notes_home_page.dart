@@ -8,6 +8,7 @@ import '../../data/local/notebook_transfer_service.dart';
 import '../../sync/sync_engine.dart';
 import '../../ui/snote_logo.dart';
 import '../auth/login_page.dart';
+import '../folders/folder_tree_view.dart';
 import '../pdf/pdf_annotation_page.dart';
 import '../settings/settings_page.dart';
 import '../share/qr_import_page.dart';
@@ -15,6 +16,7 @@ import '../trash/trash_page.dart';
 import '../tools/flashcard_page.dart';
 import '../tools/mind_map_page.dart';
 import '../tools/screenshot_import_page.dart';
+import '../updates/update_center_page.dart';
 import 'note_editor_page.dart';
 
 class NotesHomePage extends StatefulWidget {
@@ -32,18 +34,23 @@ class _NotesHomePageState extends State<NotesHomePage> {
   final _sync = SyncEngine();
   final _search = TextEditingController();
 
-  List<LocalFolder> _folderList = const [];
+  List<LocalFolder> _allFolders = const [];
   List<LocalNote> _noteList = const [];
+  List<LocalNote> _recentNotes = const [];
+  bool _sidebarCollapsed = false;
+  bool _gridView = true;
   String? _folderId;
   final List<LocalFolder> _breadcrumbs = [];
   LocalNote? _selected;
   bool _loading = true;
   bool _syncing = false;
+  Timer? _searchDebounce;
+  int _loadGeneration = 0;
 
   @override
   void initState() {
     super.initState();
-    _search.addListener(() => setState(() {}));
+    _search.addListener(_onSearchChanged);
     unawaited(_load());
     if (!widget.localOnly) unawaited(_startSync());
   }
@@ -53,18 +60,42 @@ class _NotesHomePageState extends State<NotesHomePage> {
     await _load();
   }
 
-  Future<void> _load() async {
-    final folders = await _folders.list(parentId: _folderId);
-    final notes = await _notes.list(folderId: _folderId);
+  void _onSearchChanged() {
     if (!mounted) return;
+    setState(() {});
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(
+      const Duration(milliseconds: 180),
+      () => unawaited(_load()),
+    );
+  }
+
+  Future<void> _load() async {
+    final generation = ++_loadGeneration;
+    final searching = _search.text.trim().isNotEmpty;
+    final allFolders = await _folders.listAllVisible();
+    final notes = searching
+        ? await _notes.listAllVisible()
+        : await _notes.list(folderId: _folderId);
+    final recentNotes = await _notes.listAllVisible(limit: 6);
+    if (!mounted || generation != _loadGeneration) return;
+
     final selectedId = _selected?.id;
     final visible = notes.where(_matchesSearch).toList();
-    LocalNote? selected = selectedId == null
-        ? (visible.isEmpty ? null : visible.first)
-        : visible.cast<LocalNote?>().firstWhere((n) => n?.id == selectedId, orElse: () => null);
+    LocalNote? selected = visible.isEmpty ? null : visible.first;
+    if (selectedId != null) {
+      for (final note in visible) {
+        if (note.id == selectedId) {
+          selected = note;
+          break;
+        }
+      }
+    }
+
     setState(() {
-      _folderList = folders;
+      _allFolders = allFolders;
       _noteList = notes;
+      _recentNotes = recentNotes;
       _selected = selected;
       _loading = false;
     });
@@ -109,20 +140,183 @@ class _NotesHomePageState extends State<NotesHomePage> {
   }
 
   Future<void> _openNote(LocalNote note) async {
-    setState(() => _selected = note);
+    if (note.folderId != _folderId) {
+      final byId = {for (final item in _allFolders) item.id: item};
+      final path = <LocalFolder>[];
+      final seen = <String>{};
+      LocalFolder? current =
+          note.folderId == null ? null : byId[note.folderId];
+      while (current != null && seen.add(current.id)) {
+        path.add(current);
+        current = current.parentId == null ? null : byId[current.parentId];
+      }
+      setState(() {
+        _breadcrumbs
+          ..clear()
+          ..addAll(path.reversed);
+        _folderId = note.folderId;
+        _selected = note;
+      });
+      await _load();
+    } else {
+      setState(() => _selected = note);
+    }
+
+    if (!mounted) return;
     if (MediaQuery.sizeOf(context).width < 900) {
-      await Navigator.push(context, MaterialPageRoute(builder: (_) => NoteEditorPage(note: note)));
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => NoteEditorPage(note: note)),
+      );
       await _load();
     }
   }
 
-  void _openFolder(LocalFolder folder) {
+  void _openTreeFolder(LocalFolder folder) {
+    final byId = {for (final item in _allFolders) item.id: item};
+    final path = <LocalFolder>[];
+    final seen = <String>{};
+    LocalFolder? current = folder;
+    while (current != null && seen.add(current.id)) {
+      path.add(current);
+      current = current.parentId == null ? null : byId[current.parentId];
+    }
     setState(() {
+      _breadcrumbs
+        ..clear()
+        ..addAll(path.reversed);
       _folderId = folder.id;
-      _breadcrumbs.add(folder);
       _selected = null;
     });
     unawaited(_load());
+  }
+
+  Future<void> _moveFolder(String folderId, String? parentId) async {
+    try {
+      await _folders.move(folderId, parentId: parentId);
+      await _load();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not move folder: $error')),
+        );
+      }
+    }
+  }
+
+  Future<void> _customizeFolder(LocalFolder folder) async {
+    const colors = <int>[
+      0xff5b6cf9,
+      0xff16a085,
+      0xfff39c12,
+      0xffe74c3c,
+      0xff9b59b6,
+      0xff34495e,
+      0xffd35400,
+      0xff2d9cdb,
+    ];
+    const icons = <String, String>{
+      'folder': 'Folder',
+      'book': 'Book',
+      'science': 'Science',
+      'math': 'Math',
+      'star': 'Star',
+      'lightbulb': 'Ideas',
+      'work': 'Work',
+      'archive': 'Archive',
+    };
+    var colorValue = folder.colorValue;
+    var iconKey = folder.iconKey;
+    final result = await showDialog<Map<String, Object?>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialog) => AlertDialog(
+          title: const Text('Folder appearance'),
+          content: SizedBox(
+            width: 340,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Color'),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: colors.map((value) => InkWell(
+                    onTap: () => setDialog(() => colorValue = value),
+                    borderRadius: BorderRadius.circular(24),
+                    child: Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Color(value),
+                        border: Border.all(
+                          color: colorValue == value
+                              ? Theme.of(context).colorScheme.onSurface
+                              : Colors.transparent,
+                          width: 3,
+                        ),
+                      ),
+                      child: colorValue == value
+                          ? const Icon(Icons.check_rounded, color: Colors.white, size: 18)
+                          : null,
+                    ),
+                  )).toList(),
+                ),
+                const SizedBox(height: 20),
+                DropdownButtonFormField<String>(
+                  initialValue: iconKey,
+                  decoration: const InputDecoration(labelText: 'Folder icon'),
+                  items: icons.entries.map((entry) => DropdownMenuItem(
+                    value: entry.key,
+                    child: Row(
+                      children: [
+                        Icon(folderIconForKey(entry.key), size: 19),
+                        const SizedBox(width: 10),
+                        Text(entry.value),
+                      ],
+                    ),
+                  )).toList(),
+                  onChanged: (value) {
+                    if (value != null) setDialog(() => iconKey = value);
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, {
+                'colorValue': colorValue,
+                'iconKey': iconKey,
+              }),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (result == null) return;
+    await _folders.updateAppearance(
+      folder.id,
+      colorValue: result['colorValue']! as int,
+      iconKey: result['iconKey']! as String,
+    );
+    await _load();
+  }
+
+  Future<void> _openUpdates() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const UpdateCenterPage()),
+    );
+    await _load();
   }
 
   void _goBackFolder() {
@@ -156,6 +350,9 @@ class _NotesHomePageState extends State<NotesHomePage> {
         id: folder.id,
         parentId: folder.parentId,
         name: value.trim(),
+        colorValue: folder.colorValue,
+        iconKey: folder.iconKey,
+        sortOrder: folder.sortOrder,
         createdAt: folder.createdAt,
         updatedAt: DateTime.now().millisecondsSinceEpoch,
         deletedAt: folder.deletedAt,
@@ -178,9 +375,14 @@ class _NotesHomePageState extends State<NotesHomePage> {
     );
     if (ok != true) return;
     await _folders.delete(folder.id);
-    if (_folderId == folder.id) {
-      _goBackFolder();
-      return;
+    final breadcrumbIndex =
+        _breadcrumbs.indexWhere((item) => item.id == folder.id);
+    if (breadcrumbIndex >= 0) {
+      setState(() {
+        _breadcrumbs.removeRange(breadcrumbIndex, _breadcrumbs.length);
+        _folderId = _breadcrumbs.isEmpty ? null : _breadcrumbs.last.id;
+        _selected = null;
+      });
     }
     await _load();
   }
@@ -304,7 +506,21 @@ class _NotesHomePageState extends State<NotesHomePage> {
   Widget _desktop() {
     return Row(
       children: [
-        _SideRail(localOnly: widget.localOnly, syncing: _syncing, onAccount: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LoginPage())), onSettings: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage()))),
+        _SideRail(
+          localOnly: widget.localOnly,
+          syncing: _syncing,
+          expanded: !_sidebarCollapsed,
+          onToggle: () => setState(() => _sidebarCollapsed = !_sidebarCollapsed),
+          onAccount: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const LoginPage()),
+          ),
+          onSettings: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const SettingsPage()),
+          ),
+          onUpdates: _openUpdates,
+        ),
         Expanded(
           child: Column(
             children: [
@@ -312,35 +528,60 @@ class _NotesHomePageState extends State<NotesHomePage> {
                 search: _search,
                 syncing: _syncing,
                 localOnly: widget.localOnly,
+                gridView: _gridView,
                 onSync: _syncNow,
+                onToggleView: () => setState(() => _gridView = !_gridView),
               ),
-              _Breadcrumbs(items: _breadcrumbs, onBack: _goBackFolder, onRoot: () {
-                setState(() {
-                  _breadcrumbs.clear();
-                  _folderId = null;
-                  _selected = null;
-                });
-                unawaited(_load());
-              }),
+              _Breadcrumbs(
+                items: _breadcrumbs,
+                onBack: _goBackFolder,
+                onRoot: () {
+                  setState(() {
+                    _breadcrumbs.clear();
+                    _folderId = null;
+                    _selected = null;
+                  });
+                  unawaited(_load());
+                },
+              ),
               Expanded(
                 child: Row(
                   children: [
-                    SizedBox(width: 380, child: _HierarchyPanel(
-                      folderList: _folderList,
-                      notes: _filteredNotes,
-                      selected: _selected,
-                      loading: _loading,
-                      onFolder: _openFolder,
-                      onNewFolder: _createFolder,
-                      onNewNote: _createNote,
-                      onRenameFolder: _renameFolder,
-                      onDeleteFolder: _deleteFolder,
-                      onOpenNote: _openNote,
-                      onRenameNote: _renameNote,
-                      onDeleteNote: _deleteNote,
-                    )),
+                    SizedBox(
+                      width: 380,
+                      child: _HierarchyPanel(
+                        allFolders: _allFolders,
+                        recentNotes: _search.text.trim().isEmpty
+                            ? _recentNotes
+                            : const <LocalNote>[],
+                        isSearching: _search.text.trim().isNotEmpty,
+                        currentFolderId: _folderId,
+                        notes: _filteredNotes,
+                        selected: _selected,
+                        loading: _loading,
+                        gridView: _gridView,
+                        onToggleView: () => setState(() => _gridView = !_gridView),
+                        onOpenTreeFolder: _openTreeFolder,
+                        onMoveFolder: _moveFolder,
+                        onCustomizeFolder: _customizeFolder,
+                        onNewFolder: _createFolder,
+                        onNewNote: _createNote,
+                        onRenameFolder: _renameFolder,
+                        onDeleteFolder: _deleteFolder,
+                        onOpenNote: _openNote,
+                        onRenameNote: _renameNote,
+                        onDeleteNote: _deleteNote,
+                      ),
+                    ),
                     const VerticalDivider(width: 1),
-                    Expanded(child: _selected == null ? const _WorkspaceEmpty() : KeyedSubtree(key: ValueKey(_selected!.id), child: NoteEditorPage(note: _selected!))),
+                    Expanded(
+                      child: _selected == null
+                          ? const _WorkspaceEmpty()
+                          : KeyedSubtree(
+                              key: ValueKey(_selected!.id),
+                              child: NoteEditorPage(note: _selected!),
+                            ),
+                    ),
                   ],
                 ),
               ),
@@ -360,8 +601,24 @@ class _NotesHomePageState extends State<NotesHomePage> {
             children: [
               const SnoteLogo(size: 34),
               const Spacer(),
-              IconButton(onPressed: _syncNow, tooltip: widget.localOnly ? 'Account' : 'Sync', icon: Icon(widget.localOnly ? Icons.cloud_outlined : Icons.sync_rounded)),
-              IconButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage())), tooltip: 'Settings', icon: const Icon(Icons.tune_rounded)),
+              IconButton(
+                onPressed: _openUpdates,
+                tooltip: 'Updates and notifications',
+                icon: const Icon(Icons.notifications_none_rounded),
+              ),
+              IconButton(
+                onPressed: _syncNow,
+                tooltip: widget.localOnly ? 'Account' : 'Sync',
+                icon: Icon(widget.localOnly ? Icons.cloud_outlined : Icons.sync_rounded),
+              ),
+              IconButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const SettingsPage()),
+                ),
+                tooltip: 'Settings',
+                icon: const Icon(Icons.tune_rounded),
+              ),
             ],
           ),
         ),
@@ -369,25 +626,47 @@ class _NotesHomePageState extends State<NotesHomePage> {
           padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
           child: TextField(
             controller: _search,
-            decoration: InputDecoration(hintText: 'Search notes', prefixIcon: const Icon(Icons.search_rounded), suffixIcon: _search.text.isEmpty ? null : IconButton(onPressed: _search.clear, icon: const Icon(Icons.close_rounded))),
+            decoration: InputDecoration(
+              hintText: 'Search notes',
+              prefixIcon: const Icon(Icons.search_rounded),
+              suffixIcon: _search.text.isEmpty
+                  ? null
+                  : IconButton(
+                      onPressed: _search.clear,
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+            ),
           ),
         ),
-        _Breadcrumbs(items: _breadcrumbs, onBack: _goBackFolder, onRoot: () {
-          setState(() {
-            _breadcrumbs.clear();
-            _folderId = null;
-            _selected = null;
-          });
-          unawaited(_load());
-        }),
+        _Breadcrumbs(
+          items: _breadcrumbs,
+          onBack: _goBackFolder,
+          onRoot: () {
+            setState(() {
+              _breadcrumbs.clear();
+              _folderId = null;
+              _selected = null;
+            });
+            unawaited(_load());
+          },
+        ),
         Expanded(
           child: _HierarchyPanel(
             compact: true,
-            folderList: _folderList,
+            allFolders: _allFolders,
+            recentNotes: _search.text.trim().isEmpty
+                ? _recentNotes
+                : const <LocalNote>[],
+            isSearching: _search.text.trim().isNotEmpty,
+            currentFolderId: _folderId,
             notes: _filteredNotes,
             selected: _selected,
             loading: _loading,
-            onFolder: _openFolder,
+            gridView: _gridView,
+            onToggleView: () => setState(() => _gridView = !_gridView),
+            onOpenTreeFolder: _openTreeFolder,
+            onMoveFolder: _moveFolder,
+            onCustomizeFolder: _customizeFolder,
             onNewFolder: _createFolder,
             onNewNote: _createNote,
             onRenameFolder: _renameFolder,
@@ -403,6 +682,8 @@ class _NotesHomePageState extends State<NotesHomePage> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
+    _search.removeListener(_onSearchChanged);
     _search.dispose();
     unawaited(_sync.dispose());
     super.dispose();
@@ -410,52 +691,146 @@ class _NotesHomePageState extends State<NotesHomePage> {
 }
 
 class _SideRail extends StatelessWidget {
-  final bool localOnly, syncing;
-  final VoidCallback onAccount, onSettings;
-  const _SideRail({required this.localOnly, required this.syncing, required this.onAccount, required this.onSettings});
+  final bool localOnly;
+  final bool syncing;
+  final bool expanded;
+  final VoidCallback onToggle;
+  final VoidCallback onAccount;
+  final VoidCallback onSettings;
+  final VoidCallback onUpdates;
+
+  const _SideRail({
+    required this.localOnly,
+    required this.syncing,
+    required this.expanded,
+    required this.onToggle,
+    required this.onAccount,
+    required this.onSettings,
+    required this.onUpdates,
+  });
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: 220,
-    padding: const EdgeInsets.fromLTRB(14, 18, 14, 14),
-    decoration: BoxDecoration(
-      color: Theme.of(context).colorScheme.surface,
-      border: Border(right: BorderSide(color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: .4))),
-    ),
-    child: Column(
-      children: [
-        const Padding(padding: EdgeInsets.only(left: 8, bottom: 28), child: Align(alignment: Alignment.centerLeft, child: SnoteLogo(size: 38))),
-        ListTile(leading: const Icon(Icons.auto_stories_rounded), title: const Text('Notebook'), selected: true, onTap: () {}),
-        ListTile(leading: const Icon(Icons.person_outline_rounded), title: Text(localOnly ? 'Sign in & sync' : 'Account'), onTap: onAccount),
-        ListTile(leading: const Icon(Icons.settings_outlined), title: const Text('Settings'), onTap: onSettings),
-        const Spacer(),
-        ListTile(
-          leading: Icon(localOnly ? Icons.offline_bolt_rounded : Icons.cloud_done_rounded),
-          title: Text(localOnly ? 'Offline first' : syncing ? 'Syncing…' : 'Synced'),
-          dense: true,
+  Widget build(BuildContext context) {
+    final width = expanded ? 220.0 : 76.0;
+    Widget entry({
+      required IconData icon,
+      required String label,
+      required VoidCallback onTap,
+      bool selected = false,
+    }) {
+      return Tooltip(
+        message: expanded ? '' : label,
+        child: ListTile(
+          leading: Icon(icon),
+          title: expanded ? Text(label) : null,
+          selected: selected,
+          onTap: onTap,
+          dense: !expanded,
+          contentPadding: EdgeInsets.symmetric(horizontal: expanded ? 12 : 18),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
-      ],
-    ),
-  );
+      );
+    }
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      width: width,
+      padding: EdgeInsets.fromLTRB(expanded ? 14 : 8, 18, expanded ? 14 : 8, 14),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(
+          right: BorderSide(
+            color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: .4),
+          ),
+        ),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: expanded ? MainAxisAlignment.spaceBetween : MainAxisAlignment.center,
+            children: [
+              if (expanded) const SnoteLogo(size: 38),
+              IconButton(
+                onPressed: onToggle,
+                tooltip: expanded ? 'Collapse sidebar' : 'Expand sidebar',
+                icon: Icon(expanded ? Icons.chevron_left_rounded : Icons.chevron_right_rounded),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          entry(icon: Icons.auto_stories_rounded, label: 'Notebook', selected: true, onTap: () {}),
+          entry(icon: Icons.notifications_none_rounded, label: 'Updates & notices', onTap: onUpdates),
+          entry(icon: Icons.person_outline_rounded, label: localOnly ? 'Sign in & sync' : 'Account', onTap: onAccount),
+          entry(icon: Icons.settings_outlined, label: 'Settings', onTap: onSettings),
+          const Spacer(),
+          if (expanded)
+            ListTile(
+              leading: Icon(localOnly ? Icons.offline_bolt_rounded : Icons.cloud_done_rounded),
+              title: Text(localOnly ? 'Offline first' : syncing ? 'Syncing…' : 'Sync ready'),
+              dense: true,
+            )
+          else
+            Tooltip(
+              message: localOnly ? 'Offline first' : syncing ? 'Syncing' : 'Sync ready',
+              child: Icon(localOnly ? Icons.offline_bolt_rounded : Icons.cloud_done_rounded),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 class _TopBar extends StatelessWidget {
   final TextEditingController search;
-  final bool syncing, localOnly;
+  final bool syncing;
+  final bool localOnly;
+  final bool gridView;
   final VoidCallback onSync;
-  const _TopBar({required this.search, required this.syncing, required this.localOnly, required this.onSync});
+  final VoidCallback onToggleView;
+
+  const _TopBar({
+    required this.search,
+    required this.syncing,
+    required this.localOnly,
+    required this.gridView,
+    required this.onSync,
+    required this.onToggleView,
+  });
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-    child: Row(
-      children: [
-        Expanded(child: TextField(controller: search, decoration: const InputDecoration(hintText: 'Search your notebook', prefixIcon: Icon(Icons.search_rounded)))),
-        const SizedBox(width: 10),
-        FilledButton.tonalIcon(onPressed: onSync, icon: syncing ? const SizedBox.square(dimension: 17, child: CircularProgressIndicator(strokeWidth: 2)) : Icon(localOnly ? Icons.cloud_outlined : Icons.sync_rounded), label: Text(localOnly ? 'Offline' : 'Sync')),
-      ],
-    ),
-  );
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: search,
+                decoration: const InputDecoration(
+                  hintText: 'Search your notebook',
+                  prefixIcon: Icon(Icons.search_rounded),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              onPressed: onToggleView,
+              tooltip: gridView ? 'Switch to list view' : 'Switch to grid view',
+              icon: Icon(gridView ? Icons.view_list_rounded : Icons.grid_view_rounded),
+            ),
+            const SizedBox(width: 4),
+            FilledButton.tonalIcon(
+              onPressed: onSync,
+              icon: syncing
+                  ? const SizedBox.square(
+                      dimension: 17,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(localOnly ? Icons.cloud_outlined : Icons.sync_rounded),
+              label: Text(localOnly ? 'Offline' : 'Sync'),
+            ),
+          ],
+        ),
+      );
 }
 
 class _Breadcrumbs extends StatelessWidget {
@@ -480,21 +855,41 @@ class _Breadcrumbs extends StatelessWidget {
 }
 
 class _HierarchyPanel extends StatelessWidget {
-  final List<LocalFolder> folderList;
+  final List<LocalFolder> allFolders;
+  final List<LocalNote> recentNotes;
+  final bool isSearching;
+  final String? currentFolderId;
   final List<LocalNote> notes;
   final LocalNote? selected;
-  final bool loading, compact;
-  final VoidCallback onNewFolder, onNewNote;
-  final ValueChanged<LocalFolder> onFolder, onRenameFolder, onDeleteFolder;
-  final ValueChanged<LocalNote> onOpenNote, onRenameNote, onDeleteNote;
+  final bool loading;
+  final bool compact;
+  final bool gridView;
+  final VoidCallback onToggleView;
+  final VoidCallback onNewFolder;
+  final VoidCallback onNewNote;
+  final ValueChanged<LocalFolder> onOpenTreeFolder;
+  final Future<void> Function(String folderId, String? parentId) onMoveFolder;
+  final ValueChanged<LocalFolder> onCustomizeFolder;
+  final ValueChanged<LocalFolder> onRenameFolder;
+  final ValueChanged<LocalFolder> onDeleteFolder;
+  final ValueChanged<LocalNote> onOpenNote;
+  final ValueChanged<LocalNote> onRenameNote;
+  final ValueChanged<LocalNote> onDeleteNote;
 
   const _HierarchyPanel({
-    required this.folderList,
+    required this.allFolders,
+    required this.recentNotes,
+    required this.isSearching,
+    required this.currentFolderId,
     required this.notes,
     required this.selected,
     required this.loading,
     this.compact = false,
-    required this.onFolder,
+    required this.gridView,
+    required this.onToggleView,
+    required this.onOpenTreeFolder,
+    required this.onMoveFolder,
+    required this.onCustomizeFolder,
     required this.onNewFolder,
     required this.onNewNote,
     required this.onRenameFolder,
@@ -507,48 +902,226 @@ class _HierarchyPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (loading) return const Center(child: CircularProgressIndicator());
+    final theme = Theme.of(context);
+
     return ListView(
       padding: EdgeInsets.fromLTRB(compact ? 12 : 14, 4, compact ? 12 : 14, 110),
       children: [
         Row(
           children: [
-            const Expanded(child: Text('Folders & notes', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900))),
-            IconButton(onPressed: onNewFolder, tooltip: 'New folder', icon: const Icon(Icons.create_new_folder_outlined)),
+            const Expanded(
+              child: Text(
+                'Folders & notes',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+              ),
+            ),
+            IconButton(
+              onPressed: onToggleView,
+              tooltip: gridView ? 'List view' : 'Grid view',
+              icon: Icon(gridView ? Icons.view_list_rounded : Icons.grid_view_rounded),
+            ),
+            IconButton(
+              onPressed: onNewFolder,
+              tooltip: 'New folder',
+              icon: const Icon(Icons.create_new_folder_outlined),
+            ),
           ],
         ),
-        const SizedBox(height: 8),
-        if (folderList.isEmpty && notes.isEmpty)
+        const SizedBox(height: 4),
+        if (currentFolderId == null && recentNotes.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
+            child: Text(
+              'Quick recents',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          SizedBox(
+            height: 78,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: recentNotes.take(6).length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final note = recentNotes[index];
+                return SizedBox(
+                  width: compact ? 156 : 174,
+                  child: Card(
+                    margin: EdgeInsets.zero,
+                    color: theme.colorScheme.surfaceContainerLow,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () => onOpenNote(note),
+                      child: Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.history_rounded,
+                              color: theme.colorScheme.primary,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    note.title,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    note.noteType,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.labelSmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+        if (allFolders.isEmpty && notes.isEmpty && recentNotes.isEmpty && !isSearching)
           const Padding(
-            padding: EdgeInsets.symmetric(vertical: 80, horizontal: 20),
+            padding: EdgeInsets.symmetric(vertical: 24, horizontal: 18),
             child: Column(
               children: [
-                Icon(Icons.folder_open_rounded, size: 52),
-                SizedBox(height: 14),
-                Text('Nothing here yet', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+                Icon(Icons.folder_open_rounded, size: 42),
+                SizedBox(height: 10),
+                Text('Nothing here yet', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
                 SizedBox(height: 6),
-                Text('Create a subject folder, open it, then create chapter folders and notes inside it.', textAlign: TextAlign.center),
+                Text(
+                  'Create a folder or note to start organizing your notebook.',
+                  textAlign: TextAlign.center,
+                ),
               ],
             ),
+          )
+        else
+          FolderTreeView(
+            folders: allFolders,
+            selectedFolderId: currentFolderId,
+            onSelect: onOpenTreeFolder,
+            onMove: onMoveFolder,
+            onRename: onRenameFolder,
+            onDelete: onDeleteFolder,
+            onAppearance: onCustomizeFolder,
           ),
-        ...folderList.map((folder) => Card(
-          child: ListTile(
-            leading: const Icon(Icons.folder_rounded),
-            title: Text(folder.name, style: const TextStyle(fontWeight: FontWeight.w800)),
-            subtitle: const Text('Open folder'),
-            trailing: PopupMenuButton<String>(
-              onSelected: (v) => v == 'rename' ? onRenameFolder(folder) : onDeleteFolder(folder),
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'rename', child: Text('Rename')),
-                PopupMenuItem(value: 'delete', child: Text('Delete')),
-              ],
+        if (isSearching && notes.isEmpty)
+          const Padding(
+            padding: EdgeInsets.fromLTRB(4, 18, 4, 8),
+            child: Text('No notes match your search.'),
+          ),
+        if (notes.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 18, 4, 8),
+            child: Text(
+              isSearching
+                  ? 'Search results'
+                  : currentFolderId == null
+                      ? 'Notes in this folder'
+                      : 'Notes in this folder',
+              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
             ),
-            onTap: () => onFolder(folder),
           ),
-        )),
-        if (notes.isNotEmpty) const Padding(padding: EdgeInsets.fromLTRB(4, 18, 4, 8), child: Text('Notes', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900))),
-        ...notes.map((note) => _HomeNoteTile(note: note, selected: selected?.id == note.id, onOpen: () => onOpenNote(note), onRename: () => onRenameNote(note), onDelete: () => onDeleteNote(note))),
+        if (gridView)
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: notes.map((note) {
+              final isSelected = selected?.id == note.id;
+              return SizedBox(
+                width: compact ? 155 : 166,
+                child: Card(
+                  clipBehavior: Clip.antiAlias,
+                  color: isSelected
+                      ? theme.colorScheme.primaryContainer.withValues(alpha: .65)
+                      : theme.colorScheme.surfaceContainerLow,
+                  child: InkWell(
+                    onTap: () => onOpenNote(note),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: SizedBox(
+                        height: 96,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.description_outlined, color: theme.colorScheme.primary),
+                            const Spacer(),
+                            Text(
+                              note.title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontWeight: FontWeight.w800),
+                            ),
+                            const SizedBox(height: 3),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    note.noteType,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.labelSmall,
+                                  ),
+                                ),
+                                PopupMenuButton<String>(
+                                  padding: EdgeInsets.zero,
+                                  iconSize: 18,
+                                  onSelected: (value) {
+                                    if (value == 'rename') {
+                                      onRenameNote(note);
+                                    } else {
+                                      onDeleteNote(note);
+                                    }
+                                  },
+                                  itemBuilder: (_) => const [
+                                    PopupMenuItem(value: 'rename', child: Text('Rename')),
+                                    PopupMenuItem(value: 'delete', child: Text('Move to trash')),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          )
+        else
+          ...notes.map(
+            (note) => _HomeNoteTile(
+              note: note,
+              selected: selected?.id == note.id,
+              onOpen: () => onOpenNote(note),
+              onRename: () => onRenameNote(note),
+              onDelete: () => onDeleteNote(note),
+            ),
+          ),
         const SizedBox(height: 8),
-        FilledButton.tonalIcon(onPressed: onNewNote, icon: const Icon(Icons.note_add_outlined), label: const Text('New note here')),
+        FilledButton.tonalIcon(
+          onPressed: onNewNote,
+          icon: const Icon(Icons.note_add_outlined),
+          label: const Text('New note here'),
+        ),
       ],
     );
   }
@@ -557,21 +1130,44 @@ class _HierarchyPanel extends StatelessWidget {
 class _HomeNoteTile extends StatelessWidget {
   final LocalNote note;
   final bool selected;
-  final VoidCallback onOpen, onRename, onDelete;
-  const _HomeNoteTile({required this.note, required this.selected, required this.onOpen, required this.onRename, required this.onDelete});
+  final VoidCallback onOpen;
+  final VoidCallback onRename;
+  final VoidCallback onDelete;
+
+  const _HomeNoteTile({
+    required this.note,
+    required this.selected,
+    required this.onOpen,
+    required this.onRename,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Card(
-      color: selected ? scheme.primaryContainer.withValues(alpha: .6) : null,
+      color: selected
+          ? scheme.primaryContainer.withValues(alpha: .65)
+          : scheme.surfaceContainerLow,
       child: ListTile(
         leading: const Icon(Icons.description_outlined),
-        title: Text(note.title, style: const TextStyle(fontWeight: FontWeight.w800)),
+        title: Text(
+          note.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
         subtitle: Text(note.noteType),
         onTap: onOpen,
         trailing: PopupMenuButton<String>(
-          onSelected: (v) => v == 'rename' ? onRename() : onDelete(),
+          tooltip: 'Note actions',
+          onSelected: (value) {
+            if (value == 'rename') {
+              onRename();
+            } else if (value == 'delete') {
+              onDelete();
+            }
+          },
           itemBuilder: (_) => const [
             PopupMenuItem(value: 'rename', child: Text('Rename')),
             PopupMenuItem(value: 'delete', child: Text('Move to trash')),

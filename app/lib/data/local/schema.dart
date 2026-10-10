@@ -1,4 +1,4 @@
-const databaseVersion = 5;
+const databaseVersion = 6;
 const createNotesTable = '''
 CREATE TABLE notes (
   id TEXT PRIMARY KEY,
@@ -20,6 +20,9 @@ CREATE TABLE folders (
   owner_id TEXT NOT NULL DEFAULT 'local',
   parent_id TEXT,
   name TEXT NOT NULL,
+  color_value INTEGER NOT NULL DEFAULT 4284187897,
+  icon_key TEXT NOT NULL DEFAULT 'folder',
+  sort_order INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   deleted_at INTEGER
@@ -61,4 +64,16 @@ CREATE TABLE sync_queue (
   created_at INTEGER NOT NULL,
   attempts INTEGER NOT NULL DEFAULT 0,
   last_error TEXT
+)''';
+
+const createAppNotificationsTable = '''
+CREATE TABLE app_notifications (
+  id TEXT PRIMARY KEY,
+  owner_id TEXT NOT NULL DEFAULT 'local',
+  category TEXT NOT NULL,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  read_at INTEGER,
+  action_url TEXT
 )''';

@@ -9,6 +9,7 @@ class SnoteCanvasController extends ChangeNotifier {
   VoidCallback? _deleteSelectionAction;
   VoidCallback? _duplicateSelectionAction;
   void Function(double dx, double dy)? _moveSelectionAction;
+  void Function(double factor)? _scaleSelectionAction;
   VoidCallback? _selectAllAction;
   VoidCallback? _clearSelectionAction;
   void Function(Color color)? _changeColorAction;
@@ -32,6 +33,7 @@ class SnoteCanvasController extends ChangeNotifier {
     required VoidCallback deleteSelection,
     required VoidCallback duplicateSelection,
     required void Function(double dx, double dy) moveSelection,
+    void Function(double factor)? scaleSelection,
     required VoidCallback selectAll,
     required VoidCallback clearSelection,
     required bool canUndo,
@@ -49,6 +51,7 @@ class SnoteCanvasController extends ChangeNotifier {
     _deleteSelectionAction = deleteSelection;
     _duplicateSelectionAction = duplicateSelection;
     _moveSelectionAction = moveSelection;
+    _scaleSelectionAction = scaleSelection;
     _selectAllAction = selectAll;
     _clearSelectionAction = clearSelection;
     _canUndo = canUndo;
@@ -68,6 +71,7 @@ class SnoteCanvasController extends ChangeNotifier {
   void deleteSelection() => _deleteSelectionAction?.call();
   void duplicateSelection() => _duplicateSelectionAction?.call();
   void moveSelection(double dx, double dy) => _moveSelectionAction?.call(dx, dy);
+  void scaleSelection(double factor) => _scaleSelectionAction?.call(factor);
   void selectAll() => _selectAllAction?.call();
   void clearSelection() => _clearSelectionAction?.call();
   void changeColor(Color color) => _changeColorAction?.call(color);
@@ -83,6 +87,7 @@ class SnoteCanvasController extends ChangeNotifier {
     _deleteSelectionAction = null;
     _duplicateSelectionAction = null;
     _moveSelectionAction = null;
+    _scaleSelectionAction = null;
     _selectAllAction = null;
     _clearSelectionAction = null;
     _changeColorAction = null;

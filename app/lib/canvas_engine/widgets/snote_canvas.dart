@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:uuid/uuid.dart';
 
+import '../algorithms/lasso_geometry.dart';
+import '../algorithms/shape_recognizer.dart';
 import '../input/ink_gesture_policy.dart';
 import '../input/ink_input_pipeline.dart';
 import '../input/palm_rejection.dart';
@@ -335,6 +337,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       deleteSelection: deleteSelection,
       duplicateSelection: duplicateSelection,
       moveSelection: moveSelection,
+      scaleSelection: scaleSelection,
       selectAll: selectAll,
       clearSelection: clearSelection,
       canUndo: _history.isNotEmpty,
@@ -431,6 +434,45 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
                   position: point.position + Offset(dx, dy),
                 ))
             .toList(),
+      );
+    }
+    _finishDocumentMutation();
+  }
+
+  void scaleSelection(double factor) {
+    if (_selected.isEmpty || !factor.isFinite || factor <= 0) return;
+    final points = _strokes
+        .where((stroke) => _selected.contains(stroke.id))
+        .expand((stroke) => stroke.points)
+        .toList();
+    if (points.isEmpty) return;
+
+    var minX = points.first.position.dx;
+    var maxX = minX;
+    var minY = points.first.position.dy;
+    var maxY = minY;
+    for (final point in points.skip(1)) {
+      minX = math.min(minX, point.position.dx);
+      maxX = math.max(maxX, point.position.dx);
+      minY = math.min(minY, point.position.dy);
+      maxY = math.max(maxY, point.position.dy);
+    }
+    final center = Offset((minX + maxX) / 2, (minY + maxY) / 2);
+    final scale = factor.clamp(.1, 10).toDouble();
+
+    _snapshot();
+    for (var i = 0; i < _strokes.length; i++) {
+      final stroke = _strokes[i];
+      if (!_selected.contains(stroke.id)) continue;
+      _strokes[i] = stroke.copyWith(
+        points: stroke.points
+            .map((point) => point.copyWith(
+                  position: center + (point.position - center) * scale,
+                ))
+            .toList(),
+        pen: stroke.pen.copyWith(
+          size: (stroke.pen.size * scale).clamp(.5, 60).toDouble(),
+        ),
       );
     }
     _finishDocumentMutation();
@@ -773,65 +815,8 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _repaint.repaint();
   }
 
-  String? _recognizeShape(List<StrokePoint> points) {
-    if (points.length < 8) return null;
-    final first = points.first.position;
-    final last = points.last.position;
-    final width = (last.dx - first.dx).abs();
-    final height = (last.dy - first.dy).abs();
-    final distance = (last - first).distance;
-
-    if (distance > 0 && width > 24 && height < width * .24) {
-      var maxDeviation = 0.0;
-      final line = last - first;
-      for (final point in points) {
-        final v = point.position - first;
-        final cross = (v.dx * line.dy - v.dy * line.dx).abs() /
-            distance;
-        maxDeviation = math.max(maxDeviation, cross);
-      }
-      if (maxDeviation < math.max(8, width * .08)) return 'line';
-    }
-
-    final bounds = _bounds(points);
-    if (bounds.width < 20 || bounds.height < 20) return null;
-
-    final perimeter = 2 * (bounds.width + bounds.height);
-    if (perimeter <= 0) return null;
-
-    var pathLength = 0.0;
-    for (var i = 1; i < points.length; i++) {
-      pathLength +=
-          (points[i].position - points[i - 1].position).distance;
-    }
-
-    final closure = (points.last.position - first).distance;
-    final rectangularity =
-        pathLength / math.max(1, perimeter);
-    if (closure < math.max(18, math.min(bounds.width, bounds.height) * .35) &&
-        rectangularity > .72 &&
-        rectangularity < 2.2) {
-      final aspect = bounds.width / math.max(1, bounds.height);
-      if (aspect > .65 && aspect < 1.55) return 'rectangle';
-      return 'ellipse';
-    }
-
-    return null;
-  }
-
-  Rect _bounds(List<StrokePoint> points) {
-    var left = points.first.position.dx;
-    var right = left;
-    var top = points.first.position.dy;
-    var bottom = top;
-    for (final point in points.skip(1)) {
-      left = math.min(left, point.position.dx);
-      right = math.max(right, point.position.dx);
-      top = math.min(top, point.position.dy);
-      bottom = math.max(bottom, point.position.dy);
-    }
-    return Rect.fromLTRB(left, top, right, bottom);
-  }
+  String? _recognizeShape(List<StrokePoint> points) =>
+      ShapeRecognizer.recognize(points);
 
   double _eraseRadius(double pressure) {
     final normalized =
@@ -960,9 +945,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
 
     _selected.clear();
     for (final stroke in _strokes) {
-      if (stroke.points.any(
-        (point) => _pointInPolygon(point.position, _lasso),
-      )) {
+      if (LassoGeometry.strokeIntersectsPolygon(stroke.points, _lasso)) {
         _selected.add(stroke.id);
       }
     }
@@ -973,22 +956,6 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _repaint.repaint();
   }
 
-  bool _pointInPolygon(Offset point, List<Offset> polygon) {
-    var inside = false;
-    for (var i = 0, j = polygon.length - 1;
-        i < polygon.length;
-        j = i++) {
-      final a = polygon[i];
-      final b = polygon[j];
-      final crosses = (a.dy > point.dy) != (b.dy > point.dy);
-      if (!crosses) continue;
-      final x = (b.dx - a.dx) * (point.dy - a.dy) /
-              math.max(.000001, b.dy - a.dy) +
-          a.dx;
-      if (point.dx < x) inside = !inside;
-    }
-    return inside;
-  }
 
   @override
   Widget build(BuildContext context) {
