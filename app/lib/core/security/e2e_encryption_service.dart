@@ -51,6 +51,46 @@ class SnoteE2EEncryption {
     await _storage.write(key: _enabledKey, value: 'true');
   }
 
+  /// Verifies a recovery passphrase against an encrypted note before storing
+  /// it on this device. The key is not persisted if authentication fails.
+  Future<String> unlockWithPassphrase(
+    String passphrase,
+    String encryptedText,
+  ) async {
+    if (passphrase.trim().length < 8) {
+      throw const FormatException(
+        'Encryption passphrase must contain at least 8 characters.',
+      );
+    }
+    if (!_isEnvelope(encryptedText)) {
+      throw const FormatException('This note does not contain an encryption envelope.');
+    }
+
+    final current = await _storage.read(key: _passphraseKey);
+    if (current != null && current.isNotEmpty && current != passphrase) {
+      throw const StateError(
+        'A different vault passphrase is already configured on this device. '
+        'Decrypt that vault before replacing its passphrase.',
+      );
+    }
+
+    final envelope = jsonDecode(encryptedText);
+    if (envelope is! Map) {
+      throw const FormatException('Invalid encrypted note envelope.');
+    }
+    final salt = base64Url.decode(envelope['salt'].toString());
+    final plainText = utf8.decode(
+      await _decryptBytes(envelope, passphrase, salt),
+    );
+
+    // Validate first, then persist. A mistyped recovery passphrase must not
+    // overwrite local credentials or leave the app in a half-unlocked state.
+    await _ensureSalt();
+    await _storage.write(key: _passphraseKey, value: passphrase);
+    await _storage.write(key: _enabledKey, value: 'true');
+    return plainText;
+  }
+
   Future<void> disable() async {
     await _storage.write(key: _enabledKey, value: 'false');
   }
