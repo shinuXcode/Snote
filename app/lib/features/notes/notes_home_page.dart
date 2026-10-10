@@ -691,7 +691,7 @@ class _SideRail extends StatelessWidget {
               IconButton(
                 onPressed: onToggle,
                 tooltip: expanded ? 'Collapse sidebar' : 'Expand sidebar',
-                icon: Icon(expanded ? Icons.left_panel_close_rounded : Icons.left_panel_open_rounded),
+                icon: Icon(expanded ? Icons.chevron_left_rounded : Icons.chevron_right_rounded),
               ),
             ],
           ),
@@ -980,6 +980,57 @@ class _HierarchyPanel extends StatelessWidget {
           label: const Text('New note here'),
         ),
       ],
+    );
+  }
+}
+
+class _HomeNoteTile extends StatelessWidget {
+  final LocalNote note;
+  final bool selected;
+  final VoidCallback onOpen;
+  final VoidCallback onRename;
+  final VoidCallback onDelete;
+
+  const _HomeNoteTile({
+    required this.note,
+    required this.selected,
+    required this.onOpen,
+    required this.onRename,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      color: selected
+          ? scheme.primaryContainer.withValues(alpha: .65)
+          : scheme.surfaceContainerLow,
+      child: ListTile(
+        leading: const Icon(Icons.description_outlined),
+        title: Text(
+          note.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+        subtitle: Text(note.noteType),
+        onTap: onOpen,
+        trailing: PopupMenuButton<String>(
+          tooltip: 'Note actions',
+          onSelected: (value) {
+            if (value == 'rename') {
+              onRename();
+            } else if (value == 'delete') {
+              onDelete();
+            }
+          },
+          itemBuilder: (_) => const [
+            PopupMenuItem(value: 'rename', child: Text('Rename')),
+            PopupMenuItem(value: 'delete', child: Text('Move to trash')),
+          ],
+        ),
+      ),
     );
   }
 }
