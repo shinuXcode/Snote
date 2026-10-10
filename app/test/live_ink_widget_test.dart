@@ -54,15 +54,20 @@ void main() {
     expect(commitCount, 0);
     final boundary =
         boundaryKey.currentContext!.findRenderObject()! as RenderRepaintBoundary;
-    final image = await boundary.toImage(pixelRatio: 1);
-    final pixels = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    final image = await tester.runAsync(
+      () => boundary.toImage(pixelRatio: 1),
+    );
+    expect(image, isNotNull);
+    final pixels = await tester.runAsync(
+      () => image!.toByteData(format: ui.ImageByteFormat.rawRgba),
+    );
     expect(pixels, isNotNull);
     final localMidpoint = (start + (end - start) / 2) - boundaryRect.topLeft;
     final x = localMidpoint.dx.round().clamp(0, image.width - 1).toInt();
     final y = localMidpoint.dy.round().clamp(0, image.height - 1).toInt();
     final alphaOffset = (y * image.width + x) * 4 + 3;
     expect(pixels!.getUint8(alphaOffset), greaterThan(0));
-    image.dispose();
+    image!.dispose();
 
     await gesture.up();
     await tester.pump();
