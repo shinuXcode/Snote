@@ -76,6 +76,36 @@ void main() {
       expect(ShapeRecognizer.recognize(points), 'rectangle');
     });
 
+    test('does not snap an ordinary triangle to an ellipse', () {
+      const offsets = <Offset>[
+        Offset(50, 0),
+        Offset(40, 15),
+        Offset(30, 30),
+        Offset(20, 45),
+        Offset(10, 60),
+        Offset(0, 80),
+        Offset(20, 80),
+        Offset(40, 80),
+        Offset(60, 80),
+        Offset(80, 80),
+        Offset(100, 80),
+        Offset(90, 65),
+        Offset(80, 50),
+        Offset(70, 35),
+        Offset(60, 20),
+        Offset(50, 0),
+      ];
+      final points = offsets
+          .asMap()
+          .entries
+          .map((entry) => StrokePoint(
+                position: entry.value,
+                timestamp: entry.key * 8,
+              ))
+          .toList();
+      expect(ShapeRecognizer.recognize(points), isNull);
+    });
+
     test('recognizes roughly circular strokes', () {
       final points = List<StrokePoint>.generate(32, (index) {
         final angle = index * 2 * math.pi / 31;
