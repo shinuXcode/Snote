@@ -1221,7 +1221,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
         if (!mounted || generation != _selectionTransformGeneration) return;
         _selectionPaintScheduled = false;
         _recordDocumentPicture();
-        _repaint.repaint();
+        _syncLivePainter();
         setState(() {});
       });
     }
