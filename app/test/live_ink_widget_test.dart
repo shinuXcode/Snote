@@ -58,16 +58,17 @@ void main() {
       () => boundary.toImage(pixelRatio: 1),
     );
     expect(image, isNotNull);
+    final liveImage = image!;
     final pixels = await tester.runAsync(
-      () => image!.toByteData(format: ui.ImageByteFormat.rawRgba),
+      () => liveImage.toByteData(format: ui.ImageByteFormat.rawRgba),
     );
     expect(pixels, isNotNull);
     final localMidpoint = (start + (end - start) / 2) - boundaryRect.topLeft;
-    final x = localMidpoint.dx.round().clamp(0, image.width - 1).toInt();
-    final y = localMidpoint.dy.round().clamp(0, image.height - 1).toInt();
-    final alphaOffset = (y * image.width + x) * 4 + 3;
+    final x = localMidpoint.dx.round().clamp(0, liveImage.width - 1).toInt();
+    final y = localMidpoint.dy.round().clamp(0, liveImage.height - 1).toInt();
+    final alphaOffset = (y * liveImage.width + x) * 4 + 3;
     expect(pixels!.getUint8(alphaOffset), greaterThan(0));
-    image!.dispose();
+    liveImage.dispose();
 
     await gesture.up();
     await tester.pump();
