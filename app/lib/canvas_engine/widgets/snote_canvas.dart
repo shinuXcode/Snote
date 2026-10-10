@@ -318,6 +318,8 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
   bool _selectionTransformX = false;
   bool _selectionTransformY = false;
   bool _selectionTransformChanged = false;
+  bool _selectionPaintScheduled = false;
+  int _selectionTransformGeneration = 0;
   bool _ignorePointer = false;
   bool _temporaryEraser = false;
   bool _eraseSnapshotTaken = false;
@@ -1203,16 +1205,25 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       );
     }
     _selectionTransformChanged = true;
-    // Transforms are uncommon compared with drawing; rebuilding the immutable
-    // picture here keeps the finger-following preview accurate. Persistence
-    // and the spatial index are intentionally deferred until pointer-up.
-    _recordDocumentPicture();
-    _repaint.repaint();
-    if (mounted) setState(() {});
+    // Coalesce many move events into one immutable-picture rebuild per frame.
+    // Expensive indexing and persistence are deferred until pointer-up.
+    if (!_selectionPaintScheduled) {
+      _selectionPaintScheduled = true;
+      final generation = _selectionTransformGeneration;
+      SchedulerBinding.instance.scheduleFrameCallback((_) {
+        if (!mounted || generation != _selectionTransformGeneration) return;
+        _selectionPaintScheduled = false;
+        _recordDocumentPicture();
+        _repaint.repaint();
+        setState(() {});
+      });
+    }
   }
 
   void _finishSelectionTransform() {
     final changed = _selectionTransformChanged;
+    _selectionTransformGeneration++;
+    _selectionPaintScheduled = false;
     _clearSelectionTransformState();
     if (changed) {
       _spatial.rebuild(_strokes);
