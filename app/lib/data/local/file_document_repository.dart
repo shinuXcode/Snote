@@ -5,6 +5,8 @@ import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import 'database.dart';
+import '../../core/config/account_scope.dart';
+import '../../core/security/e2e_encryption_service.dart';
 import 'local_file_store.dart';
 
 class DocumentAsset {
@@ -62,10 +64,13 @@ class FileDocumentRepository {
     Map<String, dynamic>? metadata,
   }) async {
     final id = _uuid.v4();
-    final path = await writeLocalFile(id, name, bytes);
+    final encryption = SnoteE2EEncryption.instance;
+    final encrypted = await encryption.encryptBytes(bytes);
+    final path = await writeLocalFile(id, name, encrypted);
     final data = <String, dynamic>{
       ...(metadata ?? <String, dynamic>{}),
       'name': name,
+      'e2e': encryption.isEncryptedBytes(encrypted),
     };
     final db = await _db;
     await db.insert('attachments', {
@@ -101,7 +106,137 @@ class FileDocumentRepository {
     return rows.map(DocumentAsset.fromRow).toList();
   }
 
-  Future<Uint8List> readBytes(DocumentAsset asset) => readLocalFile(asset.localPath);
+  Future<Uint8List> readBytes(DocumentAsset asset) async {
+    final bytes = await readLocalFile(asset.localPath);
+    return Uint8List.fromList(await SnoteE2EEncryption.instance.decryptBytes(bytes));
+  }
+
+  Future<DocumentAsset?> replaceBytes(DocumentAsset asset, List<int> bytes) async {
+    final encryption = SnoteE2EEncryption.instance;
+    final storedBytes = await encryption.encryptBytes(bytes);
+    final path = await writeLocalFile(asset.id, asset.name, storedBytes);
+    final updatedAt = DateTime.now().millisecondsSinceEpoch;
+    final metadata = <String, dynamic>{
+      ...asset.metadata,
+      'name': asset.name,
+      'updatedAt': updatedAt,
+      'e2e': encryption.isEncryptedBytes(storedBytes),
+    };
+    final db = await _db;
+    await db.update(
+      'attachments',
+      {
+        'local_path': path,
+        'size': bytes.length,
+        'metadata_json': jsonEncode(metadata),
+      },
+      where: 'id = ?',
+      whereArgs: [asset.id],
+    );
+    if (asset.localPath != path) {
+      await deleteLocalFile(asset.localPath);
+    }
+    return DocumentAsset(
+      id: asset.id,
+      noteId: asset.noteId,
+      type: asset.type,
+      localPath: path,
+      name: asset.name,
+      size: bytes.length,
+      isCover: asset.isCover,
+      metadata: metadata,
+    );
+  }
+
+  /// Encrypts existing attachment files without touching already-encrypted
+  /// envelopes. The replacement is written before its database path is saved,
+  /// so a failed write leaves the previous attachment intact.
+  Future<int> encryptExistingAttachments() async {
+    final encryption = SnoteE2EEncryption.instance;
+    if (!await encryption.enabled) return 0;
+
+    final db = await _db;
+    final rows = await db.rawQuery(
+      'SELECT attachments.* FROM attachments '
+      'INNER JOIN notes ON notes.id = attachments.note_id '
+      'WHERE notes.owner_id = ?',
+      <Object?>[SnoteAccountScope.ownerId],
+    );
+    var migrated = 0;
+
+    for (final row in rows) {
+      final asset = DocumentAsset.fromRow(row);
+      final current = await readLocalFile(asset.localPath);
+      if (encryption.isEncryptedBytes(current)) continue;
+
+      final protected = await encryption.encryptBytes(current);
+      final path = await writeLocalFile(asset.id, asset.name, protected);
+      final metadata = <String, dynamic>{
+        ...asset.metadata,
+        'name': asset.name,
+        'e2e': encryption.isEncryptedBytes(protected),
+      };
+      await db.update(
+        'attachments',
+        {
+          'local_path': path,
+          'size': current.length,
+          'metadata_json': jsonEncode(metadata),
+        },
+        where: 'id = ?',
+        whereArgs: <Object?>[asset.id],
+      );
+      if (asset.localPath != path) {
+        await deleteLocalFile(asset.localPath);
+      }
+      migrated++;
+    }
+    return migrated;
+  }
+
+  /// Restores previously encrypted files before the vault key is removed.
+  /// If any file fails authentication, this throws and the caller must retain
+  /// the passphrase so no remaining encrypted attachment becomes inaccessible.
+  Future<int> decryptExistingAttachments() async {
+    final encryption = SnoteE2EEncryption.instance;
+    final db = await _db;
+    final rows = await db.rawQuery(
+      'SELECT attachments.* FROM attachments '
+      'INNER JOIN notes ON notes.id = attachments.note_id '
+      'WHERE notes.owner_id = ?',
+      <Object?>[SnoteAccountScope.ownerId],
+    );
+    var migrated = 0;
+
+    for (final row in rows) {
+      final asset = DocumentAsset.fromRow(row);
+      final current = await readLocalFile(asset.localPath);
+      if (!encryption.isEncryptedBytes(current)) continue;
+
+      final clear = await encryption.decryptBytes(current);
+      final path = await writeLocalFile(asset.id, asset.name, clear);
+      final metadata = <String, dynamic>{
+        ...asset.metadata,
+        'name': asset.name,
+        'e2e': false,
+      };
+      await db.update(
+        'attachments',
+        {
+          'local_path': path,
+          'size': clear.length,
+          'metadata_json': jsonEncode(metadata),
+        },
+        where: 'id = ?',
+        whereArgs: <Object?>[asset.id],
+      );
+      if (asset.localPath != path) {
+        await deleteLocalFile(asset.localPath);
+      }
+      migrated++;
+    }
+    return migrated;
+  }
 
   Future<void> setCover(String id, bool value) async {
     final db = await _db;

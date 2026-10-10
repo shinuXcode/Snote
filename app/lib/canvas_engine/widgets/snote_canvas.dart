@@ -7,10 +7,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:uuid/uuid.dart';
 
+import '../algorithms/ink_hit_testing.dart';
 import '../input/ink_gesture_policy.dart';
 import '../input/ink_input_pipeline.dart';
 import '../input/palm_rejection.dart';
 import '../input/stylus_gesture_lock.dart';
+import '../ink_renderer.dart';
 import '../persistence/ink_commit_queue.dart';
 import '../models/pen_config.dart';
 import '../models/stroke.dart';
@@ -76,36 +78,37 @@ class _LiveInkPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (points.isNotEmpty && pen != null && tool != null) {
       final t = tool!;
-      final synthetic = Stroke(
-        id: 'live',
-        points: points,
-        pen: pen!,
-        shape: t.isShape ? t.name : null,
-        fill: fill,
-        customSides: customSides,
-        stickerText: sticker,
-        fillColor: fillColor,
-      );
-
-      // Reuse the same drawing code as the document layer. Because this
-      // painter is isolated, only the active ink is repainted.
-      SnoteCanvasPainter(
-        strokes: const <Stroke>[],
-        activeStroke: synthetic,
-        activePoints: points,
-        activePen: pen,
-        activeTool: tool,
-        activeFill: fill,
-        activeCustomSides: customSides,
-        activeStickerText: sticker,
-        selectedIds: const <String>{},
-        lassoPath: lassoPath,
-        eraserPoint: eraserPoint,
-        eraserRadius: eraserRadius,
-        showEraserMark: showEraser,
-        drawStrokes: false,
-        drawActive: true,
-      ).paint(canvas, size);
+      if (t.isShape || sticker != null) {
+        final synthetic = Stroke(
+          id: 'live',
+          points: points,
+          pen: pen!,
+          shape: t.isShape ? t.name : null,
+          fill: fill,
+          customSides: customSides,
+          stickerText: sticker,
+          fillColor: fillColor,
+        );
+        SnoteCanvasPainter(
+          strokes: const <Stroke>[],
+          activeStroke: synthetic,
+          activePoints: points,
+          activePen: pen,
+          activeTool: tool,
+          activeFill: fill,
+          activeCustomSides: customSides,
+          activeStickerText: sticker,
+          selectedIds: const <String>{},
+          lassoPath: const <Offset>[],
+          eraserPoint: null,
+          eraserRadius: 0,
+          showEraserMark: false,
+          drawStrokes: false,
+          drawActive: true,
+        ).paint(canvas, size);
+      } else {
+        InkRenderer.drawInk(canvas, points, pen!);
+      }
     }
 
     if (points.isEmpty && lassoPath.length <= 1 && !showEraser) {
@@ -225,6 +228,8 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
   bool _ignorePointer = false;
   bool _temporaryEraser = false;
   bool _eraseSnapshotTaken = false;
+  final Set<int> _touchPointers = <int>{};
+  bool _multiTouchGesture = false;
   bool _latencyScheduled = false;
   DateTime? _lastInputWallClock;
   DateTime? _lastStylusTap;
@@ -272,6 +277,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _commitQueue?.dispose();
     _input?.reset();
     _lock.reset();
+    _touchPointers.clear();
     widget.controller?.unbind();
     _documentPicture?.dispose();
     _repaint.dispose();
@@ -345,6 +351,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       toggleFill: toggleSelectedFill,
       bringToFront: bringSelectionToFront,
       sendToBack: sendSelectionToBack,
+      strokesReader: () => List<Stroke>.of(_strokes),
     );
   }
 
@@ -543,6 +550,15 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
   }
 
   bool _accept(PointerEvent event) {
+    // Touch is intentionally rejected by PalmRejection for stylus-first
+    // devices, but this canvas also supports finger writing when enabled.
+    // Resolve the configured touch policy before applying stylus palm rules.
+    if (event.kind == PointerDeviceKind.touch) {
+      if (_lock.isLocked && widget.gesturePolicy.stylusWinsOverTouch) {
+        return false;
+      }
+      return widget.gesturePolicy.allowsFingerInk();
+    }
     if (!_palm.accepts(event)) return false;
     if (event.kind == PointerDeviceKind.stylus ||
         event.kind == PointerDeviceKind.invertedStylus) {
@@ -553,6 +569,27 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
 
   void _pointerDown(PointerDownEvent event) {
     _recordInput();
+
+    if (event.kind == PointerDeviceKind.touch) {
+      _touchPointers.add(event.pointer);
+      if (_touchPointers.length >= 2) {
+        _multiTouchGesture = true;
+
+        // Once two fingers take over the viewport, cancel every active canvas
+        // operation (including erasing and lasso) and release stylus ownership.
+        // Otherwise the active pointer can become unreachable while the lock
+        // continues rejecting future touches and stylus strokes.
+        _activePointer = -1;
+        _ignorePointer = false;
+        _temporaryEraser = false;
+        _eraseSnapshotTaken = false;
+        _lock.reset();
+        _clearActiveState();
+        return;
+      }
+      if (_multiTouchGesture) return;
+    }
+
     if (!_accept(event) || _activePointer != -1) return;
 
     _ignorePointer = false;
@@ -561,6 +598,8 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     if (isStylus && !_lock.begin(event)) return;
 
     if (isStylus && _isStylusDoubleTap(event)) {
+      // Track this pointer so pointer-up/cancel releases the stylus lock.
+      _activePointer = event.pointer;
       _ignorePointer = true;
       widget.onStylusDoubleTap?.call();
       return;
@@ -681,7 +720,20 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
   }
 
   void _pointerUp(PointerUpEvent event) {
-    if (event.pointer != _activePointer) return;
+    if (event.kind == PointerDeviceKind.touch) {
+      _touchPointers.remove(event.pointer);
+      if (_multiTouchGesture) {
+        if (_touchPointers.isEmpty) _multiTouchGesture = false;
+        return;
+      }
+    }
+
+    if (event.pointer != _activePointer) {
+      // Defensively release a matching lock even if another gesture already
+      // cancelled the active canvas pointer.
+      _lock.end(event);
+      return;
+    }
 
     if (_ignorePointer) {
       _ignorePointer = false;
@@ -717,7 +769,19 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
   }
 
   void _pointerCancel(PointerCancelEvent event) {
-    if (event.pointer != _activePointer) return;
+    // Cancelled touch pointers still count toward the multi-touch state. Remove
+    // them before checking canvas ownership so a cancelled gesture cannot leave
+    // the viewport stuck in multi-touch mode.
+    if (event.kind == PointerDeviceKind.touch) {
+      _touchPointers.remove(event.pointer);
+      if (_touchPointers.isEmpty) _multiTouchGesture = false;
+    }
+
+    if (event.pointer != _activePointer) {
+      _lock.end(event);
+      return;
+    }
+
     _eraseSnapshotTaken = false;
     _temporaryEraser = false;
     _clearActiveState();
@@ -856,12 +920,15 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     }
 
     final radius = _eraseRadius(pressure);
-    final candidates = _spatial.candidates(point, radius);
+    final candidates = _spatial.candidates(point, radius + 30);
     for (final index in candidates) {
       if (index < 0 || index >= _strokes.length) continue;
       final stroke = _strokes[index];
-      if (stroke.points.any(
-        (p) => (p.position - point).distance <= radius,
+      final hitRadius = radius + stroke.pen.size / 2;
+      if (InkHitTesting.polylineTouchesCircle(
+        stroke.points,
+        point,
+        hitRadius,
       )) {
         if (!snapshotAlreadyTaken && !_eraseSnapshotTaken) {
           _snapshot();
@@ -887,15 +954,18 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     }
 
     final radius = _eraseRadius(pressure);
-    final candidates = _spatial.candidates(point, radius);
+    final candidates = _spatial.candidates(point, radius + 30);
     final sorted = candidates.toList()..sort((a, b) => b.compareTo(a));
 
     for (final index in sorted) {
       if (index < 0 || index >= _strokes.length) continue;
       final stroke = _strokes[index];
+      final hitRadius = radius + stroke.pen.size / 2;
       if (stroke.shape != null || stroke.stickerText != null) {
-        if (stroke.points.any(
-          (p) => (p.position - point).distance <= radius,
+        if (InkHitTesting.polylineTouchesCircle(
+          stroke.points,
+          point,
+          hitRadius,
         )) {
           if (!snapshotAlreadyTaken && !_eraseSnapshotTaken) {
             _snapshot();
@@ -908,25 +978,19 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
         continue;
       }
 
-      final pieces = <List<StrokePoint>>[];
-      var current = <StrokePoint>[];
-      for (final sample in stroke.points) {
-        final hit = (sample.position - point).distance <= radius;
-        if (hit) {
-          if (current.isNotEmpty) {
-            pieces.add(current);
-            current = <StrokePoint>[];
-          }
-        } else {
-          current.add(sample);
-        }
-      }
-      if (current.isNotEmpty) pieces.add(current);
-
-      if (pieces.length == 1 &&
-          pieces.first.length == stroke.points.length) {
+      if (!InkHitTesting.polylineTouchesCircle(
+        stroke.points,
+        point,
+        hitRadius,
+      )) {
         continue;
       }
+
+      final pieces = InkHitTesting.subtractCircle(
+        stroke.points,
+        point,
+        hitRadius,
+      );
 
       if (!snapshotAlreadyTaken && !_eraseSnapshotTaken) {
         _snapshot();
@@ -960,9 +1024,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
 
     _selected.clear();
     for (final stroke in _strokes) {
-      if (stroke.points.any(
-        (point) => _pointInPolygon(point.position, _lasso),
-      )) {
+      if (InkHitTesting.polylineIntersectsPolygon(stroke.points, _lasso)) {
         _selected.add(stroke.id);
       }
     }
@@ -971,23 +1033,6 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _notifySelection();
     _clearActiveState();
     _repaint.repaint();
-  }
-
-  bool _pointInPolygon(Offset point, List<Offset> polygon) {
-    var inside = false;
-    for (var i = 0, j = polygon.length - 1;
-        i < polygon.length;
-        j = i++) {
-      final a = polygon[i];
-      final b = polygon[j];
-      final crosses = (a.dy > point.dy) != (b.dy > point.dy);
-      if (!crosses) continue;
-      final x = (b.dx - a.dx) * (point.dy - a.dy) /
-              math.max(.000001, b.dy - a.dy) +
-          a.dx;
-      if (point.dx < x) inside = !inside;
-    }
-    return inside;
   }
 
   @override

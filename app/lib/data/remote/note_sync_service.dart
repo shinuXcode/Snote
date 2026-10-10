@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../local/database.dart';
 import '../../core/config/account_scope.dart';
+import '../../core/security/e2e_encryption_service.dart';
 
 class NoteSyncService {
   final SupabaseClient client;
@@ -65,6 +66,8 @@ class NoteSyncService {
         return _pushNote(db, userId, id);
       case 'folder':
         return _pushFolder(db, userId, id);
+      case 'note-purge':
+        return _purgeRemoteNote(userId, id);
       default:
         return true;
     }
@@ -139,21 +142,25 @@ class NoteSyncService {
       onConflict: 'id',
     );
 
-    if (deleted != null) {
-      await db.delete(
-        'notes',
-        where: 'id = ? AND owner_id = ? AND deleted_at IS NOT NULL',
-        whereArgs: [id, SnoteAccountScope.ownerId],
-      );
-    } else {
-      await db.update(
-        'notes',
-        {'sync_state': 'synced'},
-        where: 'id = ? AND owner_id = ?',
-        whereArgs: [id, SnoteAccountScope.ownerId],
-      );
-    }
+    // Keep synced deletions in the local trash for the retention period.
+    // A dedicated note-purge queue removes the cloud row only after permanent
+    // deletion or expiry of the local retention period.
+    await db.update(
+      'notes',
+      {'sync_state': 'synced'},
+      where: 'id = ? AND owner_id = ?',
+      whereArgs: [id, SnoteAccountScope.ownerId],
+    );
 
+    return true;
+  }
+
+  Future<bool> _purgeRemoteNote(String userId, String id) async {
+    await client
+        .from('notes')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', userId);
     return true;
   }
 
@@ -281,6 +288,22 @@ class NoteSyncService {
     final created =
         parseDate(remote['created_at'])?.millisecondsSinceEpoch ?? updated;
 
+    final incomingContent = remote['content_json'];
+    final encryption = SnoteE2EEncryption.instance;
+    String? storedContent;
+    var needsEncryptedCloudWrite = false;
+    if (incomingContent != null) {
+      final encoded = incomingContent is String
+          ? incomingContent
+          : jsonEncode(incomingContent);
+      final alreadyEncrypted = encryption.isEncryptedText(encoded);
+      storedContent = alreadyEncrypted
+          ? encoded
+          : await encryption.encryptText(encoded);
+      needsEncryptedCloudWrite =
+          !alreadyEncrypted && await encryption.enabled;
+    }
+
     await db.insert(
       'notes',
       {
@@ -290,9 +313,7 @@ class NoteSyncService {
         'folder_id': remote['folder_id'],
         'note_type':
             remote['note_type']?.toString() ?? 'handwriting',
-        'content_json': remote['content_json'] == null
-            ? null
-            : jsonEncode(remote['content_json']),
+        'content_json': storedContent,
         'created_at': local.isNotEmpty
             ? (local.first['created_at'] as num).toInt()
             : created,
@@ -302,7 +323,7 @@ class NoteSyncService {
             : parseDate(remote['deleted_at'])?.millisecondsSinceEpoch,
         'version':
             (remote['version'] as num?)?.toInt() ?? 1,
-        'sync_state': 'synced',
+        'sync_state': needsEncryptedCloudWrite ? 'pending' : 'synced',
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
@@ -312,6 +333,20 @@ class NoteSyncService {
       where: 'entity_type = ? AND entity_id = ? AND owner_id = ?',
       whereArgs: ['note', id, SnoteAccountScope.ownerId],
     );
+    if (needsEncryptedCloudWrite) {
+      await db.insert(
+        'sync_queue',
+        <String, Object?>{
+          'id': DateTime.now().microsecondsSinceEpoch.toString() + '-$id',
+          'owner_id': SnoteAccountScope.ownerId,
+          'entity_type': 'note',
+          'entity_id': id,
+          'operation': 'upsert',
+          'created_at': DateTime.now().millisecondsSinceEpoch,
+          'attempts': 0,
+        },
+      );
+    }
   }
 
   Future<void> _applyRemoteFolder(

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:file_picker/file_picker.dart';
 
+import '../../core/security/e2e_encryption_service.dart';
 import 'folder_repository.dart';
 import 'note_repository.dart';
 
@@ -102,10 +103,12 @@ class NotebookTransferService {
     final bytes = await file.readAsBytes();
     final name = file.name.toLowerCase();
 
-    if (name.endsWith('.json') || (name.endsWith('.snote') && !name.endsWith('.snote.zip'))) {
-      try {
-        return await _importJson(utf8.decode(bytes), fallbackFolderId: targetFolderId);
-      } catch (_) {}
+    if (name.endsWith('.json') ||
+        (name.endsWith('.snote') && !name.endsWith('.snote.zip'))) {
+      return _importJson(
+        utf8.decode(bytes),
+        fallbackFolderId: targetFolderId,
+      );
     }
 
     if (name.endsWith('.md') || name.endsWith('.txt') || name.endsWith('.csv') || name.endsWith('.tsv')) {
@@ -145,15 +148,53 @@ class NotebookTransferService {
       final title = item['title']?.toString().trim();
       if (title == null || title.isEmpty) continue;
       final oldFolderId = item['folderId']?.toString();
-      final note = await repository.create(title: title, folderId: folderMap[oldFolderId] ?? fallbackFolderId);
       final content = item['contentJson'];
+      final encryption = SnoteE2EEncryption.instance;
+
+      // Do not reinterpret ciphertext as ordinary note JSON. If this device
+      // already has a vault key, verify compatibility before creating the note.
+      if (content is String &&
+          content.isNotEmpty &&
+          encryption.isEncryptedText(content) &&
+          await encryption.configured) {
+        await encryption.decryptText(content);
+      }
+
+      final note = await repository.create(
+        title: title,
+        folderId: folderMap[oldFolderId] ?? fallbackFolderId,
+      );
       if (content is String && content.isNotEmpty) {
-        try {
+        if (encryption.isEncryptedText(content)) {
+          if (await encryption.configured) {
+            final decodedContent = await encryption.decryptText(content);
+            final parsed = jsonDecode(decodedContent);
+            if (parsed is! Map) {
+              throw const FormatException('Encrypted note body is invalid.');
+            }
+            await repository.saveContent(
+              note.id,
+              parsed.cast<String, Object?>(),
+            );
+          } else {
+            await repository.saveEncryptedContent(note.id, content);
+          }
+        } else {
           final parsed = jsonDecode(content);
-          if (parsed is Map) await repository.saveContent(note.id, parsed.cast<String, Object?>());
-        } catch (_) {}
+          if (parsed is Map) {
+            await repository.saveContent(
+              note.id,
+              parsed.cast<String, Object?>(),
+            );
+          } else {
+            throw const FormatException('Note content JSON must be an object.');
+          }
+        }
       } else if (content is Map) {
-        await repository.saveContent(note.id, content.cast<String, Object?>());
+        await repository.saveContent(
+          note.id,
+          content.cast<String, Object?>(),
+        );
       }
       imported++;
     }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cryptography_flutter/cryptography_flutter.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 
@@ -9,6 +10,7 @@ import 'data/remote/supabase_service.dart';
 import 'ui/snote_theme.dart';
 
 Future<void> main() async {
+  FlutterCryptography.enable();
   WidgetsFlutterBinding.ensureInitialized();
   await SnoteSupabase.initialize();
   await SnoteThemeController.instance.load();

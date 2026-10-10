@@ -45,12 +45,14 @@ class _NotebookViewportState extends State<NotebookViewport> {
   }
 
   bool get _gestureAllowed =>
-      widget.gesturePolicy.allowsSingleFingerPan() || _touchCount >= 2;
+      widget.allowSingleFingerPan ||
+      widget.gesturePolicy.allowsSingleFingerPan() ||
+      _touchCount >= 2;
 
   void _onScaleStart(ScaleStartDetails details) {
     _gestureStart = _transform;
     _gestureDocumentFocal =
-        _transform.toDocument(details.focalPoint);
+        _transform.toDocument(details.localFocalPoint);
   }
 
   void _onScaleUpdate(ScaleUpdateDetails details) {
@@ -59,7 +61,7 @@ class _NotebookViewportState extends State<NotebookViewport> {
         (_gestureStart.scale * details.scale)
             .clamp(widget.minScale, widget.maxScale)
             .toDouble();
-    final nextPan = details.focalPoint -
+    final nextPan = details.localFocalPoint -
         Offset(
           _gestureDocumentFocal.dx * nextScale,
           _gestureDocumentFocal.dy * nextScale,

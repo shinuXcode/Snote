@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-enum PageTemplate { blank, lined, grid, dotted, cornell, dotGrid, isometric, planner, music, checklist }
+enum PageTemplate { blank, lined, grid, dotted, cornell, dotGrid, isometric, planner, music, checklist, study, math, lecture, meeting, revision, daily }
 
 class PageBackground extends CustomPainter {
   final PageTemplate template;
@@ -68,6 +68,31 @@ class PageBackground extends CustomPainter {
           canvas.drawRect(Rect.fromLTWH(12, y - 10, 14, 14), line);
           canvas.drawLine(Offset(36, y + 3), Offset(size.width, y + 3), line);
         }
+      case PageTemplate.study:
+        for (double y = s * 1.4; y < size.height; y += s * 1.4) {
+          canvas.drawLine(Offset(0, y), Offset(size.width, y), line);
+        }
+        canvas.drawLine(Offset(size.width * .7, 0), Offset(size.width * .7, size.height), line);
+      case PageTemplate.math:
+        for (double x = 0; x < size.width; x += s) canvas.drawLine(Offset(x, 0), Offset(x, size.height), line);
+        for (double y = 0; y < size.height; y += s) canvas.drawLine(Offset(0, y), Offset(size.width, y), line);
+        for (double x = 0; x < size.width; x += s * 5) canvas.drawLine(Offset(x, 0), Offset(x, size.height), line..strokeWidth = 1.1);
+        for (double y = 0; y < size.height; y += s * 5) canvas.drawLine(Offset(0, y), Offset(size.width, y), line);
+      case PageTemplate.lecture:
+        for (double y = s * 1.35; y < size.height; y += s * 1.35) canvas.drawLine(Offset(0, y), Offset(size.width, y), line);
+        canvas.drawLine(Offset(size.width * .16, 0), Offset(size.width * .16, size.height), line);
+        canvas.drawLine(Offset(size.width * .78, 0), Offset(size.width * .78, size.height), line);
+      case PageTemplate.meeting:
+        for (double y = s; y < s * 4; y += s) canvas.drawLine(Offset(0, y), Offset(size.width, y), line);
+        canvas.drawRect(Rect.fromLTWH(size.width * .62, s * 4, size.width * .34, size.height - s * 5), line..style = PaintingStyle.stroke);
+        for (double y = s * 5; y < size.height; y += s) canvas.drawLine(Offset(0, y), Offset(size.width * .58, y), line);
+      case PageTemplate.revision:
+        for (double y = s; y < size.height - s * 4; y += s) canvas.drawLine(Offset(0, y), Offset(size.width, y), line);
+        canvas.drawLine(Offset(0, size.height - s * 3), Offset(size.width, size.height - s * 3), line);
+        canvas.drawLine(Offset(0, size.height - s * 2), Offset(size.width, size.height - s * 2), line);
+      case PageTemplate.daily:
+        canvas.drawLine(Offset(0, s * 2), Offset(size.width, s * 2), line);
+        for (double y = s * 3; y < size.height; y += s * 1.4) canvas.drawLine(Offset(0, y), Offset(size.width, y), line);
     }
 
     if (cornellAssist && template != PageTemplate.cornell) _cornell(canvas, size);

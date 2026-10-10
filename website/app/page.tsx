@@ -3,6 +3,10 @@ import MotionHero from "../components/MotionHero";
 import Reveal from "../components/Reveal";
 
 const features=[
+  ["08","PDF workspace","Import, read, search and select PDF text; highlight, underline and strikeout text; write with pressure-aware ink; insert, rotate, crop and reorder pages."],
+  ["09","Secure by design","Optional AES-256-GCM end-to-end encryption protects note payloads before local storage and cloud sync."],
+  ["10","Live vector ink","Raw stylus samples stream into a separate live renderer with pressure, tilt and prediction before final commit."],
+  ["11","Smart Templates","Study, Math, Lecture, Meeting, Revision and Daily layouts sit beside the core paper templates."],
   ["00","Folders","Nested folders live outside the note editor so notebooks stay organized."],
   ["05","Floating tools","Move the pen palette anywhere and snap it to an edge like a dock."],
   ["06","Secure notes","Per-note passwords stay separate from the device lock."],
@@ -16,6 +20,14 @@ const features=[
 export default function Home(){
   return <>
     <MotionHero />
+    <section className="shell">
+      <div className="card accent-panel" style={{marginTop:24}}>
+        <div className="eyebrow">Notification center</div>
+        <h2>What’s new in Snote 1.1.0</h2>
+        <p className="muted">PDF annotation, live ink controls, Smart Templates, writing gestures and optional end-to-end encryption.</p>
+        <div className="row"><Link className="cta" href="/download">View 1.1.0 downloads</Link><Link className="ghost-cta" href="https://instagram.com/">Instagram</Link></div>
+      </div>
+    </section>
     <main className="shell">
       <section className="section">
         <Reveal>

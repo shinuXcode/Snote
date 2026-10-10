@@ -1,9 +1,9 @@
 import Link from "next/link";
 import Reveal from "../../components/Reveal";
 
-const version = "1.0.0";
-const releasePage = "https://github.com/shinuXcode/Snote/releases/tag/v1.0.0";
-const assetBase = "https://github.com/shinuXcode/Snote/releases/download/v1.0.0";
+const version = "1.1.0";
+const releasePage = "https://github.com/shinuXcode/Snote/releases/tag/v1.1.0";
+const assetBase = "https://github.com/shinuXcode/Snote/releases/download/v1.1.0";
 const web = process.env.NEXT_PUBLIC_SNOTE_WEB_APP_URL || assetBase + "/Snote-Web.tar.gz";
 
 const builds = [
@@ -31,7 +31,7 @@ export default function Page() {
           <div className="eyebrow">Release status</div>
           <h2>Verified builds only.</h2>
           <p className="muted">
-            Downloads become active automatically when the v1.0.0 release finishes its production verification.
+            Downloads are published only after the v1.1.0 production release workflow completes.
           </p>
           <a className="cta" href={releasePage}>
             Open Snote releases
@@ -44,7 +44,7 @@ export default function Page() {
           <div className="eyebrow">Release history</div>
           <p className="muted">Snote keeps previous releases available so users can stay on an older build when needed.</p>
           <div className="row">
-            <a className="ghost-cta" href="https://github.com/shinuXcode/Snote/releases/tag/v1.0.0">Snote 1.0.0</a>
+            <a className="ghost-cta" href="https://github.com/shinuXcode/Snote/releases/tag/v1.1.0">Snote 1.1.0</a>
             <a className="ghost-cta" href="https://github.com/shinuXcode/Snote/releases/tag/v0.6.0">Snote 0.6.0</a>
           </div>
         </div>

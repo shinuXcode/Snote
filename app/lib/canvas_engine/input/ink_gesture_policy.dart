@@ -6,10 +6,12 @@ import 'package:flutter/gestures.dart';
 class InkGesturePolicy {
   final bool allowSingleFingerPan;
   final bool stylusWinsOverTouch;
+  final bool allowFingerInk;
 
   const InkGesturePolicy({
     this.allowSingleFingerPan = false,
     this.stylusWinsOverTouch = true,
+    this.allowFingerInk = true,
   });
 
   bool isViewportDevice(PointerDeviceKind kind) =>
@@ -20,4 +22,6 @@ class InkGesturePolicy {
       kind == PointerDeviceKind.invertedStylus;
 
   bool allowsSingleFingerPan() => allowSingleFingerPan;
+
+  bool allowsFingerInk() => allowFingerInk;
 }

@@ -40,6 +40,10 @@ jobs:
           flutter create --platforms=android,web --org=com.snote .
           rm -f test/widget_test.dart
 
+      - name: Clean
+        working-directory: app
+        run: flutter clean
+
       - name: Configure camera permissions
         working-directory: app
         run: |
@@ -61,10 +65,6 @@ jobs:
       - name: Generate launcher icons
         working-directory: app
         run: dart run launcher_icons
-
-      - name: Clean
-        working-directory: app
-        run: flutter clean
 
       - name: Format
         working-directory: app

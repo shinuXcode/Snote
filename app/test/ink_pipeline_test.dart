@@ -185,4 +185,29 @@ void main() {
       closeTo(documentPoint.dy, .0001),
     );
   });
+
+
+  test('live tip follows sub-pixel movement suppressed from canonical samples', () {
+    final pipeline = InkInputPipeline();
+    pipeline.begin(
+      const PointerDownEvent(
+        pointer: 1,
+        kind: PointerDeviceKind.stylus,
+        position: Offset(10, 10),
+        timeStamp: Duration.zero,
+      ),
+    );
+
+    final frame = pipeline.update(
+      const PointerMoveEvent(
+        pointer: 1,
+        kind: PointerDeviceKind.stylus,
+        position: Offset(10.02, 10.02),
+        timeStamp: Duration(microseconds: 500),
+      ),
+    );
+
+    expect(frame.realPoints, hasLength(1));
+    expect(frame.livePoints.last.position, const Offset(10.02, 10.02));
+  });
 }

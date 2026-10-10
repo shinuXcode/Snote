@@ -6,7 +6,9 @@ import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import 'database.dart';
+import 'local_file_store.dart';
 import '../../core/config/account_scope.dart';
+import '../../core/security/e2e_encryption_service.dart';
 
 String _encodeNoteContent(Map<String, Object?> content) => jsonEncode(content);
 
@@ -122,7 +124,7 @@ class NoteRepository {
     );
 
     if (rows.isEmpty) return null;
-    return LocalNote.fromMap(rows.first);
+    return _hydrate(rows.first);
   }
 
   Future<List<LocalNote>> list({String? folderId}) async {
@@ -145,7 +147,7 @@ class NoteRepository {
       orderBy: 'updated_at DESC',
     );
 
-    return rows.map(LocalNote.fromMap).toList();
+    return Future.wait(rows.map(_hydrate));
   }
 
   Future<List<LocalNote>> listAllVisible() async {
@@ -159,11 +161,44 @@ class NoteRepository {
     return rows.map(LocalNote.fromMap).toList();
   }
 
+  Future<LocalNote> _hydrate(Map<String, Object?> row) async {
+    final note = LocalNote.fromMap(row);
+    final content = note.contentJson;
+    if (content == null || content.isEmpty) return note;
+    final encryption = SnoteE2EEncryption.instance;
+    if (encryption.isEncryptedText(content) && !await encryption.configured) {
+      // Keep encrypted notes visible in the notebook list on a second device.
+      // The editor presents the recovery-passphrase flow before parsing content.
+      return note;
+    }
+    String decrypted;
+    try {
+      decrypted = await encryption.decryptText(content);
+    } catch (_) {
+      // Keep the note list usable when this device has not yet been given the
+      // correct recovery passphrase. The editor offers an explicit unlock flow.
+      return note;
+    }
+    if (identical(decrypted, content)) return note;
+    return LocalNote(
+      id: note.id,
+      title: note.title,
+      folderId: note.folderId,
+      noteType: note.noteType,
+      contentJson: decrypted,
+      createdAt: note.createdAt,
+      updatedAt: note.updatedAt,
+      deletedAt: note.deletedAt,
+      version: note.version,
+    );
+  }
+
   Future<void> saveContent(
     String id,
     Map<String, Object?> content,
   ) async {
     final encoded = await compute(_encodeNoteContent, content);
+    final stored = await SnoteE2EEncryption.instance.encryptText(encoded);
     final db = await _db;
 
     await db.transaction((tx) async {
@@ -183,7 +218,7 @@ class NoteRepository {
         'notes',
         {
           'owner_id': SnoteAccountScope.ownerId,
-          'content_json': encoded,
+          'content_json': stored,
           'updated_at': DateTime.now().millisecondsSinceEpoch,
           'version': currentVersion + 1,
           'sync_state': 'pending',
@@ -195,6 +230,96 @@ class NoteRepository {
 
       await _queue(tx, id, 'upsert');
     });
+  }
+
+  /// Stores an already-encrypted Snote envelope without encrypting it a
+  /// second time. Used by secure notebook imports when the recovery key is not
+  /// currently available on this device.
+  Future<void> saveEncryptedContent(String id, String envelope) async {
+    final encryption = SnoteE2EEncryption.instance;
+    if (!encryption.isEncryptedText(envelope)) {
+      throw const FormatException('Invalid Snote encrypted note envelope.');
+    }
+
+    final db = await _db;
+    await db.transaction((tx) async {
+      final rows = await tx.query(
+        'notes',
+        columns: <String>['version'],
+        where: 'id = ? AND owner_id = ?',
+        whereArgs: <Object?>[id, SnoteAccountScope.ownerId],
+        limit: 1,
+      );
+      if (rows.isEmpty) {
+        throw StateError('Cannot save content for a note that does not exist.');
+      }
+
+      final version = (rows.first['version'] as num?)?.toInt() ?? 1;
+      await tx.update(
+        'notes',
+        <String, Object?>{
+          'content_json': envelope,
+          'updated_at': DateTime.now().millisecondsSinceEpoch,
+          'version': version + 1,
+          'sync_state': 'pending',
+          'deleted_at': null,
+        },
+        where: 'id = ? AND owner_id = ?',
+        whereArgs: <Object?>[id, SnoteAccountScope.ownerId],
+      );
+      await _queue(tx, id, 'upsert');
+    });
+  }
+
+  Future<int> encryptExistingNotes() async {
+    if (!(await SnoteE2EEncryption.instance.enabled)) return 0;
+    final db = await _db;
+    final rows = await db.query(
+      'notes',
+      columns: ['id', 'content_json'],
+      where: 'owner_id = ? AND content_json IS NOT NULL',
+      whereArgs: [SnoteAccountScope.ownerId],
+    );
+    var count = 0;
+    for (final row in rows) {
+      final raw = row['content_json']?.toString();
+      if (raw == null || raw.isEmpty || SnoteE2EEncryption.instance.isEncryptedText(raw)) continue;
+      final encrypted = await SnoteE2EEncryption.instance.encryptText(raw);
+      if (encrypted == raw) continue;
+      await db.update('notes', {
+        'content_json': encrypted,
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+        'sync_state': 'pending',
+      }, where: 'id = ? AND owner_id = ?', whereArgs: [row['id'], SnoteAccountScope.ownerId]);
+      await _queue(db, row['id']!.toString(), 'upsert');
+      count++;
+    }
+    return count;
+  }
+
+  Future<int> decryptExistingNotes() async {
+    final db = await _db;
+    final rows = await db.query(
+      'notes',
+      columns: ['id', 'content_json'],
+      where: 'owner_id = ? AND content_json IS NOT NULL',
+      whereArgs: [SnoteAccountScope.ownerId],
+    );
+    var count = 0;
+    for (final row in rows) {
+      final raw = row['content_json']?.toString();
+      if (raw == null || raw.isEmpty) continue;
+      final plain = await SnoteE2EEncryption.instance.decryptText(raw);
+      if (plain == raw) continue;
+      await db.update('notes', {
+        'content_json': plain,
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+        'sync_state': 'pending',
+      }, where: 'id = ? AND owner_id = ?', whereArgs: [row['id'], SnoteAccountScope.ownerId]);
+      await _queue(db, row['id']!.toString(), 'upsert');
+      count++;
+    }
+    return count;
   }
 
   Future<void> rename(String id, String title) async {
@@ -252,28 +377,52 @@ class NoteRepository {
 
   Future<void> permanentlyDelete(String id) async {
     final db = await _db;
+    final localPaths = <String>[];
+
     await db.transaction((tx) async {
-      await tx.delete(
-        'sync_queue',
-        where: 'entity_id = ? AND owner_id = ?',
-        whereArgs: [id, SnoteAccountScope.ownerId],
+      final owned = await tx.query(
+        'notes',
+        columns: <String>['id'],
+        where: 'id = ? AND owner_id = ?',
+        whereArgs: <Object?>[id, SnoteAccountScope.ownerId],
+        limit: 1,
       );
+      if (owned.isEmpty) return;
+
+      final attachments = await tx.query(
+        'attachments',
+        columns: <String>['local_path'],
+        where: 'note_id = ?',
+        whereArgs: <Object?>[id],
+      );
+      localPaths.addAll(
+        attachments
+            .map((row) => row['local_path']?.toString())
+            .whereType<String>()
+            .where((path) => path.isNotEmpty),
+      );
+
+      await _queuePurge(tx, id);
       await tx.delete(
         'attachments',
         where: 'note_id = ?',
-        whereArgs: [id],
+        whereArgs: <Object?>[id],
       );
       await tx.delete(
         'pages',
         where: 'note_id = ?',
-        whereArgs: [id],
+        whereArgs: <Object?>[id],
       );
       await tx.delete(
         'notes',
         where: 'id = ? AND owner_id = ?',
-        whereArgs: [id, SnoteAccountScope.ownerId],
+        whereArgs: <Object?>[id, SnoteAccountScope.ownerId],
       );
     });
+
+    for (final path in localPaths) {
+      await deleteLocalFile(path);
+    }
   }
 
   Future<void> restore(String id) async {
@@ -295,12 +444,63 @@ class NoteRepository {
 
   Future<void> purgeExpiredTrash() async {
     final db = await _db;
-    final cutoff = DateTime.now().subtract(const Duration(days: 30)).millisecondsSinceEpoch;
-    await db.delete(
-      'notes',
-      where: 'owner_id = ? AND deleted_at IS NOT NULL AND deleted_at < ?',
-      whereArgs: [SnoteAccountScope.ownerId, cutoff],
-    );
+    final cutoff = DateTime.now()
+        .subtract(const Duration(days: 30))
+        .millisecondsSinceEpoch;
+    final localPaths = <String>[];
+
+    await db.transaction((tx) async {
+      final expiredRows = await tx.query(
+        'notes',
+        columns: <String>['id'],
+        where: 'owner_id = ? AND deleted_at IS NOT NULL AND deleted_at < ?',
+        whereArgs: <Object?>[SnoteAccountScope.ownerId, cutoff],
+      );
+      final ids = expiredRows
+          .map((row) => row['id']?.toString())
+          .whereType<String>()
+          .where((id) => id.isNotEmpty)
+          .toList();
+      if (ids.isEmpty) return;
+
+      final placeholders = List<String>.filled(ids.length, '?').join(',');
+      final attachments = await tx.query(
+        'attachments',
+        columns: <String>['local_path'],
+        where: 'note_id IN ($placeholders)',
+        whereArgs: ids,
+      );
+      localPaths.addAll(
+        attachments
+            .map((row) => row['local_path']?.toString())
+            .whereType<String>()
+            .where((path) => path.isNotEmpty),
+      );
+
+      for (final id in ids) {
+        await _queuePurge(tx, id);
+      }
+
+      await tx.delete(
+        'attachments',
+        where: 'note_id IN ($placeholders)',
+        whereArgs: ids,
+      );
+      await tx.delete(
+        'pages',
+        where: 'note_id IN ($placeholders)',
+        whereArgs: ids,
+      );
+      await tx.delete(
+        'notes',
+        where: 'owner_id = ? AND id IN ($placeholders)',
+        whereArgs: <Object?>[SnoteAccountScope.ownerId, ...ids],
+      );
+    });
+
+    for (final path in localPaths) {
+      await deleteLocalFile(path);
+    }
   }
 
   Future<void> delete(String id) async {
@@ -364,7 +564,7 @@ class NoteRepository {
     final updated = updatedDate.millisecondsSinceEpoch;
     final local = await get(id);
 
-    if (local != null && local.updatedAt > updated) return;
+    if (local != null && local.updatedAt >= updated) return;
 
     final created =
         parseDate(remote['created_at'])?.millisecondsSinceEpoch ?? updated;
@@ -372,6 +572,22 @@ class NoteRepository {
         parseDate(remote['deleted_at'])?.millisecondsSinceEpoch;
 
     final db = await _db;
+
+    final incomingContent = remote['content_json'];
+    final encryption = SnoteE2EEncryption.instance;
+    String? storedContent;
+    var needsEncryptedCloudWrite = false;
+    if (incomingContent != null) {
+      final encoded = incomingContent is String
+          ? incomingContent
+          : jsonEncode(incomingContent);
+      final alreadyEncrypted = encryption.isEncryptedText(encoded);
+      storedContent = alreadyEncrypted
+          ? encoded
+          : await encryption.encryptText(encoded);
+      needsEncryptedCloudWrite =
+          !alreadyEncrypted && await encryption.enabled;
+    }
 
     await db.insert(
       'notes',
@@ -382,15 +598,13 @@ class NoteRepository {
         'folder_id': remote['folder_id']?.toString(),
         'note_type':
             remote['note_type']?.toString() ?? 'handwriting',
-        'content_json': remote['content_json'] == null
-            ? null
-            : jsonEncode(remote['content_json']),
+        'content_json': storedContent,
         'created_at': local?.createdAt ?? created,
         'updated_at': updated,
         'deleted_at': deleted,
         'version':
             (remote['version'] as num?)?.toInt() ?? 1,
-        'sync_state': 'synced',
+        'sync_state': needsEncryptedCloudWrite ? 'pending' : 'synced',
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
@@ -400,6 +614,9 @@ class NoteRepository {
       where: 'entity_type = ? AND entity_id = ? AND owner_id = ?',
       whereArgs: ['note', id, SnoteAccountScope.ownerId],
     );
+    if (needsEncryptedCloudWrite) {
+      await _queue(db, id, 'upsert');
+    }
   }
 
   Future<void> _queue(
@@ -421,6 +638,29 @@ class NoteRepository {
         'entity_type': 'note',
         'entity_id': id,
         'operation': operation,
+        'created_at': DateTime.now().millisecondsSinceEpoch,
+        'attempts': 0,
+      },
+    );
+  }
+
+  Future<void> _queuePurge(DatabaseExecutor db, String id) async {
+    // Remove stale upserts so a permanent deletion cannot be undone by sync.
+    await db.delete(
+      'sync_queue',
+      where: 'entity_id = ? AND owner_id = ?',
+      whereArgs: <Object?>[id, SnoteAccountScope.ownerId],
+    );
+    if (!SnoteAccountScope.isCloudAccount) return;
+
+    await db.insert(
+      'sync_queue',
+      <String, Object?>{
+        'id': _uuid.v4(),
+        'owner_id': SnoteAccountScope.ownerId,
+        'entity_type': 'note-purge',
+        'entity_id': id,
+        'operation': 'delete',
         'created_at': DateTime.now().millisecondsSinceEpoch,
         'attempts': 0,
       },
