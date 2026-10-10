@@ -36,6 +36,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
 
   List<LocalFolder> _allFolders = const [];
   List<LocalNote> _noteList = const [];
+  List<LocalNote> _recentNotes = const [];
   bool _sidebarCollapsed = false;
   bool _gridView = true;
   String? _folderId;
@@ -60,6 +61,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
   Future<void> _load() async {
     final allFolders = await _folders.listAllVisible();
     final notes = await _notes.list(folderId: _folderId);
+    final recentNotes = await _notes.listAllVisible();
     if (!mounted) return;
     final selectedId = _selected?.id;
     final visible = notes.where(_matchesSearch).toList();
@@ -69,6 +71,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
     setState(() {
       _allFolders = allFolders;
       _noteList = notes;
+      _recentNotes = recentNotes;
       _selected = selected;
       _loading = false;
     });
@@ -113,9 +116,34 @@ class _NotesHomePageState extends State<NotesHomePage> {
   }
 
   Future<void> _openNote(LocalNote note) async {
-    setState(() => _selected = note);
+    if (note.folderId != _folderId) {
+      final byId = {for (final item in _allFolders) item.id: item};
+      final path = <LocalFolder>[];
+      final seen = <String>{};
+      LocalFolder? current =
+          note.folderId == null ? null : byId[note.folderId];
+      while (current != null && seen.add(current.id)) {
+        path.add(current);
+        current = current.parentId == null ? null : byId[current.parentId];
+      }
+      setState(() {
+        _breadcrumbs
+          ..clear()
+          ..addAll(path.reversed);
+        _folderId = note.folderId;
+        _selected = note;
+      });
+      await _load();
+    } else {
+      setState(() => _selected = note);
+    }
+
+    if (!mounted) return;
     if (MediaQuery.sizeOf(context).width < 900) {
-      await Navigator.push(context, MaterialPageRoute(builder: (_) => NoteEditorPage(note: note)));
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => NoteEditorPage(note: note)),
+      );
       await _load();
     }
   }
@@ -499,6 +527,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
                       width: 380,
                       child: _HierarchyPanel(
                         allFolders: _allFolders,
+                        recentNotes: _recentNotes,
                         currentFolderId: _folderId,
                         notes: _filteredNotes,
                         selected: _selected,
@@ -598,6 +627,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
           child: _HierarchyPanel(
             compact: true,
             allFolders: _allFolders,
+            recentNotes: _recentNotes,
             currentFolderId: _folderId,
             notes: _filteredNotes,
             selected: _selected,
@@ -794,6 +824,7 @@ class _Breadcrumbs extends StatelessWidget {
 
 class _HierarchyPanel extends StatelessWidget {
   final List<LocalFolder> allFolders;
+  final List<LocalNote> recentNotes;
   final String? currentFolderId;
   final List<LocalNote> notes;
   final LocalNote? selected;
@@ -814,6 +845,7 @@ class _HierarchyPanel extends StatelessWidget {
 
   const _HierarchyPanel({
     required this.allFolders,
+    required this.recentNotes,
     required this.currentFolderId,
     required this.notes,
     required this.selected,
@@ -862,7 +894,75 @@ class _HierarchyPanel extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 4),
-        if (allFolders.isEmpty && notes.isEmpty)
+        if (currentFolderId == null && recentNotes.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
+            child: Text(
+              'Quick recents',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          SizedBox(
+            height: 78,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: recentNotes.take(6).length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final note = recentNotes[index];
+                return SizedBox(
+                  width: compact ? 156 : 174,
+                  child: Card(
+                    margin: EdgeInsets.zero,
+                    color: theme.colorScheme.surfaceContainerLow,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () => onOpenNote(note),
+                      child: Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.history_rounded,
+                              color: theme.colorScheme.primary,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    note.title,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    note.noteType,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.labelSmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+        if (allFolders.isEmpty && notes.isEmpty && recentNotes.isEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 24, horizontal: 18),
             child: Column(
