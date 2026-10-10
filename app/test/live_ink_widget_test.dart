@@ -58,8 +58,8 @@ void main() {
     final pixels = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
     expect(pixels, isNotNull);
     final localMidpoint = (start + (end - start) / 2) - boundaryRect.topLeft;
-    final x = localMidpoint.dx.round().clamp(0, image.width - 1);
-    final y = localMidpoint.dy.round().clamp(0, image.height - 1);
+    final x = localMidpoint.dx.round().clamp(0, image.width - 1).toInt();
+    final y = localMidpoint.dy.round().clamp(0, image.height - 1).toInt();
     final alphaOffset = (y * image.width + x) * 4 + 3;
     expect(pixels!.getUint8(alphaOffset), greaterThan(0));
     image.dispose();
