@@ -68,6 +68,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   Timer? _saveTimer;
   bool _savePending = false;
   bool _saveInFlight = false;
+  StateSetter? _templateSheetRefresh;
 
   Map<String, Object?> get pageData => _pages[_page];
   PenConfig get pen {
@@ -428,7 +429,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     PointerDeviceKind.touch,
                     PointerDeviceKind.trackpad,
                   },
-                  onHorizontalDragEnd: _pan ? null : _pageSwipe,
+                  onHorizontalDragEnd: (_pan || _selected > 0) ? null : _pageSwipe,
                   onDoubleTap: () => setState(() => _toolbar = !_toolbar),
                   onLongPress: _settings.getBool('fingerLongPressSelection')
                       ? () => _selectTool(CanvasTool.lasso)
@@ -437,7 +438,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                 ),
               ),
               if (!_full) _header(),
-              if (!_full && _settings.getBool('showPageNavigation')) _pageControls(),
+              if (!_full) _fixedLeftRail(),
+              if (!_full) _fixedRightRail(),
               if (_preview && !_full) _previewRail(),
               if (_toolbar && _draw) _toolbarWidget(),
               if (_shapePanel && !_full) _shapePanelWidget(),
@@ -563,7 +565,15 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       allowSingleFingerPan: _pan,
       minScale: .5,
       maxScale: 4,
-      child: child,
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: _full ? 0 : 44,
+          right: _full ? 0 : 42,
+          top: _full ? 0 : 46,
+          bottom: _full ? 0 : 12,
+        ),
+        child: child,
+      ),
     );
   }
 
@@ -587,25 +597,207 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         right: 0,
         top: 0,
         child: Material(
-          color: Theme.of(context).colorScheme.surface.withValues(alpha: .96),
+          color: Theme.of(context).colorScheme.surface.withValues(alpha: .98),
           child: SizedBox(
-            height: 58,
+            height: 46,
             child: Row(children: [
-              IconButton(onPressed: () async { await _flushSave(); if (mounted) Navigator.maybePop(context); }, icon: const Icon(Icons.arrow_back_rounded)),
-              Expanded(child: TextField(controller: _title, decoration: const InputDecoration(border: InputBorder.none, hintText: 'Untitled note'), onSubmitted: (_) => _save())),
-              IconButton(tooltip: 'Pages', onPressed: () => setState(() => _preview = !_preview), icon: const Icon(Icons.view_sidebar_outlined)),
-              IconButton(tooltip: 'Paper', onPressed: _paperSheet, icon: const Icon(Icons.grid_4x4_rounded)),
-              IconButton(tooltip: _locked ? 'Unlock' : 'Lock', onPressed: _lockNote, icon: Icon(_locked ? Icons.lock_rounded : Icons.lock_outline_rounded)),
-              AnimatedBuilder(animation: _canvas, builder: (_, __) => Row(children: [
-                IconButton(onPressed: _canvas.canUndo ? _canvas.undo : null, icon: const Icon(Icons.undo_rounded)),
-                IconButton(onPressed: _canvas.canRedo ? _canvas.redo : null, icon: const Icon(Icons.redo_rounded)),
-              ])),
-              IconButton(tooltip: 'Fullscreen', onPressed: _toggleFullscreen, icon: Icon(_full ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded)),
-              IconButton(tooltip: 'Settings', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage())).then((_) => _keepAwake()), icon: const Icon(Icons.settings_outlined)),
+              _compactAction(
+                tooltip: 'Back to notes',
+                icon: Icons.menu_rounded,
+                onPressed: () async { await _flushSave(); if (mounted) Navigator.maybePop(context); },
+              ),
+              AnimatedBuilder(
+                animation: _canvas,
+                builder: (_, __) => Row(mainAxisSize: MainAxisSize.min, children: [
+                  _compactAction(tooltip: 'Undo', icon: Icons.undo_rounded, onPressed: _canvas.canUndo ? _canvas.undo : null),
+                  _compactAction(tooltip: 'Redo', icon: Icons.redo_rounded, onPressed: _canvas.canRedo ? _canvas.redo : null),
+                ]),
+              ),
+              Expanded(
+                child: TextField(
+                  controller: _title,
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                    border: InputBorder.none,
+                    hintText: 'Untitled note',
+                  ),
+                  onSubmitted: (_) => _save(force: true),
+                ),
+              ),
+              _compactAction(tooltip: 'Pages / thumbnails', icon: Icons.view_sidebar_outlined, onPressed: () => setState(() => _preview = !_preview)),
+              _compactAction(tooltip: 'Page templates', icon: Icons.grid_4x4_rounded, onPressed: _paperSheet),
+              _compactAction(tooltip: 'Shapes and diagrams', icon: Icons.category_outlined, onPressed: () => setState(() => _shapePanel = !_shapePanel)),
+              _compactAction(tooltip: _draw ? 'Text mode' : 'Handwriting mode', icon: _draw ? Icons.text_fields_rounded : Icons.draw_rounded, onPressed: () => setState(() => _draw = !_draw)),
+              _compactAction(tooltip: 'Lock note', icon: _locked ? Icons.lock_rounded : Icons.lock_outline_rounded, onPressed: _lockNote),
+              _compactAction(tooltip: 'Fullscreen', icon: _full ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded, onPressed: _toggleFullscreen),
+              _compactAction(tooltip: 'Settings', icon: Icons.settings_outlined, onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage())).then((_) => _keepAwake())),
             ]),
           ),
         ),
       );
+
+  Widget _compactAction({
+    required String tooltip,
+    required IconData icon,
+    required VoidCallback? onPressed,
+  }) => IconButton(
+        onPressed: onPressed,
+        tooltip: tooltip,
+        constraints: const BoxConstraints.tightFor(width: 34, height: 40),
+        padding: EdgeInsets.zero,
+        visualDensity: VisualDensity.compact,
+        icon: Icon(icon, size: 20),
+      );
+
+  Widget _fixedLeftRail() {
+    final tools = <CanvasTool>[
+      CanvasTool.ballpoint, CanvasTool.fountain, CanvasTool.pencil,
+      CanvasTool.highlighter, CanvasTool.marker, CanvasTool.brush,
+      CanvasTool.eraser, CanvasTool.pixelEraser, CanvasTool.lasso,
+      CanvasTool.line, CanvasTool.arrow, CanvasTool.rectangle,
+      CanvasTool.ellipse, CanvasTool.triangle, CanvasTool.diamond,
+      CanvasTool.hexagon, CanvasTool.star,
+    ];
+    return Positioned(
+      left: 0,
+      top: 46,
+      bottom: 0,
+      width: 44,
+      child: Material(
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: .96),
+        child: SafeArea(
+          top: false,
+          bottom: false,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(vertical: 5),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              for (final tool in tools.take(9))
+                _railToolButton(tool),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                child: Divider(height: 1),
+              ),
+              _railButton('Text box', Icons.text_fields_rounded, () => setState(() => _draw = false)),
+              _railButton('Shapes and diagrams', Icons.category_outlined, () => setState(() => _shapePanel = !_shapePanel)),
+              _railToolButton(CanvasTool.lasso),
+              for (final tool in tools.skip(9))
+                _railToolButton(tool),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                child: Divider(height: 1),
+              ),
+              for (final color in _penPalette.take(16))
+                InkWell(
+                  tooltip: 'Pen color: #${color.value.toRadixString(16).padLeft(8, '0')}',
+                  onTap: () => setState(() => _penColor = color),
+                  child: SizedBox(
+                    width: 34,
+                    height: 25,
+                    child: Center(
+                      child: Container(
+                        width: _penColor.value == color.value ? 19 : 14,
+                        height: _penColor.value == color.value ? 19 : 14,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: _penColor.value == color.value ? Theme.of(context).colorScheme.primary : Colors.black26, width: _penColor.value == color.value ? 2 : 1),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                child: Divider(height: 1),
+              ),
+              _railButton('Paper template', Icons.grid_4x4_rounded, _paperSheet),
+              _railButton('Floating toolbox', Icons.drag_indicator_rounded, () => setState(() => _toolbar = !_toolbar)),
+              _railButton('Pan and zoom', Icons.pan_tool_outlined, () => setState(() => _pan = !_pan)),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _railToolButton(CanvasTool tool) => _railButton(
+        tool.label,
+        _toolIcon(tool),
+        () => _selectTool(tool),
+        selected: _tool == tool,
+      );
+
+  Widget _railButton(String tooltip, IconData icon, VoidCallback onPressed, {bool selected = false}) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 1),
+        child: IconButton(
+          onPressed: onPressed,
+          tooltip: tooltip,
+          constraints: const BoxConstraints.tightFor(width: 38, height: 36),
+          padding: EdgeInsets.zero,
+          visualDensity: VisualDensity.compact,
+          style: IconButton.styleFrom(
+            backgroundColor: selected ? Theme.of(context).colorScheme.primaryContainer : null,
+            foregroundColor: selected ? Theme.of(context).colorScheme.primary : null,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+          ),
+          icon: Icon(icon, size: 20),
+        ),
+      );
+
+  Widget _fixedRightRail() => Positioned(
+        right: 0,
+        top: 46,
+        bottom: 0,
+        width: 42,
+        child: Material(
+          color: Theme.of(context).colorScheme.surface.withValues(alpha: .96),
+          child: SafeArea(
+            top: false,
+            bottom: false,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(vertical: 5),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                _railButton('Previous page', Icons.keyboard_arrow_up_rounded, _previousPage),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  child: Text('${_page + 1}/${_pages.length}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800)),
+                ),
+                _railButton('Next page', Icons.keyboard_arrow_down_rounded, _nextPage),
+                _railButton('Add page', Icons.add_rounded, _addPage),
+                const Padding(padding: EdgeInsets.symmetric(horizontal: 7, vertical: 3), child: Divider(height: 1)),
+                _railButton('Page thumbnails and reorder', Icons.layers_outlined, () => setState(() => _preview = !_preview)),
+                _railButton('Duplicate page', Icons.content_copy_rounded, () => _duplicatePage(_page)),
+                _railButton('Delete page', Icons.delete_outline_rounded, () => _confirmDeletePage()),
+                _railButton('Templates', Icons.grid_on_rounded, _paperSheet),
+                const Padding(padding: EdgeInsets.symmetric(horizontal: 7, vertical: 3), child: Divider(height: 1)),
+                _railButton('Selected object: duplicate', Icons.copy_rounded, _canvas.duplicateSelection),
+                _railButton('Selected object: delete', Icons.delete_outline_rounded, _canvas.deleteSelection),
+                _railButton('Clear selection', Icons.close_rounded, _canvas.clearSelection),
+              ]),
+            ),
+          ),
+        ),
+      );
+
+  Future<void> _confirmDeletePage() async {
+    if (_pages.length <= 1) {
+      _deletePage(0);
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete page?'),
+        content: Text('Delete page ${_page + 1}? This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (confirmed == true) _deletePage(_page);
+  }
 
   Widget _pageControls() => Positioned(
         right: 12,
@@ -761,9 +953,12 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       ),
     ];
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
-      child: Flex(direction: axis, mainAxisSize: MainAxisSize.min, children: items),
+    return SingleChildScrollView(
+      scrollDirection: axis == Axis.horizontal ? Axis.horizontal : Axis.vertical,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+        child: Flex(direction: axis, mainAxisSize: MainAxisSize.min, children: items),
+      ),
     );
   }
 
@@ -1240,19 +1435,24 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       showDragHandle: true,
       builder: (_) => DefaultTabController(
         length: 3,
-        child: SizedBox(
-          height: MediaQuery.sizeOf(context).height * .88,
-          child: Column(children: [
-            const TabBar(tabs: [Tab(text: 'Paper'), Tab(text: 'Featured'), Tab(text: 'Custom')]),
-            Expanded(child: TabBarView(children: [
-              _paperTab([PageTemplate.grid, PageTemplate.lined, PageTemplate.dotted, PageTemplate.blank, PageTemplate.cornell]),
-              _paperTab([PageTemplate.dotGrid, PageTemplate.isometric, PageTemplate.planner, PageTemplate.music, PageTemplate.checklist, PageTemplate.dark]),
-              _customPaper(),
-            ])),
-          ]),
+        child: StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            _templateSheetRefresh = setSheetState;
+            return SizedBox(
+              height: MediaQuery.sizeOf(context).height * .88,
+              child: Column(children: [
+                const TabBar(tabs: [Tab(text: 'Paper'), Tab(text: 'Featured'), Tab(text: 'Custom')]),
+                Expanded(child: TabBarView(children: [
+                  _paperTab([PageTemplate.grid, PageTemplate.lined, PageTemplate.dotted, PageTemplate.blank, PageTemplate.cornell]),
+                  _paperTab([PageTemplate.dotGrid, PageTemplate.isometric, PageTemplate.planner, PageTemplate.music, PageTemplate.checklist, PageTemplate.dark]),
+                  _customPaper(),
+                ])),
+              ]),
+            );
+          },
         ),
       ),
-    );
+    ).whenComplete(() => _templateSheetRefresh = null);
   }
 
   Widget _paperTab(List<PageTemplate> templates) => ListView(
@@ -1270,7 +1470,21 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                 height: 170,
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(color: _pageColor(), borderRadius: BorderRadius.circular(11), border: Border.all(color: _template() == t ? Theme.of(context).colorScheme.primary : Colors.black12, width: _template() == t ? 2 : 1)),
-                child: CustomPaint(painter: PageBackground(template: t, paperColor: _pageColor(), lineColor: _pageColor('lineColor', const Color(0xffaab2bd)), spacing: 20, lineOpacity: .8)),
+                child: Column(children: [
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: RepaintBoundary(
+                        child: CustomPaint(
+                          painter: PageBackground(template: t, paperColor: _pageColor(), lineColor: _pageColor('lineColor', const Color(0xffaab2bd)), spacing: 20, lineOpacity: .8),
+                          child: const SizedBox.expand(),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(t.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                ]),
               ),
             )).toList(),
           ),
@@ -1356,7 +1570,13 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       );
 
   void _setTemplate(PageTemplate template) {
-    setState(() => pageData['template'] = template.name);
+    setState(() {
+      pageData['template'] = template.name;
+      pageData['templateUpdatedAt'] = DateTime.now().millisecondsSinceEpoch;
+    });
+    // The modal sheet is a separate route; update it explicitly so the
+    // selected template, preview card and active canvas stay in sync.
+    _templateSheetRefresh?.call(() {});
     _scheduleSave();
   }
 
