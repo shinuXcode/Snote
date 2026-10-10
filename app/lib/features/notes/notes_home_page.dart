@@ -34,7 +34,6 @@ class _NotesHomePageState extends State<NotesHomePage> {
   final _sync = SyncEngine();
   final _search = TextEditingController();
 
-  List<LocalFolder> _folderList = const [];
   List<LocalFolder> _allFolders = const [];
   List<LocalNote> _noteList = const [];
   bool _sidebarCollapsed = false;
@@ -59,7 +58,6 @@ class _NotesHomePageState extends State<NotesHomePage> {
   }
 
   Future<void> _load() async {
-    final folders = await _folders.list(parentId: _folderId);
     final allFolders = await _folders.listAllVisible();
     final notes = await _notes.list(folderId: _folderId);
     if (!mounted) return;
@@ -69,7 +67,6 @@ class _NotesHomePageState extends State<NotesHomePage> {
         ? (visible.isEmpty ? null : visible.first)
         : visible.cast<LocalNote?>().firstWhere((n) => n?.id == selectedId, orElse: () => null);
     setState(() {
-      _folderList = folders;
       _allFolders = allFolders;
       _noteList = notes;
       _selected = selected;
@@ -121,15 +118,6 @@ class _NotesHomePageState extends State<NotesHomePage> {
       await Navigator.push(context, MaterialPageRoute(builder: (_) => NoteEditorPage(note: note)));
       await _load();
     }
-  }
-
-  void _openFolder(LocalFolder folder) {
-    setState(() {
-      _folderId = folder.id;
-      _breadcrumbs.add(folder);
-      _selected = null;
-    });
-    unawaited(_load());
   }
 
   void _openTreeFolder(LocalFolder folder) {
@@ -505,7 +493,6 @@ class _NotesHomePageState extends State<NotesHomePage> {
                     SizedBox(
                       width: 380,
                       child: _HierarchyPanel(
-                        folderList: _folderList,
                         allFolders: _allFolders,
                         currentFolderId: _folderId,
                         notes: _filteredNotes,
@@ -513,7 +500,6 @@ class _NotesHomePageState extends State<NotesHomePage> {
                         loading: _loading,
                         gridView: _gridView,
                         onToggleView: () => setState(() => _gridView = !_gridView),
-                        onFolder: _openFolder,
                         onOpenTreeFolder: _openTreeFolder,
                         onMoveFolder: _moveFolder,
                         onCustomizeFolder: _customizeFolder,
@@ -606,7 +592,6 @@ class _NotesHomePageState extends State<NotesHomePage> {
         Expanded(
           child: _HierarchyPanel(
             compact: true,
-            folderList: _folderList,
             allFolders: _allFolders,
             currentFolderId: _folderId,
             notes: _filteredNotes,
@@ -614,7 +599,6 @@ class _NotesHomePageState extends State<NotesHomePage> {
             loading: _loading,
             gridView: _gridView,
             onToggleView: () => setState(() => _gridView = !_gridView),
-            onFolder: _openFolder,
             onOpenTreeFolder: _openTreeFolder,
             onMoveFolder: _moveFolder,
             onCustomizeFolder: _customizeFolder,
@@ -804,7 +788,6 @@ class _Breadcrumbs extends StatelessWidget {
 }
 
 class _HierarchyPanel extends StatelessWidget {
-  final List<LocalFolder> folderList;
   final List<LocalFolder> allFolders;
   final String? currentFolderId;
   final List<LocalNote> notes;
@@ -815,7 +798,6 @@ class _HierarchyPanel extends StatelessWidget {
   final VoidCallback onToggleView;
   final VoidCallback onNewFolder;
   final VoidCallback onNewNote;
-  final ValueChanged<LocalFolder> onFolder;
   final ValueChanged<LocalFolder> onOpenTreeFolder;
   final Future<void> Function(String folderId, String? parentId) onMoveFolder;
   final ValueChanged<LocalFolder> onCustomizeFolder;
@@ -826,7 +808,6 @@ class _HierarchyPanel extends StatelessWidget {
   final ValueChanged<LocalNote> onDeleteNote;
 
   const _HierarchyPanel({
-    required this.folderList,
     required this.allFolders,
     required this.currentFolderId,
     required this.notes,
@@ -835,7 +816,6 @@ class _HierarchyPanel extends StatelessWidget {
     this.compact = false,
     required this.gridView,
     required this.onToggleView,
-    required this.onFolder,
     required this.onOpenTreeFolder,
     required this.onMoveFolder,
     required this.onCustomizeFolder,
