@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-enum PageTemplate { blank, lined, grid, dotted, cornell, dotGrid, isometric, planner, music, checklist }
+enum PageTemplate { blank, lined, grid, dotted, cornell, dotGrid, isometric, planner, music, checklist, dark }
 
 class PageBackground extends CustomPainter {
   final PageTemplate template;
@@ -21,9 +21,11 @@ class PageBackground extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawColor(paperColor, BlendMode.srcOver);
+    final isDark = template == PageTemplate.dark;
+    canvas.drawColor(isDark ? const Color(0xff17191f) : paperColor, BlendMode.srcOver);
     final double s = spacing.clamp(10, 80).toDouble();
-    final line = Paint()..color = lineColor.withValues(alpha: lineOpacity.clamp(0, 1))..strokeWidth = .7;
+    final effectiveLineColor = isDark ? const Color(0xff3a414d) : lineColor;
+    final line = Paint()..color = effectiveLineColor.withValues(alpha: lineOpacity.clamp(0, 1))..strokeWidth = .7;
 
     switch (template) {
       case PageTemplate.blank:
@@ -68,13 +70,20 @@ class PageBackground extends CustomPainter {
           canvas.drawRect(Rect.fromLTWH(12, y - 10, 14, 14), line);
           canvas.drawLine(Offset(36, y + 3), Offset(size.width, y + 3), line);
         }
+      case PageTemplate.dark:
+        for (double x = 0; x < size.width; x += s) {
+          canvas.drawLine(Offset(x, 0), Offset(x, size.height), line);
+        }
+        for (double y = 0; y < size.height; y += s) {
+          canvas.drawLine(Offset(0, y), Offset(size.width, y), line);
+        }
     }
 
     if (cornellAssist && template != PageTemplate.cornell) _cornell(canvas, size);
   }
 
   void _cornell(Canvas canvas, Size size) {
-    final p = Paint()..color = lineColor.withValues(alpha: .9)..strokeWidth = 1.1;
+    final p = Paint()..color = (template == PageTemplate.dark ? const Color(0xff5b6573) : lineColor).withValues(alpha: .9)..strokeWidth = 1.1;
     canvas.drawLine(Offset(size.width * .27, 0), Offset(size.width * .27, size.height), p);
     canvas.drawLine(Offset(0, size.height - 180), Offset(size.width, size.height - 180), p);
   }
