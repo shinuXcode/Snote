@@ -497,16 +497,18 @@ class _PdfProWorkspacePageState extends State<PdfProWorkspacePage> {
     ];
     final color = await showModalBottomSheet<Color>(
       context: context,
-      builder: (sheet) => Wrap(
+      builder: (sheet) => Padding(
         padding: const EdgeInsets.all(18),
-        spacing: 12,
-        children: colors.map((c) => InkWell(
+        child: Wrap(
+          spacing: 12,
+          children: colors.map((c) => InkWell(
           onTap: () => Navigator.pop(sheet, c),
           child: CircleAvatar(backgroundColor: c),
-        )).toList(),
+          )).toList(),
+        ),
       ),
     );
-    if (color != null) setState(() => _inkColor = color);
+    if (color != null && mounted) setState(() => _inkColor = color);
   }
 
   Future<void> _inkSizeSheet() async {
