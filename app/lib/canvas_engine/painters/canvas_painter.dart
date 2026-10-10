@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../algorithms/velocity_calculator.dart';
+import '../algorithms/stroke_geometry.dart';
 import '../models/pen_config.dart';
 import '../models/stroke.dart';
 
@@ -141,30 +142,46 @@ class SnoteCanvasPainter extends CustomPainter {
       return;
     }
 
-    if (points.length == 1) {
-      canvas.drawCircle(points.first.position, math.max(1, stroke.pen.size / 2), Paint()..color = color);
-      return;
-    }
+    final inkPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true
+      ..blendMode = stroke.pen.type == PenType.highlighter
+          ? BlendMode.multiply
+          : BlendMode.srcOver;
 
-    for (var i = 1; i < points.length; i++) {
-      final a = points[i - 1];
-      final b = points[i];
-      var width = stroke.pen.size.clamp(.5, 60).toDouble();
-      if (stroke.pen.type == PenType.fountain) {
-        final dt = (b.timestamp - a.timestamp).clamp(.5, 250.0);
-        final velocity = (b.position - a.position).distance / dt;
-        width = fountainWidth(baseWidth: width, velocity: velocity, pressure: b.pressure);
+    // Use one smoothed ribbon path instead of isolated straight line segments.
+    // Pressure, velocity, and tilt remain attached to their original samples.
+    final ribbon = StrokeGeometry.buildRibbonPath(points, (point, index) {
+      final sensitivity =
+          stroke.pen.pressureSensitivity.clamp(0, 1).toDouble();
+      final pressure = curvePressure(point.pressure, stroke.pen);
+      var width = stroke.pen.size *
+          ((1 - sensitivity) + sensitivity * (.64 + .72 * pressure));
+
+      if (stroke.pen.type == PenType.fountain && index > 0) {
+        final previous = points[index - 1];
+        final dt = (point.timestamp - previous.timestamp).clamp(.5, 250.0);
+        final velocity = (point.position - previous.position).distance / dt;
+        final fountain = fountainWidth(
+          baseWidth: stroke.pen.size,
+          velocity: velocity,
+          pressure: pressure,
+        );
+        final velocitySensitivity =
+            stroke.pen.velocitySensitivity.clamp(0, 1).toDouble();
+        width += (fountain - width) * velocitySensitivity;
       } else if (stroke.pen.type == PenType.pencil) {
-        width *= .78 + b.pressure.clamp(0, 1) * .32;
-      } else {
-        width *= .82 + b.pressure.clamp(0, 1) * .22;
+        width *= .86;
       }
 
-      paint.strokeWidth = stroke.pen.type == PenType.highlighter ? width * 2.05 : width;
-      paint.blendMode = stroke.pen.type == PenType.highlighter ? BlendMode.multiply : BlendMode.srcOver;
+      final tilt = point.tilt.abs().clamp(0, math.pi / 2).toDouble();
+      width *= 1 + (tilt / (math.pi / 2)) * .16;
+      if (stroke.pen.type == PenType.highlighter) width *= 2.05;
+      return width.clamp(.5, 120).toDouble() / 2;
+    });
 
-      canvas.drawLine(a.position, b.position, paint);
-    }
+    canvas.drawPath(ribbon, inkPaint);
   }
 
   void _drawShape(Canvas canvas, Stroke stroke, Paint paint) {
