@@ -6,6 +6,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../local/database.dart';
 import '../../core/config/account_scope.dart';
 
+const defaultFolderColorForSync = 0xff5b6cf9;
+
 class NoteSyncService {
   final SupabaseClient client;
 
@@ -212,6 +214,9 @@ class NoteSyncService {
         'user_id': userId,
         'parent_id': folder['parent_id'],
         'name': folder['name'],
+        'color_value': (folder['color_value'] as num?)?.toInt() ?? defaultFolderColorForSync,
+        'icon_key': folder['icon_key']?.toString() ?? 'folder',
+        'sort_order': (folder['sort_order'] as num?)?.toInt() ?? 0,
         'created_at': createdAt.toIso8601String(),
         'updated_at': updatedAt.toIso8601String(),
         'deleted_at': deleted?.toIso8601String(),
@@ -351,6 +356,9 @@ class NoteSyncService {
         'owner_id': SnoteAccountScope.ownerId,
         'parent_id': remote['parent_id'],
         'name': remote['name']?.toString() ?? 'Folder',
+        'color_value': (remote['color_value'] as num?)?.toInt() ?? defaultFolderColorForSync,
+        'icon_key': remote['icon_key']?.toString() ?? 'folder',
+        'sort_order': (remote['sort_order'] as num?)?.toInt() ?? 0,
         'created_at': local.isNotEmpty
             ? (local.first['created_at'] as num).toInt()
             : created,
