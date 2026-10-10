@@ -604,6 +604,8 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     if (isStylus && !_lock.begin(event)) return;
 
     if (isStylus && _isStylusDoubleTap(event)) {
+      // Track this pointer so pointer-up/cancel releases the stylus lock.
+      _activePointer = event.pointer;
       _ignorePointer = true;
       widget.onStylusDoubleTap?.call();
       return;
