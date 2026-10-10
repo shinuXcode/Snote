@@ -607,6 +607,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         passphrase,
         encrypted,
       );
+      // Unlocking activates this device's vault. Protect any other local notes
+      // and attachments before returning to the notebook.
+      await _repo.encryptExistingNotes();
+      await _files.encryptExistingAttachments();
       if (!mounted) return;
       setState(() {
         _vaultLocked = false;
