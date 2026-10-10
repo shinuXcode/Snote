@@ -512,7 +512,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
               if (!_full) _header(),
               if (!_full && _settings.getBool('showPageNavigation')) _pageControls(),
               if (_preview && !_full) _previewRail(),
-              if (_toolbar && _draw) _toolbarWidget(),
+              if (!_full) _toolbarWidget(),
               if (_shapePanel && !_full) _shapePanelWidget(),
               if (!_toolbar && !_full) _toolbarOpen(),
               if (_full) _fullExit(),
