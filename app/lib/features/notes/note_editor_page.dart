@@ -851,9 +851,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     if (_docked) {
       final vertical = _dockSide == 'left' || _dockSide == 'right';
       return Positioned(
-        left: _dockSide == 'left' ? 0 : null,
-        right: _dockSide == 'right' ? 0 : null,
-        top: _dockSide == 'top' ? 58 : null,
+        left: _dockSide == 'left' ? (_full ? 0 : 44) : null,
+        right: _dockSide == 'right' ? (_full ? 0 : 42) : null,
+        top: _dockSide == 'top' ? (_full ? 0 : 46) : null,
         bottom: _dockSide == 'bottom' ? 0 : null,
         child: SafeArea(child: _toolbarSurface(_toolbarContent(vertical ? Axis.vertical : Axis.horizontal, docked: true))),
       );
