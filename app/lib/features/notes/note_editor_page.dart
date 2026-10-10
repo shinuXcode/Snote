@@ -688,10 +688,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                 child: Divider(height: 1),
               ),
               for (final color in _penPalette.take(16))
-                InkWell(
-                  tooltip: 'Pen color: #${color.value.toRadixString(16).padLeft(8, '0')}',
-                  onTap: () => setState(() => _penColor = color),
-                  child: SizedBox(
+                Tooltip(
+                  message: 'Pen color: #${color.value.toRadixString(16).padLeft(8, '0')}',
+                  child: InkWell(
+                    onTap: () => setState(() => _penColor = color),
+                    child: SizedBox(
                     width: 34,
                     height: 25,
                     child: Center(
@@ -705,6 +706,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                         ),
                       ),
                     ),
+                  ),
                   ),
                 ),
               const Padding(
