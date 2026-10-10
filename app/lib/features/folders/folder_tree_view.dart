@@ -173,32 +173,30 @@ class _FolderTreeViewState extends State<FolderTreeView> {
             visualDensity: const VisualDensity(vertical: -1),
             selected: selected,
             contentPadding: const EdgeInsets.only(left: 2, right: 4),
-            leading: SizedBox(
-              width: 34,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (hasChildren)
-                    InkWell(
-                      borderRadius: BorderRadius.circular(16),
-                      onTap: () => setState(() {
-                        if (expanded) {
-                          _expanded.remove(folder.id);
-                        } else {
-                          _expanded.add(folder.id);
-                        }
-                      }),
-                      child: Icon(
-                        expanded
-                            ? Icons.keyboard_arrow_down_rounded
-                            : Icons.chevron_right_rounded,
-                        size: 20,
-                      ),
-                    )
-                  else
-                    const SizedBox(width: 20),
-                  Icon(folderIconForKey(folder.iconKey), color: folderColor, size: 20),
-                ],
+            leading: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (hasChildren)
+                  InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: () => setState(() {
+                      if (expanded) {
+                        _expanded.remove(folder.id);
+                      } else {
+                        _expanded.add(folder.id);
+                      }
+                    }),
+                    child: Icon(
+                      expanded
+                          ? Icons.keyboard_arrow_down_rounded
+                          : Icons.chevron_right_rounded,
+                      size: 20,
+                    ),
+                  )
+                else
+                  const SizedBox(width: 20),
+                Icon(folderIconForKey(folder.iconKey), color: folderColor, size: 20),
+              ],
             ),
             title: Text(
               folder.name,
