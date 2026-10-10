@@ -684,7 +684,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     final frame = _input!.begin(event);
     _real = frame.realPoints;
     _live = frame.livePoints;
-    _repaint.repaint();
+    _syncLivePainter();
 
     if (widget.tool == CanvasTool.sticker) {
       _commitActive();
@@ -720,7 +720,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
           snapshotAlreadyTaken: _eraseSnapshotTaken,
         );
       }
-      _repaint.repaint();
+      _syncLivePainter();
       return;
     }
 
@@ -729,7 +729,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
           (_lasso.last - event.localPosition).distanceSquared > .35) {
         _lasso.add(event.localPosition);
       }
-      _repaint.repaint();
+      _syncLivePainter();
       return;
     }
 
@@ -741,7 +741,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       _perf.rendered(_live.length);
       _perf.setPredictionHorizon(frame.predictionHorizonMs);
     }
-    _repaint.repaint();
+    _syncLivePainter();
   }
 
   void _pointerUp(PointerUpEvent event) {
@@ -825,7 +825,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _eraserRadius = 0;
     _lasso.clear();
     _input?.reset();
-    _repaint.repaint();
+    _syncLivePainter();
   }
 
   void _commitActive() {
@@ -859,7 +859,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _activeSticker = null;
     _input?.reset();
     _finishDocumentMutation();
-    _repaint.repaint();
+    _syncLivePainter();
   }
 
   String? _recognizeShape(List<StrokePoint> points) {
@@ -1057,7 +1057,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _recordDocumentPicture();
     _notifySelection();
     _clearActiveState();
-    _repaint.repaint();
+    _syncLivePainter();
   }
 
   void _syncLivePainter() {
