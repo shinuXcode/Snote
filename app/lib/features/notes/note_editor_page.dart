@@ -990,6 +990,16 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     IconButton(onPressed: _canvas.sendToBack, icon: const Icon(Icons.vertical_align_bottom_rounded), tooltip: 'Send to back'),
                     IconButton(onPressed: () => _canvas.moveSelection(-8, 0), icon: const Icon(Icons.arrow_back_rounded)),
                     IconButton(onPressed: () => _canvas.moveSelection(8, 0), icon: const Icon(Icons.arrow_forward_rounded)),
+                    IconButton(
+                      onPressed: () => _canvas.scaleSelection(.9),
+                      icon: const Icon(Icons.remove_circle_outline_rounded),
+                      tooltip: 'Scale down',
+                    ),
+                    IconButton(
+                      onPressed: () => _canvas.scaleSelection(1.1),
+                      icon: const Icon(Icons.add_circle_outline_rounded),
+                      tooltip: 'Scale up',
+                    ),
                     IconButton(onPressed: _canvas.duplicateSelection, icon: const Icon(Icons.copy_rounded), tooltip: 'Duplicate'),
                     IconButton(onPressed: _canvas.deleteSelection, icon: const Icon(Icons.delete_outline_rounded), tooltip: 'Delete'),
                     IconButton(onPressed: _canvas.selectAll, icon: const Icon(Icons.select_all_rounded), tooltip: 'Select all'),
