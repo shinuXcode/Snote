@@ -66,7 +66,6 @@ class _CanvasRepaint extends ChangeNotifier {
     notifyListeners();
   }
 
-  void repaint() => notifyListeners();
 }
 
 /// Cached immutable document layer. It is rebuilt only after a logical
@@ -840,7 +839,6 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _activeSticker = null;
     _real = const <StrokePoint>[];
     _live = const <StrokePoint>[];
-    _syncLivePainter();
     _eraserPoint = null;
     _eraserRadius = 0;
     _lasso.clear();
@@ -874,13 +872,12 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _strokes.add(stroke);
     _real = const <StrokePoint>[];
     _live = const <StrokePoint>[];
-    _syncLivePainter();
     _activePen = null;
     _activeTool = null;
     _activeSticker = null;
     _input?.reset();
-    _finishDocumentMutation();
     _syncLivePainter();
+    _finishDocumentMutation();
   }
 
   String? _recognizeShape(List<StrokePoint> points) =>
