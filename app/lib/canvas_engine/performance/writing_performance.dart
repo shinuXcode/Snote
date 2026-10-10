@@ -112,7 +112,7 @@ class WritingPerformanceStats extends ChangeNotifier {
     for (final timing in timings) {
       frame(
         timing.totalSpan,
-        frameBudgetMs: 16.667,
+        frameBudgetMs: frameBudgetMs,
       );
     }
   }
