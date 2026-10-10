@@ -39,7 +39,7 @@ class SnoteE2EEncryption {
     // permanently lock old content. Key rotation must be a separate migration.
     final current = await _storage.read(key: _passphraseKey);
     if (current != null && current.isNotEmpty && current != passphrase) {
-      throw const StateError(
+      throw StateError(
         'An encryption passphrase is already configured. Enter the current '
         'passphrase, or disable encryption and decrypt existing content before '
         'setting a new one.',
@@ -68,7 +68,7 @@ class SnoteE2EEncryption {
 
     final current = await _storage.read(key: _passphraseKey);
     if (current != null && current.isNotEmpty && current != passphrase) {
-      throw const StateError(
+      throw StateError(
         'A different vault passphrase is already configured on this device. '
         'Decrypt that vault before replacing its passphrase.',
       );
@@ -109,7 +109,7 @@ class SnoteE2EEncryption {
     if (!(await enabled)) return text;
     final passphrase = await _storage.read(key: _passphraseKey);
     if (passphrase == null || passphrase.isEmpty) {
-      throw const StateError('Encryption is enabled but no vault passphrase is configured.');
+      throw StateError('Encryption is enabled but no vault passphrase is configured.');
     }
     final salt = await _ensureSalt();
     return _encrypt(utf8.encode(text), passphrase, salt);
@@ -119,7 +119,7 @@ class SnoteE2EEncryption {
     if (!_isEnvelope(value)) return value;
     final passphrase = await _storage.read(key: _passphraseKey);
     if (passphrase == null || passphrase.isEmpty) {
-      throw const StateError('This note is encrypted. Enter the Snote recovery passphrase first.');
+      throw StateError('This note is encrypted. Enter the Snote recovery passphrase first.');
     }
     final envelope = jsonDecode(value);
     if (envelope is! Map) throw const FormatException('Invalid encrypted note envelope.');
@@ -131,10 +131,10 @@ class SnoteE2EEncryption {
     if (!(await enabled)) return bytes;
     final passphrase = await _storage.read(key: _passphraseKey);
     if (passphrase == null || passphrase.isEmpty) {
-      throw const StateError('Encryption is enabled but no vault passphrase is configured.');
+      throw StateError('Encryption is enabled but no vault passphrase is configured.');
     }
     final salt = await _ensureSalt();
-    final envelope = jsonDecode(_encrypt(bytes, passphrase, salt)) as Map;
+    final envelope = jsonDecode(await _encrypt(bytes, passphrase, salt)) as Map;
     final payload = <int>[
       ...utf8.encode('SNOTE-E2E-BIN-1\n'),
       ...utf8.encode(jsonEncode(envelope)),
@@ -163,7 +163,7 @@ class SnoteE2EEncryption {
     }
     final passphrase = await _storage.read(key: _passphraseKey);
     if (passphrase == null || passphrase.isEmpty) {
-      throw const StateError('This attachment is encrypted. Enter the Snote recovery passphrase first.');
+      throw StateError('This attachment is encrypted. Enter the Snote recovery passphrase first.');
     }
     final salt = base64Url.decode(envelope['salt'].toString());
     return _decryptBytes(envelope, passphrase, salt);
