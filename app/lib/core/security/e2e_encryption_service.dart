@@ -107,17 +107,16 @@ class SnoteE2EEncryption {
     final raw = utf8.decode(bytes, allowMalformed: false);
     // Accept the original escaped-separator format as well as the canonical
     // newline format so files created by earlier Snote builds remain readable.
-    final canonicalStart = raw.indexOf('\n');
+    final canonicalStart = raw.indexOf('\\n');
     final legacyStart = raw.indexOf(r'\\n');
-    final jsonStart = canonicalStart >= 0
-        ? canonicalStart
+    final payloadStart = canonicalStart >= 0
+        ? canonicalStart + 1
         : legacyStart >= 0
-            ? legacyStart + 1
+            ? legacyStart + 2
             : -1;
-    if (jsonStart <= 0) {
+    if (payloadStart <= 0) {
       throw const FormatException('Invalid encrypted attachment.');
     }
-    final payloadStart = canonicalStart >= 0 ? jsonStart + 1 : jsonStart + 1;
     final envelope = jsonDecode(raw.substring(payloadStart));
     if (envelope is! Map) {
       throw const FormatException('Invalid encrypted attachment envelope.');
