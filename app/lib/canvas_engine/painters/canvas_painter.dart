@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import '../algorithms/velocity_calculator.dart';
-import '../algorithms/stroke_geometry.dart';
+import '../ink_renderer.dart';
 import '../models/pen_config.dart';
 import '../models/stroke.dart';
 
@@ -142,46 +141,10 @@ class SnoteCanvasPainter extends CustomPainter {
       return;
     }
 
-    final inkPaint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill
-      ..isAntiAlias = true
-      ..blendMode = stroke.pen.type == PenType.highlighter
-          ? BlendMode.multiply
-          : BlendMode.srcOver;
-
-    // Use one smoothed ribbon path instead of isolated straight line segments.
-    // Pressure, velocity, and tilt remain attached to their original samples.
-    final ribbon = StrokeGeometry.buildRibbonPath(points, (point, index) {
-      final sensitivity =
-          stroke.pen.pressureSensitivity.clamp(0, 1).toDouble();
-      final pressure = curvePressure(point.pressure, stroke.pen);
-      var width = stroke.pen.size *
-          ((1 - sensitivity) + sensitivity * (.64 + .72 * pressure));
-
-      if (stroke.pen.type == PenType.fountain && index > 0) {
-        final previous = points[index - 1];
-        final dt = (point.timestamp - previous.timestamp).clamp(.5, 250.0);
-        final velocity = (point.position - previous.position).distance / dt;
-        final fountain = fountainWidth(
-          baseWidth: stroke.pen.size,
-          velocity: velocity,
-          pressure: pressure,
-        );
-        final velocitySensitivity =
-            stroke.pen.velocitySensitivity.clamp(0, 1).toDouble();
-        width += (fountain - width) * velocitySensitivity;
-      } else if (stroke.pen.type == PenType.pencil) {
-        width *= .86;
-      }
-
-      final tilt = point.tilt.abs().clamp(0, math.pi / 2).toDouble();
-      width *= 1 + (tilt / (math.pi / 2)) * .16;
-      if (stroke.pen.type == PenType.highlighter) width *= 2.05;
-      return width.clamp(.5, 120).toDouble() / 2;
-    });
-
-    canvas.drawPath(ribbon, inkPaint);
+    // Freehand live and committed strokes share exactly one geometry and
+    // pressure/velocity/tilt implementation, preventing a visual jump on
+    // pointer-up.
+    InkRenderer.drawInk(canvas, points, stroke.pen);
   }
 
   void _drawShape(Canvas canvas, Stroke stroke, Paint paint) {
