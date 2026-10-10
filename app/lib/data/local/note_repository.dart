@@ -148,13 +148,14 @@ class NoteRepository {
     return rows.map(LocalNote.fromMap).toList();
   }
 
-  Future<List<LocalNote>> listAllVisible() async {
+  Future<List<LocalNote>> listAllVisible({int? limit}) async {
     final db = await _db;
     final rows = await db.query(
       'notes',
       where: 'owner_id = ? AND deleted_at IS NULL',
       whereArgs: [SnoteAccountScope.ownerId],
       orderBy: 'updated_at DESC',
+      limit: limit == null ? null : limit.clamp(1, 500).toInt(),
     );
     return rows.map(LocalNote.fromMap).toList();
   }
