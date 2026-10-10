@@ -58,10 +58,12 @@ class _UpdateCenterPageState extends State<UpdateCenterPage> {
       });
     }
     try {
-      final response = await http.get(
-        _apiUri,
-        headers: const {'Accept': 'application/vnd.github+json'},
-      );
+      final response = await http
+          .get(
+            _apiUri,
+            headers: const {'Accept': 'application/vnd.github+json'},
+          )
+          .timeout(const Duration(seconds: 8));
       if (response.statusCode != 200) {
         throw Exception('Update server returned ${response.statusCode}.');
       }
