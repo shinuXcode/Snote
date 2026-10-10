@@ -15,8 +15,6 @@ import '../../data/local/file_document_repository.dart';
 import '../../data/local/note_repository.dart';
 import 'pdf_workspace_service.dart';
 
-enum _Markup { none, highlight, underline, strikeout }
-
 class PdfProWorkspacePage extends StatefulWidget {
   final String? folderId;
   const PdfProWorkspacePage({super.key, this.folderId});
@@ -44,7 +42,6 @@ class _PdfProWorkspacePageState extends State<PdfProWorkspacePage> {
   bool _loading = false;
   bool _inkMode = false;
   bool _showThumbs = true;
-  _Markup _markup = _Markup.none;
   CanvasTool _inkTool = CanvasTool.ballpoint;
   Color _inkColor = const Color(0xff263238);
   double _inkSize = 3;
