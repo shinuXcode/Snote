@@ -3,6 +3,7 @@ import '../../app/theme_controller.dart';
 import '../../core/settings/app_settings.dart';
 import '../../core/security/e2e_encryption_service.dart';
 import '../../data/local/notebook_transfer_service.dart';
+import '../../data/local/file_document_repository.dart';
 import '../../data/local/note_repository.dart';
 import '../updates/update_center_page.dart';
 
@@ -214,14 +215,19 @@ class _SettingsPageState extends State<SettingsPage> {
     final value = await showDialog<String>(
       context: context,
       builder: (dialog) => AlertDialog(
-        title: Text(existing ? 'Update encryption passphrase' : 'Enable end-to-end encryption'),
+        title: Text(existing ? 'Confirm encryption passphrase' : 'Enable end-to-end encryption'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: controller,
               obscureText: true,
-              decoration: const InputDecoration(labelText: 'Passphrase', helperText: 'Use at least 8 characters.'),
+              decoration: InputDecoration(
+                labelText: existing ? 'Current passphrase' : 'Passphrase',
+                helperText: existing
+                    ? 'Use the existing passphrase. Turn encryption off safely before setting a new one.'
+                    : 'Use at least 8 characters.',
+              ),
             ),
             const SizedBox(height: 10),
             TextField(
@@ -247,6 +253,7 @@ class _SettingsPageState extends State<SettingsPage> {
     try {
       await SnoteE2EEncryption.instance.enable(value);
       await NoteRepository().encryptExistingNotes();
+      await FileDocumentRepository().encryptExistingAttachments();
       if (mounted) {
         setState(() {});
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Encryption enabled. Keep your recovery passphrase safe.')));
@@ -258,11 +265,16 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _disableE2E() async {
     try {
+      // Keep the key available until every stored encrypted payload has been
+      // successfully decrypted; otherwise a single failed attachment could
+      // become permanently unreadable.
+      await FileDocumentRepository().decryptExistingAttachments();
       await NoteRepository().decryptExistingNotes();
       await SnoteE2EEncryption.instance.disable();
+      await SnoteE2EEncryption.instance.forgetPassphrase();
       if (mounted) {
         setState(() {});
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Encryption disabled for future saves. Existing notes were returned to local plaintext.')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Encryption disabled. Existing notes and attachments were returned to local plaintext.')));
       }
     } catch (error) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not disable encryption: $error')));
