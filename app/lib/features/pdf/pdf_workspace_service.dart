@@ -188,7 +188,7 @@ class PdfWorkspaceService {
             final pen = PdfPen(_color(stroke.pen.color), width: width);
             final p1 = _mapPoint(a.position, sourceSizes[entry.key], size);
             final p2 = _mapPoint(b.position, sourceSizes[entry.key], size);
-            page.graphics.drawLine(p1, p2, pen: pen);
+            page.graphics.drawLine(pen, p1.dx, p1.dy, p2.dx, p2.dy);
           }
         }
       }
