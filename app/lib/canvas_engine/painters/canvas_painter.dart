@@ -209,3 +209,253 @@ class SnoteCanvasPainter extends CustomPainter {
     } else {
       _drawShapePath(canvas, stroke, shapePaint, rect);
     }
+  }
+
+  void _drawDashedShape(
+    Canvas canvas,
+    Stroke stroke,
+    Paint paint,
+    Rect rect,
+  ) {
+    final path = Path();
+    final a = stroke.points.first.position;
+    final b = stroke.points.last.position;
+
+    switch (stroke.shape) {
+      case 'line':
+      case 'arrow':
+        path
+          ..moveTo(a.dx, a.dy)
+          ..lineTo(b.dx, b.dy);
+        break;
+      case 'rectangle':
+        path.addRect(rect);
+        break;
+      case 'roundedRectangle':
+        path.addRRect(
+          RRect.fromRectAndRadius(rect, const Radius.circular(12)),
+        );
+        break;
+      case 'ellipse':
+      case 'circle':
+        final size = math.min(rect.width.abs(), rect.height.abs());
+        final square = Rect.fromCenter(
+          center: rect.center,
+          width: size,
+          height: size,
+        );
+        path.addOval(stroke.shape == 'circle' ? square : rect);
+        break;
+      default:
+        _drawShapePath(canvas, stroke, paint, rect);
+        return;
+    }
+
+    for (final metric in path.computeMetrics()) {
+      for (double distance = 0; distance < metric.length; distance += 14) {
+        final end = math.min(distance + 8, metric.length);
+        canvas.drawPath(metric.extractPath(distance, end), paint);
+      }
+    }
+  }
+
+  void _drawShapePath(
+    Canvas canvas,
+    Stroke stroke,
+    Paint paint,
+    Rect rect,
+  ) {
+    final a = stroke.points.first.position;
+    final b = stroke.points.last.position;
+    final center = rect.center;
+
+    switch (stroke.shape) {
+      case 'line':
+        canvas.drawLine(a, b, paint);
+        break;
+      case 'arrow':
+        canvas.drawLine(a, b, paint);
+        final direction = b - a;
+        if (direction.distance > 1) {
+          final unit = direction / direction.distance;
+          final normal = Offset(-unit.dy, unit.dx);
+          final tip = b - unit * 16;
+          canvas.drawLine(b, tip + normal * 7, paint);
+          canvas.drawLine(b, tip - normal * 7, paint);
+        }
+        break;
+      case 'rectangle':
+        canvas.drawRect(rect, paint);
+        break;
+      case 'roundedRectangle':
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(rect, const Radius.circular(12)),
+          paint,
+        );
+        break;
+      case 'ellipse':
+      case 'circle':
+        final size = math.min(rect.width.abs(), rect.height.abs());
+        final square = Rect.fromCenter(
+          center: center,
+          width: size,
+          height: size,
+        );
+        canvas.drawOval(stroke.shape == 'circle' ? square : rect, paint);
+        break;
+      case 'triangle':
+        canvas.drawPath(
+          _regularPolygon(
+            center,
+            rect.width.abs().clamp(1, double.infinity).toDouble(),
+            3,
+            -math.pi / 2,
+          ),
+          paint,
+        );
+        break;
+      case 'diamond':
+        final path = Path()
+          ..moveTo(center.dx, rect.top)
+          ..lineTo(rect.right, center.dy)
+          ..lineTo(center.dx, rect.bottom)
+          ..lineTo(rect.left, center.dy)
+          ..close();
+        canvas.drawPath(path, paint);
+        break;
+      case 'hexagon':
+        canvas.drawPath(
+          _regularPolygon(
+            center,
+            math.min(rect.width.abs(), rect.height.abs()) / 2,
+            6,
+            math.pi / 6,
+          ),
+          paint,
+        );
+        break;
+      case 'star':
+        canvas.drawPath(
+          _star(
+            center,
+            math.min(rect.width.abs(), rect.height.abs()) / 2,
+            5,
+          ),
+          paint,
+        );
+        break;
+      case 'customPolygon':
+        canvas.drawPath(
+          _regularPolygon(
+            center,
+            math.min(rect.width.abs(), rect.height.abs()) / 2,
+            stroke.customSides,
+            -math.pi / 2,
+          ),
+          paint,
+        );
+        break;
+    }
+  }
+
+  Path _regularPolygon(
+    Offset center,
+    double radius,
+    int sides,
+    double rotation,
+  ) {
+    final path = Path();
+    for (var i = 0; i < sides; i++) {
+      final angle = rotation + math.pi * 2 * i / sides;
+      final point = Offset(
+        center.dx + math.cos(angle) * radius,
+        center.dy + math.sin(angle) * radius,
+      );
+      if (i == 0) {
+        path.moveTo(point.dx, point.dy);
+      } else {
+        path.lineTo(point.dx, point.dy);
+      }
+    }
+    path.close();
+    return path;
+  }
+
+  Path _star(
+    Offset center,
+    double radius,
+    int points,
+  ) {
+    final path = Path();
+    final inner = radius * .44;
+    for (var i = 0; i < points * 2; i++) {
+      final r = i.isEven ? radius : inner;
+      final angle = -math.pi / 2 + math.pi * i / points;
+      final point = Offset(
+        center.dx + math.cos(angle) * r,
+        center.dy + math.sin(angle) * r,
+      );
+      if (i == 0) {
+        path.moveTo(point.dx, point.dy);
+      } else {
+        path.lineTo(point.dx, point.dy);
+      }
+    }
+    path.close();
+    return path;
+  }
+
+  void _drawSticker(
+    Canvas canvas,
+    Offset position,
+    String text,
+  ) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: const TextStyle(fontSize: 42),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    painter.paint(
+      canvas,
+      position - Offset(painter.width / 2, painter.height / 2),
+    );
+  }
+
+  Rect _bounds(List<StrokePoint> points) {
+    var left = points.first.position.dx;
+    var right = left;
+    var top = points.first.position.dy;
+    var bottom = top;
+
+    for (final point in points.skip(1)) {
+      left = math.min(left, point.position.dx);
+      right = math.max(right, point.position.dx);
+      top = math.min(top, point.position.dy);
+      bottom = math.max(bottom, point.position.dy);
+    }
+
+    return Rect.fromLTRB(left, top, right, bottom);
+  }
+
+  @override
+  bool shouldRepaint(covariant SnoteCanvasPainter oldDelegate) {
+    return !identical(oldDelegate.strokes, strokes) ||
+        !identical(oldDelegate.activePoints, activePoints) ||
+        oldDelegate.activeStroke != activeStroke ||
+        oldDelegate.activePath != activePath ||
+        oldDelegate.activePen != activePen ||
+        oldDelegate.activeTool != activeTool ||
+        oldDelegate.activeFill != activeFill ||
+        oldDelegate.activeCustomSides != activeCustomSides ||
+        oldDelegate.activeStickerText != activeStickerText ||
+        !identical(oldDelegate.selectedIds, selectedIds) ||
+        !identical(oldDelegate.lassoPath, lassoPath) ||
+        oldDelegate.eraserPoint != eraserPoint ||
+        oldDelegate.eraserRadius != eraserRadius ||
+        oldDelegate.showEraserMark != showEraserMark ||
+        oldDelegate.drawStrokes != drawStrokes ||
+        oldDelegate.drawActive != drawActive;
+  }
+}
