@@ -44,11 +44,13 @@ class _NotesHomePageState extends State<NotesHomePage> {
   LocalNote? _selected;
   bool _loading = true;
   bool _syncing = false;
+  Timer? _searchDebounce;
+  int _loadGeneration = 0;
 
   @override
   void initState() {
     super.initState();
-    _search.addListener(() => setState(() {}));
+    _search.addListener(_onSearchChanged);
     unawaited(_load());
     if (!widget.localOnly) unawaited(_startSync());
   }
@@ -58,16 +60,38 @@ class _NotesHomePageState extends State<NotesHomePage> {
     await _load();
   }
 
-  Future<void> _load() async {
-    final allFolders = await _folders.listAllVisible();
-    final notes = await _notes.list(folderId: _folderId);
-    final recentNotes = await _notes.listAllVisible(limit: 6);
+  void _onSearchChanged() {
     if (!mounted) return;
+    setState(() {});
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(
+      const Duration(milliseconds: 180),
+      () => unawaited(_load()),
+    );
+  }
+
+  Future<void> _load() async {
+    final generation = ++_loadGeneration;
+    final searching = _search.text.trim().isNotEmpty;
+    final allFolders = await _folders.listAllVisible();
+    final notes = searching
+        ? await _notes.listAllVisible()
+        : await _notes.list(folderId: _folderId);
+    final recentNotes = await _notes.listAllVisible(limit: 6);
+    if (!mounted || generation != _loadGeneration) return;
+
     final selectedId = _selected?.id;
     final visible = notes.where(_matchesSearch).toList();
-    LocalNote? selected = selectedId == null
-        ? (visible.isEmpty ? null : visible.first)
-        : visible.cast<LocalNote?>().firstWhere((n) => n?.id == selectedId, orElse: () => null);
+    LocalNote? selected = visible.isEmpty ? null : visible.first;
+    if (selectedId != null) {
+      for (final note in visible) {
+        if (note.id == selectedId) {
+          selected = note;
+          break;
+        }
+      }
+    }
+
     setState(() {
       _allFolders = allFolders;
       _noteList = notes;
@@ -527,7 +551,10 @@ class _NotesHomePageState extends State<NotesHomePage> {
                       width: 380,
                       child: _HierarchyPanel(
                         allFolders: _allFolders,
-                        recentNotes: _recentNotes,
+                        recentNotes: _search.text.trim().isEmpty
+                            ? _recentNotes
+                            : const <LocalNote>[],
+                        isSearching: _search.text.trim().isNotEmpty,
                         currentFolderId: _folderId,
                         notes: _filteredNotes,
                         selected: _selected,
@@ -627,7 +654,10 @@ class _NotesHomePageState extends State<NotesHomePage> {
           child: _HierarchyPanel(
             compact: true,
             allFolders: _allFolders,
-            recentNotes: _recentNotes,
+            recentNotes: _search.text.trim().isEmpty
+                ? _recentNotes
+                : const <LocalNote>[],
+            isSearching: _search.text.trim().isNotEmpty,
             currentFolderId: _folderId,
             notes: _filteredNotes,
             selected: _selected,
@@ -652,6 +682,8 @@ class _NotesHomePageState extends State<NotesHomePage> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
+    _search.removeListener(_onSearchChanged);
     _search.dispose();
     unawaited(_sync.dispose());
     super.dispose();
@@ -825,6 +857,7 @@ class _Breadcrumbs extends StatelessWidget {
 class _HierarchyPanel extends StatelessWidget {
   final List<LocalFolder> allFolders;
   final List<LocalNote> recentNotes;
+  final bool isSearching;
   final String? currentFolderId;
   final List<LocalNote> notes;
   final LocalNote? selected;
@@ -846,6 +879,7 @@ class _HierarchyPanel extends StatelessWidget {
   const _HierarchyPanel({
     required this.allFolders,
     required this.recentNotes,
+    required this.isSearching,
     required this.currentFolderId,
     required this.notes,
     required this.selected,
@@ -962,7 +996,7 @@ class _HierarchyPanel extends StatelessWidget {
             ),
           ),
         ],
-        if (allFolders.isEmpty && notes.isEmpty && recentNotes.isEmpty)
+        if (allFolders.isEmpty && notes.isEmpty && recentNotes.isEmpty && !isSearching)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 24, horizontal: 18),
             child: Column(
@@ -988,11 +1022,20 @@ class _HierarchyPanel extends StatelessWidget {
             onDelete: onDeleteFolder,
             onAppearance: onCustomizeFolder,
           ),
+        if (isSearching && notes.isEmpty)
+          const Padding(
+            padding: EdgeInsets.fromLTRB(4, 18, 4, 8),
+            child: Text('No notes match your search.'),
+          ),
         if (notes.isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 18, 4, 8),
             child: Text(
-              'Recent notes',
+              isSearching
+                  ? 'Search results'
+                  : currentFolderId == null
+                      ? 'Notes in this folder'
+                      : 'Notes in this folder',
               style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
             ),
           ),
