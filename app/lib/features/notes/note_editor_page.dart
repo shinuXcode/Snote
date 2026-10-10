@@ -1253,38 +1253,121 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   }
 
   Widget _shapePanelWidget() {
-    final entries = [
+    final mathShapes = <List<Object>>[
       [CanvasTool.line, Icons.horizontal_rule_rounded],
       [CanvasTool.arrow, Icons.arrow_forward_rounded],
       [CanvasTool.rectangle, Icons.crop_square_rounded],
-      [CanvasTool.roundedRectangle, Icons.rounded_corner_rounded],
-      [CanvasTool.ellipse, Icons.circle_outlined],
-      [CanvasTool.circle, Icons.radio_button_checked_rounded],
       [CanvasTool.triangle, Icons.change_history_outlined],
+      [CanvasTool.circle, Icons.radio_button_checked_rounded],
+      [CanvasTool.ellipse, Icons.circle_outlined],
       [CanvasTool.diamond, Icons.diamond_outlined],
       [CanvasTool.hexagon, Icons.hexagon_outlined],
-      [CanvasTool.star, Icons.star_border_rounded],
+    ];
+    final physicsShapes = <List<Object>>[
+      [CanvasTool.line, Icons.horizontal_rule_rounded],
+      [CanvasTool.arrow, Icons.arrow_forward_rounded],
+      [CanvasTool.rectangle, Icons.crop_square_rounded],
+      [CanvasTool.circle, Icons.radio_button_checked_rounded],
+      [CanvasTool.ellipse, Icons.circle_outlined],
+      [CanvasTool.triangle, Icons.change_history_outlined],
       [CanvasTool.customPolygon, Icons.hdr_strong_rounded],
     ];
+    final chemistryShapes = <List<Object>>[
+      [CanvasTool.line, Icons.horizontal_rule_rounded],
+      [CanvasTool.arrow, Icons.arrow_forward_rounded],
+      [CanvasTool.circle, Icons.radio_button_checked_rounded],
+      [CanvasTool.ellipse, Icons.circle_outlined],
+      [CanvasTool.hexagon, Icons.hexagon_outlined],
+      [CanvasTool.triangle, Icons.change_history_outlined],
+      [CanvasTool.customPolygon, Icons.hdr_strong_rounded],
+    ];
+    final biologyShapes = <List<Object>>[
+      [CanvasTool.circle, Icons.radio_button_checked_rounded],
+      [CanvasTool.ellipse, Icons.circle_outlined],
+      [CanvasTool.line, Icons.horizontal_rule_rounded],
+      [CanvasTool.arrow, Icons.arrow_forward_rounded],
+      [CanvasTool.triangle, Icons.change_history_outlined],
+      [CanvasTool.roundedRectangle, Icons.rounded_corner_rounded],
+      [CanvasTool.customPolygon, Icons.hdr_strong_rounded],
+    ];
+
+    Widget palette(List<List<Object>> entries) => SingleChildScrollView(
+          padding: const EdgeInsets.all(8),
+          child: Wrap(
+            spacing: 4,
+            runSpacing: 4,
+            children: entries.map((entry) {
+              final tool = entry[0] as CanvasTool;
+              return IconButton(
+                tooltip: tool.label,
+                onPressed: () {
+                  _selectTool(tool);
+                  if (tool == CanvasTool.customPolygon) _styleSheet();
+                },
+                icon: Icon(entry[1] as IconData),
+              );
+            }).toList(),
+          ),
+        );
+
     return Positioned(
-      right: 16,
+      right: 50,
       bottom: 118,
       child: Material(
         elevation: 14,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(18),
+        clipBehavior: Clip.antiAlias,
         child: SizedBox(
-          width: 190,
-          child: Padding(
-            padding: const EdgeInsets.all(8),
-            child: Wrap(
-              children: entries.map((e) => IconButton(
-                tooltip: (e[0] as CanvasTool).label,
-                onPressed: () {
-                  _selectTool(e[0] as CanvasTool);
-                  if (e[0] == CanvasTool.customPolygon) _styleSheet();
-                },
-                icon: Icon(e[1] as IconData),
-              )).toList(),
+          width: 252,
+          height: 286,
+          child: DefaultTabController(
+            length: 4,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 4, 2),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Text('Shape library', style: TextStyle(fontWeight: FontWeight.w800)),
+                      ),
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        tooltip: 'Close shape library',
+                        onPressed: () => setState(() => _shapePanel = false),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+                const TabBar(
+                  isScrollable: true,
+                  tabs: [
+                    Tab(text: 'Math'),
+                    Tab(text: 'Physics'),
+                    Tab(text: 'Chemistry'),
+                    Tab(text: 'Biology'),
+                  ],
+                ),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      palette(mathShapes),
+                      palette(physicsShapes),
+                      palette(chemistryShapes),
+                      palette(biologyShapes),
+                    ],
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(10, 0, 10, 8),
+                  child: Text(
+                    'Combine lines, arrows, and geometric shapes to build diagrams.',
+                    style: TextStyle(fontSize: 10),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ],
             ),
           ),
         ),
