@@ -23,6 +23,45 @@ import '../performance/writing_performance.dart';
 import 'snote_canvas_controller.dart';
 
 class _CanvasRepaint extends ChangeNotifier {
+  List<StrokePoint> points = const <StrokePoint>[];
+  PenConfig? pen;
+  CanvasTool? tool;
+  bool fill = false;
+  int customSides = 6;
+  String? sticker;
+  List<Offset> lassoPath = const <Offset>[];
+  Offset? eraserPoint;
+  double eraserRadius = 0;
+  bool showEraser = false;
+  Color? fillColor;
+
+  void update({
+    required List<StrokePoint> points,
+    required PenConfig? pen,
+    required CanvasTool? tool,
+    required bool fill,
+    required int customSides,
+    required String? sticker,
+    required List<Offset> lassoPath,
+    required Offset? eraserPoint,
+    required double eraserRadius,
+    required bool showEraser,
+    required Color? fillColor,
+  }) {
+    this.points = points;
+    this.pen = pen;
+    this.tool = tool;
+    this.fill = fill;
+    this.customSides = customSides;
+    this.sticker = sticker;
+    this.lassoPath = lassoPath;
+    this.eraserPoint = eraserPoint;
+    this.eraserRadius = eraserRadius;
+    this.showEraser = showEraser;
+    this.fillColor = fillColor;
+    notifyListeners();
+  }
+
   void repaint() => notifyListeners();
 }
 
@@ -47,42 +86,31 @@ class _PicturePainter extends CustomPainter {
 /// High-frequency active layer. The painter is driven by a Listenable instead
 /// of widget-tree rebuilds, so pointer moves invalidate paint only.
 class _LiveInkPainter extends CustomPainter {
-  final List<StrokePoint> points;
-  final PenConfig? pen;
-  final CanvasTool? tool;
-  final bool fill;
-  final int customSides;
-  final String? sticker;
-  final List<Offset> lassoPath;
-  final Offset? eraserPoint;
-  final double eraserRadius;
-  final bool showEraser;
-  final Color? fillColor;
+  final _CanvasRepaint liveState;
 
-  const _LiveInkPainter({
-    required this.points,
-    required this.pen,
-    required this.tool,
-    required this.fill,
-    required this.customSides,
-    required this.sticker,
-    required this.lassoPath,
-    required this.eraserPoint,
-    required this.eraserRadius,
-    required this.showEraser,
-    required this.fillColor,
-    super.repaint,
-  });
+  const _LiveInkPainter({required this.liveState}) : super(repaint: liveState);
 
   @override
   void paint(Canvas canvas, Size size) {
+    final points = liveState.points;
+    final pen = liveState.pen;
+    final tool = liveState.tool;
+    final fill = liveState.fill;
+    final customSides = liveState.customSides;
+    final sticker = liveState.sticker;
+    final lassoPath = liveState.lassoPath;
+    final eraserPoint = liveState.eraserPoint;
+    final eraserRadius = liveState.eraserRadius;
+    final showEraser = liveState.showEraser;
+    final fillColor = liveState.fillColor;
+
     if (points.isNotEmpty && pen != null && tool != null) {
-      final t = tool!;
+      final t = tool;
       if (t.isShape || sticker != null) {
         final synthetic = Stroke(
           id: 'live',
           points: points,
-          pen: pen!,
+          pen: pen,
           shape: t.isShape ? t.name : null,
           fill: fill,
           customSides: customSides,
@@ -107,15 +135,12 @@ class _LiveInkPainter extends CustomPainter {
           drawActive: true,
         ).paint(canvas, size);
       } else {
-        InkRenderer.drawInk(canvas, points, pen!);
+        InkRenderer.drawInk(canvas, points, pen);
       }
     }
 
-    if (points.isEmpty && lassoPath.length <= 1 && !showEraser) {
-      return;
-    }
+    if (points.isEmpty && lassoPath.length <= 1 && !showEraser) return;
 
-    // Handles lasso/eraser visuals even when there is no active stroke.
     if (lassoPath.length > 1) {
       final p = Paint()
         ..color = const Color(0xff4f6df6)
@@ -132,7 +157,7 @@ class _LiveInkPainter extends CustomPainter {
         ..color = const Color(0xff4f6df6).withValues(alpha: .55)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.4;
-      canvas.drawCircle(eraserPoint!, eraserRadius, p);
+      canvas.drawCircle(eraserPoint, eraserRadius, p);
     }
   }
 
@@ -637,7 +662,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
           snapshotAlreadyTaken: true,
         );
       }
-      _repaint.repaint();
+      _syncLivePainter();
       return;
     }
 
@@ -647,7 +672,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       _lasso
         ..clear()
         ..add(event.localPosition);
-      _repaint.repaint();
+      _syncLivePainter();
       return;
     }
 
@@ -1035,6 +1060,25 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _repaint.repaint();
   }
 
+  void _syncLivePainter() {
+    _repaint.update(
+      points: _live,
+      pen: _activePen,
+      tool: _activeTool,
+      fill: widget.shapeFill,
+      customSides: widget.customShapeSides,
+      sticker: _activeSticker,
+      lassoPath: List<Offset>.unmodifiable(_lasso),
+      eraserPoint: _eraserPoint,
+      eraserRadius: _eraserRadius,
+      showEraser: widget.eraseMark &&
+          (_activeTool == CanvasTool.eraser ||
+              _activeTool == CanvasTool.pixelEraser ||
+              _temporaryEraser),
+      fillColor: widget.fillColor,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Listener(
@@ -1055,23 +1099,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
           ),
           RepaintBoundary(
             child: CustomPaint(
-              painter: _LiveInkPainter(
-                points: _live,
-                pen: _activePen,
-                tool: _activeTool,
-                fill: widget.shapeFill,
-                customSides: widget.customShapeSides,
-                sticker: _activeSticker,
-                lassoPath: _lasso,
-                eraserPoint: _eraserPoint,
-                eraserRadius: _eraserRadius,
-                showEraser: widget.eraseMark &&
-                    (_activeTool == CanvasTool.eraser ||
-                        _activeTool == CanvasTool.pixelEraser ||
-                        _temporaryEraser),
-                fillColor: widget.fillColor,
-                repaint: _repaint,
-              ),
+              painter: _LiveInkPainter(liveState: _repaint),
               child: const SizedBox.expand(),
             ),
           ),
