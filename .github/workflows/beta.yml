@@ -37,20 +37,28 @@ jobs:
           flutter create --platforms=android --org=com.snote .
           rm -f test/widget_test.dart
 
-      - name: Configure Android
+      - name: Configure Android beta identity
         working-directory: app
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          p = Path('android/app/build.gradle.kts')
-          s = p.read_text()
-          s = s.replace('minSdk = flutter.minSdkVersion', 'minSdk = 24')
-          p.write_text(s)
-          p = Path('android/app/src/main/AndroidManifest.xml')
-          s = p.read_text()
-          if 'android.permission.CAMERA' not in s:
-              s = s.replace('</manifest>', '    <uses-permission android:name="android.permission.CAMERA" />\\n</manifest>')
-          p.write_text(s)
+          build = Path('android/app/build.gradle.kts')
+          text = build.read_text()
+          text = text.replace('minSdk = flutter.minSdkVersion', 'minSdk = 24')
+          if 'applicationId = "com.snote.snote"' not in text and 'applicationId = "com.snote.snote.beta"' not in text:
+              raise SystemExit('Could not locate generated Android applicationId; refusing to build an in-place beta')
+          text = text.replace('applicationId = "com.snote.snote"', 'applicationId = "com.snote.snote.beta"')
+          build.write_text(text)
+
+          manifest = Path('android/app/src/main/AndroidManifest.xml')
+          text = manifest.read_text()
+          if 'android.permission.CAMERA' not in text:
+              text = text.replace('</manifest>', '    <uses-permission android:name="android.permission.CAMERA" />\n</manifest>')
+          text = text.replace('android:label="snote"', 'android:label="Snote Beta"')
+          manifest.write_text(text)
+
+          assert 'com.snote.snote.beta' in build.read_text(), 'Beta application ID was not set'
+          assert 'Snote Beta' in manifest.read_text(), 'Beta app label was not set'
           PY
 
       - name: Install dependencies
@@ -69,9 +77,8 @@ jobs:
         working-directory: app
         run: flutter test
 
-      - name: Configure PDF.js web assets
-        working-directory: app
-        run: dart run pdfx:install_web
+      # This job builds Android only. pdfx:install_web needs web/index.html
+      # and is intentionally run by the separate Web build workflow instead.
 
       - name: Build release APK
         working-directory: app
@@ -100,5 +107,5 @@ jobs:
           files: Snote-Android-Beta.apk
           body: |
             Snote 1.1 beta build for testing only.
-            This is a prerelease from the TouchNotes-inspired editor overhaul branch, separate from the stable production release.
-            Please test live stylus ink, scientific shape palettes, lasso/selection, templates, page navigation, and persistence.
+            This APK uses the separate Android application ID com.snote.snote.beta, so it can be installed beside the stable Snote app without replacing it or touching the stable app's local data.
+            Please test live stylus ink, scientific shape palettes, lasso movement/resizing/duplication, templates, page navigation, and persistence.
