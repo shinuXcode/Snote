@@ -132,7 +132,9 @@ class _PdfProWorkspacePageState extends State<PdfProWorkspacePage> {
 
   Future<Uint8List?> _savedPdf() async {
     try {
-      return await _viewer?.saveDocument() ?? _bytes;
+      final saved = await _viewer?.saveDocument();
+      if (saved != null) return Uint8List.fromList(saved);
+      return _bytes;
     } catch (_) {
       return _bytes;
     }
