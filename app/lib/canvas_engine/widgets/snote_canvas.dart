@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -112,19 +111,19 @@ class _LiveInkPainter extends CustomPainter {
     final showEraser = liveState.showEraser;
     final fillColor = liveState.fillColor;
     if (points.isNotEmpty && pen != null && tool != null) {
-      final currentTool = tool!;
+      final currentTool = tool;
 
       // Freehand ink goes through the same renderer while the pointer is down
       // and after commit. Do not route every live frame through a second
       // temporary painter: that used to duplicate work and could make the
       // live layer visually lag the finalized document layer.
       if (!currentTool.isShape && currentTool != CanvasTool.sticker) {
-        InkRenderer.drawInk(canvas, points, pen!);
+        InkRenderer.drawInk(canvas, points, pen);
       } else {
         final synthetic = Stroke(
           id: 'live',
           points: points,
-          pen: pen!,
+          pen: pen,
           shape: currentTool.isShape ? currentTool.name : null,
           fill: fill,
           customSides: customSides,
@@ -171,7 +170,7 @@ class _LiveInkPainter extends CustomPainter {
 
     if (showEraser && eraserPoint != null && eraserRadius > 0) {
       canvas.drawCircle(
-        eraserPoint!,
+        eraserPoint,
         eraserRadius,
         Paint()
           ..color = const Color(0xff4f6df6).withValues(alpha: .55)
