@@ -329,7 +329,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
                 });
                 unawaited(_load());
               }),
-                )),
+                ),
                 IconButton(tooltip: _gridView ? 'List view' : 'Grid view', onPressed: () => setState(() => _gridView = !_gridView), icon: Icon(_gridView ? Icons.view_list_rounded : Icons.grid_view_rounded)),
               ]),
               Expanded(
