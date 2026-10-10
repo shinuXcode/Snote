@@ -337,6 +337,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       deleteSelection: deleteSelection,
       duplicateSelection: duplicateSelection,
       moveSelection: moveSelection,
+      scaleSelection: scaleSelection,
       selectAll: selectAll,
       clearSelection: clearSelection,
       canUndo: _history.isNotEmpty,
@@ -433,6 +434,45 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
                   position: point.position + Offset(dx, dy),
                 ))
             .toList(),
+      );
+    }
+    _finishDocumentMutation();
+  }
+
+  void scaleSelection(double factor) {
+    if (_selected.isEmpty || !factor.isFinite || factor <= 0) return;
+    final points = _strokes
+        .where((stroke) => _selected.contains(stroke.id))
+        .expand((stroke) => stroke.points)
+        .toList();
+    if (points.isEmpty) return;
+
+    var minX = points.first.position.dx;
+    var maxX = minX;
+    var minY = points.first.position.dy;
+    var maxY = minY;
+    for (final point in points.skip(1)) {
+      minX = math.min(minX, point.position.dx);
+      maxX = math.max(maxX, point.position.dx);
+      minY = math.min(minY, point.position.dy);
+      maxY = math.max(maxY, point.position.dy);
+    }
+    final center = Offset((minX + maxX) / 2, (minY + maxY) / 2);
+    final scale = factor.clamp(.1, 10).toDouble();
+
+    _snapshot();
+    for (var i = 0; i < _strokes.length; i++) {
+      final stroke = _strokes[i];
+      if (!_selected.contains(stroke.id)) continue;
+      _strokes[i] = stroke.copyWith(
+        points: stroke.points
+            .map((point) => point.copyWith(
+                  position: center + (point.position - center) * scale,
+                ))
+            .toList(),
+        pen: stroke.pen.copyWith(
+          size: (stroke.pen.size * scale).clamp(.5, 60).toDouble(),
+        ),
       );
     }
     _finishDocumentMutation();
