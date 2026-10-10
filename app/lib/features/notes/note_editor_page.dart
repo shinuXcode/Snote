@@ -19,6 +19,7 @@ import '../../canvas_engine/widgets/notebook_viewport.dart';
 import '../../canvas_engine/widgets/snote_canvas.dart';
 import '../../canvas_engine/widgets/snote_canvas_controller.dart';
 import '../../core/security/note_lock_service.dart';
+import '../../core/security/e2e_encryption_service.dart';
 import '../../core/settings/app_settings.dart';
 import '../../data/local/note_repository.dart';
 import '../../data/local/file_document_repository.dart';
@@ -47,6 +48,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   bool _loading = true;
   bool _locked = false;
   bool _unlocked = true;
+  bool _vaultLocked = false;
+  String? _vaultCiphertext;
+  String? _vaultError;
   bool _draw = true;
   bool _pan = false;
   bool _full = false;
@@ -128,7 +132,36 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   }
 
   Future<void> _load() async {
-    final note = await _repo.get(widget.note.id);
+    LocalNote? note;
+    try {
+      note = await _repo.get(widget.note.id);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _vaultLocked = true;
+        _vaultCiphertext = widget.note.contentJson;
+        _vaultError = 'The encrypted note could not be opened: $error';
+      });
+      return;
+    }
+
+    final savedContent = note?.contentJson;
+    if (savedContent != null &&
+        SnoteE2EEncryption.instance.isEncryptedText(savedContent)) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _vaultLocked = true;
+        _vaultCiphertext = savedContent;
+        _vaultError = null;
+      });
+      return;
+    }
+
+    _vaultLocked = false;
+    _vaultCiphertext = null;
+    _vaultError = null;
     final parsed = <Map<String, Object?>>[];
     if (note?.contentJson != null) {
       try {
@@ -441,6 +474,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
 
   @override
   Widget build(BuildContext context) {
+    if (_vaultLocked) return _vaultUnlockView();
     if (_loading) return _lockedView();
 
     return PopScope(
@@ -488,6 +522,102 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         ),
       ),
     );
+  }
+
+  Widget _vaultUnlockView() => Scaffold(
+        appBar: AppBar(title: Text(widget.note.title)),
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.enhanced_encryption_rounded, size: 52),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Encrypted note',
+                        style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900),
+                      ),
+                      const SizedBox(height: 10),
+                      const Text(
+                        'Enter the recovery passphrase used when this note was encrypted. Snote cannot reset or recover a lost passphrase.',
+                        textAlign: TextAlign.center,
+                      ),
+                      if (_vaultError != null) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          _vaultError!,
+                          style: TextStyle(color: Theme.of(context).colorScheme.error),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                      const SizedBox(height: 20),
+                      FilledButton.icon(
+                        onPressed: _vaultCiphertext == null ? null : _unlockVault,
+                        icon: const Icon(Icons.key_rounded),
+                        label: const Text('Enter recovery passphrase'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+  Future<void> _unlockVault() async {
+    final encrypted = _vaultCiphertext;
+    if (encrypted == null) return;
+
+    final controller = TextEditingController();
+    final passphrase = await showDialog<String>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Unlock Snote vault'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          obscureText: true,
+          onSubmitted: (value) => Navigator.pop(dialog, value),
+          decoration: const InputDecoration(labelText: 'Recovery passphrase'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialog, controller.text),
+            child: const Text('Unlock'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (passphrase == null || passphrase.isEmpty || !mounted) return;
+
+    try {
+      await SnoteE2EEncryption.instance.unlockWithPassphrase(
+        passphrase,
+        encrypted,
+      );
+      if (!mounted) return;
+      setState(() {
+        _vaultLocked = false;
+        _vaultError = null;
+        _loading = true;
+      });
+      await _load();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _vaultError = 'Could not unlock the note: $error');
+    }
   }
 
   Widget _lockedView() {
