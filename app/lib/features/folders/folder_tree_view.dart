@@ -132,9 +132,10 @@ class _FolderTreeViewState extends State<FolderTreeView> {
     );
   }
 
-  Widget _folderRow(LocalFolder folder, int depth) {
+  Widget _folderRow(LocalFolder folder, int depth, [Set<String> ancestry = const <String>{}]) {
+    final branch = <String>{...ancestry, folder.id};
     final children = widget.folders
-        .where((candidate) => candidate.parentId == folder.id)
+        .where((candidate) => candidate.parentId == folder.id && !branch.contains(candidate.id))
         .toList()
       ..sort((a, b) {
         final order = a.sortOrder.compareTo(b.sortOrder);
@@ -198,7 +199,6 @@ class _FolderTreeViewState extends State<FolderTreeView> {
                     const SizedBox(width: 20),
                   Icon(folderIconForKey(folder.iconKey), color: folderColor, size: 20),
                 ],
-              ),
             ),
             title: Text(
               folder.name,
@@ -252,7 +252,7 @@ class _FolderTreeViewState extends State<FolderTreeView> {
             children: [
               tile,
               if (expanded && hasChildren)
-                ...children.map((child) => _folderRow(child, depth + 1)),
+                ...children.map((child) => _folderRow(child, depth + 1, branch)),
             ],
           ),
         );
