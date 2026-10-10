@@ -30,8 +30,22 @@ class SnoteE2EEncryption {
 
   Future<void> enable(String passphrase) async {
     if (passphrase.trim().length < 8) {
-      throw const FormatException('Encryption passphrase must contain at least 8 characters.');
+      throw const FormatException(
+        'Encryption passphrase must contain at least 8 characters.',
+      );
     }
+
+    // Replacing this key without re-encrypting every existing record would
+    // permanently lock old content. Key rotation must be a separate migration.
+    final current = await _storage.read(key: _passphraseKey);
+    if (current != null && current.isNotEmpty && current != passphrase) {
+      throw const StateError(
+        'An encryption passphrase is already configured. Enter the current '
+        'passphrase, or disable encryption and decrypt existing content before '
+        'setting a new one.',
+      );
+    }
+
     await _ensureSalt();
     await _storage.write(key: _passphraseKey, value: passphrase);
     await _storage.write(key: _enabledKey, value: 'true');
@@ -82,7 +96,7 @@ class SnoteE2EEncryption {
     final salt = await _ensureSalt();
     final envelope = jsonDecode(_encrypt(bytes, passphrase, salt)) as Map;
     final payload = <int>[
-      ...utf8.encode('SNOTE-E2E-BIN-1\\n'),
+      ...utf8.encode('SNOTE-E2E-BIN-1\n'),
       ...utf8.encode(jsonEncode(envelope)),
     ];
     return payload;
@@ -91,10 +105,23 @@ class SnoteE2EEncryption {
   Future<List<int>> decryptBytes(List<int> bytes) async {
     if (!_isBinaryEnvelope(bytes)) return bytes;
     final raw = utf8.decode(bytes, allowMalformed: false);
-    final jsonStart = raw.indexOf('\\n');
-    if (jsonStart <= 0) throw const FormatException('Invalid encrypted attachment.');
-    final envelope = jsonDecode(raw.substring(jsonStart + 1));
-    if (envelope is! Map) throw const FormatException('Invalid encrypted attachment envelope.');
+    // Accept the original escaped-separator format as well as the canonical
+    // newline format so files created by earlier Snote builds remain readable.
+    final canonicalStart = raw.indexOf('\n');
+    final legacyStart = raw.indexOf(r'\\n');
+    final jsonStart = canonicalStart >= 0
+        ? canonicalStart
+        : legacyStart >= 0
+            ? legacyStart + 1
+            : -1;
+    if (jsonStart <= 0) {
+      throw const FormatException('Invalid encrypted attachment.');
+    }
+    final payloadStart = canonicalStart >= 0 ? jsonStart + 1 : jsonStart + 1;
+    final envelope = jsonDecode(raw.substring(payloadStart));
+    if (envelope is! Map) {
+      throw const FormatException('Invalid encrypted attachment envelope.');
+    }
     final passphrase = await _storage.read(key: _passphraseKey);
     if (passphrase == null || passphrase.isEmpty) {
       throw const StateError('This attachment is encrypted. Enter the Snote recovery passphrase first.');
@@ -144,7 +171,15 @@ class SnoteE2EEncryption {
     String passphrase,
     List<int> salt,
   ) async {
+    if (envelope['format'] != 'snote-e2e-v1' ||
+        envelope['cipher'] != 'AES-256-GCM' ||
+        envelope['kdf'] != 'PBKDF2-HMAC-SHA256') {
+      throw const FormatException('Unsupported encrypted content format.');
+    }
     final iterations = (envelope['iterations'] as num?)?.toInt() ?? _iterations;
+    if (iterations < 10000 || iterations > 500000) {
+      throw const FormatException('Invalid encryption work factor.');
+    }
     final kdf = Pbkdf2.hmacSha256(iterations: iterations, bits: 256);
     final key = await kdf.deriveKeyFromPassword(password: passphrase, nonce: salt);
     final cipher = AesGcm.with256bits(nonceLength: 12);
