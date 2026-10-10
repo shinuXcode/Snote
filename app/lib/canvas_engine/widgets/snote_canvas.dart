@@ -17,6 +17,7 @@ import '../persistence/ink_commit_queue.dart';
 import '../models/pen_config.dart';
 import '../models/stroke.dart';
 import '../models/stroke_codec.dart';
+import '../ink_renderer.dart';
 import '../painters/canvas_painter.dart';
 import '../performance/stroke_spatial_index.dart';
 import '../performance/writing_performance.dart';
@@ -77,64 +78,74 @@ class _LiveInkPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (points.isNotEmpty && pen != null && tool != null) {
-      final t = tool!;
-      final synthetic = Stroke(
-        id: 'live',
-        points: points,
-        pen: pen!,
-        shape: t.isShape ? t.name : null,
-        fill: fill,
-        customSides: customSides,
-        stickerText: sticker,
-        fillColor: fillColor,
-      );
+      final currentTool = tool!;
 
-      // Reuse the same drawing code as the document layer. Because this
-      // painter is isolated, only the active ink is repainted.
-      SnoteCanvasPainter(
-        strokes: const <Stroke>[],
-        activeStroke: synthetic,
-        activePoints: points,
-        activePen: pen,
-        activeTool: tool,
-        activeFill: fill,
-        activeCustomSides: customSides,
-        activeStickerText: sticker,
-        selectedIds: const <String>{},
-        lassoPath: lassoPath,
-        eraserPoint: eraserPoint,
-        eraserRadius: eraserRadius,
-        showEraserMark: showEraser,
-        drawStrokes: false,
-        drawActive: true,
-      ).paint(canvas, size);
-    }
+      // Freehand ink goes through the same renderer while the pointer is down
+      // and after commit. Do not route every live frame through a second
+      // temporary painter: that used to duplicate work and could make the
+      // live layer visually lag the finalized document layer.
+      if (!currentTool.isShape && currentTool != CanvasTool.sticker) {
+        InkRenderer.drawInk(canvas, points, pen!);
+      } else {
+        final synthetic = Stroke(
+          id: 'live',
+          points: points,
+          pen: pen!,
+          shape: currentTool.isShape ? currentTool.name : null,
+          fill: fill,
+          customSides: customSides,
+          stickerText: sticker,
+          fillColor: fillColor,
+        );
 
-    if (points.isEmpty && lassoPath.length <= 1 && !showEraser) {
-      return;
-    }
-
-    // Handles lasso/eraser visuals even when there is no active stroke.
-    if (lassoPath.length > 1) {
-      final p = Paint()
-        ..color = const Color(0xff4f6df6)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.6
-        ..strokeCap = StrokeCap.round;
-      for (var i = 1; i < lassoPath.length; i++) {
-        canvas.drawLine(lassoPath[i - 1], lassoPath[i], p);
+        SnoteCanvasPainter(
+          strokes: const <Stroke>[],
+          activeStroke: synthetic,
+          activePoints: points,
+          activePen: pen,
+          activeTool: tool,
+          activeFill: fill,
+          activeCustomSides: customSides,
+          activeStickerText: sticker,
+          selectedIds: const <String>{},
+          lassoPath: const <Offset>[],
+          eraserPoint: null,
+          eraserRadius: 0,
+          showEraserMark: false,
+          drawStrokes: false,
+          drawActive: true,
+        ).paint(canvas, size);
       }
     }
 
+    if (lassoPath.length > 1) {
+      final path = Path()..moveTo(lassoPath.first.dx, lassoPath.first.dy);
+      for (final point in lassoPath.skip(1)) {
+        path.lineTo(point.dx, point.dy);
+      }
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = const Color(0xff4f6df6)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.6
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..isAntiAlias = true,
+      );
+    }
+
     if (showEraser && eraserPoint != null && eraserRadius > 0) {
-      final p = Paint()
-        ..color = const Color(0xff4f6df6).withValues(alpha: .55)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.4;
-      canvas.drawCircle(eraserPoint!, eraserRadius, p);
+      canvas.drawCircle(
+        eraserPoint!,
+        eraserRadius,
+        Paint()
+          ..color = const Color(0xff4f6df6).withValues(alpha: .55)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.4,
+      );
     }
   }
-
   @override
   bool shouldRepaint(covariant _LiveInkPainter oldDelegate) => false;
 }
