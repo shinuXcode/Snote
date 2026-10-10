@@ -980,9 +980,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     for (final index in candidates) {
       if (index < 0 || index >= _strokes.length) continue;
       final stroke = _strokes[index];
-      if (stroke.points.any(
-        (p) => (p.position - point).distance <= radius,
-      )) {
+      if (_polylineTouchesCircle(stroke.points, point, radius)) {
         if (!snapshotAlreadyTaken && !_eraseSnapshotTaken) {
           _snapshot();
           _eraseSnapshotTaken = true;
@@ -1028,20 +1026,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
         continue;
       }
 
-      final pieces = <List<StrokePoint>>[];
-      var current = <StrokePoint>[];
-      for (final sample in stroke.points) {
-        final hit = (sample.position - point).distance <= radius;
-        if (hit) {
-          if (current.isNotEmpty) {
-            pieces.add(current);
-            current = <StrokePoint>[];
-          }
-        } else {
-          current.add(sample);
-        }
-      }
-      if (current.isNotEmpty) pieces.add(current);
+      final pieces = _subtractCircle(stroke.points, point, radius);
 
       if (pieces.length == 1 &&
           pieces.first.length == stroke.points.length) {
@@ -1247,6 +1232,122 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _selectionTransformX = false;
     _selectionTransformY = false;
     _selectionTransformChanged = false;
+  }
+
+  bool _polylineTouchesCircle(
+    List<StrokePoint> points,
+    Offset center,
+    double radius,
+  ) {
+    if (points.isEmpty) return false;
+    if (points.length == 1) return (points.first.position - center).distance <= radius;
+    for (var i = 1; i < points.length; i++) {
+      if (_distanceToSegment(center, points[i - 1].position, points[i].position) <= radius) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  double _distanceToSegment(Offset point, Offset a, Offset b) {
+    final segment = b - a;
+    final lengthSquared = segment.distanceSquared;
+    if (lengthSquared <= 1e-12) return (point - a).distance;
+    final relative = point - a;
+    final t = ((relative.dx * segment.dx + relative.dy * segment.dy) / lengthSquared)
+        .clamp(0.0, 1.0)
+        .toDouble();
+    return (point - (a + segment * t)).distance;
+  }
+
+  List<List<StrokePoint>> _subtractCircle(
+    List<StrokePoint> points,
+    Offset center,
+    double radius,
+  ) {
+    if (points.isEmpty) return <List<StrokePoint>>[];
+    if (!radius.isFinite || radius <= 0) return <List<StrokePoint>>[List.of(points)];
+    final radiusSquared = radius * radius;
+    if (points.length == 1) {
+      return (points.first.position - center).distanceSquared <= radiusSquared
+          ? <List<StrokePoint>>[]
+          : <List<StrokePoint>>[List.of(points)];
+    }
+
+    final pieces = <List<StrokePoint>>[];
+    var current = <StrokePoint>[];
+    void append(StrokePoint sample) {
+      if (current.isEmpty ||
+          current.last.position != sample.position ||
+          current.last.pressure != sample.pressure) {
+        current.add(sample);
+      }
+    }
+    void finish() {
+      if (current.isNotEmpty) {
+        pieces.add(current);
+        current = <StrokePoint>[];
+      }
+    }
+
+    for (var i = 1; i < points.length; i++) {
+      final a = points[i - 1];
+      final b = points[i];
+      final delta = b.position - a.position;
+      final lengthSquared = delta.distanceSquared;
+      if (lengthSquared <= 1e-12) {
+        if ((a.position - center).distanceSquared <= radiusSquared) {
+          finish();
+        } else {
+          append(a);
+          append(b);
+        }
+        continue;
+      }
+
+      final relative = center - a.position;
+      final projection = (relative.dx * delta.dx + relative.dy * delta.dy) / lengthSquared;
+      final closest = a.position + delta * projection;
+      final distanceSquared = (center - closest).distanceSquared;
+      final halfInterval = math.sqrt(math.max(0.0, (radiusSquared - distanceSquared) / lengthSquared));
+      final rawEnter = projection - halfInterval;
+      final rawExit = projection + halfInterval;
+
+      if (distanceSquared >= radiusSquared || rawExit <= 0 || rawEnter >= 1) {
+        append(a);
+        append(b);
+        continue;
+      }
+
+      final enter = rawEnter.clamp(0.0, 1.0).toDouble();
+      final exit = rawExit.clamp(0.0, 1.0).toDouble();
+      if (enter > 0) {
+        append(a);
+        append(_interpolateStrokePoint(a, b, enter));
+        finish();
+      } else {
+        finish();
+      }
+      if (exit < 1) {
+        append(_interpolateStrokePoint(a, b, exit));
+        append(b);
+      } else {
+        finish();
+      }
+    }
+    finish();
+    return pieces;
+  }
+
+  StrokePoint _interpolateStrokePoint(StrokePoint a, StrokePoint b, double t) {
+    double lerp(double x, double y) => x + (y - x) * t;
+    return StrokePoint(
+      position: Offset.lerp(a.position, b.position, t)!,
+      pressure: lerp(a.pressure, b.pressure),
+      timestamp: lerp(a.timestamp, b.timestamp),
+      tilt: lerp(a.tilt, b.tilt),
+      orientation: lerp(a.orientation, b.orientation),
+    );
   }
 
   void _finishLasso() {
