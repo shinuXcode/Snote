@@ -51,7 +51,7 @@ class NotificationRepository {
     await db.insert(
       'app_notifications',
       {
-        'id': id,
+        'id': '${SnoteAccountScope.ownerId}:$id',
         'owner_id': SnoteAccountScope.ownerId,
         'category': category,
         'title': title,
