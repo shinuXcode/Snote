@@ -61,7 +61,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
   Future<void> _load() async {
     final allFolders = await _folders.listAllVisible();
     final notes = await _notes.list(folderId: _folderId);
-    final recentNotes = await _notes.listAllVisible();
+    final recentNotes = await _notes.listAllVisible(limit: 6);
     if (!mounted) return;
     final selectedId = _selected?.id;
     final visible = notes.where(_matchesSearch).toList();
@@ -243,7 +243,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
                 ),
                 const SizedBox(height: 20),
                 DropdownButtonFormField<String>(
-                  value: iconKey,
+                  initialValue: iconKey,
                   decoration: const InputDecoration(labelText: 'Folder icon'),
                   items: icons.entries.map((entry) => DropdownMenuItem(
                     value: entry.key,
