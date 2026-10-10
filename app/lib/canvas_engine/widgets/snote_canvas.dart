@@ -573,24 +573,17 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       _touchPointers.add(event.pointer);
       if (_touchPointers.length >= 2) {
         _multiTouchGesture = true;
-        if (_activePointer != -1 &&
-            _activeTool != null &&
-            (_activeTool == CanvasTool.ballpoint ||
-                _activeTool == CanvasTool.fountain ||
-                _activeTool == CanvasTool.calligraphy ||
-                _activeTool == CanvasTool.pencil ||
-                _activeTool == CanvasTool.highlighter ||
-                _activeTool == CanvasTool.marker ||
-                _activeTool == CanvasTool.brush)) {
-          _activePointer = -1;
-          _activePen = null;
-          _activeTool = null;
-          _activeSticker = null;
-          _real = const <StrokePoint>[];
-          _live = const <StrokePoint>[];
-          _input?.reset();
-          _repaint.repaint();
-        }
+
+        // Once two fingers take over the viewport, cancel every active canvas
+        // operation (including erasing and lasso) and release stylus ownership.
+        // Otherwise the active pointer can become unreachable while the lock
+        // continues rejecting future touches and stylus strokes.
+        _activePointer = -1;
+        _ignorePointer = false;
+        _temporaryEraser = false;
+        _eraseSnapshotTaken = false;
+        _lock.reset();
+        _clearActiveState();
         return;
       }
       if (_multiTouchGesture) return;
@@ -734,7 +727,12 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       }
     }
 
-    if (event.pointer != _activePointer) return;
+    if (event.pointer != _activePointer) {
+      // Defensively release a matching lock even if another gesture already
+      // cancelled the active canvas pointer.
+      _lock.end(event);
+      return;
+    }
 
     if (_ignorePointer) {
       _ignorePointer = false;
@@ -770,7 +768,19 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
   }
 
   void _pointerCancel(PointerCancelEvent event) {
-    if (event.pointer != _activePointer) return;
+    // Cancelled touch pointers still count toward the multi-touch state. Remove
+    // them before checking canvas ownership so a cancelled gesture cannot leave
+    // the viewport stuck in multi-touch mode.
+    if (event.kind == PointerDeviceKind.touch) {
+      _touchPointers.remove(event.pointer);
+      if (_touchPointers.isEmpty) _multiTouchGesture = false;
+    }
+
+    if (event.pointer != _activePointer) {
+      _lock.end(event);
+      return;
+    }
+
     _eraseSnapshotTaken = false;
     _temporaryEraser = false;
     _clearActiveState();
