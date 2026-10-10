@@ -183,6 +183,47 @@ class _LiveInkPainter extends CustomPainter {
   bool shouldRepaint(covariant _LiveInkPainter oldDelegate) => false;
 }
 
+class _SelectionOverlayPainter extends CustomPainter {
+  final Rect? bounds;
+
+  const _SelectionOverlayPainter({required this.bounds});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = bounds;
+    if (rect == null) return;
+    final outline = Paint()
+      ..color = const Color(0xff4f6df6)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4;
+    canvas.drawRect(rect, outline);
+
+    final handles = <Offset>[
+      rect.topLeft,
+      Offset(rect.center.dx, rect.top),
+      rect.topRight,
+      Offset(rect.right, rect.center.dy),
+      rect.bottomRight,
+      Offset(rect.center.dx, rect.bottom),
+      rect.bottomLeft,
+      Offset(rect.left, rect.center.dy),
+    ];
+    final fill = Paint()..color = Colors.white;
+    final border = Paint()
+      ..color = const Color(0xff4f6df6)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4;
+    for (final point in handles) {
+      canvas.drawCircle(point, 4.5, fill);
+      canvas.drawCircle(point, 4.5, border);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _SelectionOverlayPainter oldDelegate) =>
+      oldDelegate.bounds != bounds;
+}
+
 class SnoteCanvas extends StatefulWidget {
   final PenConfig pen;
   final CanvasTool tool;
@@ -268,6 +309,16 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
   Offset? _eraserPoint;
   double _eraserRadius = 0;
   int _activePointer = -1;
+  String? _selectionTransformMode;
+  String? _selectionTransformHandle;
+  Offset? _selectionTransformStart;
+  Offset? _selectionTransformAnchor;
+  Offset? _selectionTransformStartHandle;
+  Rect? _selectionTransformStartBounds;
+  List<Stroke> _selectionTransformOriginals = const <Stroke>[];
+  bool _selectionTransformX = false;
+  bool _selectionTransformY = false;
+  bool _selectionTransformChanged = false;
   bool _ignorePointer = false;
   bool _temporaryEraser = false;
   bool _eraseSnapshotTaken = false;
@@ -657,6 +708,12 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
   }
 
   void _pointerDown(PointerDownEvent event) {
+    // Fingers manipulate a completed lasso selection; stylus events remain
+    // dedicated to ink so a palm or finger cannot steal the writing pointer.
+    if (event.kind == PointerDeviceKind.touch && _activePointer == -1 &&
+        _selected.isNotEmpty && _beginSelectionTransform(event)) {
+      return;
+    }
     _recordInput();
     if (!_accept(event) || _activePointer != -1) return;
 
@@ -741,6 +798,10 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
 
   void _pointerMove(PointerMoveEvent event) {
     if (event.pointer != _activePointer || _ignorePointer) return;
+    if (_selectionTransformMode != null) {
+      _updateSelectionTransform(event.localPosition);
+      return;
+    }
     _recordInput();
 
     if (_activeTool == CanvasTool.eraser ||
@@ -788,6 +849,12 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
   void _pointerUp(PointerUpEvent event) {
     if (event.pointer != _activePointer) return;
 
+    if (_selectionTransformMode != null) {
+      _finishSelectionTransform();
+      _activePointer = -1;
+      return;
+    }
+
     if (_ignorePointer) {
       _ignorePointer = false;
       _lock.end(event);
@@ -824,6 +891,11 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
 
   void _pointerCancel(PointerCancelEvent event) {
     if (event.pointer != _activePointer) return;
+    if (_selectionTransformMode != null) {
+      _finishSelectionTransform();
+      _activePointer = -1;
+      return;
+    }
     _eraseSnapshotTaken = false;
     _temporaryEraser = false;
     _clearActiveState();
@@ -1001,6 +1073,185 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     widget.onEraserMiss?.call();
   }
 
+  Rect? get _selectionBounds {
+    final points = _strokes
+        .where((stroke) => _selected.contains(stroke.id))
+        .expand((stroke) => stroke.points)
+        .toList();
+    if (points.isEmpty) return null;
+    var left = points.first.position.dx;
+    var right = left;
+    var top = points.first.position.dy;
+    var bottom = top;
+    for (final point in points.skip(1)) {
+      left = math.min(left, point.position.dx);
+      right = math.max(right, point.position.dx);
+      top = math.min(top, point.position.dy);
+      bottom = math.max(bottom, point.position.dy);
+    }
+    // A minimum visible selection target makes narrow lines practical to move.
+    return Rect.fromLTRB(left, top, right, bottom).inflate(8);
+  }
+
+  List<MapEntry<String, Offset>> _selectionHandles(Rect bounds) => [
+        MapEntry('tl', bounds.topLeft),
+        MapEntry('tm', Offset(bounds.center.dx, bounds.top)),
+        MapEntry('tr', bounds.topRight),
+        MapEntry('rm', Offset(bounds.right, bounds.center.dy)),
+        MapEntry('br', bounds.bottomRight),
+        MapEntry('bm', Offset(bounds.center.dx, bounds.bottom)),
+        MapEntry('bl', bounds.bottomLeft),
+        MapEntry('lm', Offset(bounds.left, bounds.center.dy)),
+      ];
+
+  bool _beginSelectionTransform(PointerDownEvent event) {
+    final bounds = _selectionBounds;
+    if (bounds == null || !bounds.inflate(16).contains(event.localPosition)) {
+      return false;
+    }
+    String? handle;
+    Offset? handlePoint;
+    var nearest = 18.0;
+    for (final candidate in _selectionHandles(bounds)) {
+      final distance = (candidate.value - event.localPosition).distance;
+      if (distance <= nearest) {
+        nearest = distance;
+        handle = candidate.key;
+        handlePoint = candidate.value;
+      }
+    }
+    final isResize = handle != null;
+    if (!isResize && !bounds.contains(event.localPosition)) return false;
+
+    _selectionTransformMode = isResize ? 'resize' : 'move';
+    _selectionTransformHandle = handle;
+    _selectionTransformStart = event.localPosition;
+    _selectionTransformStartHandle = handlePoint;
+    _selectionTransformStartBounds = bounds;
+    _selectionTransformOriginals = _strokes
+        .where((stroke) => _selected.contains(stroke.id))
+        .toList(growable: false);
+    if (_selectionTransformOriginals.isEmpty) {
+      _clearSelectionTransformState();
+      return false;
+    }
+
+    final h = handle;
+    _selectionTransformX = h == 'tl' || h == 'tm' || h == 'tr' ||
+        h == 'rm' || h == 'br' || h == 'bm' || h == 'bl' || h == 'lm';
+    _selectionTransformY = _selectionTransformX;
+    if (h == 'tm' || h == 'bm') _selectionTransformX = false;
+    if (h == 'lm' || h == 'rm') _selectionTransformY = false;
+
+    if (h == 'tl') _selectionTransformAnchor = bounds.bottomRight;
+    if (h == 'tm') _selectionTransformAnchor = Offset(bounds.center.dx, bounds.bottom);
+    if (h == 'tr') _selectionTransformAnchor = bounds.bottomLeft;
+    if (h == 'rm') _selectionTransformAnchor = Offset(bounds.left, bounds.center.dy);
+    if (h == 'br') _selectionTransformAnchor = bounds.topLeft;
+    if (h == 'bm') _selectionTransformAnchor = Offset(bounds.center.dx, bounds.top);
+    if (h == 'bl') _selectionTransformAnchor = bounds.topRight;
+    if (h == 'lm') _selectionTransformAnchor = Offset(bounds.right, bounds.center.dy);
+
+    _snapshot();
+    _selectionTransformChanged = false;
+    _activePointer = event.pointer;
+    return true;
+  }
+
+  void _updateSelectionTransform(Offset position) {
+    final mode = _selectionTransformMode;
+    final start = _selectionTransformStart;
+    final bounds = _selectionTransformStartBounds;
+    if (mode == null || start == null || bounds == null) return;
+    final original = _selectionTransformOriginals;
+    if (original.isEmpty) return;
+
+    var dx = 0.0;
+    var dy = 0.0;
+    var sx = 1.0;
+    var sy = 1.0;
+    if (mode == 'move') {
+      dx = position.dx - start.dx;
+      dy = position.dy - start.dy;
+    } else {
+      final anchor = _selectionTransformAnchor;
+      final startHandle = _selectionTransformStartHandle;
+      if (anchor == null || startHandle == null) return;
+      if (_selectionTransformX) {
+        final denominator = startHandle.dx - anchor.dx;
+        if (denominator.abs() > 1) {
+          sx = ((position.dx - anchor.dx) / denominator).clamp(.1, 10).toDouble();
+        }
+      }
+      if (_selectionTransformY) {
+        final denominator = startHandle.dy - anchor.dy;
+        if (denominator.abs() > 1) {
+          sy = ((position.dy - anchor.dy) / denominator).clamp(.1, 10).toDouble();
+        }
+      }
+    }
+
+    final byId = {for (final stroke in original) stroke.id: stroke};
+    for (var i = 0; i < _strokes.length; i++) {
+      final current = _strokes[i];
+      final source = byId[current.id];
+      if (source == null) continue;
+      final points = source.points.map((point) {
+        final Offset next;
+        if (mode == 'move') {
+          next = point.position + Offset(dx, dy);
+        } else {
+          final anchor = _selectionTransformAnchor!;
+          next = Offset(
+            anchor.dx + (point.position.dx - anchor.dx) * sx,
+            anchor.dy + (point.position.dy - anchor.dy) * sy,
+          );
+        }
+        return point.copyWith(position: next);
+      }).toList(growable: false);
+      final widthFactor = math.sqrt(sx * sy);
+      _strokes[i] = source.copyWith(
+        points: points,
+        pen: mode == 'resize'
+            ? source.pen.copyWith(
+                size: (source.pen.size * widthFactor).clamp(.5, 60).toDouble(),
+              )
+            : source.pen,
+      );
+    }
+    _selectionTransformChanged = true;
+    // Transforms are uncommon compared with drawing; rebuilding the immutable
+    // picture here keeps the finger-following preview accurate. Persistence
+    // and the spatial index are intentionally deferred until pointer-up.
+    _recordDocumentPicture();
+    _repaint.repaint();
+    if (mounted) setState(() {});
+  }
+
+  void _finishSelectionTransform() {
+    final changed = _selectionTransformChanged;
+    _clearSelectionTransformState();
+    if (changed) {
+      _spatial.rebuild(_strokes);
+      _recordDocumentPicture();
+      _commitQueue?.enqueue(StrokeCodec.strokesToDocument(_strokes));
+    }
+    _notifySelection();
+  }
+
+  void _clearSelectionTransformState() {
+    _selectionTransformMode = null;
+    _selectionTransformHandle = null;
+    _selectionTransformStart = null;
+    _selectionTransformAnchor = null;
+    _selectionTransformStartHandle = null;
+    _selectionTransformStartBounds = null;
+    _selectionTransformOriginals = const <Stroke>[];
+    _selectionTransformX = false;
+    _selectionTransformY = false;
+    _selectionTransformChanged = false;
+  }
+
   void _finishLasso() {
     if (_lasso.length < 3) {
       _clearActiveState();
@@ -1047,6 +1298,11 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
               child: const SizedBox.expand(),
             ),
           ),
+          if (_selected.isNotEmpty)
+            CustomPaint(
+              painter: _SelectionOverlayPainter(bounds: _selectionBounds),
+              child: const SizedBox.expand(),
+            ),
           if (widget.showPerformanceOverlay && _perfEnabled)
             WritingPerformanceOverlay(stats: _perf),
         ],
