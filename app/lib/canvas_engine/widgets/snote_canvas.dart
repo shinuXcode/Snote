@@ -709,10 +709,17 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
   }
 
   void _pointerDown(PointerDownEvent event) {
-    // Fingers manipulate a completed lasso selection; stylus events remain
-    // dedicated to ink so a palm or finger cannot steal the writing pointer.
-    if (event.kind == PointerDeviceKind.touch && _activePointer == -1 &&
-        _selected.isNotEmpty && _beginSelectionTransform(event)) {
+    // A completed lasso selection can be moved/resized directly with a
+    // finger or stylus. Only a down inside the selection or its handles is
+    // intercepted; all other stylus input remains available for writing.
+    final canTransformWithPointer = event.kind == PointerDeviceKind.touch ||
+        event.kind == PointerDeviceKind.stylus ||
+        event.kind == PointerDeviceKind.invertedStylus ||
+        event.kind == PointerDeviceKind.mouse;
+    if (canTransformWithPointer &&
+        _activePointer == -1 &&
+        _selected.isNotEmpty &&
+        _beginSelectionTransform(event)) {
       return;
     }
     _recordInput();
