@@ -93,7 +93,7 @@ class _PdfProWorkspacePageState extends State<PdfProWorkspacePage> {
       _page = 1;
       _pageCount = 0;
       _revision++;
-      _markup = _Markup.none;
+      _viewer?.annotationMode = PdfAnnotationMode.none;
       _inkMode = false;
     });
     _loadThumbs(bytes);
@@ -703,3 +703,5 @@ class _PageRaster {
   final Uint8List bytes;
   const _PageRaster(this.bytes);
 }
+
+enum _Markup { none, highlight, underline, strikeout }
