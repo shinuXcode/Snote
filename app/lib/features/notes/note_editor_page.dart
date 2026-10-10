@@ -976,9 +976,47 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       case CanvasTool.pixelEraser: return Icons.auto_fix_high_rounded;
       case CanvasTool.lasso: return Icons.gesture_rounded;
       case CanvasTool.line: return Icons.horizontal_rule_rounded;
-      case CanvasTool.arrow: return Icons.arrow_forward_rounded;
-      case CanvasTool.rectangle: return Icons.crop_square_rounded;
-      default: return Icons.category_outlined;
+      case CanvasTool.arrow:
+      case CanvasTool.vectorArrow:
+      case CanvasTool.projectilePath: return Icons.arrow_outward_rounded;
+      case CanvasTool.rectangle:
+      case CanvasTool.plantCell: return Icons.crop_square_rounded;
+      case CanvasTool.roundedRectangle: return Icons.rounded_corner_rounded;
+      case CanvasTool.ellipse:
+      case CanvasTool.circle:
+      case CanvasTool.animalCell:
+      case CanvasTool.orbital:
+      case CanvasTool.atom: return Icons.circle_outlined;
+      case CanvasTool.triangle:
+      case CanvasTool.angle: return Icons.change_history_outlined;
+      case CanvasTool.diamond: return Icons.diamond_outlined;
+      case CanvasTool.hexagon:
+      case CanvasTool.benzeneRing: return Icons.hexagon_outlined;
+      case CanvasTool.star: return Icons.star_border_rounded;
+      case CanvasTool.coordinateAxes:
+      case CanvasTool.parabola:
+      case CanvasTool.sineWave: return Icons.show_chart_rounded;
+      case CanvasTool.rayDiagram:
+      case CanvasTool.convexLens:
+      case CanvasTool.concaveLens:
+      case CanvasTool.planeMirror: return Icons.remove_red_eye_outlined;
+      case CanvasTool.forceDiagram:
+      case CanvasTool.pulley: return Icons.device_hub_outlined;
+      case CanvasTool.circuitResistor:
+      case CanvasTool.circuitBattery:
+      case CanvasTool.capacitor:
+      case CanvasTool.circuitSwitch:
+      case CanvasTool.circuitLamp: return Icons.electrical_services_outlined;
+      case CanvasTool.molecule: return Icons.bubble_chart_outlined;
+      case CanvasTool.beaker:
+      case CanvasTool.testTube:
+      case CanvasTool.conicalFlask: return Icons.science_outlined;
+      case CanvasTool.dnaHelix:
+      case CanvasTool.neuron:
+      case CanvasTool.leaf:
+      case CanvasTool.microscope: return Icons.biotech_outlined;
+      case CanvasTool.customPolygon: return Icons.hdr_strong_rounded;
+      case CanvasTool.sticker: return Icons.emoji_emotions_outlined;
     }
   }
 
@@ -1122,45 +1160,122 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     );
   }
 
-  Widget _shapePanelWidget() {
-    final entries = [
-      [CanvasTool.line, Icons.horizontal_rule_rounded],
-      [CanvasTool.arrow, Icons.arrow_forward_rounded],
-      [CanvasTool.rectangle, Icons.crop_square_rounded],
-      [CanvasTool.roundedRectangle, Icons.rounded_corner_rounded],
-      [CanvasTool.ellipse, Icons.circle_outlined],
-      [CanvasTool.circle, Icons.radio_button_checked_rounded],
-      [CanvasTool.triangle, Icons.change_history_outlined],
-      [CanvasTool.diamond, Icons.diamond_outlined],
-      [CanvasTool.hexagon, Icons.hexagon_outlined],
-      [CanvasTool.star, Icons.star_border_rounded],
-      [CanvasTool.customPolygon, Icons.hdr_strong_rounded],
-    ];
-    return Positioned(
-      right: 16,
-      bottom: 118,
-      child: Material(
-        elevation: 14,
-        borderRadius: BorderRadius.circular(20),
-        child: SizedBox(
-          width: 190,
-          child: Padding(
-            padding: const EdgeInsets.all(8),
-            child: Wrap(
-              children: entries.map((e) => IconButton(
-                tooltip: (e[0] as CanvasTool).label,
-                onPressed: () {
-                  _selectTool(e[0] as CanvasTool);
-                  if (e[0] == CanvasTool.customPolygon) _styleSheet();
-                },
-                icon: Icon(e[1] as IconData),
-              )).toList(),
-            ),
+  Widget _shapePanelWidget() => Positioned(
+        right: 48,
+        top: 54,
+        bottom: 72,
+        width: 300,
+        child: Material(
+          elevation: 14,
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(18),
+          clipBehavior: Clip.antiAlias,
+          child: DefaultTabController(
+            length: 5,
+            child: Column(children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 8, 2),
+                child: Row(children: [
+                  const Expanded(child: Text('Shapes & study diagrams', style: TextStyle(fontWeight: FontWeight.w900))),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'Close shapes',
+                    onPressed: () => setState(() => _shapePanel = false),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ]),
+              ),
+              const TabBar(
+                isScrollable: true,
+                tabs: [
+                  Tab(text: 'Basic'),
+                  Tab(text: 'Maths'),
+                  Tab(text: 'Physics'),
+                  Tab(text: 'Chemistry'),
+                  Tab(text: 'Biology'),
+                ],
+              ),
+              Expanded(child: TabBarView(children: [
+                _shapeGrid([
+                  CanvasTool.line, CanvasTool.arrow, CanvasTool.rectangle,
+                  CanvasTool.roundedRectangle, CanvasTool.ellipse, CanvasTool.circle,
+                  CanvasTool.triangle, CanvasTool.diamond, CanvasTool.hexagon,
+                  CanvasTool.star, CanvasTool.customPolygon,
+                ]),
+                _shapeGrid([
+                  CanvasTool.coordinateAxes, CanvasTool.parabola, CanvasTool.sineWave,
+                  CanvasTool.angle, CanvasTool.vectorArrow,
+                ]),
+                _shapeGrid([
+                  CanvasTool.vectorArrow, CanvasTool.projectilePath, CanvasTool.rayDiagram,
+                  CanvasTool.convexLens, CanvasTool.concaveLens, CanvasTool.planeMirror,
+                  CanvasTool.forceDiagram, CanvasTool.pulley,
+                ]),
+                _shapeGrid([
+                  CanvasTool.atom, CanvasTool.molecule, CanvasTool.benzeneRing,
+                  CanvasTool.beaker, CanvasTool.testTube, CanvasTool.conicalFlask,
+                  CanvasTool.orbital,
+                ]),
+                _shapeGrid([
+                  CanvasTool.animalCell, CanvasTool.plantCell, CanvasTool.dnaHelix,
+                  CanvasTool.neuron, CanvasTool.leaf, CanvasTool.microscope,
+                ]),
+              ])),
+            ]),
           ),
         ),
-      ),
-    );
-  }
+      );
+
+  Widget _shapeGrid(List<CanvasTool> tools) => GridView.builder(
+        padding: const EdgeInsets.all(10),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          crossAxisSpacing: 7,
+          mainAxisSpacing: 7,
+          childAspectRatio: 1.05,
+        ),
+        itemCount: tools.length,
+        itemBuilder: (_, index) {
+          final tool = tools[index];
+          return Tooltip(
+            message: tool.label,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => _selectTool(tool),
+              child: Ink(
+                decoration: BoxDecoration(
+                  color: _tool == tool
+                      ? Theme.of(context).colorScheme.primaryContainer
+                      : Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _tool == tool
+                        ? Theme.of(context).colorScheme.primary
+                        : Colors.transparent,
+                  ),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(_toolIcon(tool), size: 25),
+                    const SizedBox(height: 5),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 3),
+                      child: Text(
+                        tool.label,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 10, height: 1.05),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      );
 
   Widget _selectionTools() => Positioned(
         left: 8,
