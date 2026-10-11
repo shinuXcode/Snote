@@ -1678,59 +1678,213 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     );
   }
 
+  List<Map<String, dynamic>> get _savedPenPresets {
+    try {
+      final decoded = jsonDecode(_settings.getString('pencasePresets'));
+      if (decoded is List) {
+        return decoded.whereType<Map>().map((entry) => Map<String, dynamic>.from(entry)).toList();
+      }
+    } catch (_) {}
+    return <Map<String, dynamic>>[];
+  }
+
+  Future<void> _applyPenPreset(Map<String, dynamic> preset) async {
+    final toolName = preset['tool']?.toString() ?? CanvasTool.ballpoint.name;
+    final target = CanvasTool.values.firstWhere(
+      (tool) => tool.name == toolName,
+      orElse: () => CanvasTool.ballpoint,
+    );
+    final colorValue = (preset['color'] as num?)?.toInt() ?? _penColor.toARGB32();
+    final size = (preset['size'] as num?)?.toDouble() ?? _penSize;
+    final opacity = (preset['opacity'] as num?)?.toDouble() ?? _opacity;
+    setState(() {
+      _tool = target;
+      _penColor = Color(colorValue);
+      _toolColorOverrides[target.name] = Color(colorValue);
+      _penSize = size.clamp(.5, 60).toDouble();
+      _toolSizeOverrides[target.name] = _penSize;
+      _opacity = opacity.clamp(.05, 1).toDouble();
+    });
+    await _settings.setString('toolColors', jsonEncode({
+      for (final entry in _toolColorOverrides.entries) entry.key: entry.value.toARGB32(),
+    }));
+    await _settings.setString('toolSizes', jsonEncode(_toolSizeOverrides));
+  }
+
+  Widget _presetToolButton(Map<String, dynamic> preset) {
+    final name = preset['name']?.toString() ?? 'Saved pen';
+    final colorValue = (preset['color'] as num?)?.toInt() ?? _penColor.toARGB32();
+    return IconButton(
+      tooltip: name,
+      onPressed: () => unawaited(_applyPenPreset(preset)),
+      icon: Container(
+        width: 21,
+        height: 21,
+        decoration: BoxDecoration(
+          color: Color(colorValue),
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outline,
+            width: 1.4,
+          ),
+        ),
+        child: const Icon(Icons.edit_rounded, size: 12, color: Colors.white),
+      ),
+    );
+  }
+
   Future<void> _pencaseSheet() async {
     const tools = <CanvasTool>[
       CanvasTool.ballpoint, CanvasTool.fountain, CanvasTool.pencil,
       CanvasTool.highlighter, CanvasTool.marker, CanvasTool.brush,
-      CanvasTool.eraser, CanvasTool.lasso,
-      CanvasTool.line, CanvasTool.arrow, CanvasTool.rectangle,
+      CanvasTool.eraser, CanvasTool.lasso, CanvasTool.line,
+      CanvasTool.arrow, CanvasTool.rectangle, CanvasTool.ellipse,
     ];
     final selected = _settings.getString('pencaseTools').split(',').where((v) => v.isNotEmpty).toSet();
+    final presets = _savedPenPresets;
+    final nameController = TextEditingController(text: '${_tool.label} ${presets.length + 1}');
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
       builder: (sheetContext) => StatefulBuilder(
         builder: (_, setModal) => SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const Align(alignment: Alignment.centerLeft, child: Text('Pencase', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900))),
-              const SizedBox(height: 8),
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Keep your most-used tools in the floating toolbar.'),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: tools.map((tool) => FilterChip(
-                  avatar: Icon(_toolIcon(tool), size: 18),
-                  label: Text(tool.label),
-                  selected: selected.contains(tool.name),
-                  onSelected: (value) => setModal(() {
-                    if (value) {
-                      selected.add(tool.name);
-                    } else {
-                      selected.remove(tool.name);
-                    }
-                  }),
-                )).toList(),
-              ),
-              const SizedBox(height: 14),
-              FilledButton(
-                onPressed: () async {
-                  await _settings.setString('pencaseTools', selected.join(','));
-                  if (mounted) Navigator.pop(sheetContext);
-                },
-                child: const Text('Save pencase'),
-              ),
-            ]),
+          child: SizedBox(
+            height: MediaQuery.sizeOf(context).height * .86,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Align(alignment: Alignment.centerLeft, child: Text('Pencase', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900))),
+                const SizedBox(height: 6),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Save the same pen multiple times with different colours and widths. Saved presets also appear in the floating toolbox.'),
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      const Text('Visible tools', style: TextStyle(fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: tools.map((tool) => FilterChip(
+                          avatar: Icon(_toolIcon(tool), size: 18),
+                          label: Text(tool.label),
+                          selected: selected.contains(tool.name),
+                          onSelected: (value) => setModal(() {
+                            if (value) {
+                              selected.add(tool.name);
+                            } else {
+                              selected.remove(tool.name);
+                            }
+                          }),
+                        )).toList(),
+                      ),
+                      const Divider(height: 28),
+                      const Text('Save the current pen as a preset', style: TextStyle(fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: nameController,
+                        decoration: const InputDecoration(
+                          labelText: 'Preset name',
+                          hintText: 'Blue fountain pen',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(children: [
+                        Container(
+                          width: 30,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: _toolColorOverrides[_tool.name] ?? _penColor,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Theme.of(context).colorScheme.outline),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text('${_tool.label} · ${(_toolSizeOverrides[_tool.name] ?? _penSize).toStringAsFixed(1)} px')),
+                        FilledButton.icon(
+                          onPressed: () async {
+                            final name = nameController.text.trim().isEmpty
+                                ? '${_tool.label} ${presets.length + 1}'
+                                : nameController.text.trim();
+                            final entry = <String, dynamic>{
+                              'id': DateTime.now().microsecondsSinceEpoch.toString(),
+                              'name': name,
+                              'tool': _tool.name,
+                              'color': (_toolColorOverrides[_tool.name] ?? _penColor).toARGB32(),
+                              'size': _toolSizeOverrides[_tool.name] ?? _penSize,
+                              'opacity': _opacity,
+                            };
+                            setModal(() => presets.insert(0, entry));
+                            await _settings.setString('pencasePresets', jsonEncode(presets));
+                            nameController.text = '${_tool.label} ${presets.length + 1}';
+                          },
+                          icon: const Icon(Icons.bookmark_add_outlined),
+                          label: const Text('Save pen'),
+                        ),
+                      ]),
+                      const Divider(height: 28),
+                      Row(children: [
+                        const Expanded(child: Text('Saved pen presets', style: TextStyle(fontWeight: FontWeight.w800))),
+                        Text('${presets.length}'),
+                      ]),
+                      if (presets.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 18),
+                          child: Text('No saved presets yet. Save a named pen above.'),
+                        ),
+                      for (final preset in presets)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: CircleAvatar(
+                            backgroundColor: Color((preset['color'] as num?)?.toInt() ?? 0xff303030),
+                            child: Icon(_toolIcon(CanvasTool.values.firstWhere(
+                              (tool) => tool.name == preset['tool'],
+                              orElse: () => CanvasTool.ballpoint,
+                            )), color: Colors.white, size: 19),
+                          ),
+                          title: Text(preset['name']?.toString() ?? 'Saved pen'),
+                          subtitle: Text('${preset['tool'] ?? 'ballpoint'} · ${((preset['size'] as num?)?.toDouble() ?? 3).toStringAsFixed(1)} px'),
+                          onTap: () async {
+                            Navigator.pop(sheetContext);
+                            await _applyPenPreset(preset);
+                          },
+                          trailing: IconButton(
+                            tooltip: 'Delete preset',
+                            onPressed: () async {
+                              final id = preset['id'];
+                              setModal(() => presets.removeWhere((value) => value['id'] == id));
+                              await _settings.setString('pencasePresets', jsonEncode(presets));
+                            },
+                            icon: const Icon(Icons.delete_outline_rounded),
+                          ),
+                        ),
+                    ]),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () async {
+                      await _settings.setString('pencaseTools', selected.join(','));
+                      if (mounted) Navigator.pop(sheetContext);
+                    },
+                    child: const Text('Save pencase layout'),
+                  ),
+                ),
+              ]),
+            ),
           ),
         ),
       ),
     );
+    nameController.dispose();
   }
 
   Widget _shapePanelWidget() => Positioned(
