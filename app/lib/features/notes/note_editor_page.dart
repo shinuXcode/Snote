@@ -8,6 +8,7 @@ import 'package:flutter/rendering.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:pdf/pdf.dart' as pdfcore;
 import 'package:pdf/widgets.dart' as pw;
+import 'package:pdfx/pdfx.dart';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -57,6 +58,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   final _lock = const NoteLockService();
   final _settings = SnoteSettings.instance;
   final GlobalKey _pageCaptureKey = GlobalKey();
+  final GlobalKey _toolbarKey = GlobalKey();
   final Map<String, double> _toolSizeOverrides = <String, double>{};
   final Map<String, Color> _toolColorOverrides = <String, Color>{};
   final Map<String, bool> _toolDashedOverrides = <String, bool>{};
@@ -77,6 +79,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   bool _pan = false;
   bool _full = false;
   bool _preview = false;
+  bool _tabsVisible = true;
+  bool _readingMode = false;
+  bool _eyedropperActive = false;
   bool _toolbar = true;
   bool _docked = false;
   String _dockSide = 'bottom';
@@ -397,6 +402,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     p['lineColor'] ??= 0xffd8dee8;
     p['lineOpacity'] ??= .85;
     p['spacing'] ??= 28.0;
+    p['lineWidth'] ??= .7;
+    p['pageSize'] ??= 'A4';
     p['cornellAssist'] ??= false;
     p['orientation'] ??= 'vertical';
     p['strokes'] ??= <Object?>[];
@@ -428,6 +435,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       'lineColor': inheritedLineColor,
       'lineOpacity': inheritedOpacity,
       'spacing': inheritedSpacing,
+      'lineWidth': _pages.isNotEmpty ? _pageDouble('lineWidth', .7) : .7,
+      'pageSize': _pages.isNotEmpty ? (pageData['pageSize']?.toString() ?? 'A4') : 'A4',
       'cornellAssist': inheritedCornell,
       'orientation': inheritedOrientation,
       'strokes': <Object?>[],
@@ -710,14 +719,14 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                 ),
               ),
               if (!_full) _header(),
-              if (!_full) _openNotesTabsBar(),
-              if (!_full) _movablePageChanger(),
-              if (_preview && !_full) _previewRail(),
-              if (_toolbar && _draw) _toolbarWidget(),
-              if (_shapePanel && !_full) _shapePanelWidget(),
-              if (!_toolbar && !_full) _toolbarOpen(),
+              if (!_full && _tabsVisible) _openNotesTabsBar(),
+              if (!_full && !_readingMode) _movablePageChanger(),
+              if (_preview && !_full && !_readingMode) _previewRail(),
+              if (_toolbar && _draw && !_readingMode) _toolbarWidget(),
+              if (_shapePanel && !_full && !_readingMode) _shapePanelWidget(),
+              if (!_toolbar && !_full && !_readingMode) _toolbarOpen(),
               if (_full) _fullExit(),
-              if (_selected > 0) _selectionTools(),
+              if (_selected > 0 && !_readingMode) _selectionTools(),
             ],
           ),
         ),
@@ -816,6 +825,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   fillColor: _fillColor,
                   smoothing: _settings.getDouble('strokeSmoothing'),
                   showPerformanceOverlay: const bool.fromEnvironment('SNOTE_PERF'),
+                  palmRejection: _settings.getBool('palmRejection'),
                 ),
               )
               else
@@ -1147,6 +1157,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                 builder: (_, __) => Row(mainAxisSize: MainAxisSize.min, children: [
                   _compactAction(tooltip: 'Undo', icon: Icons.undo_rounded, onPressed: _canvas.canUndo ? _canvas.undo : null),
                   _compactAction(tooltip: 'Redo', icon: Icons.redo_rounded, onPressed: _canvas.canRedo ? _canvas.redo : null),
+                  _compactAction(
+                    tooltip: _tabsVisible ? 'Hide note tabs' : 'Show note tabs',
+                    icon: Icons.tab_outlined,
+                    onPressed: () => setState(() => _tabsVisible = !_tabsVisible),
+                  ),
                 ]),
               ),
               Expanded(
@@ -1163,6 +1178,23 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                 ),
               ),
               _compactAction(tooltip: 'Save note', icon: Icons.save_outlined, onPressed: () => _save(force: true)),
+              _compactAction(tooltip: 'Add screenshot / gallery image', icon: Icons.photo_library_outlined, onPressed: _insertScreenshot),
+              _compactAction(tooltip: 'Insert PDF pages', icon: Icons.picture_as_pdf_outlined, onPressed: _importPdfIntoNote),
+              _compactAction(tooltip: 'Calculator', icon: Icons.calculate_outlined, onPressed: _calculatorSheet),
+              _compactAction(
+                tooltip: _settings.getBool('palmRejection') ? 'Palm rejection on' : 'Palm rejection off — finger ink',
+                icon: _settings.getBool('palmRejection') ? Icons.back_hand_rounded : Icons.front_hand_rounded,
+                onPressed: () async {
+                  final next = !_settings.getBool('palmRejection');
+                  await _settings.setBool('palmRejection', next);
+                  if (mounted) setState(() {});
+                },
+              ),
+              _compactAction(
+                tooltip: _readingMode ? 'Exit reading mode' : 'Reading mode',
+                icon: _readingMode ? Icons.edit_note_rounded : Icons.chrome_reader_mode_rounded,
+                onPressed: () => setState(() => _readingMode = !_readingMode),
+              ),
               _compactAction(tooltip: 'Pages / thumbnails', icon: Icons.view_sidebar_outlined, onPressed: () => setState(() => _preview = !_preview)),
               _compactAction(tooltip: 'Page templates', icon: Icons.grid_4x4_rounded, onPressed: _paperSheet),
               _compactAction(tooltip: 'Shapes and diagrams', icon: Icons.category_outlined, onPressed: () => setState(() => _shapePanel = !_shapePanel)),
@@ -1267,7 +1299,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         right: _dockSide == 'right' ? 0 : null,
         top: _dockSide == 'top' ? (_full ? 0 : 46) : null,
         bottom: _dockSide == 'bottom' ? 0 : null,
-        child: SafeArea(child: _toolbarSurface(_toolbarContent(vertical ? Axis.vertical : Axis.horizontal, docked: true))),
+        child: SafeArea(child: _toolbarSurface(_toolbarContent(vertical ? Axis.vertical : Axis.horizontal, docked: true), key: _toolbarKey)),
       );
     }
 
@@ -1289,13 +1321,14 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           ),
         );
       },
-      child: _toolbarSurface(_toolbarContent(Axis.horizontal, docked: false)),
+      child: _toolbarSurface(_toolbarContent(Axis.horizontal, docked: false), key: _toolbarKey),
     );
   }
 
-  Widget _toolbarSurface(Widget child) {
+  Widget _toolbarSurface(Widget child, {Key? key}) {
     final blur = SnoteThemeController.instance.eInk ? 0.0 : 12.0;
     return ClipRRect(
+      key: key,
       borderRadius: BorderRadius.circular(20),
       child: BackdropFilter(
         filter: ui.ImageFilter.blur(sigmaX: blur, sigmaY: blur),
@@ -1350,6 +1383,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         ),
       ),
       ...pencaseTools.map((tool) => _toolButton(tool, _toolIcon(tool))),
+      ..._savedPenPresets.map(_presetToolButton),
       IconButton.filledTonal(
         onPressed: () => setState(() => _shapePanel = !_shapePanel),
         icon: const Icon(Icons.category_outlined),
@@ -1562,22 +1596,25 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   ];
 
   void _snapToolbar(Size size) {
-    final map = {
+    final box = _toolbarKey.currentContext?.findRenderObject();
+    final toolboxSize = box is RenderBox ? box.size : const Size(240, 44);
+    final actualY = _toolbarY == 0 ? size.height - toolboxSize.height - 12 : _toolbarY;
+    final map = <String, double>{
       'left': _toolbarX,
-      'right': (size.width - _toolbarX).abs(),
-      'top': (_toolbarY - 60).abs(),
-      'bottom': (size.height - _toolbarY).abs(),
+      'right': size.width - (_toolbarX + toolboxSize.width),
+      'top': actualY - (_full ? 0 : 46),
+      'bottom': size.height - (actualY + toolboxSize.height),
     };
     final side = map.entries.reduce((a, b) => a.value < b.value ? a : b).key;
-    if (map[side]! < 40) {
+    final distance = map[side]!.abs();
+    if (distance < 44) {
       setState(() {
         _docked = true;
         _dockSide = side;
       });
     } else {
-      // If the toolbox was released near (but not docked to) the left edge,
-      // snap it clear of the fixed tool rail instead of leaving an overlap.
-      _toolbarX = math.max(8, _toolbarX);
+      _toolbarX = _toolbarX.clamp(8, math.max(8, size.width - toolboxSize.width)).toDouble();
+      _toolbarY = actualY.clamp(_full ? 8 : 54, math.max(_full ? 8 : 54, size.height - toolboxSize.height - 8)).toDouble();
       _toolbarOffset.value = Offset(_toolbarX, _toolbarY);
     }
     pageData['toolbarX'] = _toolbarX;
@@ -1587,7 +1624,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   }
 
   Widget _toolButton(CanvasTool tool, IconData icon) => GestureDetector(
-        onDoubleTap: () => _styleSheet(tool),
+        onDoubleTapDown: (details) => _showInlineToolOptions(tool, details.globalPosition),
         child: IconButton(
           onPressed: () => _selectTool(tool),
           constraints: const BoxConstraints.tightFor(width: 29, height: 30),
