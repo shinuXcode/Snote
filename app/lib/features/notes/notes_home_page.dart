@@ -388,7 +388,16 @@ class _NotesHomePageState extends State<NotesHomePage> {
     await _load();
   }
 
-  Future<void> _renameNote(LocalNote note) async {
+  void _closeEmbeddedOpenNoteTab(LocalNote? next) {
+    if (!mounted) return;
+    if (next == null) {
+      setState(() => _selected = null);
+      return;
+    }
+    unawaited(_openNote(next));
+  }
+
+    Future<void> _renameNote(LocalNote note) async {
     final c = TextEditingController(text: note.title);
     final value = await showDialog<String>(
       context: context,
@@ -743,7 +752,12 @@ class _NotesHomePageState extends State<NotesHomePage> {
                           ? const _WorkspaceEmpty()
                           : KeyedSubtree(
                               key: ValueKey(_selected!.id),
-                              child: NoteEditorPage(note: _selected!),
+                              child: NoteEditorPage(
+                                note: _selected!,
+                                embedded: true,
+                                onSwitchTab: (note) => unawaited(_openNote(note)),
+                                onCloseTab: _closeEmbeddedOpenNoteTab,
+                              ),
                             ),
                     ),
                   ],
