@@ -795,11 +795,19 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   }
 
   Widget _pageView() {
+    final sizeKey = pageData['pageSize']?.toString() ?? 'A4';
     final horizontal = pageData['orientation']?.toString() == 'horizontal';
-    final child = Center(
-      child: AspectRatio(
-        aspectRatio: horizontal ? 297 / 210 : 210 / 297,
-        child: Material(
+    final baseAspectRatio = switch (sizeKey) {
+      'A3' => 297 / 420,
+      'A5' => 148 / 210,
+      'Letter' => 215.9 / 279.4,
+      'Legal' => 215.9 / 355.6,
+      'Infinite' => 1.0,
+      _ => 210 / 297,
+    };
+    final aspectRatio = horizontal ? 1 / baseAspectRatio : baseAspectRatio;
+    final infiniteCanvas = sizeKey == 'Infinite';
+    final pageSurface = Material(
           elevation: SnoteThemeController.instance.eInk ? 0 : 4,
           color: _pageColor(),
           child: Stack(
@@ -898,9 +906,20 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                 Positioned(right: 10, bottom: 8, child: Text((_page + 1).toString(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800))),
             ],
           ),
-        ),
-      ),
-    );
+        );
+    final child = infiniteCanvas
+        ? Center(
+            child: OverflowBox(
+              minWidth: 0,
+              maxWidth: double.infinity,
+              minHeight: 0,
+              maxHeight: double.infinity,
+              child: SizedBox(width: 2400, height: 2400, child: pageSurface),
+            ),
+          )
+        : Center(
+            child: AspectRatio(aspectRatio: aspectRatio, child: pageSurface),
+          );
     return RepaintBoundary(
       key: _pageCaptureKey,
       child: NotebookViewport(
@@ -1104,7 +1123,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         _page = insertionIndex;
         _normalize(pageData);
       });
-      await _scheduleSave();
+      _scheduleSave();
       if (mounted) {
         final message = totalPages > importCount
             ? 'Imported $importCount of $totalPages PDF pages. Split large PDFs into smaller files to keep this note responsive.'
@@ -2647,7 +2666,21 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     ).whenComplete(() => _templateSheetRefresh = null);
   }
 
-  Widget _paperTab(List<PageTemplate> templates) => ListView(
+  List<double> _paperDimensions(String size) {
+    switch (size) {
+      case 'A3': return const [297, 420];
+      case 'A5': return const [148, 210];
+      case 'Letter': return const [215.9, 279.4];
+      case 'Legal': return const [215.9, 355.6];
+      case 'Infinite': return const [0, 0];
+      default: return const [210, 297];
+    }
+  }
+
+  Widget _paperTab(List<PageTemplate> templates) {
+    final sizeKey = pageData['pageSize']?.toString() ?? 'A4';
+    final dimensions = _paperDimensions(sizeKey);
+    return ListView(
         padding: const EdgeInsets.all(18),
         children: [
           const Text('Paper', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
@@ -2681,19 +2714,32 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
             )).toList(),
           ),
           const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            initialValue: const {'A3', 'A4', 'A5', 'Letter', 'Legal', 'Infinite'}.contains(sizeKey) ? sizeKey : 'A4',
+            decoration: const InputDecoration(labelText: 'Paper size'),
+            items: const ['A3', 'A4', 'A5', 'Letter', 'Legal', 'Infinite'].map((size) =>
+              DropdownMenuItem(value: size, child: Text(size == 'Infinite' ? 'Infinite canvas (large workspace)' : size))
+            ).toList(),
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() => pageData['pageSize'] = value);
+              _scheduleSave();
+            },
+          ),
+          const SizedBox(height: 8),
           Row(children: [
-            Expanded(child: _infoBox('Width', pageData['orientation'] == 'horizontal' ? '2105' : '1487')),
+            Expanded(child: _infoBox('Width', sizeKey == 'Infinite' ? 'Unlimited workspace' : '${dimensions[horizontal ? 1 : 0]} mm')),
             const SizedBox(width: 10),
-            Expanded(child: _infoBox('Height', pageData['orientation'] == 'horizontal' ? '1487' : '2105')),
+            Expanded(child: _infoBox('Height', sizeKey == 'Infinite' ? 'Unlimited workspace' : '${dimensions[horizontal ? 0 : 1]} mm')),
           ]),
           const SizedBox(height: 8),
           Row(children: [
-            Expanded(child: _infoBox('Size', 'A4')),
-            const SizedBox(width: 10),
-            Expanded(child: _infoBox('Orientation', pageData['orientation'] == 'horizontal' ? 'Horizontal' : 'Vertical', onTap: () {
+            Expanded(child: _infoBox('Orientation', pageData['orientation'] == 'horizontal' ? 'Landscape' : 'Portrait', onTap: () {
               setState(() => pageData['orientation'] = pageData['orientation'] == 'horizontal' ? 'vertical' : 'horizontal');
               _scheduleSave();
             })),
+            const SizedBox(width: 10),
+            Expanded(child: _infoBox('Rule width', '${_pageDouble('lineWidth', .7).toStringAsFixed(2)} px')),
           ]),
           const SizedBox(height: 10),
           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -2705,6 +2751,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           ]),
           SwitchListTile(contentPadding: EdgeInsets.zero, value: pageData['cornellAssist'] == true, onChanged: (v) { setState(() => pageData['cornellAssist'] = v); _scheduleSave(); }, title: const Text('Add Cornell Assist Line')),
           _range('Line Opacity', _pageDouble('lineOpacity', .85), 0, 1, (v) { setState(() => pageData['lineOpacity'] = v); _scheduleSave(); }),
+          _range('Line Width', _pageDouble('lineWidth', .7), .25, 4, (v) { setState(() => pageData['lineWidth'] = v); _scheduleSave(); }),
           _range('Line Spacing', _pageDouble('spacing', 28), 12, 64, (v) { setState(() => pageData['spacing'] = v); _scheduleSave(); }),
           FilledButton(onPressed: () {
             for (final page in _pages) {
@@ -2712,7 +2759,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
               page['paperColor'] = pageData['paperColor'];
               page['lineColor'] = pageData['lineColor'];
               page['lineOpacity'] = pageData['lineOpacity'];
+              page['lineWidth'] = pageData['lineWidth'];
               page['spacing'] = pageData['spacing'];
+              page['pageSize'] = pageData['pageSize'];
+              page['orientation'] = pageData['orientation'];
               page['cornellAssist'] = pageData['cornellAssist'];
             }
             setState(() {});
@@ -2721,6 +2771,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           }, child: const Text('Apply All Pages')),
         ],
       );
+  }
 
   Widget _customPaper() => ListView(
         padding: const EdgeInsets.all(18),
@@ -2730,6 +2781,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           FilledButton.tonal(onPressed: _paperColorPicker, child: const Text('Paper color')),
           FilledButton.tonal(onPressed: _lineColorPicker, child: const Text('Line color')),
           _range('Spacing', _pageDouble('spacing', 28), 12, 64, (v) { setState(() => pageData['spacing'] = v); _scheduleSave(); }),
+          _range('Line width', _pageDouble('lineWidth', .7), .25, 4, (v) { setState(() => pageData['lineWidth'] = v); _scheduleSave(); }),
           _range('Line opacity', _pageDouble('lineOpacity', .85), 0, 1, (v) { setState(() => pageData['lineOpacity'] = v); _scheduleSave(); }),
           SwitchListTile(contentPadding: EdgeInsets.zero, value: pageData['cornellAssist'] == true, onChanged: (v) { setState(() => pageData['cornellAssist'] = v); _scheduleSave(); }, title: const Text('Cornell assist line')),
           FilledButton(onPressed: () {
@@ -2738,7 +2790,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
               page['paperColor'] = pageData['paperColor'];
               page['lineColor'] = pageData['lineColor'];
               page['lineOpacity'] = pageData['lineOpacity'];
+              page['lineWidth'] = pageData['lineWidth'];
               page['spacing'] = pageData['spacing'];
+              page['pageSize'] = pageData['pageSize'];
+              page['orientation'] = pageData['orientation'];
               page['cornellAssist'] = pageData['cornellAssist'];
             }
             Navigator.pop(context);
