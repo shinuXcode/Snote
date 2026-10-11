@@ -21,6 +21,7 @@ class SnoteDatabase {
         await db.execute(createAttachmentsTable);
         await db.execute(createSyncQueueTable);
         await db.execute(createAppNotificationsTable);
+        await db.execute(createFolderCoversTable);
       },
       onUpgrade: (db, oldVersion, _) async {
         if (oldVersion < 5) {
@@ -51,6 +52,9 @@ class SnoteDatabase {
             declaration: 'INTEGER NOT NULL DEFAULT 0',
           );
           await db.execute(createAppNotificationsTable);
+        }
+        if (oldVersion < 7) {
+          await db.execute(createFolderCoversTable);
         }
       },
       onOpen: (db) async {

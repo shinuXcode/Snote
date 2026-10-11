@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../data/local/folder_repository.dart';
+import 'folder_cover_art.dart';
 
 List<Color> _folderCoverColors(int seed) {
   final index = seed.clamp(0, 99);
@@ -207,17 +208,12 @@ class _FolderTreeViewState extends State<FolderTreeView> {
                 else
                   const SizedBox(width: 20),
                 if (folder.iconKey.startsWith('cover:'))
-                  Container(
+                  FolderCoverArt(
+                    coverKey: folder.iconKey,
                     width: 24,
                     height: 28,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(colors: _folderCoverColors(
-                        int.tryParse(folder.iconKey.split(':').last) ?? 0,
-                      )),
-                      borderRadius: BorderRadius.circular(5),
-                      border: Border.all(color: Colors.white.withValues(alpha: .55)),
-                    ),
-                    child: const Icon(Icons.auto_awesome_rounded, size: 13, color: Colors.white),
+                    borderRadius: BorderRadius.circular(5),
+                    showTitle: false,
                   )
                 else
                   Icon(folderIconForKey(folder.iconKey), color: folderColor, size: 20),
