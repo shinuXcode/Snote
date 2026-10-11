@@ -919,7 +919,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                 if (!mounted) return;
                 setState(() {
                   _docked = false;
-                  _toolbarX = 16;
+                  // Undock into the usable canvas area, not underneath the
+                  // fixed left toolbar.
+                  _toolbarX = _full ? 16 : 56;
                   _toolbarY = 100;
                   _toolbarOffset.value = Offset(_toolbarX, _toolbarY);
                 });
