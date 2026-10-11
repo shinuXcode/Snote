@@ -257,6 +257,7 @@ class SnoteCanvas extends StatefulWidget {
   final bool eraseMark;
   final bool dashed;
   final bool stylusHoldActions;
+  final String eraserMode;
   final Color? fillColor;
   final double smoothing;
   final bool showPerformanceOverlay;
@@ -284,6 +285,7 @@ class SnoteCanvas extends StatefulWidget {
     this.eraseMark = true,
     this.dashed = false,
     this.stylusHoldActions = true,
+    this.eraserMode = 'stroke',
     this.fillColor,
     this.smoothing = .72,
     this.showPerformanceOverlay = false,
@@ -772,7 +774,8 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     if (_temporaryEraser ||
         widget.tool == CanvasTool.eraser ||
         widget.tool == CanvasTool.pixelEraser) {
-      _activeTool = widget.tool == CanvasTool.pixelEraser
+      _activeTool = widget.tool == CanvasTool.pixelEraser ||
+              widget.eraserMode == 'pixel'
           ? CanvasTool.pixelEraser
           : CanvasTool.eraser;
       _activePen = widget.pen;
@@ -867,7 +870,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     }
 
     // Hold on blank paper switches temporarily to a pressure-sized eraser.
-    _activeTool = CanvasTool.eraser;
+    _activeTool = widget.eraserMode == 'pixel' ? CanvasTool.pixelEraser : CanvasTool.eraser;
     _activePen = widget.pen;
     _temporaryEraser = true;
     _eraserPoint = position;
@@ -876,7 +879,11 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       _snapshot();
       _eraseSnapshotTaken = true;
     }
-    _eraseAt(position, pressure: pressure, snapshotAlreadyTaken: true);
+    if (_activeTool == CanvasTool.pixelEraser) {
+      _erasePixelAt(position, pressure: pressure, snapshotAlreadyTaken: true);
+    } else {
+      _eraseAt(position, pressure: pressure, snapshotAlreadyTaken: true);
+    }
     _syncLivePainter();
   }
 
