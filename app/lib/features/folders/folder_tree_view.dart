@@ -2,6 +2,15 @@ import 'package:flutter/material.dart';
 
 import '../../data/local/folder_repository.dart';
 
+List<Color> _folderCoverColors(int seed) {
+  final index = seed.clamp(0, 99);
+  final hue = (index * 47.0) % 360;
+  return [
+    HSVColor.fromAHSV(1, hue, .58 + (index % 3) * .1, .96).toColor(),
+    HSVColor.fromAHSV(1, (hue + 42) % 360, .76, .48 + (index % 4) * .08).toColor(),
+  ];
+}
+
 IconData folderIconForKey(String key) {
   switch (key) {
     case 'book':
@@ -19,6 +28,8 @@ IconData folderIconForKey(String key) {
     case 'archive':
       return Icons.archive_rounded;
     default:
+      if (key.startsWith('cover:')) return Icons.auto_awesome_rounded;
+
       return Icons.folder_rounded;
   }
 }
@@ -195,7 +206,21 @@ class _FolderTreeViewState extends State<FolderTreeView> {
                   )
                 else
                   const SizedBox(width: 20),
-                Icon(folderIconForKey(folder.iconKey), color: folderColor, size: 20),
+                if (folder.iconKey.startsWith('cover:'))
+                  Container(
+                    width: 24,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(colors: _folderCoverColors(
+                        int.tryParse(folder.iconKey.split(':').last) ?? 0,
+                      )),
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(color: Colors.white.withValues(alpha: .55)),
+                    ),
+                    child: const Icon(Icons.auto_awesome_rounded, size: 13, color: Colors.white),
+                  )
+                else
+                  Icon(folderIconForKey(folder.iconKey), color: folderColor, size: 20),
               ],
             ),
             title: Text(
