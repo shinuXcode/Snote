@@ -807,42 +807,43 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     };
     final aspectRatio = horizontal ? 1 / baseAspectRatio : baseAspectRatio;
     final infiniteCanvas = sizeKey == 'Infinite';
+
     final pageSurface = Material(
-          elevation: SnoteThemeController.instance.eInk ? 0 : 4,
-          color: _pageColor(),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              RepaintBoundary(
-                child: CustomPaint(
-                  painter: PageBackground(
-                    template: _template(),
-                    paperColor: _pageColor(),
-                    lineColor: _pageColor('lineColor', const Color(0xffd8dee8)),
-                    spacing: _pageDouble('spacing', 28),
-                    lineOpacity: _pageDouble('lineOpacity', .85),
-                    lineWidth: _pageDouble('lineWidth', .7),
-                    cornellAssist: pageData['cornellAssist'] == true,
-                  ),
+      elevation: SnoteThemeController.instance.eInk ? 0 : 4,
+      color: _pageColor(),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          RepaintBoundary(
+            child: CustomPaint(
+              painter: PageBackground(
+                template: _template(),
+                paperColor: _pageColor(),
+                lineColor: _pageColor('lineColor', const Color(0xffd8dee8)),
+                spacing: _pageDouble('spacing', 28),
+                lineOpacity: _pageDouble('lineOpacity', .85),
+                lineWidth: _pageDouble('lineWidth', .7),
+                cornellAssist: pageData['cornellAssist'] == true,
+              ),
+            ),
+          ),
+          if (pageData['backgroundImage'] is String &&
+              (pageData['backgroundImage'] as String).isNotEmpty)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Image.memory(
+                  base64Decode(pageData['backgroundImage']! as String),
+                  fit: BoxFit.fill,
+                  gaplessPlayback: true,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
                 ),
               ),
-              if (pageData['backgroundImage'] is String &&
-                  (pageData['backgroundImage'] as String).isNotEmpty)
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: Image.memory(
-                      base64Decode(pageData['backgroundImage']! as String),
-                      fit: BoxFit.fill,
-                      gaplessPlayback: true,
-                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                    ),
-                  ),
-                ),
-              if (_draw)
-                IgnorePointer(
-                  ignoring: _readingMode,
-                  child: RepaintBoundary(
-                    child: SnoteCanvas(
+            ),
+          if (_draw)
+            IgnorePointer(
+              ignoring: _readingMode,
+              child: RepaintBoundary(
+                child: SnoteCanvas(
                   key: ValueKey(widget.note.id + '-' + _page.toString()),
                   pen: pen,
                   tool: _tool,
@@ -854,72 +855,105 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   stickerText: _sticker,
                   onChanged: _changed,
                   onSelectionChanged: (count) {
-                    if (mounted && count != _selected) setState(() => _selected = count);
+                    if (mounted && count != _selected) {
+                      setState(() => _selected = count);
+                    }
                   },
                   autoRecognition: _settings.getBool('autoRecognition'),
-                  onEraserMiss: _settings.getBool('eraseClickSwitch') && _tool == CanvasTool.eraser
+                  onEraserMiss: _settings.getBool('eraseClickSwitch') &&
+                          _tool == CanvasTool.eraser
                       ? () => _selectTool(CanvasTool.ballpoint)
                       : null,
-                  onStylusDoubleTap: _settings.getBool('stylusDoubleTapUndo') ? _canvas.undo : null,
+                  onStylusDoubleTap:
+                      _settings.getBool('stylusDoubleTapUndo')
+                          ? _canvas.undo
+                          : null,
                   pressureErase: _settings.getBool('pressureErase'),
                   pressureEraseArea: _settings.getBool('pressureEraseArea'),
-                  pressureEraseThreshold: _settings.getDouble('pressureEraseThreshold'),
+                  pressureEraseThreshold:
+                      _settings.getDouble('pressureEraseThreshold'),
                   eraseWithStylusButton: true,
                   eraseMark: true,
                   eraserMode: _settings.getString('eraserMode'),
                   stylusHoldActions: _settings.getBool('stylusHoldActions'),
-                  dashed: _dashed || (_toolDashedOverrides[_tool.name] ?? false) || (_tool == CanvasTool.lasso && _settings.getString('lassoStyle') == 'dashed'),
+                  dashed: _dashed ||
+                      (_toolDashedOverrides[_tool.name] ?? false) ||
+                      (_tool == CanvasTool.lasso &&
+                          _settings.getString('lassoStyle') == 'dashed'),
                   fillColor: _fillColor,
                   smoothing: _settings.getDouble('strokeSmoothing'),
-                  showPerformanceOverlay: const bool.fromEnvironment('SNOTE_PERF'),
+                  showPerformanceOverlay:
+                      const bool.fromEnvironment('SNOTE_PERF'),
                   palmRejection: _settings.getBool('palmRejection'),
-                  ),
-                )
-              )
-              else
-                IgnorePointer(
-                  ignoring: _readingMode,
-                  child: Padding(
-                  padding: const EdgeInsets.all(24),
-                    child: QuillEditor(
-                      focusNode: _focus,
-                      scrollController: _scroll,
-                      controller: _quill,
-                      config: const QuillEditorConfig(placeholder: 'Start writing…'),
-                    ),
-                  ),
                 ),
-              Positioned.fill(
-                child: IgnorePointer(
-                  ignoring: _readingMode,
-                  child: LayoutBuilder(
-                    builder: (_, constraints) => Stack(
-                    clipBehavior: Clip.none,
-                    children: _pageImages.map((image) => _pageImageItem(
-                      image, constraints.maxWidth, constraints.maxHeight,
-                    )).toList(),
-                    ),
+              ),
+            )
+          else
+            IgnorePointer(
+              ignoring: _readingMode,
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: QuillEditor(
+                  focusNode: _focus,
+                  scrollController: _scroll,
+                  controller: _quill,
+                  config: const QuillEditorConfig(
+                    placeholder: 'Start writing…',
                   ),
                 ),
               ),
-              if (_settings.getBool('showPageNumbers'))
-                Positioned(right: 10, bottom: 8, child: Text((_page + 1).toString(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800))),
-            ],
-          ),
-        );
-    final child = infiniteCanvas
-        ? Center(
-            child: OverflowBox(
-              minWidth: 0,
-              maxWidth: double.infinity,
-              minHeight: 0,
-              maxHeight: double.infinity,
-              child: SizedBox(width: 2400, height: 2400, child: pageSurface),
             ),
-          )
-        : Center(
-            child: AspectRatio(aspectRatio: aspectRatio, child: pageSurface),
-          );
+          Positioned.fill(
+            child: IgnorePointer(
+              ignoring: _readingMode,
+              child: LayoutBuilder(
+                builder: (_, constraints) => Stack(
+                  clipBehavior: Clip.none,
+                  children: _pageImages
+                      .map((image) => _pageImageItem(
+                            image,
+                            constraints.maxWidth,
+                            constraints.maxHeight,
+                          ))
+                      .toList(),
+                ),
+              ),
+            ),
+          ),
+          if (_settings.getBool('showPageNumbers'))
+            Positioned(
+              right: 10,
+              bottom: 8,
+              child: Text(
+                (_page + 1).toString(),
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    final Widget child;
+    if (infiniteCanvas) {
+      child = Center(
+        child: SizedBox(
+          width: 2400,
+          height: 2400,
+          child: pageSurface,
+        ),
+      );
+    } else {
+      child = Center(
+        child: AspectRatio(
+          aspectRatio: aspectRatio,
+          child: pageSurface,
+        ),
+      );
+    }
+
     return RepaintBoundary(
       key: _pageCaptureKey,
       child: NotebookViewport(
@@ -938,7 +972,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       ),
     );
   }
-
 
   List<Map<String, Object?>> get _pageImages {
     final raw = pageData['images'];
