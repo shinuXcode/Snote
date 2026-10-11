@@ -91,6 +91,8 @@ class _SettingsPageState extends State<SettingsPage> {
         _toggle('autoAuxiliaryPoint', 'Auto approach to auxiliary point', 'Snap helper points to the guide.'),
         _toggle('pressureErase', 'Pressure erase', 'Use stylus pressure for erasing.'),
         _toggle('pressureEraseArea', 'Erase area changes with pressure', 'Increase eraser radius with pressure.'),
+        _toggle('stylusHoldActions', 'Stylus hold actions', 'Hold over ink to select it; hold on blank paper to erase.'),
+        _toggle('autoSave', 'Auto-save notes', 'Save automatically after changes. Turn this off to save manually from the editor toolbar.'),
         _toggle('volumeKeyTurnPage', 'Volume key turn page', 'Turn pages with volume keys where the platform exposes the event.'),
       ]),
       Card(
