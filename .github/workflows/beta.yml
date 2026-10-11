@@ -41,24 +41,54 @@ jobs:
         working-directory: app
         run: |
           python3 - <<'PY'
-          import re
           from pathlib import Path
 
           build = Path('android/app/build.gradle.kts')
           if not build.exists():
               raise SystemExit('Generated Android app Gradle file is missing')
           text = build.read_text()
-          text, sdk_matches = re.subn(
-              r'(?m)^([ \\t]*)compileSdk[ \\t]*=[ \\t]*(?:flutter\\.compileSdkVersion|\\d+)[ \\t]*
+          text = text.replace('compileSdk = flutter.compileSdkVersion', 'compileSdk = 37')
+          text = text.replace('compileSdk = 36', 'compileSdk = 37')
+          if 'compileSdk = 37' not in text:
+              raise SystemExit('Could not configure compileSdk 37 for receive_sharing_intent')
+          text = text.replace('minSdk = flutter.minSdkVersion', 'minSdk = 24')
           if 'applicationId = "com.snote.snote"' not in text and 'applicationId = "com.snote.snote.beta"' not in text:
               raise SystemExit('Could not locate generated Android applicationId; refusing to build an in-place beta')
           text = text.replace('applicationId = "com.snote.snote"', 'applicationId = "com.snote.snote.beta"')
           build.write_text(text)
 
+          settings_candidates = [Path('android/settings.gradle.kts'), Path('android/settings.gradle')]
+          settings = next((path for path in settings_candidates if path.exists()), None)
+          if settings is None:
+              raise SystemExit('Generated Gradle settings file is missing')
+          settings_text = settings.read_text()
+          settings_text = settings_text.replace(
+              'id("com.android.application") version "9.1.0"',
+              'id("com.android.application") version "9.1.1"',
+          )
+          settings_text = settings_text.replace(
+              "id('com.android.application') version '9.1.0'",
+              "id('com.android.application') version '9.1.1'",
+          )
+          if 'id("com.android.application") version "9.1.1"' not in settings_text and "id('com.android.application') version '9.1.1'" not in settings_text:
+              raise SystemExit('Could not configure Android Gradle Plugin 9.1.1 for API 37')
+          settings.write_text(settings_text)
+
+          wrapper = Path('android/gradle/wrapper/gradle-wrapper.properties')
+          if not wrapper.exists():
+              raise SystemExit('Generated Gradle wrapper properties are missing')
+          wrapper_text = wrapper.read_text()
+          for old_version in ('9.1.0', '9.2.0', '9.3.0', '9.4.1'):
+              wrapper_text = wrapper_text.replace(f'gradle-{old_version}-all.zip', 'gradle-9.3.1-all.zip')
+              wrapper_text = wrapper_text.replace(f'gradle-{old_version}-bin.zip', 'gradle-9.3.1-bin.zip')
+          if 'gradle-9.3.1-' not in wrapper_text:
+              raise SystemExit('Could not configure Gradle 9.3.1 for Android Gradle Plugin 9.1.1')
+          wrapper.write_text(wrapper_text)
+
           manifest = Path('android/app/src/main/AndroidManifest.xml')
           text = manifest.read_text()
           if 'android.permission.CAMERA' not in text:
-              text = text.replace('</manifest>', '    <uses-permission android:name="android.permission.CAMERA" />\n</manifest>')
+              text = text.replace('</manifest>', '    <uses-permission android:name="android.permission.CAMERA" />\\n</manifest>')
           text = text.replace('android:label="snote"', 'android:label="Snote Beta"')
           if 'android:launchMode="singleTop"' in text:
               text = text.replace('android:launchMode="singleTop"', 'android:launchMode="singleTask"')
@@ -77,7 +107,7 @@ jobs:
               '''
               if '</activity>' not in text:
                   raise SystemExit('Could not find activity closing tag for Android share filters')
-              text = text.replace('</activity>', share_filters + '\n            </activity>', 1)
+              text = text.replace('</activity>', share_filters + '\\n            </activity>', 1)
           manifest.write_text(text)
 
           assert 'com.snote.snote.beta' in build.read_text(), 'Beta application ID was not set'
@@ -85,6 +115,11 @@ jobs:
           assert 'android.intent.action.SEND' in manifest.read_text(), 'Android image share filters were not configured'
           PY
 
+      - name: Verify beta version
+        working-directory: app
+        run: |
+          version="$(sed -n 's/^version: \\([^+]*\\)+.*/\\1/p' pubspec.yaml)"
+          test "$version" = "1.1.0-beta.43"
       - name: Install dependencies
         working-directory: app
         run: flutter pub get
