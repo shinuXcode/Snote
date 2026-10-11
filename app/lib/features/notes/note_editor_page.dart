@@ -986,61 +986,131 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   }
 
   IconData _toolIcon(CanvasTool tool) {
+    // Keep pen, lasso, erasers and common geometry visually distinct. The
+    // remaining specialist shapes use related, recognizable study icons.
+    const exact = <CanvasTool, IconData>{
+      CanvasTool.ballpoint: Icons.edit_rounded,
+      CanvasTool.fountain: Icons.draw_rounded,
+      CanvasTool.pencil: Icons.edit_note_rounded,
+      CanvasTool.highlighter: Icons.highlight_rounded,
+      CanvasTool.marker: Icons.border_color_rounded,
+      CanvasTool.brush: Icons.brush_rounded,
+      CanvasTool.eraser: Icons.auto_fix_normal_rounded,
+      CanvasTool.pixelEraser: Icons.auto_fix_high_rounded,
+      CanvasTool.lasso: Icons.gesture_rounded,
+      CanvasTool.line: Icons.horizontal_rule_rounded,
+      CanvasTool.dottedLine: Icons.more_horiz_rounded,
+      CanvasTool.dashedLine: Icons.more_rounded,
+      CanvasTool.arrow: Icons.arrow_right_alt_rounded,
+      CanvasTool.vectorArrow: Icons.north_east_rounded,
+      CanvasTool.projectilePath: Icons.trending_up_rounded,
+      CanvasTool.rectangle: Icons.crop_square_rounded,
+      CanvasTool.roundedRectangle: Icons.rounded_corner_rounded,
+      CanvasTool.ellipse: Icons.circle_outlined,
+      CanvasTool.circle: Icons.circle_outlined,
+      CanvasTool.triangle: Icons.change_history_outlined,
+      CanvasTool.diamond: Icons.diamond_outlined,
+      CanvasTool.hexagon: Icons.hexagon_outlined,
+      CanvasTool.star: Icons.star_border_rounded,
+      CanvasTool.customPolygon: Icons.hdr_strong_rounded,
+      CanvasTool.coordinateAxes: Icons.grid_4x4_rounded,
+      CanvasTool.cartesianPlane: Icons.grid_on_rounded,
+      CanvasTool.parabola: Icons.show_chart_rounded,
+      CanvasTool.sineWave: Icons.waves_rounded,
+      CanvasTool.cubicGraph: Icons.show_chart_rounded,
+      CanvasTool.exponentialGraph: Icons.trending_up_rounded,
+      CanvasTool.logarithmicGraph: Icons.stacked_line_chart_rounded,
+      CanvasTool.tangentGraph: Icons.multiline_chart_rounded,
+      CanvasTool.histogram: Icons.bar_chart_rounded,
+      CanvasTool.barChart: Icons.bar_chart_rounded,
+      CanvasTool.pieChart: Icons.pie_chart_outline_rounded,
+      CanvasTool.tableGrid: Icons.table_chart_outlined,
+      CanvasTool.checklist: Icons.checklist_rounded,
+      CanvasTool.ruler: Icons.straighten_rounded,
+      CanvasTool.compass: Icons.explore_outlined,
+      CanvasTool.protractor: Icons.architecture_rounded,
+      CanvasTool.rayDiagram: Icons.light_mode_outlined,
+      CanvasTool.convexLens: Icons.lens_outlined,
+      CanvasTool.concaveLens: Icons.remove_red_eye_outlined,
+      CanvasTool.planeMirror: Icons.flip_rounded,
+      CanvasTool.forceDiagram: Icons.device_hub_outlined,
+      CanvasTool.pulley: Icons.settings_input_component_outlined,
+      CanvasTool.circuitResistor: Icons.electrical_services_outlined,
+      CanvasTool.circuitBattery: Icons.battery_4_bar_outlined,
+      CanvasTool.capacitor: Icons.electrical_services_outlined,
+      CanvasTool.circuitSwitch: Icons.toggle_on_outlined,
+      CanvasTool.circuitLamp: Icons.lightbulb_outline_rounded,
+      CanvasTool.atom: Icons.hub_outlined,
+      CanvasTool.molecule: Icons.bubble_chart_outlined,
+      CanvasTool.benzeneRing: Icons.hexagon_outlined,
+      CanvasTool.beaker: Icons.science_outlined,
+      CanvasTool.testTube: Icons.science_outlined,
+      CanvasTool.conicalFlask: Icons.science_outlined,
+      CanvasTool.orbital: Icons.blur_circular_rounded,
+      CanvasTool.animalCell: Icons.circle_outlined,
+      CanvasTool.plantCell: Icons.crop_square_rounded,
+      CanvasTool.dnaHelix: Icons.biotech_outlined,
+      CanvasTool.neuron: Icons.hub_outlined,
+      CanvasTool.leaf: Icons.eco_outlined,
+      CanvasTool.microscope: Icons.biotech_outlined,
+      CanvasTool.sticker: Icons.emoji_emotions_outlined,
+    };
+    final chosen = exact[tool];
+    if (chosen != null) return chosen;
     switch (tool) {
-      case CanvasTool.ballpoint: return Icons.edit_rounded;
-      case CanvasTool.fountain: return Icons.gesture_rounded;
-      case CanvasTool.pencil: return Icons.brush_rounded;
-      case CanvasTool.highlighter: return Icons.highlight_rounded;
-      case CanvasTool.marker: return Icons.border_color_rounded;
-      case CanvasTool.brush: return Icons.brush_rounded;
-      case CanvasTool.eraser: return Icons.auto_fix_normal_rounded;
-      case CanvasTool.pixelEraser: return Icons.auto_fix_high_rounded;
-      case CanvasTool.lasso: return Icons.gesture_rounded;
-      case CanvasTool.line: return Icons.horizontal_rule_rounded;
-      case CanvasTool.arrow:
-      case CanvasTool.vectorArrow:
-      case CanvasTool.projectilePath: return Icons.arrow_outward_rounded;
-      case CanvasTool.rectangle:
-      case CanvasTool.plantCell: return Icons.crop_square_rounded;
-      case CanvasTool.roundedRectangle: return Icons.rounded_corner_rounded;
-      case CanvasTool.ellipse:
-      case CanvasTool.circle:
-      case CanvasTool.animalCell:
-      case CanvasTool.orbital:
-      case CanvasTool.atom: return Icons.circle_outlined;
-      case CanvasTool.triangle:
-      case CanvasTool.angle: return Icons.change_history_outlined;
-      case CanvasTool.diamond: return Icons.diamond_outlined;
-      case CanvasTool.hexagon:
-      case CanvasTool.benzeneRing: return Icons.hexagon_outlined;
-      case CanvasTool.star: return Icons.star_border_rounded;
-      case CanvasTool.coordinateAxes:
-      case CanvasTool.parabola:
-      case CanvasTool.sineWave: return Icons.show_chart_rounded;
-      case CanvasTool.rayDiagram:
-      case CanvasTool.convexLens:
-      case CanvasTool.concaveLens:
-      case CanvasTool.planeMirror: return Icons.remove_red_eye_outlined;
-      case CanvasTool.forceDiagram:
-      case CanvasTool.pulley: return Icons.device_hub_outlined;
-      case CanvasTool.circuitResistor:
-      case CanvasTool.circuitBattery:
-      case CanvasTool.capacitor:
-      case CanvasTool.circuitSwitch:
-      case CanvasTool.circuitLamp: return Icons.electrical_services_outlined;
-      case CanvasTool.molecule: return Icons.bubble_chart_outlined;
-      case CanvasTool.beaker:
-      case CanvasTool.testTube:
-      case CanvasTool.conicalFlask: return Icons.science_outlined;
-      case CanvasTool.dnaHelix:
-      case CanvasTool.neuron:
-      case CanvasTool.leaf:
-      case CanvasTool.microscope: return Icons.biotech_outlined;
-      case CanvasTool.customPolygon: return Icons.hdr_strong_rounded;
-      case CanvasTool.sticker: return Icons.emoji_emotions_outlined;
+      case CanvasTool.pentagon:
+      case CanvasTool.parallelogram:
+      case CanvasTool.trapezoid:
+      case CanvasTool.cube:
+      case CanvasTool.cuboid:
+      case CanvasTool.cylinder:
+      case CanvasTool.cone:
+      case CanvasTool.pyramid:
+      case CanvasTool.triangularPrism:
+      case CanvasTool.sphere:
+      case CanvasTool.arc:
+      case CanvasTool.semicircle:
+      case CanvasTool.sector:
+      case CanvasTool.ring:
+      case CanvasTool.crescent:
+      case CanvasTool.cross:
+      case CanvasTool.plus:
+      case CanvasTool.heart:
+      case CanvasTool.cloud:
+      case CanvasTool.speechBubble:
+      case CanvasTool.callout:
+      case CanvasTool.curlyBrace:
+      case CanvasTool.bracket:
+      case CanvasTool.dimensionLine:
+      case CanvasTool.numberLine:
+        return Icons.category_outlined;
+      case CanvasTool.unitCircle:
+      case CanvasTool.ellipseAxes:
+      case CanvasTool.vectorField:
+      case CanvasTool.polarGraph:
+        return Icons.grid_4x4_rounded;
+      case CanvasTool.flowchartTerminator:
+      case CanvasTool.flowchartProcess:
+      case CanvasTool.flowchartDecision:
+      case CanvasTool.flowchartInputOutput:
+      case CanvasTool.flowchartDocument:
+      case CanvasTool.flowchartDatabase:
+      case CanvasTool.flowchartConnector:
+      case CanvasTool.timeline:
+        return Icons.account_tree_outlined;
+      case CanvasTool.waveform:
+      case CanvasTool.spring:
+      case CanvasTool.lever:
+      case CanvasTool.inclinedPlane:
+      case CanvasTool.gear:
+      case CanvasTool.magnet:
+      case CanvasTool.thermometer:
+      case CanvasTool.stopwatch:
+        return Icons.science_outlined;
+      default:
+        return Icons.category_outlined;
     }
   }
-
 
   List<Color> get _penPalette => const [
     Color(0xff111111), Color(0xff374151), Color(0xff6b7280), Color(0xff9ca3af),
@@ -1076,11 +1146,19 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     _scheduleSave();
   }
 
-  Widget _toolButton(CanvasTool tool, IconData icon) => IconButton(
-        onPressed: () => _selectTool(tool),
-        style: IconButton.styleFrom(backgroundColor: _tool == tool ? Theme.of(context).colorScheme.primaryContainer : null),
-        icon: Icon(icon),
-        tooltip: tool.label,
+  Widget _toolButton(CanvasTool tool, IconData icon) => GestureDetector(
+        onDoubleTap: () => _styleSheet(tool),
+        child: IconButton(
+          onPressed: () => _selectTool(tool),
+          constraints: const BoxConstraints.tightFor(width: 34, height: 34),
+          padding: EdgeInsets.zero,
+          visualDensity: VisualDensity.compact,
+          style: IconButton.styleFrom(
+            backgroundColor: _tool == tool ? Theme.of(context).colorScheme.primaryContainer : null,
+          ),
+          icon: Icon(icon, size: 20),
+          tooltip: '${tool.label} (double-tap for options)',
+        ),
       );
 
   Widget _colorDot(Color color) => InkWell(
@@ -1197,7 +1275,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           borderRadius: BorderRadius.circular(18),
           clipBehavior: Clip.antiAlias,
           child: DefaultTabController(
-            length: 5,
+            length: 6,
             child: Column(children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 10, 8, 2),
@@ -1219,6 +1297,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   Tab(text: 'Physics'),
                   Tab(text: 'Chemistry'),
                   Tab(text: 'Biology'),
+                  Tab(text: 'More'),
                 ],
               ),
               Expanded(child: TabBarView(children: [
@@ -1245,6 +1324,68 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                 _shapeGrid([
                   CanvasTool.animalCell, CanvasTool.plantCell, CanvasTool.dnaHelix,
                   CanvasTool.neuron, CanvasTool.leaf, CanvasTool.microscope,
+                ]),
+                _shapeGrid([
+                  CanvasTool.pentagon,
+                  CanvasTool.parallelogram,
+                  CanvasTool.trapezoid,
+                  CanvasTool.cube,
+                  CanvasTool.cuboid,
+                  CanvasTool.cylinder,
+                  CanvasTool.cone,
+                  CanvasTool.pyramid,
+                  CanvasTool.triangularPrism,
+                  CanvasTool.sphere,
+                  CanvasTool.arc,
+                  CanvasTool.semicircle,
+                  CanvasTool.sector,
+                  CanvasTool.ring,
+                  CanvasTool.crescent,
+                  CanvasTool.cross,
+                  CanvasTool.plus,
+                  CanvasTool.heart,
+                  CanvasTool.cloud,
+                  CanvasTool.speechBubble,
+                  CanvasTool.callout,
+                  CanvasTool.curlyBrace,
+                  CanvasTool.bracket,
+                  CanvasTool.dimensionLine,
+                  CanvasTool.numberLine,
+                  CanvasTool.unitCircle,
+                  CanvasTool.cubicGraph,
+                  CanvasTool.exponentialGraph,
+                  CanvasTool.logarithmicGraph,
+                  CanvasTool.tangentGraph,
+                  CanvasTool.ellipseAxes,
+                  CanvasTool.vectorField,
+                  CanvasTool.polarGraph,
+                  CanvasTool.histogram,
+                  CanvasTool.barChart,
+                  CanvasTool.pieChart,
+                  CanvasTool.flowchartTerminator,
+                  CanvasTool.flowchartProcess,
+                  CanvasTool.flowchartDecision,
+                  CanvasTool.flowchartInputOutput,
+                  CanvasTool.flowchartDocument,
+                  CanvasTool.flowchartDatabase,
+                  CanvasTool.flowchartConnector,
+                  CanvasTool.timeline,
+                  CanvasTool.tableGrid,
+                  CanvasTool.checklist,
+                  CanvasTool.waveform,
+                  CanvasTool.spring,
+                  CanvasTool.lever,
+                  CanvasTool.inclinedPlane,
+                  CanvasTool.gear,
+                  CanvasTool.magnet,
+                  CanvasTool.thermometer,
+                  CanvasTool.stopwatch,
+                  CanvasTool.ruler,
+                  CanvasTool.compass,
+                  CanvasTool.protractor,
+                  CanvasTool.dottedLine,
+                  CanvasTool.dashedLine,
+                  CanvasTool.cartesianPlane,
                 ]),
               ])),
             ]),
