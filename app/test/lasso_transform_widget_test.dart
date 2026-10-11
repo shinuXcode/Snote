@@ -106,6 +106,26 @@ void main() {
     controller.dispose();
   });
 
+  testWidgets('lasso side handles resize one axis like a crop tool', (tester) async {
+    final (controller, rect) = await _mountCanvas(tester);
+    await _lassoSample(tester, rect);
+    expect(controller.selectionCount, 1);
+
+    final gesture = await tester.startGesture(
+      rect.topLeft + const Offset(80, 60),
+      kind: PointerDeviceKind.stylus,
+    );
+    await gesture.moveTo(rect.topLeft + const Offset(120, 60));
+    await tester.pump();
+    await gesture.up();
+    await tester.pump();
+
+    final resized = controller.strokes.single;
+    expect(resized.points.first.position, const Offset(40, 40));
+    expect(resized.points.last.position, const Offset(120, 80));
+    controller.dispose();
+  });
+
   testWidgets('duplicate option creates a separately movable selected copy', (tester) async {
     final (controller, rect) = await _mountCanvas(tester);
     await _lassoSample(tester, rect);
