@@ -727,6 +727,30 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
               if (!_toolbar && !_full && !_readingMode) _toolbarOpen(),
               if (_full) _fullExit(),
               if (_selected > 0 && !_readingMode) _selectionTools(),
+              if (_eyedropperActive)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  top: _full ? 0 : 80,
+                  bottom: 0,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTapDown: (details) => unawaited(_samplePageColor(details.globalPosition)),
+                    child: Container(
+                      color: Theme.of(context).colorScheme.primary.withValues(alpha: .035),
+                      alignment: Alignment.topCenter,
+                      child: Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Chip(
+                          avatar: const Icon(Icons.colorize_rounded),
+                          label: const Text('Tap anywhere on this page to sample its colour'),
+                          onDeleted: () => setState(() => _eyedropperActive = false),
+                          deleteIcon: const Icon(Icons.close_rounded),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -789,13 +813,28 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     lineColor: _pageColor('lineColor', const Color(0xffd8dee8)),
                     spacing: _pageDouble('spacing', 28),
                     lineOpacity: _pageDouble('lineOpacity', .85),
+                    lineWidth: _pageDouble('lineWidth', .7),
                     cornellAssist: pageData['cornellAssist'] == true,
                   ),
                 ),
               ),
+              if (pageData['backgroundImage'] is String &&
+                  (pageData['backgroundImage'] as String).isNotEmpty)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Image.memory(
+                      base64Decode(pageData['backgroundImage']! as String),
+                      fit: BoxFit.fill,
+                      gaplessPlayback: true,
+                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    ),
+                  ),
+                ),
               if (_draw)
-                RepaintBoundary(
-                  child: SnoteCanvas(
+                IgnorePointer(
+                  ignoring: _readingMode,
+                  child: RepaintBoundary(
+                    child: SnoteCanvas(
                   key: ValueKey(widget.note.id + '-' + _page.toString()),
                   pen: pen,
                   tool: _tool,
@@ -826,25 +865,32 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   smoothing: _settings.getDouble('strokeSmoothing'),
                   showPerformanceOverlay: const bool.fromEnvironment('SNOTE_PERF'),
                   palmRejection: _settings.getBool('palmRejection'),
-                ),
+                  ),
+                )
               )
               else
-                Padding(
+                IgnorePointer(
+                  ignoring: _readingMode,
+                  child: Padding(
                   padding: const EdgeInsets.all(24),
-                  child: QuillEditor(
-                    focusNode: _focus,
-                    scrollController: _scroll,
-                    controller: _quill,
-                    config: const QuillEditorConfig(placeholder: 'Start writing…'),
+                    child: QuillEditor(
+                      focusNode: _focus,
+                      scrollController: _scroll,
+                      controller: _quill,
+                      config: const QuillEditorConfig(placeholder: 'Start writing…'),
+                    ),
                   ),
                 ),
               Positioned.fill(
-                child: LayoutBuilder(
-                  builder: (_, constraints) => Stack(
+                child: IgnorePointer(
+                  ignoring: _readingMode,
+                  child: LayoutBuilder(
+                    builder: (_, constraints) => Stack(
                     clipBehavior: Clip.none,
                     children: _pageImages.map((image) => _pageImageItem(
                       image, constraints.maxWidth, constraints.maxHeight,
                     )).toList(),
+                    ),
                   ),
                 ),
               ),
@@ -858,7 +904,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     return RepaintBoundary(
       key: _pageCaptureKey,
       child: NotebookViewport(
-        allowSingleFingerPan: _pan,
+        allowSingleFingerPan: _pan || _readingMode,
         minScale: .5,
         maxScale: 4,
         child: Padding(
@@ -991,6 +1037,84 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Could not insert image: $error')),
+        );
+      }
+    }
+  }
+
+  Future<void> _importPdfIntoNote() async {
+    try {
+      final file = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: const ['pdf'],
+      );
+      if (file == null) return;
+      final sourceBytes = await file.readAsBytes();
+      if (sourceBytes.isEmpty) throw StateError('The selected PDF is empty.');
+      final document = await PdfDocument.openData(sourceBytes);
+      final totalPages = document.pagesCount;
+      final importCount = math.min(totalPages, 40);
+      final imported = <Map<String, Object?>>[];
+      try {
+        for (var index = 1; index <= importCount; index++) {
+          final pdfPage = await document.getPage(index);
+          try {
+            const maxDimension = 1500.0;
+            final scale = math.min(
+              maxDimension / pdfPage.width,
+              maxDimension / pdfPage.height,
+            );
+            final rendered = await pdfPage.render(
+              width: (pdfPage.width * scale).roundToDouble(),
+              height: (pdfPage.height * scale).roundToDouble(),
+              format: PdfPageImageFormat.png,
+              backgroundColor: '#ffffff',
+            );
+            if (rendered == null || rendered.bytes.isEmpty) {
+              throw StateError('Could not render PDF page $index.');
+            }
+            imported.add({
+              'id': '${DateTime.now().microsecondsSinceEpoch}-$index',
+              'template': PageTemplate.blank.name,
+              'paperColor': 0xffffffff,
+              'lineColor': 0xffd8dee8,
+              'lineOpacity': .85,
+              'spacing': 28.0,
+              'lineWidth': .7,
+              'pageSize': 'A4',
+              'cornellAssist': false,
+              'orientation': pdfPage.width > pdfPage.height ? 'horizontal' : 'vertical',
+              'backgroundImage': base64Encode(rendered.bytes),
+              'pdfSourceName': file.name,
+              'pdfSourcePage': index,
+              'strokes': <Object?>[],
+              'images': <Object?>[],
+            });
+          } finally {
+            await pdfPage.close();
+          }
+        }
+      } finally {
+        await document.close();
+      }
+      if (!mounted || imported.isEmpty) return;
+      setState(() {
+        final insertionIndex = (_page + 1).clamp(0, _pages.length);
+        _pages.insertAll(insertionIndex, imported);
+        _page = insertionIndex;
+        _normalize(pageData);
+      });
+      await _scheduleSave();
+      if (mounted) {
+        final message = totalPages > importCount
+            ? 'Imported $importCount of $totalPages PDF pages. Split large PDFs into smaller files to keep this note responsive.'
+            : 'Imported $totalPages PDF pages into this note.';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('PDF import failed: $error')),
         );
       }
     }
@@ -1621,6 +1745,194 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     pageData['toolbarY'] = _toolbarY;
     pageData['toolbarDock'] = _docked ? _dockSide : 'free';
     _scheduleSave();
+  }
+
+  Future<void> _showInlineToolOptions(CanvasTool target, Offset globalPosition) async {
+    var size = _toolSizeOverrides[target.name] ?? _penSize;
+    var opacity = target == _tool ? _opacity : 1.0;
+    var color = _toolColorOverrides[target.name] ?? _penColor;
+    var fill = target == _tool && _fill;
+    var showAdvanced = false;
+    await showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Tool options',
+      barrierColor: Colors.black12,
+      pageBuilder: (popupContext, animation, secondaryAnimation) {
+        final screen = MediaQuery.sizeOf(popupContext);
+        final left = (globalPosition.dx + 12).clamp(8.0, math.max(8.0, screen.width - 308)).toDouble();
+        final top = (globalPosition.dy - 30).clamp(52.0, math.max(52.0, screen.height - 370)).toDouble();
+        return StatefulBuilder(
+          builder: (dialogContext, setPopup) => Stack(
+            children: [
+              Positioned(
+                left: left,
+                top: top,
+                width: 296,
+                child: Material(
+                  elevation: 18,
+                  color: Theme.of(dialogContext).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(18),
+                  clipBehavior: Clip.antiAlias,
+                  child: SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(children: [
+                              Icon(_toolIcon(target), size: 20),
+                              const SizedBox(width: 8),
+                              Expanded(child: Text('${target.label} settings', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16))),
+                              IconButton(
+                                tooltip: 'Close',
+                                visualDensity: VisualDensity.compact,
+                                onPressed: () => Navigator.pop(dialogContext),
+                                icon: const Icon(Icons.close_rounded),
+                              ),
+                            ]),
+                            Text('Stroke size: ${size.toStringAsFixed(1)} px'),
+                            Slider(
+                              value: size.clamp(.5, 60).toDouble(),
+                              min: .5,
+                              max: 60,
+                              onChanged: (value) => setPopup(() => size = value),
+                            ),
+                            Text('Opacity: ${(opacity * 100).round()}%'),
+                            Slider(
+                              value: opacity.clamp(.05, 1).toDouble(),
+                              min: .05,
+                              max: 1,
+                              onChanged: (value) => setPopup(() => opacity = value),
+                            ),
+                            const Text('Color', style: TextStyle(fontWeight: FontWeight.w800)),
+                            const SizedBox(height: 7),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: _penPalette.take(18).map((choice) => InkWell(
+                                onTap: () => setPopup(() => color = choice),
+                                borderRadius: BorderRadius.circular(20),
+                                child: Container(
+                                  width: 27,
+                                  height: 27,
+                                  decoration: BoxDecoration(
+                                    color: choice,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: choice.toARGB32() == color.toARGB32()
+                                          ? Theme.of(dialogContext).colorScheme.primary
+                                          : Colors.black26,
+                                      width: choice.toARGB32() == color.toARGB32() ? 3 : 1,
+                                    ),
+                                  ),
+                                ),
+                              )).toList(),
+                            ),
+                            if (target.isShape)
+                              SwitchListTile(
+                                contentPadding: EdgeInsets.zero,
+                                dense: true,
+                                value: fill,
+                                onChanged: (value) => setPopup(() => fill = value),
+                                title: const Text('Fill shape'),
+                              ),
+                            const SizedBox(height: 8),
+                            Row(children: [
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: () {
+                                    Navigator.pop(dialogContext);
+                                    showAdvanced = true;
+                                  },
+                                  child: const Text('More settings'),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: FilledButton(
+                                  onPressed: () async {
+                                    setState(() {
+                                      _toolSizeOverrides[target.name] = size;
+                                      _toolColorOverrides[target.name] = color;
+                                      if (target == _tool) {
+                                        _penSize = size;
+                                        _penColor = color;
+                                        _opacity = opacity;
+                                        _fill = fill;
+                                      }
+                                    });
+                                    await _settings.setString('toolSizes', jsonEncode(_toolSizeOverrides));
+                                    await _settings.setString('toolColors', jsonEncode({
+                                      for (final entry in _toolColorOverrides.entries) entry.key: entry.value.toARGB32(),
+                                    }));
+                                    if (target == _tool) {
+                                      await _settings.setDouble('penOpacity', _opacity);
+                                    }
+                                    Navigator.pop(dialogContext);
+                                  },
+                                  child: const Text('Apply'),
+                                ),
+                              ),
+                            ]),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (showAdvanced && mounted) await _styleSheet(target);
+  }
+
+  Future<void> _samplePageColor(Offset globalPosition) async {
+    try {
+      await WidgetsBinding.instance.endOfFrame;
+      final renderObject = _pageCaptureKey.currentContext?.findRenderObject();
+      if (renderObject is! RenderRepaintBoundary) {
+        throw StateError('The page is not ready to sample.');
+      }
+      final image = await renderObject.toImage(pixelRatio: 1);
+      final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      if (data == null) {
+        image.dispose();
+        throw StateError('Could not read the page pixels.');
+      }
+      final local = renderObject.globalToLocal(globalPosition);
+      final x = local.dx.round().clamp(0, image.width - 1);
+      final y = local.dy.round().clamp(0, image.height - 1);
+      final offset = (y * image.width + x) * 4;
+      final sampled = Color.fromARGB(
+        data.getUint8(offset + 3),
+        data.getUint8(offset),
+        data.getUint8(offset + 1),
+        data.getUint8(offset + 2),
+      );
+      image.dispose();
+      if (!mounted) return;
+      setState(() {
+        _penColor = sampled;
+        _toolColorOverrides[_tool.name] = sampled;
+        _eyedropperActive = false;
+      });
+      await _settings.setString('toolColors', jsonEncode({
+        for (final entry in _toolColorOverrides.entries) entry.key: entry.value.toARGB32(),
+      }));
+    } catch (error) {
+      if (mounted) {
+        setState(() => _eyedropperActive = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not sample colour: $error')),
+        );
+      }
+    }
   }
 
   Widget _toolButton(CanvasTool tool, IconData icon) => GestureDetector(
