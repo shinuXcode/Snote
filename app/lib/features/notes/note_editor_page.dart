@@ -486,32 +486,22 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           child: Stack(
             children: [
               Positioned.fill(
-                child: Padding(
-                  // Reserve space for both fixed tool rails. Without this
-                  // inset, the paper is centered beneath the rails and ink
-                  // near either edge is partially hidden by the toolbars.
-                  padding: EdgeInsets.only(
-                    left: _full ? 0 : 44,
-                    right: _full ? 0 : 42,
-                  ),
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    supportedDevices: const {
-                      PointerDeviceKind.touch,
-                      PointerDeviceKind.trackpad,
-                    },
-                    onHorizontalDragEnd: (_pan || _selected > 0) ? null : _pageSwipe,
-                    onDoubleTap: () => setState(() => _toolbar = !_toolbar),
-                    onLongPress: _settings.getBool('fingerLongPressSelection')
-                        ? () => _selectTool(CanvasTool.lasso)
-                        : null,
-                    child: _pageView(),
-                  ),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  supportedDevices: const {
+                    PointerDeviceKind.touch,
+                    PointerDeviceKind.trackpad,
+                  },
+                  onHorizontalDragEnd: (_pan || _selected > 0) ? null : _pageSwipe,
+                  onDoubleTap: () => setState(() => _toolbar = !_toolbar),
+                  onLongPress: _settings.getBool('fingerLongPressSelection')
+                      ? () => _selectTool(CanvasTool.lasso)
+                      : null,
+                  child: _pageView(),
                 ),
               ),
               if (!_full) _header(),
-              if (!_full) _fixedLeftRail(),
-              if (!_full) _fixedRightRail(),
+              if (!_full) _movablePageChanger(),
               if (_preview && !_full) _previewRail(),
               if (_toolbar && _draw) _toolbarWidget(),
               if (_shapePanel && !_full) _shapePanelWidget(),
@@ -986,6 +976,64 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         icon: Icon(icon, size: 20),
       );
 
+
+  Widget _movablePageChanger() {
+    final size = MediaQuery.sizeOf(context);
+    return Positioned(
+      left: _pageChangerX < 0 ? null : _pageChangerX,
+      right: _pageChangerX < 0 ? 8 : null,
+      top: _pageChangerY.clamp(50.0, math.max(50.0, size.height - 62)),
+      child: Material(
+        elevation: 8,
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: .94),
+        borderRadius: BorderRadius.circular(16),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          GestureDetector(
+            onPanUpdate: (details) {
+              setState(() {
+                final x = _pageChangerX < 0 ? size.width - 166 : _pageChangerX;
+                _pageChangerX = (x + details.delta.dx).clamp(4.0, math.max(4.0, size.width - 170));
+                _pageChangerY = (_pageChangerY + details.delta.dy).clamp(50.0, math.max(50.0, size.height - 62));
+              });
+            },
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 5, vertical: 8),
+              child: Icon(Icons.drag_indicator_rounded, size: 18),
+            ),
+          ),
+          IconButton(
+            onPressed: _previousPage,
+            tooltip: 'Previous page',
+            constraints: const BoxConstraints.tightFor(width: 30, height: 34),
+            padding: EdgeInsets.zero,
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.chevron_left_rounded, size: 20),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 3),
+            child: Text('${_page + 1}/${_pages.length}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+          ),
+          IconButton(
+            onPressed: _nextPage,
+            tooltip: 'Next page',
+            constraints: const BoxConstraints.tightFor(width: 30, height: 34),
+            padding: EdgeInsets.zero,
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.chevron_right_rounded, size: 20),
+          ),
+          IconButton(
+            onPressed: _addPage,
+            tooltip: 'Add page',
+            constraints: const BoxConstraints.tightFor(width: 30, height: 34),
+            padding: EdgeInsets.zero,
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.add_rounded, size: 18),
+          ),
+        ]),
+      ),
+    );
+  }
+
   Widget _fixedLeftRail() {
     final tools = <CanvasTool>[
       CanvasTool.ballpoint, CanvasTool.fountain, CanvasTool.pencil,
@@ -1156,8 +1204,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     if (_docked) {
       final vertical = _dockSide == 'left' || _dockSide == 'right';
       return Positioned(
-        left: _dockSide == 'left' ? (_full ? 0 : 44) : null,
-        right: _dockSide == 'right' ? (_full ? 0 : 42) : null,
+        left: _dockSide == 'left' ? 0 : null,
+        right: _dockSide == 'right' ? 0 : null,
         top: _dockSide == 'top' ? (_full ? 0 : 46) : null,
         bottom: _dockSide == 'bottom' ? 0 : null,
         child: SafeArea(child: _toolbarSurface(_toolbarContent(vertical ? Axis.vertical : Axis.horizontal, docked: true))),
@@ -1225,7 +1273,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   _docked = false;
                   // Undock into the usable canvas area, not underneath the
                   // fixed left toolbar.
-                  _toolbarX = _full ? 16 : 56;
+                  _toolbarX = 16;
                   _toolbarY = 100;
                   _toolbarOffset.value = Offset(_toolbarX, _toolbarY);
                 });
@@ -1441,7 +1489,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     } else {
       // If the toolbox was released near (but not docked to) the left edge,
       // snap it clear of the fixed tool rail instead of leaving an overlap.
-      _toolbarX = math.max(_full ? 8 : 52, _toolbarX);
+      _toolbarX = math.max(8, _toolbarX);
       _toolbarOffset.value = Offset(_toolbarX, _toolbarY);
     }
     pageData['toolbarX'] = _toolbarX;
@@ -1569,7 +1617,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   }
 
   Widget _shapePanelWidget() => Positioned(
-        right: 48,
+        right: 8,
         top: 54,
         bottom: 72,
         width: 300,
