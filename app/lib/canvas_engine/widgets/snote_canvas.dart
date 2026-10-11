@@ -36,6 +36,7 @@ class _CanvasRepaint extends ChangeNotifier {
   bool showEraser = false;
   bool dashed = false;
   Color? fillColor;
+  double fillOpacity = 1.0;
 
   /// Keep all transient drawing state in the repaint source. Pointer events
   /// mutate state without rebuilding the widget tree, so painter delegates
@@ -53,6 +54,7 @@ class _CanvasRepaint extends ChangeNotifier {
     required bool showEraser,
     required bool dashed,
     required Color? fillColor,
+    required double fillOpacity,
   }) {
     this.livePoints = livePoints;
     this.pen = pen;
@@ -66,6 +68,7 @@ class _CanvasRepaint extends ChangeNotifier {
     this.showEraser = showEraser;
     this.dashed = dashed;
     this.fillColor = fillColor;
+    this.fillOpacity = fillOpacity;
     notifyListeners();
   }
 
@@ -115,6 +118,7 @@ class _LiveInkPainter extends CustomPainter {
     final showEraser = liveState.showEraser;
     final dashed = liveState.dashed;
     final fillColor = liveState.fillColor;
+    final fillOpacity = liveState.fillOpacity;
     if (points.isNotEmpty && pen != null && tool != null) {
       final currentTool = tool;
 
@@ -131,6 +135,7 @@ class _LiveInkPainter extends CustomPainter {
           pen: pen,
           shape: currentTool.isShape ? currentTool.name : null,
           fill: fill,
+          fillOpacity: fillOpacity,
           customSides: customSides,
           stickerText: sticker,
           fillColor: fillColor,
@@ -260,6 +265,7 @@ class SnoteCanvas extends StatefulWidget {
   final bool stylusHoldActions;
   final String eraserMode;
   final Color? fillColor;
+  final double fillOpacity;
   final double smoothing;
   final bool showPerformanceOverlay;
   final bool palmRejection;
@@ -290,6 +296,7 @@ class SnoteCanvas extends StatefulWidget {
     this.stylusHoldActions = true,
     this.eraserMode = 'stroke',
     this.fillColor,
+    this.fillOpacity = 1.0,
     this.smoothing = .72,
     this.showPerformanceOverlay = false,
     this.palmRejection = true,
@@ -633,7 +640,11 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     for (var i = 0; i < _strokes.length; i++) {
       final stroke = _strokes[i];
       if (_selected.contains(stroke.id) && stroke.shape != null) {
-        _strokes[i] = stroke.copyWith(fill: !stroke.fill);
+        _strokes[i] = stroke.copyWith(
+        fill: !stroke.fill,
+        fillColor: widget.fillColor ?? widget.pen.color,
+        fillOpacity: widget.fillOpacity,
+      );
       }
     }
     _finishDocumentMutation();
@@ -687,6 +698,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
               _activeTool == CanvasTool.pixelEraser ||
               _temporaryEraser),
       fillColor: widget.fillColor,
+      fillOpacity: widget.fillOpacity,
       dashed: widget.dashed,
     );
   }
@@ -1104,6 +1116,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       stickerText: _activeSticker,
       dashed: widget.dashed || _activeTool == CanvasTool.dottedLine || _activeTool == CanvasTool.dashedLine || _activeTool == CanvasTool.dottedLine,
       fillColor: widget.fillColor,
+      fillOpacity: widget.fillOpacity,
     );
 
     _strokes.add(stroke);

@@ -12,6 +12,8 @@ class SnoteCanvasPainter extends CustomPainter {
   final PenConfig? activePen;
   final CanvasTool? activeTool;
   final bool activeFill;
+  final double activeFillOpacity;
+  final Color? activeFillColor;
   final int activeCustomSides;
   final String? activeStickerText;
   final Set<String> selectedIds;
@@ -30,6 +32,8 @@ class SnoteCanvasPainter extends CustomPainter {
     required this.activePen,
     required this.activeTool,
     required this.activeFill,
+    this.activeFillOpacity = 1.0,
+    this.activeFillColor,
     required this.activeCustomSides,
     required this.activeStickerText,
     required this.selectedIds,
@@ -104,6 +108,8 @@ class SnoteCanvasPainter extends CustomPainter {
       pen: activePen!,
       shape: activeTool!.isShape ? activeTool!.name : null,
       fill: activeFill,
+      fillOpacity: activeFillOpacity,
+      fillColor: activeFillColor,
       customSides: activeCustomSides,
       stickerText: activeStickerText,
     );

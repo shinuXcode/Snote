@@ -937,6 +937,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                       (_tool == CanvasTool.lasso &&
                           _settings.getString('lassoStyle') == 'dashed'),
                   fillColor: _fillColor,
+                  fillOpacity: _opacity,
                   smoothing: _settings.getDouble('strokeSmoothing'),
                   showPerformanceOverlay:
                       const bool.fromEnvironment('SNOTE_PERF'),
