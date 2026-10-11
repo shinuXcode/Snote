@@ -1317,6 +1317,28 @@ class _HierarchyPanel extends StatelessWidget {
     required this.onOpenCoverLibrary,
   });
 
+  String _noteContentKind(LocalNote note) {
+    try {
+      final decoded = jsonDecode(note.contentJson ?? '{}');
+      if (decoded is Map) {
+        final kind = decoded['noteType']?.toString();
+        if (kind == 'flashcard' || kind == 'mindmap') return kind!;
+      }
+    } catch (_) {}
+    return note.noteType;
+  }
+
+  String _noteCoverKey(LocalNote note) {
+    try {
+      final decoded = jsonDecode(note.contentJson ?? '{}');
+      if (decoded is Map) {
+        final key = decoded['coverKey']?.toString();
+        if (key != null && key.startsWith('cover:')) return key;
+      }
+    } catch (_) {}
+    return 'cover:' + (note.id.hashCode.abs() % 100).toString();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (loading) return const Center(child: CircularProgressIndicator());

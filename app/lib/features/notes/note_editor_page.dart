@@ -1649,7 +1649,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         ),
       ),
       ...pencaseTools.map((tool) => _toolButton(tool, _toolIcon(tool))),
-      ..._savedPenPresets.map(_presetToolButton),
       IconButton.filledTonal(
         onPressed: () => setState(() => _shapePanel = !_shapePanel),
         icon: const Icon(Icons.category_outlined),

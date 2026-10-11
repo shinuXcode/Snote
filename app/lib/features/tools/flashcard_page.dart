@@ -107,12 +107,6 @@ class _FlashcardPageState extends State<FlashcardPage> {
     if (mounted) Navigator.pop(context, target);
   }
 
-  @override
-  void dispose() {
-    _front.dispose();
-    _back.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
