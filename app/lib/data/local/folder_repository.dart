@@ -361,7 +361,13 @@ class FolderRepository {
       'archive',
     };
     if (known.contains(value)) return value;
-    final coverMatch = RegExp(r'^cover:(\d{1,2})
+    final coverMatch = RegExp(r'^cover:(\d{1,2})$').firstMatch(value);
+    final coverIndex = int.tryParse(coverMatch?.group(1) ?? '');
+    if (coverIndex != null && coverIndex >= 0 && coverIndex < 100) {
+      return 'cover:$coverIndex';
+    }
+    return 'folder';
+  }
 
   Future<void> _queue(DatabaseExecutor db, String id, String operation) async {
     await db.delete(
