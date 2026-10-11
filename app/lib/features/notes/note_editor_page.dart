@@ -6,7 +6,7 @@ import 'dart:ui' as ui;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/rendering.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:pdf/pdf.dart' as pdf;
+import 'package:pdf/pdf.dart' as pdfcore;
 import 'package:pdf/widgets.dart' as pw;
 
 import 'package:flutter/gestures.dart';
@@ -796,14 +796,14 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       if (pngData == null) throw StateError('Could not render this page.');
       final pdf = pw.Document();
       pdf.addPage(pw.Page(
-        pageFormat: pdf.PdfPageFormat.a4,
+        pageFormat: pdfcore.PdfPageFormat.a4,
         build: (_) => pw.Center(
           child: pw.Image(pw.MemoryImage(pngData.buffer.asUint8List()), fit: pw.BoxFit.contain),
         ),
       ));
       final safeTitle = _title.text.trim().replaceAll(RegExp(r'[^a-zA-Z0-9 _-]'), '').replaceAll(' ', '_');
       final bytes = await pdf.save();
-      final saved = await FilePicker().saveFile(
+      final saved = await FilePicker.saveFile(
         dialogTitle: 'Save current note page as PDF',
         fileName: '${safeTitle.isEmpty ? 'Snote' : safeTitle}-page-${_page + 1}.pdf',
         type: FileType.custom,
