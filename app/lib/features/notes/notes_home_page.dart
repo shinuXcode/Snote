@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/settings/app_settings.dart';
 import '../../data/local/folder_repository.dart';
 import '../../data/local/note_repository.dart';
 import '../../data/local/notebook_transfer_service.dart';
@@ -9,6 +10,8 @@ import '../../sync/sync_engine.dart';
 import '../../ui/snote_logo.dart';
 import '../auth/login_page.dart';
 import '../folders/folder_tree_view.dart';
+import '../folders/folder_cover_art.dart';
+import '../folders/folder_cover_library_page.dart';
 import '../pdf/pdf_annotation_page.dart';
 import '../settings/settings_page.dart';
 import '../share/qr_import_page.dart';
@@ -46,10 +49,16 @@ class _NotesHomePageState extends State<NotesHomePage> {
   bool _syncing = false;
   Timer? _searchDebounce;
   int _loadGeneration = 0;
+  String _folderSort = 'nameAsc';
+  bool _folderSelectionMode = false;
+  final Set<String> _selectedFolderIds = <String>{};
+  List<String> _folderClipboardIds = <String>[];
+  String? _folderClipboardMode;
 
   @override
   void initState() {
     super.initState();
+    _folderSort = SnoteSettings.instance.getString('folderSort');
     _search.addListener(_onSearchChanged);
     unawaited(_load());
     if (!widget.localOnly) unawaited(_startSync());
@@ -226,7 +235,8 @@ class _NotesHomePageState extends State<NotesHomePage> {
       'archive': 'Archive',
     };
     var colorValue = folder.colorValue;
-    var iconKey = folder.iconKey;
+    var coverKey = folder.iconKey.startsWith('cover:') ? folder.iconKey : null;
+    var iconKey = coverKey == null ? folder.iconKey : 'folder';
     final result = await showDialog<Map<String, Object?>>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -283,6 +293,41 @@ class _NotesHomePageState extends State<NotesHomePage> {
                     if (value != null) setDialog(() => iconKey = value);
                   },
                 ),
+                const SizedBox(height: 14),
+                const Text('Cover page', style: TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 112,
+                  width: double.infinity,
+                  child: FolderCoverArt(coverKey: coverKey ?? 'cover:0', title: folder.name),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final chosen = await Navigator.push<String>(
+                          dialogContext,
+                          MaterialPageRoute(builder: (_) => FolderCoverLibraryPage(
+                            selectionMode: true,
+                            initialCoverKey: coverKey,
+                          )),
+                        );
+                        if (chosen != null) setDialog(() => coverKey = chosen);
+                      },
+                      icon: const Icon(Icons.collections_bookmark_outlined, size: 18),
+                      label: const Text('Choose cover'),
+                    ),
+                    if (coverKey != null)
+                      TextButton.icon(
+                        onPressed: () => setDialog(() => coverKey = null),
+                        icon: const Icon(Icons.close_rounded, size: 16),
+                        label: const Text('Remove cover'),
+                      ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -295,6 +340,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
               onPressed: () => Navigator.pop(dialogContext, {
                 'colorValue': colorValue,
                 'iconKey': iconKey,
+                'coverKey': coverKey,
               }),
               child: const Text('Save'),
             ),
@@ -306,17 +352,247 @@ class _NotesHomePageState extends State<NotesHomePage> {
     await _folders.updateAppearance(
       folder.id,
       colorValue: result['colorValue']! as int,
-      iconKey: result['iconKey']! as String,
+      iconKey: result['coverKey'] is String ? result['coverKey']! as String : result['iconKey']! as String,
     );
     await _load();
   }
 
   Future<void> _openUpdates() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const UpdateCenterPage()),
-    );
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => const UpdateCenterPage()));
     await _load();
+  }
+
+  Future<void> _openCoverLibrary() async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => const FolderCoverLibraryPage()));
+    await _load();
+  }
+
+  void _setFolderSort(String value) {
+    setState(() => _folderSort = value);
+    unawaited(SnoteSettings.instance.setString('folderSort', value));
+  }
+
+  List<String> _topLevelFolderIds(Iterable<String> sourceIds) {
+    final chosen = sourceIds.toSet();
+    final byId = {for (final item in _allFolders) item.id: item};
+    bool hasChosenAncestor(LocalFolder folder) {
+      String? parentId = folder.parentId;
+      final seen = <String>{};
+      while (parentId != null && seen.add(parentId)) {
+        if (chosen.contains(parentId)) return true;
+        parentId = byId[parentId]?.parentId;
+      }
+      return false;
+    }
+    return chosen.where((id) {
+      final folder = byId[id];
+      return folder != null && !hasChosenAncestor(folder);
+    }).toList();
+  }
+
+  bool _isInsideFolder(String? folderId, String rootId) {
+    if (folderId == null) return false;
+    final byId = {for (final item in _allFolders) item.id: item};
+    LocalFolder? current = byId[folderId];
+    final seen = <String>{};
+    while (current != null && seen.add(current.id)) {
+      if (current.id == rootId) return true;
+      current = current.parentId == null ? null : byId[current.parentId];
+    }
+    return false;
+  }
+
+  void _toggleFolderSelection(LocalFolder folder) {
+    setState(() {
+      _folderSelectionMode = true;
+      if (!_selectedFolderIds.add(folder.id)) _selectedFolderIds.remove(folder.id);
+    });
+  }
+
+  void _selectAllVisibleFolders() {
+    setState(() {
+      _folderSelectionMode = true;
+      _selectedFolderIds
+        ..clear()
+        ..addAll(_allFolders.where((f) => f.parentId == _folderId).map((f) => f.id));
+    });
+  }
+
+  void _invertFolderSelection() {
+    final visible = _allFolders.where((f) => f.parentId == _folderId).map((f) => f.id).toSet();
+    setState(() {
+      _folderSelectionMode = true;
+      for (final id in visible) {
+        if (!_selectedFolderIds.add(id)) _selectedFolderIds.remove(id);
+      }
+    });
+  }
+
+  void _clearFolderSelection() {
+    setState(() {
+      _selectedFolderIds.clear();
+      _folderSelectionMode = false;
+    });
+  }
+
+  void _setFolderClipboard(LocalFolder folder, String mode) {
+    setState(() {
+      _folderClipboardIds = <String>[folder.id];
+      _folderClipboardMode = mode;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(mode == 'cut' ? 'Folder ready to move. Open destination and choose Paste.' : 'Folder copied. Open destination and choose Paste.'),
+    ));
+  }
+
+  void _clipboardSelection(String mode) {
+    final ids = _topLevelFolderIds(_selectedFolderIds);
+    if (ids.isEmpty) return;
+    setState(() {
+      _folderClipboardIds = ids;
+      _folderClipboardMode = mode;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(mode == 'cut' ? 'Selected folders ready to move. Choose Paste in destination.' : 'Selected folders copied. Choose Paste in destination.'),
+    ));
+  }
+
+  Future<String?> _chooseFolderDestination(Set<String> excludedRoots) async {
+    final byId = {for (final item in _allFolders) item.id: item};
+    bool isExcludedDescendant(LocalFolder folder) {
+      LocalFolder? current = folder;
+      final seen = <String>{};
+      while (current != null && seen.add(current.id)) {
+        if (excludedRoots.contains(current.id)) return true;
+        current = current.parentId == null ? null : byId[current.parentId];
+      }
+      return false;
+    }
+    final destinations = _allFolders.where((folder) => !isExcludedDescendant(folder)).toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return showDialog<String>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Choose destination'),
+        content: SizedBox(
+          width: 340,
+          height: 360,
+          child: ListView(children: [
+            ListTile(leading: const Icon(Icons.home_work_outlined), title: const Text('Notebook root'), onTap: () => Navigator.pop(dialog, '')),
+            for (final folder in destinations)
+              ListTile(
+                leading: Icon(folderIconForKey(folder.iconKey), color: Color(folder.colorValue)),
+                title: Text(folder.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                onTap: () => Navigator.pop(dialog, folder.id),
+              ),
+          ]),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(dialog), child: const Text('Cancel'))],
+      ),
+    );
+  }
+
+  Future<void> _moveFolderPrompt(LocalFolder folder) async {
+    final destination = await _chooseFolderDestination(<String>{folder.id});
+    if (destination == null) return;
+    await _moveFolder(folder.id, parentId: destination.isEmpty ? null : destination);
+  }
+
+  Future<void> _moveSelectedFolders() async {
+    final ids = _topLevelFolderIds(_selectedFolderIds);
+    if (ids.isEmpty) return;
+    final destination = await _chooseFolderDestination(ids.toSet());
+    if (destination == null) return;
+    try {
+      for (final id in ids) {
+        await _folders.move(id, parentId: destination.isEmpty ? null : destination);
+      }
+      _clearFolderSelection();
+      await _load();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not move folders: ' + error.toString())));
+    }
+  }
+
+  Future<void> _pasteFolders() async {
+    if (_folderClipboardIds.isEmpty || _folderClipboardMode == null) return;
+    final ids = List<String>.from(_folderClipboardIds);
+    final mode = _folderClipboardMode!;
+    try {
+      for (final id in ids) {
+        if (mode == 'cut') {
+          await _folders.move(id, parentId: _folderId);
+        } else {
+          await _folders.duplicate(id, parentId: _folderId);
+        }
+      }
+      if (mode == 'cut') {
+        setState(() {
+          _folderClipboardIds = <String>[];
+          _folderClipboardMode = null;
+        });
+      }
+      _clearFolderSelection();
+      await _load();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not paste folders: ' + error.toString())));
+    }
+  }
+
+  Future<void> _deleteSelectedFolders() async {
+    final ids = _topLevelFolderIds(_selectedFolderIds);
+    if (ids.isEmpty) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Delete selected folders?'),
+        content: const Text('Child folders will be deleted too. Notes are returned to notebook root.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialog, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(dialog, true), child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final resetRoot = _folderId != null && ids.any((id) => _isInsideFolder(_folderId, id));
+    for (final id in ids) {
+      await _folders.delete(id);
+    }
+    if (resetRoot) {
+      setState(() {
+        _breadcrumbs.clear();
+        _folderId = null;
+      });
+    }
+    _clearFolderSelection();
+    await _load();
+  }
+
+  Future<void> _showFolderDetails(LocalFolder folder) async {
+    final visibleNotes = await _notes.listAllVisible();
+    if (!mounted) return;
+    final childCount = _allFolders.where((item) => item.parentId == folder.id).length;
+    final noteCount = visibleNotes.where((item) => item.folderId == folder.id).length;
+    final created = DateTime.fromMillisecondsSinceEpoch(folder.createdAt).toLocal().toString().split('.').first;
+    final updated = DateTime.fromMillisecondsSinceEpoch(folder.updatedAt).toLocal().toString().split('.').first;
+    await showDialog<void>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text(folder.name),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Direct child folders: ' + childCount.toString()),
+            Text('Notes: ' + noteCount.toString()),
+            Text('Created: ' + created),
+            Text('Updated: ' + updated),
+            Text('Cover: ' + (folder.iconKey.startsWith('cover:') ? folder.iconKey : 'Generated cover')),
+          ],
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(dialog), child: const Text('Close'))],
+      ),
+    );
   }
 
   void _goBackFolder() {
@@ -492,7 +768,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final wide = MediaQuery.sizeOf(context).width >= 900;
+    final wide = MediaQuery.sizeOf(context).width >= 1120;
     return Scaffold(
       body: SafeArea(child: wide ? _desktop() : _mobile()),
       floatingActionButton: FloatingActionButton(
@@ -520,6 +796,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
             MaterialPageRoute(builder: (_) => const SettingsPage()),
           ),
           onUpdates: _openUpdates,
+          onCovers: _openCoverLibrary,
         ),
         Expanded(
           child: Column(
@@ -571,6 +848,23 @@ class _NotesHomePageState extends State<NotesHomePage> {
                         onOpenNote: _openNote,
                         onRenameNote: _renameNote,
                         onDeleteNote: _deleteNote,
+                        folderSort: _folderSort,
+                        onFolderSort: _setFolderSort,
+                        selectedFolderIds: _selectedFolderIds,
+                        folderSelectionMode: _folderSelectionMode,
+                        onToggleFolderSelection: _toggleFolderSelection,
+                        onSelectAllFolders: _selectAllVisibleFolders,
+                        onInvertFolderSelection: _invertFolderSelection,
+                        onClearFolderSelection: _clearFolderSelection,
+                        onMoveFolderPrompt: _moveFolderPrompt,
+                        onFolderDetails: _showFolderDetails,
+                        onSetFolderClipboard: _setFolderClipboard,
+                        onClipboardSelection: _clipboardSelection,
+                        onPasteFolders: _pasteFolders,
+                        onMoveSelectedFolders: _moveSelectedFolders,
+                        onDeleteSelectedFolders: _deleteSelectedFolders,
+                        canPasteFolders: _folderClipboardIds.isNotEmpty,
+                        onOpenCoverLibrary: _openCoverLibrary,
                       ),
                     ),
                     const VerticalDivider(width: 1),
@@ -605,6 +899,11 @@ class _NotesHomePageState extends State<NotesHomePage> {
                 onPressed: _openUpdates,
                 tooltip: 'Updates and notifications',
                 icon: const Icon(Icons.notifications_none_rounded),
+              ),
+              IconButton(
+                onPressed: _openCoverLibrary,
+                tooltip: 'Cover library',
+                icon: const Icon(Icons.collections_bookmark_outlined),
               ),
               IconButton(
                 onPressed: _syncNow,
@@ -674,6 +973,23 @@ class _NotesHomePageState extends State<NotesHomePage> {
             onOpenNote: _openNote,
             onRenameNote: _renameNote,
             onDeleteNote: _deleteNote,
+                        folderSort: _folderSort,
+                        onFolderSort: _setFolderSort,
+                        selectedFolderIds: _selectedFolderIds,
+                        folderSelectionMode: _folderSelectionMode,
+                        onToggleFolderSelection: _toggleFolderSelection,
+                        onSelectAllFolders: _selectAllVisibleFolders,
+                        onInvertFolderSelection: _invertFolderSelection,
+                        onClearFolderSelection: _clearFolderSelection,
+                        onMoveFolderPrompt: _moveFolderPrompt,
+                        onFolderDetails: _showFolderDetails,
+                        onSetFolderClipboard: _setFolderClipboard,
+                        onClipboardSelection: _clipboardSelection,
+                        onPasteFolders: _pasteFolders,
+                        onMoveSelectedFolders: _moveSelectedFolders,
+                        onDeleteSelectedFolders: _deleteSelectedFolders,
+                        canPasteFolders: _folderClipboardIds.isNotEmpty,
+                        onOpenCoverLibrary: _openCoverLibrary,
           ),
         ),
       ],
@@ -698,6 +1014,7 @@ class _SideRail extends StatelessWidget {
   final VoidCallback onAccount;
   final VoidCallback onSettings;
   final VoidCallback onUpdates;
+  final VoidCallback onCovers;
 
   const _SideRail({
     required this.localOnly,
@@ -707,6 +1024,7 @@ class _SideRail extends StatelessWidget {
     required this.onAccount,
     required this.onSettings,
     required this.onUpdates,
+    required this.onCovers,
   });
 
   @override
@@ -760,6 +1078,7 @@ class _SideRail extends StatelessWidget {
           const SizedBox(height: 20),
           entry(icon: Icons.auto_stories_rounded, label: 'Notebook', selected: true, onTap: () {}),
           entry(icon: Icons.notifications_none_rounded, label: 'Updates & notices', onTap: onUpdates),
+          entry(icon: Icons.collections_bookmark_outlined, label: 'Cover library', onTap: onCovers),
           entry(icon: Icons.person_outline_rounded, label: localOnly ? 'Sign in & sync' : 'Account', onTap: onAccount),
           entry(icon: Icons.settings_outlined, label: 'Settings', onTap: onSettings),
           const Spacer(),
@@ -875,6 +1194,23 @@ class _HierarchyPanel extends StatelessWidget {
   final ValueChanged<LocalNote> onOpenNote;
   final ValueChanged<LocalNote> onRenameNote;
   final ValueChanged<LocalNote> onDeleteNote;
+  final String folderSort;
+  final ValueChanged<String> onFolderSort;
+  final Set<String> selectedFolderIds;
+  final bool folderSelectionMode;
+  final ValueChanged<LocalFolder> onToggleFolderSelection;
+  final VoidCallback onSelectAllFolders;
+  final VoidCallback onInvertFolderSelection;
+  final VoidCallback onClearFolderSelection;
+  final ValueChanged<LocalFolder> onMoveFolderPrompt;
+  final ValueChanged<LocalFolder> onFolderDetails;
+  final void Function(LocalFolder folder, String mode) onSetFolderClipboard;
+  final ValueChanged<String> onClipboardSelection;
+  final VoidCallback onPasteFolders;
+  final VoidCallback onMoveSelectedFolders;
+  final VoidCallback onDeleteSelectedFolders;
+  final bool canPasteFolders;
+  final VoidCallback onOpenCoverLibrary;
 
   const _HierarchyPanel({
     required this.allFolders,
@@ -897,12 +1233,43 @@ class _HierarchyPanel extends StatelessWidget {
     required this.onOpenNote,
     required this.onRenameNote,
     required this.onDeleteNote,
+    required this.folderSort,
+    required this.onFolderSort,
+    required this.selectedFolderIds,
+    required this.folderSelectionMode,
+    required this.onToggleFolderSelection,
+    required this.onSelectAllFolders,
+    required this.onInvertFolderSelection,
+    required this.onClearFolderSelection,
+    required this.onMoveFolderPrompt,
+    required this.onFolderDetails,
+    required this.onSetFolderClipboard,
+    required this.onClipboardSelection,
+    required this.onPasteFolders,
+    required this.onMoveSelectedFolders,
+    required this.onDeleteSelectedFolders,
+    required this.canPasteFolders,
+    required this.onOpenCoverLibrary,
   });
 
   @override
   Widget build(BuildContext context) {
     if (loading) return const Center(child: CircularProgressIndicator());
     final theme = Theme.of(context);
+    final visibleFolders = allFolders.where((folder) => folder.parentId == currentFolderId).toList();
+    switch (folderSort) {
+      case 'nameDesc':
+        visibleFolders.sort((a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()));
+        break;
+      case 'newest':
+        visibleFolders.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+        break;
+      case 'oldest':
+        visibleFolders.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+        break;
+      default:
+        visibleFolders.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    }
 
     return ListView(
       padding: EdgeInsets.fromLTRB(compact ? 12 : 14, 4, compact ? 12 : 14, 110),
@@ -924,6 +1291,47 @@ class _HierarchyPanel extends StatelessWidget {
               onPressed: onNewFolder,
               tooltip: 'New folder',
               icon: const Icon(Icons.create_new_folder_outlined),
+            ),
+            PopupMenuButton<String>(
+              tooltip: 'Sort folders',
+              icon: const Icon(Icons.sort_by_alpha_rounded),
+              onSelected: onFolderSort,
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'nameAsc', child: Text('Name (A–Z)')),
+                PopupMenuItem(value: 'nameDesc', child: Text('Name (Z–A)')),
+                PopupMenuItem(value: 'newest', child: Text('Recently changed')),
+                PopupMenuItem(value: 'oldest', child: Text('Oldest first')),
+              ],
+            ),
+            PopupMenuButton<String>(
+              tooltip: 'Folder selection and clipboard',
+              icon: Icon(folderSelectionMode ? Icons.checklist_rounded : Icons.more_vert_rounded),
+              onSelected: (action) {
+                switch (action) {
+                  case 'selectAll': onSelectAllFolders(); break;
+                  case 'invert': onInvertFolderSelection(); break;
+                  case 'clear': onClearFolderSelection(); break;
+                  case 'move': onMoveSelectedFolders(); break;
+                  case 'copy': onClipboardSelection('copy'); break;
+                  case 'cut': onClipboardSelection('cut'); break;
+                  case 'delete': onDeleteSelectedFolders(); break;
+                  case 'paste': onPasteFolders(); break;
+                  case 'covers': onOpenCoverLibrary(); break;
+                }
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: 'selectAll', child: Text('Select all folders')),
+                const PopupMenuItem(value: 'invert', child: Text('Invert selection')),
+                if (folderSelectionMode) const PopupMenuItem(value: 'clear', child: Text('Clear selection')),
+                if (selectedFolderIds.isNotEmpty) ...[
+                  const PopupMenuItem(value: 'move', child: Text('Move selected')),
+                  const PopupMenuItem(value: 'copy', child: Text('Copy selected')),
+                  const PopupMenuItem(value: 'cut', child: Text('Cut selected')),
+                  const PopupMenuItem(value: 'delete', child: Text('Delete selected')),
+                ],
+                if (canPasteFolders) const PopupMenuItem(value: 'paste', child: Text('Paste folders here')),
+                const PopupMenuItem(value: 'covers', child: Text('Cover library')),
+              ],
             ),
           ],
         ),
@@ -1012,7 +1420,38 @@ class _HierarchyPanel extends StatelessWidget {
               ],
             ),
           )
-        else
+        else if (compact) ...[
+          if (visibleFolders.isEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 14, 4, 10),
+              child: Text(currentFolderId == null ? 'No folders yet. Use + to make one.' : 'No subfolders here.'),
+            )
+          else
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: visibleFolders.map((folder) {
+                final isSelected = selectedFolderIds.contains(folder.id);
+                return SizedBox(
+                  width: compact ? 152 : 174,
+                  child: _FolderCoverCard(
+                    folder: folder,
+                    selected: isSelected,
+                    selectionMode: folderSelectionMode,
+                    onOpen: () => folderSelectionMode ? onToggleFolderSelection(folder) : onOpenTreeFolder(folder),
+                    onSelect: () => onToggleFolderSelection(folder),
+                    onCustomize: () => onCustomizeFolder(folder),
+                    onRename: () => onRenameFolder(folder),
+                    onDelete: () => onDeleteFolder(folder),
+                    onMove: () => onMoveFolderPrompt(folder),
+                    onCopy: () => onSetFolderClipboard(folder, 'copy'),
+                    onCut: () => onSetFolderClipboard(folder, 'cut'),
+                    onDetails: () => onFolderDetails(folder),
+                  ),
+                );
+              }).toList(),
+            )
+        ] else
           FolderTreeView(
             folders: allFolders,
             selectedFolderId: currentFolderId,
@@ -1123,6 +1562,116 @@ class _HierarchyPanel extends StatelessWidget {
           label: const Text('New note here'),
         ),
       ],
+    );
+  }
+}
+
+class _FolderCoverCard extends StatelessWidget {
+  final LocalFolder folder;
+  final bool selected;
+  final bool selectionMode;
+  final VoidCallback onOpen;
+  final VoidCallback onSelect;
+  final VoidCallback onCustomize;
+  final VoidCallback onRename;
+  final VoidCallback onDelete;
+  final VoidCallback onMove;
+  final VoidCallback onCopy;
+  final VoidCallback onCut;
+  final VoidCallback onDetails;
+
+  const _FolderCoverCard({
+    required this.folder, required this.selected, required this.selectionMode,
+    required this.onOpen, required this.onSelect, required this.onCustomize,
+    required this.onRename, required this.onDelete, required this.onMove,
+    required this.onCopy, required this.onCut, required this.onDetails,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final coverKey = folder.iconKey.startsWith('cover:')
+        ? folder.iconKey
+        : 'cover:' + (folder.sortOrder.abs() % 100).toString();
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      elevation: selected ? 5 : 2,
+      shadowColor: Theme.of(context).colorScheme.shadow.withValues(alpha: .24),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(
+          color: selected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outlineVariant.withValues(alpha: .55),
+          width: selected ? 2.4 : .7,
+        ),
+      ),
+      child: InkWell(
+        onTap: onOpen,
+        onLongPress: onSelect,
+        child: SizedBox(
+          height: 202,
+          child: Column(children: [
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  FolderCoverArt(coverKey: coverKey, title: folder.name),
+                  Positioned(
+                    right: 2,
+                    top: 2,
+                    child: PopupMenuButton<String>(
+                      tooltip: 'Folder options',
+                      onSelected: (action) {
+                        switch (action) {
+                          case 'open': onOpen(); break;
+                          case 'cover': onCustomize(); break;
+                          case 'select': onSelect(); break;
+                          case 'move': onMove(); break;
+                          case 'copy': onCopy(); break;
+                          case 'cut': onCut(); break;
+                          case 'details': onDetails(); break;
+                          case 'rename': onRename(); break;
+                          case 'delete': onDelete(); break;
+                        }
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(value: 'open', child: Text('Open folder')),
+                        PopupMenuItem(value: 'cover', child: Text('Change cover / color')),
+                        PopupMenuItem(value: 'select', child: Text('Select')),
+                        PopupMenuItem(value: 'move', child: Text('Move')),
+                        PopupMenuItem(value: 'copy', child: Text('Copy')),
+                        PopupMenuItem(value: 'cut', child: Text('Cut')),
+                        PopupMenuItem(value: 'details', child: Text('Details')),
+                        PopupMenuItem(value: 'rename', child: Text('Rename')),
+                        PopupMenuItem(value: 'delete', child: Text('Delete')),
+                      ],
+                      icon: const Icon(Icons.more_vert_rounded, color: Colors.white, shadows: [Shadow(color: Colors.black45, blurRadius: 4)]),
+                      style: IconButton.styleFrom(backgroundColor: Colors.black26, foregroundColor: Colors.white),
+                    ),
+                  ),
+                  if (selected || selectionMode)
+                    Positioned(
+                      left: 4,
+                      bottom: 4,
+                      child: IconButton.filledTonal(
+                        tooltip: selected ? 'Deselect folder' : 'Select folder',
+                        onPressed: onSelect,
+                        visualDensity: VisualDensity.compact,
+                        icon: Icon(selected ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded, size: 18),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
+              child: Row(children: [
+                Icon(Icons.folder_rounded, size: 17, color: Color(folder.colorValue)),
+                const SizedBox(width: 6),
+                Expanded(child: Text(folder.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12))),
+              ]),
+            ),
+          ]),
+        ),
+      ),
     );
   }
 }

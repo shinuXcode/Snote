@@ -32,7 +32,7 @@ class SnoteSettings extends ChangeNotifier {
 
   static const stringDefaults = <String, String>{
     'themeStyle': 'standard',
-    'toolbarDock': 'bottom',
+    'toolbarDock': 'left',
     'toolbarToolbox': 'compact',
     'eInkProfile': 'physical',
     'defaultPageTemplate': 'dotted',
@@ -40,6 +40,7 @@ class SnoteSettings extends ChangeNotifier {
     'pencaseTools': 'ballpoint,fountain,pencil,highlighter,marker,brush,eraser,lasso,line,arrow,rectangle,ellipse,cartesianPlane,dashedLine,dottedLine',
     'pencasePresets': '[]',
     'coverLibrary': '[]',
+    'folderSort': 'nameAsc',
     'pressureCurve': 'linear',
     'toolSizes': '{}',
     'toolColors': '{}',
