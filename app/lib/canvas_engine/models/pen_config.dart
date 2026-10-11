@@ -28,6 +28,28 @@ enum CanvasTool {
   star,
   customPolygon,
   sticker,
+  mathCoordinateAxes,
+  mathParabola,
+  mathSineWave,
+  mathAngle,
+  mathRightAngle,
+  physicsVector,
+  physicsResistor,
+  physicsCapacitor,
+  physicsBattery,
+  physicsDiode,
+  physicsConvexLens,
+  chemistryBenzene,
+  chemistryMolecule,
+  chemistryAtom,
+  chemistryOrbital,
+  chemistryFlask,
+  chemistryBeaker,
+  biologyCell,
+  biologyMitochondrion,
+  biologyDna,
+  biologyLeaf,
+  biologyNeuron,
 }
 
 extension CanvasToolX on CanvasTool {
@@ -53,6 +75,28 @@ extension CanvasToolX on CanvasTool {
     CanvasTool.hexagon,
     CanvasTool.star,
     CanvasTool.customPolygon,
+    CanvasTool.mathCoordinateAxes,
+    CanvasTool.mathParabola,
+    CanvasTool.mathSineWave,
+    CanvasTool.mathAngle,
+    CanvasTool.mathRightAngle,
+    CanvasTool.physicsVector,
+    CanvasTool.physicsResistor,
+    CanvasTool.physicsCapacitor,
+    CanvasTool.physicsBattery,
+    CanvasTool.physicsDiode,
+    CanvasTool.physicsConvexLens,
+    CanvasTool.chemistryBenzene,
+    CanvasTool.chemistryMolecule,
+    CanvasTool.chemistryAtom,
+    CanvasTool.chemistryOrbital,
+    CanvasTool.chemistryFlask,
+    CanvasTool.chemistryBeaker,
+    CanvasTool.biologyCell,
+    CanvasTool.biologyMitochondrion,
+    CanvasTool.biologyDna,
+    CanvasTool.biologyLeaf,
+    CanvasTool.biologyNeuron,
   }.contains(this);
 
   PenType get penType {
@@ -91,6 +135,28 @@ extension CanvasToolX on CanvasTool {
       case CanvasTool.star: return 'Star';
       case CanvasTool.customPolygon: return 'Custom polygon';
       case CanvasTool.sticker: return 'Sticker';
+      case CanvasTool.mathCoordinateAxes: return 'Coordinate axes';
+      case CanvasTool.mathParabola: return 'Parabola';
+      case CanvasTool.mathSineWave: return 'Sine wave';
+      case CanvasTool.mathAngle: return 'Angle';
+      case CanvasTool.mathRightAngle: return 'Right angle';
+      case CanvasTool.physicsVector: return 'Physics vector';
+      case CanvasTool.physicsResistor: return 'Resistor';
+      case CanvasTool.physicsCapacitor: return 'Capacitor';
+      case CanvasTool.physicsBattery: return 'Battery';
+      case CanvasTool.physicsDiode: return 'Diode';
+      case CanvasTool.physicsConvexLens: return 'Convex lens';
+      case CanvasTool.chemistryBenzene: return 'Benzene ring';
+      case CanvasTool.chemistryMolecule: return 'Molecule';
+      case CanvasTool.chemistryAtom: return 'Atom';
+      case CanvasTool.chemistryOrbital: return 'Orbital';
+      case CanvasTool.chemistryFlask: return 'Conical flask';
+      case CanvasTool.chemistryBeaker: return 'Beaker';
+      case CanvasTool.biologyCell: return 'Cell';
+      case CanvasTool.biologyMitochondrion: return 'Mitochondrion';
+      case CanvasTool.biologyDna: return 'DNA helix';
+      case CanvasTool.biologyLeaf: return 'Leaf';
+      case CanvasTool.biologyNeuron: return 'Neuron';
     }
   }
 }
