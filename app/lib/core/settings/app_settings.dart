@@ -12,7 +12,7 @@ class SnoteSettings extends ChangeNotifier {
     'autoRecognition': true, 'independentGraphColor': true, 'longPressMenu': true,
     'selectionMenuOnTouch': true, 'eraseClickSwitch': true, 'stylusDoubleTapUndo': true,
     'fingerLongPressSelection': true, 'showAuxiliaryLine': true, 'autoAuxiliaryPoint': true,
-    'pressureErase': true, 'pressureEraseArea': true, 'volumeKeyTurnPage': false,
+    'pressureErase': true, 'pressureEraseArea': true, 'stylusHoldActions': true, 'autoSave': true, 'volumeKeyTurnPage': false,
     'keepScreenOn': false, 'bookshelfStartPage': true, 'showPageNavigation': true,
     'showPageNumbers': true, 'showVisitedHistory': true, 'showPagePreview': true,
     'showUndoOnRight': false, 'screenshotNotification': false, 'clickHyperlink': true,
@@ -37,8 +37,12 @@ class SnoteSettings extends ChangeNotifier {
     'eInkProfile': 'physical',
     'defaultPageTemplate': 'dotted',
     'defaultPaperPalette': 'paper-white',
-    'pencaseTools': 'ballpoint,fountain,pencil,highlighter,marker,brush,eraser,pixelEraser,lasso',
+    'pencaseTools': 'ballpoint,fountain,pencil,highlighter,marker,brush,eraser,lasso,line,arrow,rectangle,ellipse,cartesianPlane,dashedLine,dottedLine',
     'pressureCurve': 'linear',
+    'toolSizes': '{}',
+    'toolColors': '{}',
+    'lassoStyle': 'solid',
+    'eraserMode': 'stroke',
   };
 
   bool getBool(String key) => (_values[key] as bool?) ?? boolDefaults[key] ?? false;
