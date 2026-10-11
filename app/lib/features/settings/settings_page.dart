@@ -4,6 +4,10 @@ import '../../core/settings/app_settings.dart';
 import '../../data/local/notebook_transfer_service.dart';
 import '../../data/local/note_repository.dart';
 import '../updates/update_center_page.dart';
+import '../share/qr_import_page.dart';
+import '../share/qr_transfer_page.dart';
+import '../tools/screenshot_import_page.dart';
+import '../trash/trash_page.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -195,6 +199,32 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ),
       ]),
+      if (_query.isEmpty || 'private transfer qr screenshot bin trash import export notes'.contains(_query)) _group('Notebook & File Management', [
+        Card(child: ListTile(
+          leading: const Icon(Icons.qr_code_2_rounded),
+          title: const Text('Private transfer'),
+          subtitle: const Text('Send a note using local QR frames or receive a QR transfer. No cloud upload.'),
+          onTap: _privateTransfer,
+        )),
+        Card(child: ListTile(
+          leading: const Icon(Icons.image_outlined),
+          title: const Text('Screenshot to note'),
+          subtitle: const Text('Capture or import a screenshot into a note.'),
+          onTap: _openScreenshotImport,
+        )),
+        Card(child: ListTile(
+          leading: const Icon(Icons.delete_outline_rounded),
+          title: const Text('Bin / recently deleted'),
+          subtitle: const Text('Restore or permanently delete trashed notes.'),
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TrashPage())),
+        )),
+        Card(child: ListTile(
+          leading: const Icon(Icons.import_export_rounded),
+          title: const Text('Import / export notes'),
+          subtitle: const Text('Portable Snote package, JSON and text formats.'),
+          onTap: _transfer,
+        )),
+      ]),
       if (_query.isEmpty || 'notebook transfer import export notes'.contains(_query)) _group('Notebook Transfer', [
         Card(
           child: ListTile(
@@ -274,6 +304,54 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Widget _customToggle({required bool value, required String title, required String subtitle, required ValueChanged<bool> onChanged}) =>
       SwitchListTile.adaptive(contentPadding: const EdgeInsets.symmetric(horizontal: 16), value: value, onChanged: onChanged, title: Text(title), subtitle: Text(subtitle));
+
+  Future<void> _privateTransfer() async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheet) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        ListTile(leading: const Icon(Icons.qr_code_scanner_rounded), title: const Text('Receive note'), subtitle: const Text('Open the QR receiver'), onTap: () => Navigator.pop(sheet, 'receive')),
+        ListTile(leading: const Icon(Icons.qr_code_2_rounded), title: const Text('Send note'), subtitle: const Text('Choose a note to display transfer QR codes'), onTap: () => Navigator.pop(sheet, 'send')),
+      ])),
+    );
+    if (!mounted || action == null) return;
+    if (action == 'receive') {
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => const QrImportPage()));
+      return;
+    }
+    final notes = await NoteRepository().listAllVisible();
+    if (!mounted) return;
+    final selected = await showModalBottomSheet<LocalNote>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheet) => SafeArea(child: SizedBox(
+        height: MediaQuery.sizeOf(sheet).height * .7,
+        child: ListView(
+          children: [
+            const ListTile(title: Text('Choose note to send', style: TextStyle(fontWeight: FontWeight.w800))),
+            for (final note in notes)
+              ListTile(
+                leading: const Icon(Icons.description_outlined),
+                title: Text(note.title.isEmpty ? 'Untitled note' : note.title),
+                subtitle: Text(note.noteType),
+                onTap: () => Navigator.pop(sheet, note),
+              ),
+          ],
+        ),
+      )),
+    );
+    if (selected != null && mounted) {
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => QrTransferPage(note: selected)));
+    }
+  }
+
+  Future<void> _openScreenshotImport() async {
+    final notes = await NoteRepository().listAllVisible(limit: 1);
+    if (!mounted) return;
+    // Screenshot import creates a new note; an empty folder context is intentional here.
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => const ScreenshotImportPage()));
+  }
 
   Future<void> _transfer() async {
     final messenger = ScaffoldMessenger.of(context);
