@@ -99,13 +99,13 @@ jobs:
         if: success() && github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.1.0-beta.1
-          name: Snote 1.1 Beta 1
+          tag_name: v1.1.0-beta.2
+          name: Snote 1.1 Beta 2
           prerelease: true
           make_latest: false
           target_commitish: ${{ github.sha }}
           files: Snote-Android-Beta.apk
           body: |
-            Snote 1.1 beta build for testing only.
+            Snote 1.1 beta 2 build for testing only.
             This APK uses the separate Android application ID com.snote.snote.beta, so it can be installed beside the stable Snote app without replacing it or touching the stable app's local data.
-            Please test live stylus ink, scientific shape palettes, lasso movement/resizing/duplication, templates, page navigation, and persistence.
+            Beta 2 also fixes overlap between the canvas and fixed rails, prevents the movable toolbox from opening under the left rail, and adds assertions for shape rendering and lasso duplication.
