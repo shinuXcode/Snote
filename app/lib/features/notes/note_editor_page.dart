@@ -1580,6 +1580,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       CanvasTool.cartesianPlane,
       CanvasTool.dashedLine,
       CanvasTool.dottedLine,
+      CanvasTool.ruler,
+      CanvasTool.compass,
+      CanvasTool.protractor,
     ];
     final pencaseTools = defaultTools.where((tool) => tool != CanvasTool.pixelEraser && configured.contains(tool.name)).toList();
 
@@ -1614,11 +1617,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         onPressed: _stickers,
         icon: const Icon(Icons.emoji_emotions_outlined),
         tooltip: 'Stickers',
-      ),
-      IconButton.filledTonal(
-        onPressed: _paperSheet,
-        icon: const Icon(Icons.grid_4x4_rounded),
-        tooltip: 'Page templates',
       ),
       IconButton(
         onPressed: _colorSheet,

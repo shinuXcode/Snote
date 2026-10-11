@@ -47,6 +47,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
   LocalNote? _selected;
   bool _loading = true;
   bool _syncing = false;
+  bool _searchVisible = false;
   Timer? _searchDebounce;
   int _loadGeneration = 0;
   String _folderSort = 'nameAsc';
@@ -806,6 +807,8 @@ class _NotesHomePageState extends State<NotesHomePage> {
                 syncing: _syncing,
                 localOnly: widget.localOnly,
                 gridView: _gridView,
+                searchVisible: _searchVisible,
+                onToggleSearch: () => setState(() { _searchVisible = !_searchVisible; if (!_searchVisible) _search.clear(); }),
                 onSync: _syncNow,
                 onToggleView: () => setState(() => _gridView = !_gridView),
               ),
@@ -828,9 +831,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
                       width: 380,
                       child: _HierarchyPanel(
                         allFolders: _allFolders,
-                        recentNotes: _search.text.trim().isEmpty
-                            ? _recentNotes
-                            : const <LocalNote>[],
+                        recentNotes: const <LocalNote>[],
                         isSearching: _search.text.trim().isNotEmpty,
                         currentFolderId: _folderId,
                         notes: _filteredNotes,
@@ -895,6 +896,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
             children: [
               const SnoteLogo(size: 34),
               const Spacer(),
+              IconButton(onPressed: () => setState(() { _searchVisible = !_searchVisible; if (!_searchVisible) _search.clear(); }), tooltip: 'Search notes', icon: const Icon(Icons.search_rounded)),
               IconButton(
                 onPressed: _openUpdates,
                 tooltip: 'Updates and notifications',
@@ -921,6 +923,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
             ],
           ),
         ),
+        if (_searchVisible) ...[
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
           child: TextField(
@@ -937,6 +940,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
             ),
           ),
         ),
+        ],
         _Breadcrumbs(
           items: _breadcrumbs,
           onBack: _goBackFolder,
@@ -953,9 +957,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
           child: _HierarchyPanel(
             compact: true,
             allFolders: _allFolders,
-            recentNotes: _search.text.trim().isEmpty
-                ? _recentNotes
-                : const <LocalNote>[],
+            recentNotes: const <LocalNote>[],
             isSearching: _search.text.trim().isNotEmpty,
             currentFolderId: _folderId,
             notes: _filteredNotes,
@@ -1104,6 +1106,8 @@ class _TopBar extends StatelessWidget {
   final bool syncing;
   final bool localOnly;
   final bool gridView;
+  final bool searchVisible;
+  final VoidCallback onToggleSearch;
   final VoidCallback onSync;
   final VoidCallback onToggleView;
 
@@ -1112,6 +1116,8 @@ class _TopBar extends StatelessWidget {
     required this.syncing,
     required this.localOnly,
     required this.gridView,
+    required this.searchVisible,
+    required this.onToggleSearch,
     required this.onSync,
     required this.onToggleView,
   });
@@ -1121,15 +1127,18 @@ class _TopBar extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
         child: Row(
           children: [
-            Expanded(
-              child: TextField(
+            if (searchVisible)
+              Expanded(child: TextField(
                 controller: search,
-                decoration: const InputDecoration(
+                autofocus: true,
+                decoration: InputDecoration(
                   hintText: 'Search your notebook',
-                  prefixIcon: Icon(Icons.search_rounded),
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  suffixIcon: IconButton(onPressed: onToggleSearch, icon: const Icon(Icons.close_rounded), tooltip: 'Close search'),
                 ),
-              ),
-            ),
+              ))
+            else
+              IconButton(onPressed: onToggleSearch, tooltip: 'Search notes', icon: const Icon(Icons.search_rounded)),
             const SizedBox(width: 8),
             IconButton(
               onPressed: onToggleView,
@@ -1336,74 +1345,6 @@ class _HierarchyPanel extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 4),
-        if (currentFolderId == null && recentNotes.isNotEmpty) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
-            child: Text(
-              'Quick recents',
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ),
-          SizedBox(
-            height: 78,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: recentNotes.take(6).length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                final note = recentNotes[index];
-                return SizedBox(
-                  width: compact ? 156 : 174,
-                  child: Card(
-                    margin: EdgeInsets.zero,
-                    color: theme.colorScheme.surfaceContainerLow,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: () => onOpenNote(note),
-                      child: Padding(
-                        padding: const EdgeInsets.all(10),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.history_rounded,
-                              color: theme.colorScheme.primary,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    note.title,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    note.noteType,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.labelSmall,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
         if (allFolders.isEmpty && notes.isEmpty && recentNotes.isEmpty && !isSearching)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 24, horizontal: 18),
@@ -1556,11 +1497,6 @@ class _HierarchyPanel extends StatelessWidget {
             ),
           ),
         const SizedBox(height: 8),
-        FilledButton.tonalIcon(
-          onPressed: onNewNote,
-          icon: const Icon(Icons.note_add_outlined),
-          label: const Text('New note here'),
-        ),
       ],
     );
   }

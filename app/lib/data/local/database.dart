@@ -62,6 +62,12 @@ class SnoteDatabase {
           'CREATE INDEX IF NOT EXISTS idx_notes_folder ON notes(folder_id, updated_at)',
         );
         await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_notes_title ON notes(title COLLATE NOCASE)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_pages_note ON pages(note_id, page_number)',
+        );
+        await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_folders_parent '
           'ON folders(parent_id, sort_order, name)',
         );

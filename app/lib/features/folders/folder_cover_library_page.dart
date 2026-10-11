@@ -28,6 +28,7 @@ class _FolderCoverLibraryPageState extends State<FolderCoverLibraryPage> {
   String? _selectedKey;
   bool _loading = true;
   bool _busy = false;
+  int _libraryTab = 0;
 
   @override
   void initState() {
@@ -120,7 +121,8 @@ class _FolderCoverLibraryPageState extends State<FolderCoverLibraryPage> {
 
   @override
   Widget build(BuildContext context) {
-    final total = 100 + _customCovers.length;
+    final showingCustom = _libraryTab == 1;
+    final total = showingCustom ? _customCovers.length : 100;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Cover library'),
@@ -131,19 +133,17 @@ class _FolderCoverLibraryPageState extends State<FolderCoverLibraryPage> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '100 built-in covers + ' + _customCovers.length.toString() + ' custom covers',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
-                  ),
-                ),
-                if (_busy) const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+            child: SegmentedButton<int>(
+              segments: [
+                const ButtonSegment(value: 0, label: Text('Built-in (100)'), icon: Icon(Icons.auto_awesome_outlined)),
+                ButtonSegment(value: 1, label: Text('Custom (' + _customCovers.length.toString() + ')'), icon: const Icon(Icons.photo_library_outlined)),
               ],
+              selected: {_libraryTab},
+              onSelectionChanged: (value) => setState(() => _libraryTab = value.first),
             ),
           ),
+          if (_busy) const LinearProgressIndicator(minHeight: 2),
           Expanded(
             child: _loading ? const Center(child: CircularProgressIndicator()) : GridView.builder(
               padding: const EdgeInsets.fromLTRB(14, 2, 14, 18),
@@ -152,7 +152,7 @@ class _FolderCoverLibraryPageState extends State<FolderCoverLibraryPage> {
                 maxCrossAxisExtent: 178, mainAxisSpacing: 12, crossAxisSpacing: 12, childAspectRatio: .72,
               ),
               itemBuilder: (context, index) {
-                final custom = index >= 100 ? _customCovers[index - 100] : null;
+                final custom = showingCustom ? _customCovers[index] : null;
                 final key = custom == null ? 'cover:' + index.toString() : custom.key;
                 final title = custom == null ? _builtInName(index) : custom.name;
                 final selected = _selectedKey == key;
