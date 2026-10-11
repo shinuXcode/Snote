@@ -42,6 +42,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
   List<LocalNote> _recentNotes = const [];
   bool _sidebarCollapsed = false;
   bool _gridView = true;
+  String _sortMode = 'updated';
   String? _folderId;
   final List<LocalFolder> _breadcrumbs = [];
   LocalNote? _selected;
@@ -109,7 +110,19 @@ class _NotesHomePageState extends State<NotesHomePage> {
     return q.isEmpty || note.title.toLowerCase().contains(q);
   }
 
-  List<LocalNote> get _filteredNotes => _noteList.where(_matchesSearch).toList();
+  List<LocalNote> get _filteredNotes {
+    final filtered = _noteList.where(_matchesSearch).toList();
+    switch (_sortMode) {
+      case 'title':
+        filtered.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+      case 'created':
+        filtered.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      case 'updated':
+      default:
+        filtered.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    }
+    return filtered;
+  }
 
   Future<void> _createFolder() async {
     final c = TextEditingController();
@@ -804,6 +817,130 @@ class _NotesHomePageState extends State<NotesHomePage> {
     await _load();
   }
 
+  Future<void> _copyNote(LocalNote note) async {
+    final full = await _notes.get(note.id);
+    if (full == null) return;
+    try {
+      final copy = await _notes.create(
+        title: '${full.title} (copy)',
+        folderId: full.folderId,
+      );
+      final raw = full.contentJson;
+      if (raw != null && raw.isNotEmpty) {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map) {
+          await _notes.saveContent(copy.id, Map<String, Object?>.from(decoded));
+        }
+      }
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Copied "${full.title}".')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not copy note: $error')),
+        );
+      }
+    }
+  }
+
+  Future<void> _moveNote(LocalNote note) async {
+    final destination = await showDialog<Map<String, Object?>>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Move note'),
+        content: SizedBox(
+          width: 400,
+          height: 360,
+          child: ListView(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.home_outlined),
+                title: const Text('Root / no folder'),
+                onTap: () => Navigator.pop(dialogContext, <String, Object?>{'folderId': null}),
+              ),
+              for (final folder in _allFolders)
+                ListTile(
+                  leading: Icon(folder.iconKey.startsWith('cover:')
+                      ? Icons.auto_awesome_rounded
+                      : folderIconForKey(folder.iconKey), color: Color(folder.colorValue)),
+                  title: Text(folder.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  subtitle: folder.parentId == null ? const Text('Top-level folder') : const Text('Nested folder'),
+                  onTap: () => Navigator.pop(dialogContext, <String, Object?>{'folderId': folder.id}),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+        ],
+      ),
+    );
+    if (destination == null) return;
+    try {
+      await _notes.moveToFolder(note.id, destination['folderId'] as String?);
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Moved "${note.title}".')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not move note: $error')),
+        );
+      }
+    }
+  }
+
+  Future<void> _noteDetails(LocalNote note) async {
+    final full = await _notes.get(note.id) ?? note;
+    final folderName = full.folderId == null
+        ? 'Root'
+        : _allFolders.where((folder) => folder.id == full.folderId).map((folder) => folder.name).firstOrNull ?? 'Folder unavailable';
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Note details'),
+        content: SizedBox(
+          width: 380,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(full.title, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+              const SizedBox(height: 12),
+              _detailLine('Type', full.noteType),
+              _detailLine('Folder', folderName),
+              _detailLine('Created', DateTime.fromMillisecondsSinceEpoch(full.createdAt).toLocal().toString()),
+              _detailLine('Modified', DateTime.fromMillisecondsSinceEpoch(full.updatedAt).toLocal().toString()),
+              _detailLine('Version', full.version.toString()),
+              _detailLine('Stored content', '${full.contentJson?.length ?? 0} characters'),
+            ],
+          ),
+        ),
+        actions: [
+          FilledButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Close')),
+        ],
+      ),
+    );
+  }
+
+  Widget _detailLine(String label, String value) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(width: 104, child: Text(label, style: const TextStyle(fontWeight: FontWeight.w800))),
+            Expanded(child: Text(value)),
+          ],
+        ),
+      );
+
   Future<void> _deleteNote(LocalNote note) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -958,6 +1095,8 @@ class _NotesHomePageState extends State<NotesHomePage> {
                         selected: _selected,
                         loading: _loading,
                         gridView: _gridView,
+                        sortMode: _sortMode,
+                        onSortChanged: (value) => setState(() => _sortMode = value),
                         onToggleView: () => setState(() => _gridView = !_gridView),
                         onOpenTreeFolder: _openTreeFolder,
                         onMoveFolder: _moveFolder,
@@ -970,6 +1109,9 @@ class _NotesHomePageState extends State<NotesHomePage> {
                         onRenameNote: _renameNote,
                         onDeleteNote: _deleteNote,
                         onCustomizeNote: _customizeNoteCover,
+                        onCopyNote: (note) => unawaited(_copyNote(note)),
+                        onMoveNote: (note) => unawaited(_moveNote(note)),
+                        onDetailsNote: (note) => unawaited(_noteDetails(note)),
                       ),
                     ),
                     const VerticalDivider(width: 1),
@@ -1067,6 +1209,8 @@ class _NotesHomePageState extends State<NotesHomePage> {
             selected: _selected,
             loading: _loading,
             gridView: _gridView,
+            sortMode: _sortMode,
+            onSortChanged: (value) => setState(() => _sortMode = value),
             onToggleView: () => setState(() => _gridView = !_gridView),
             onOpenTreeFolder: _openTreeFolder,
             onMoveFolder: _moveFolder,
@@ -1079,6 +1223,9 @@ class _NotesHomePageState extends State<NotesHomePage> {
             onRenameNote: _renameNote,
             onDeleteNote: _deleteNote,
             onCustomizeNote: _customizeNoteCover,
+            onCopyNote: (note) => unawaited(_copyNote(note)),
+            onMoveNote: (note) => unawaited(_moveNote(note)),
+            onDetailsNote: (note) => unawaited(_noteDetails(note)),
           ),
         ),
       ],
@@ -1397,6 +1544,8 @@ class _HierarchyPanel extends StatelessWidget {
   final bool loading;
   final bool compact;
   final bool gridView;
+  final String sortMode;
+  final ValueChanged<String> onSortChanged;
   final VoidCallback onToggleView;
   final VoidCallback onNewFolder;
   final VoidCallback onNewNote;
@@ -1409,6 +1558,9 @@ class _HierarchyPanel extends StatelessWidget {
   final ValueChanged<LocalNote> onRenameNote;
   final ValueChanged<LocalNote> onDeleteNote;
   final ValueChanged<LocalNote> onCustomizeNote;
+  final ValueChanged<LocalNote> onCopyNote;
+  final ValueChanged<LocalNote> onMoveNote;
+  final ValueChanged<LocalNote> onDetailsNote;
 
   const _HierarchyPanel({
     required this.allFolders,
@@ -1420,6 +1572,8 @@ class _HierarchyPanel extends StatelessWidget {
     required this.loading,
     this.compact = false,
     required this.gridView,
+    required this.sortMode,
+    required this.onSortChanged,
     required this.onToggleView,
     required this.onOpenTreeFolder,
     required this.onMoveFolder,
@@ -1432,6 +1586,9 @@ class _HierarchyPanel extends StatelessWidget {
     required this.onRenameNote,
     required this.onDeleteNote,
     required this.onCustomizeNote,
+    required this.onCopyNote,
+    required this.onMoveNote,
+    required this.onDetailsNote,
   });
 
   @override
@@ -1449,6 +1606,17 @@ class _HierarchyPanel extends StatelessWidget {
                 'Folders & notes',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
               ),
+            ),
+            PopupMenuButton<String>(
+              tooltip: 'Sort notes',
+              initialValue: sortMode,
+              onSelected: onSortChanged,
+              icon: const Icon(Icons.sort_rounded),
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'updated', child: Text('Recently modified')),
+                PopupMenuItem(value: 'created', child: Text('Date created')),
+                PopupMenuItem(value: 'title', child: Text('Title A–Z')),
+              ],
             ),
             IconButton(
               onPressed: onToggleView,
@@ -1625,11 +1793,20 @@ class _HierarchyPanel extends StatelessWidget {
                                       onCustomizeNote(note);
                                     } else if (value == 'delete') {
                                       onDeleteNote(note);
+                                    } else if (value == 'copy') {
+                                      onCopyNote(note);
+                                    } else if (value == 'move') {
+                                      onMoveNote(note);
+                                    } else if (value == 'details') {
+                                      onDetailsNote(note);
                                     }
                                   },
                                   itemBuilder: (_) => const [
-                                    PopupMenuItem(value: 'cover', child: Text('Customize cover')),
+                                    PopupMenuItem(value: 'cover', child: Text('Cover page')),
                                     PopupMenuItem(value: 'rename', child: Text('Rename')),
+                                    PopupMenuItem(value: 'copy', child: Text('Copy note')),
+                                    PopupMenuItem(value: 'move', child: Text('Move to folder')),
+                                    PopupMenuItem(value: 'details', child: Text('Details')),
                                     PopupMenuItem(value: 'delete', child: Text('Move to trash')),
                                   ],
                                 ),
@@ -1653,6 +1830,9 @@ class _HierarchyPanel extends StatelessWidget {
               onRename: () => onRenameNote(note),
               onDelete: () => onDeleteNote(note),
               onCover: () => onCustomizeNote(note),
+              onCopy: () => onCopyNote(note),
+              onMove: () => onMoveNote(note),
+              onDetails: () => onDetailsNote(note),
             ),
           ),
         const SizedBox(height: 8),
@@ -1673,6 +1853,9 @@ class _HomeNoteTile extends StatelessWidget {
   final VoidCallback onRename;
   final VoidCallback onDelete;
   final VoidCallback onCover;
+  final VoidCallback onCopy;
+  final VoidCallback onMove;
+  final VoidCallback onDetails;
 
   const _HomeNoteTile({
     required this.note,
@@ -1681,6 +1864,9 @@ class _HomeNoteTile extends StatelessWidget {
     required this.onRename,
     required this.onDelete,
     required this.onCover,
+    required this.onCopy,
+    required this.onMove,
+    required this.onDetails,
   });
 
   @override
@@ -1709,11 +1895,20 @@ class _HomeNoteTile extends StatelessWidget {
               onRename();
             } else if (value == 'delete') {
               onDelete();
+            } else if (value == 'copy') {
+              onCopy();
+            } else if (value == 'move') {
+              onMove();
+            } else if (value == 'details') {
+              onDetails();
             }
           },
           itemBuilder: (_) => const [
-            PopupMenuItem(value: 'cover', child: Text('Customize cover')),
+            PopupMenuItem(value: 'cover', child: Text('Cover page')),
             PopupMenuItem(value: 'rename', child: Text('Rename')),
+            PopupMenuItem(value: 'copy', child: Text('Copy note')),
+            PopupMenuItem(value: 'move', child: Text('Move to folder')),
+            PopupMenuItem(value: 'details', child: Text('Details')),
             PopupMenuItem(value: 'delete', child: Text('Move to trash')),
           ],
         ),
