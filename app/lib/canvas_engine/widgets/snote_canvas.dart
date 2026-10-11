@@ -175,9 +175,13 @@ class _LiveInkPainter extends CustomPainter {
       canvas.drawRect(box, outline);
       final handles = <Offset>[
         box.topLeft,
+        Offset(box.center.dx, box.top),
         box.topRight,
+        Offset(box.right, box.center.dy),
         box.bottomRight,
+        Offset(box.center.dx, box.bottom),
         box.bottomLeft,
+        Offset(box.left, box.center.dy),
       ];
       final handlePaint = Paint()
         ..color = const Color(0xff4f6df6)
@@ -913,15 +917,19 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     final bounds = _boundsForStrokes(selectedStrokes);
     if (bounds == null) return false;
 
-    final corners = <Offset>[
+    final handles = <Offset>[
       bounds.topLeft,
+      Offset(bounds.center.dx, bounds.top),
       bounds.topRight,
+      Offset(bounds.right, bounds.center.dy),
       bounds.bottomRight,
+      Offset(bounds.center.dx, bounds.bottom),
       bounds.bottomLeft,
+      Offset(bounds.left, bounds.center.dy),
     ];
     int? cornerIndex;
-    for (var i = 0; i < corners.length; i++) {
-      if ((corners[i] - point).distance <= 20) {
+    for (var i = 0; i < handles.length; i++) {
+      if ((handles[i] - point).distance <= 20) {
         cornerIndex = i;
         break;
       }
@@ -930,14 +938,40 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       return false;
     }
 
+    Offset? fixedAnchor;
+    switch (cornerIndex) {
+      case 0:
+        fixedAnchor = bounds.bottomRight;
+        break;
+      case 1:
+        fixedAnchor = Offset(bounds.center.dx, bounds.bottom);
+        break;
+      case 2:
+        fixedAnchor = bounds.bottomLeft;
+        break;
+      case 3:
+        fixedAnchor = Offset(bounds.left, bounds.center.dy);
+        break;
+      case 4:
+        fixedAnchor = bounds.topLeft;
+        break;
+      case 5:
+        fixedAnchor = Offset(bounds.center.dx, bounds.top);
+        break;
+      case 6:
+        fixedAnchor = bounds.topRight;
+        break;
+      case 7:
+        fixedAnchor = Offset(bounds.right, bounds.center.dy);
+        break;
+    }
+
     _snapshot();
     _selectionTransformActive = true;
     _selectionStart = point;
     _selectionBoundsAtStart = bounds;
     _resizeCorner = cornerIndex;
-    _resizeFixedAnchor = cornerIndex == null
-        ? null
-        : corners[(cornerIndex + 2) % 4];
+    _resizeFixedAnchor = fixedAnchor;
     _selectionOriginalStrokes = selectedStrokes;
     _selectionPreviewStrokes = selectedStrokes;
     _activeTool = CanvasTool.lasso;
@@ -965,18 +999,14 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
         );
       }).toList(growable: false);
     } else {
-      final bounds = _selectionBoundsAtStart!;
-      final corners = <Offset>[
-        bounds.topLeft,
-        bounds.topRight,
-        bounds.bottomRight,
-        bounds.bottomLeft,
-      ];
-      final movingStart = corners[corner];
-      final startDx = movingStart.dx - fixed.dx;
-      final startDy = movingStart.dy - fixed.dy;
+      final startDx = start.dx - fixed.dx;
+      final startDy = start.dy - fixed.dy;
       var scaleX = startDx.abs() < 1e-6 ? 1.0 : (point.dx - fixed.dx) / startDx;
       var scaleY = startDy.abs() < 1e-6 ? 1.0 : (point.dy - fixed.dy) / startDy;
+      // Edge handles resize only the axis perpendicular to that edge;
+      // corner handles resize both dimensions just like a crop rectangle.
+      if (corner == 1 || corner == 5) scaleX = 1;
+      if (corner == 3 || corner == 7) scaleY = 1;
       scaleX = scaleX.clamp(-20.0, 20.0).toDouble();
       scaleY = scaleY.clamp(-20.0, 20.0).toDouble();
       if (scaleX.abs() < .04) scaleX = scaleX.isNegative ? -.04 : .04;
