@@ -495,7 +495,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
   Future<void> _moveFolderPrompt(LocalFolder folder) async {
     final destination = await _chooseFolderDestination(<String>{folder.id});
     if (destination == null) return;
-    await _moveFolder(folder.id, parentId: destination.isEmpty ? null : destination);
+    await _moveFolder(folder.id, destination.isEmpty ? null : destination);
   }
 
   Future<void> _moveSelectedFolders() async {
