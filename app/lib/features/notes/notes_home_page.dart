@@ -1805,11 +1805,11 @@ class _HierarchyPanel extends StatelessWidget {
                     child: Padding(
                       padding: const EdgeInsets.all(12),
                       child: SizedBox(
-                        height: 96,
+                        height: 190,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _noteCoverPreview(note, size: 46),
+                            _noteCoverPreview(note, size: 70),
                             const Spacer(),
                             Text(
                               note.title,
