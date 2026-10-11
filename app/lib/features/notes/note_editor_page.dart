@@ -2737,6 +2737,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
 
   Widget _paperTab(List<PageTemplate> templates) {
     final sizeKey = pageData['pageSize']?.toString() ?? 'A4';
+    final horizontal = pageData['orientation']?.toString() == 'horizontal';
     final dimensions = _paperDimensions(sizeKey);
     return ListView(
         padding: const EdgeInsets.all(18),
