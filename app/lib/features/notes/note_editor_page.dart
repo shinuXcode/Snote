@@ -47,7 +47,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   final Map<String, bool> _toolDashedOverrides = <String, bool>{};
   double _pageChangerX = -1;
   double _pageChangerY = 130;
+  double _selectionToolbarX = -1;
+  double _selectionToolbarY = -1;
   bool _pdfExporting = false;
+  final TextEditingController _calculatorInput = TextEditingController(text: '0');
+  String _calculatorResult = '0';
 
   List<Map<String, Object?>> _pages = [];
   int _page = 0;
@@ -454,6 +458,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     _quill.removeListener(_scheduleSave);
     _quill.dispose();
     _title.dispose();
+    _calculatorInput.dispose();
     _focus.dispose();
     _scroll.dispose();
     _canvas.dispose();
@@ -605,7 +610,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   pressureEraseThreshold: _settings.getDouble('pressureEraseThreshold'),
                   eraseWithStylusButton: true,
                   eraseMark: true,
-                  dashed: _dashed,
+                  eraserMode: _settings.getString('eraserMode'),
+                  stylusHoldActions: _settings.getBool('stylusHoldActions'),
+                  dashed: _dashed || (_toolDashedOverrides[_tool.name] ?? false) || (_tool == CanvasTool.lasso && _settings.getString('lassoStyle') == 'dashed'),
                   fillColor: _fillColor,
                   smoothing: _settings.getDouble('strokeSmoothing'),
                   showPerformanceOverlay: const bool.fromEnvironment('SNOTE_PERF'),
@@ -621,6 +628,16 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     config: const QuillEditorConfig(placeholder: 'Start writing…'),
                   ),
                 ),
+              Positioned.fill(
+                child: LayoutBuilder(
+                  builder: (_, constraints) => Stack(
+                    clipBehavior: Clip.none,
+                    children: _pageImages.map((image) => _pageImageItem(
+                      image, constraints.maxWidth, constraints.maxHeight,
+                    )).toList(),
+                  ),
+                ),
+              ),
               if (_settings.getBool('showPageNumbers'))
                 Positioned(right: 10, bottom: 8, child: Text((_page + 1).toString(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800))),
             ],
@@ -628,18 +645,21 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         ),
       ),
     );
-    return NotebookViewport(
-      allowSingleFingerPan: _pan,
-      minScale: .5,
-      maxScale: 4,
-      child: Padding(
-        padding: EdgeInsets.only(
-          left: _full ? 0 : 44,
-          right: _full ? 0 : 42,
-          top: _full ? 0 : 46,
-          bottom: _full ? 0 : 12,
+    return RepaintBoundary(
+      key: _pageCaptureKey,
+      child: NotebookViewport(
+        allowSingleFingerPan: _pan,
+        minScale: .5,
+        maxScale: 4,
+        child: Padding(
+          padding: EdgeInsets.only(
+            left: 8,
+            right: 8,
+            top: _full ? 0 : 46,
+            bottom: _full ? 0 : 12,
+          ),
+          child: child,
         ),
-        child: child,
       ),
     );
   }
