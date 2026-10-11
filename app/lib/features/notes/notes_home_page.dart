@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 
 import '../../core/settings/app_settings.dart';
 import '../../data/local/folder_repository.dart';
@@ -36,6 +37,8 @@ class _NotesHomePageState extends State<NotesHomePage> {
   final _transfer = NotebookTransferService(NoteRepository());
   final _sync = SyncEngine();
   final _search = TextEditingController();
+  StreamSubscription<List<SharedMediaFile>>? _shareSubscription;
+  final Set<String> _handledSharePaths = <String>{};
 
   List<LocalFolder> _allFolders = const [];
   List<LocalNote> _noteList = const [];
@@ -55,8 +58,172 @@ class _NotesHomePageState extends State<NotesHomePage> {
   void initState() {
     super.initState();
     _search.addListener(_onSearchChanged);
+    _shareSubscription = ReceiveSharingIntent.instance.getMediaStream().listen(
+      (files) => unawaited(_handleSharedImages(files)),
+      onError: (Object error) => debugPrint('Snote share receiver: $error'),
+    );
+    unawaited(ReceiveSharingIntent.instance.getInitialMedia().then((files) async {
+      if (files.isNotEmpty) {
+        // Wait for the home page's first note/folder query before showing the
+        // destination chooser on a cold start from Android's share sheet.
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        await _handleSharedImages(files);
+      }
+      await ReceiveSharingIntent.instance.reset();
+    }));
     unawaited(_load());
     if (!widget.localOnly) unawaited(_startSync());
+  }
+
+  Future<void> _handleSharedImages(List<SharedMediaFile> files) async {
+    final imageFiles = files.where((file) {
+      final path = file.path.toLowerCase();
+      final mime = file.mimeType?.toLowerCase() ?? '';
+      return mime.startsWith('image/') ||
+          path.endsWith('.png') ||
+          path.endsWith('.jpg') ||
+          path.endsWith('.jpeg') ||
+          path.endsWith('.webp') ||
+          path.endsWith('.heic') ||
+          path.endsWith('.gif');
+    }).where((file) => !_handledSharePaths.contains(file.path)).toList();
+    if (imageFiles.isEmpty || !mounted) return;
+
+    final notes = await _notes.listAllVisible();
+    if (!mounted) return;
+    if (notes.isEmpty) {
+      final create = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Add shared screenshot'),
+          content: const Text('Create a new note to receive the shared image?'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Create note')),
+          ],
+        ),
+      );
+      if (create != true) return;
+    }
+
+    LocalNote? target;
+    if (notes.length == 1) {
+      target = notes.first;
+    } else if (notes.isEmpty) {
+      target = await _notes.create(title: 'Shared screenshots', folderId: _folderId);
+    } else {
+      final chosenId = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Add shared image to…'),
+          content: SizedBox(
+            width: 420,
+            height: 420,
+            child: ListView(
+              children: notes.map((note) => ListTile(
+                leading: _noteCoverPreview(note, size: 38),
+                title: Text(note.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                subtitle: Text(note.noteType),
+                onTap: () => Navigator.pop(dialogContext, note.id),
+              )).toList(),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+          ],
+        ),
+      );
+      if (chosenId == null) return;
+      target = await _notes.get(chosenId);
+    }
+    if (target == null || !mounted) return;
+
+    try {
+      final stored = await _notes.get(target.id);
+      if (stored == null) return;
+      var content = <String, Object?>{};
+      if (stored.contentJson != null && stored.contentJson!.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(stored.contentJson!);
+          if (decoded is Map) content = Map<String, Object?>.from(decoded);
+        } catch (_) {}
+      }
+      final rawPages = content['pages'];
+      final pages = <Map<String, Object?>>[];
+      if (rawPages is List) {
+        for (final raw in rawPages) {
+          if (raw is Map) pages.add(Map<String, Object?>.from(raw));
+        }
+      }
+      if (pages.isEmpty) {
+        pages.add(<String, Object?>{
+          'id': DateTime.now().microsecondsSinceEpoch.toString(),
+          'template': 'dotted',
+          'paperColor': 0xffffffff,
+          'lineColor': 0xffd8dee8,
+          'lineOpacity': .85,
+          'lineWidth': .7,
+          'spacing': 28.0,
+          'pageSize': 'A4',
+          'orientation': 'vertical',
+          'cornellAssist': false,
+          'strokes': <Object?>[],
+          'images': <Object?>[],
+        });
+      }
+      final page = pages.first;
+      final rawImages = page['images'];
+      final images = rawImages is List ? List<Object?>.from(rawImages) : <Object?>[];
+      var inserted = 0;
+      for (final file in imageFiles) {
+        if (!_handledSharePaths.add(file.path)) continue;
+        try {
+          final bytes = await XFile(file.path).readAsBytes();
+          if (bytes.isEmpty) continue;
+          if (bytes.length > 15 * 1024 * 1024) {
+            throw StateError('This image exceeds 15 MB. Please share a compressed screenshot.');
+          }
+          images.add(<String, Object?>{
+            'id': 'shared-${DateTime.now().microsecondsSinceEpoch}-$inserted',
+            'data': base64Encode(bytes),
+            'x': .12 + (inserted % 3) * .055,
+            'y': .12 + (inserted % 4) * .055,
+            'width': .70,
+            'height': .46,
+            'source': 'android-share',
+          });
+          inserted++;
+        } catch (error) {
+          _handledSharePaths.remove(file.path);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Could not read shared image: $error')),
+            );
+          }
+        }
+      }
+      if (inserted == 0) return;
+      page['images'] = images;
+      content['pages'] = pages;
+      content['text_delta'] ??= <Object?>[
+        <String, Object?>{'insert': '\n'},
+      ];
+      content['version'] = content['version'] ?? 5;
+      await _notes.saveContent(target.id, content);
+      await _load();
+      await ReceiveSharingIntent.instance.reset();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Added $inserted shared image(s) to "${target.title}".')),
+      );
+      await _openNote(await _notes.get(target.id) ?? target);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Shared image import failed: $error')),
+        );
+      }
+    }
   }
 
   Future<void> _startSync() async {
@@ -1279,6 +1446,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
 
   @override
   void dispose() {
+    unawaited(_shareSubscription?.cancel() ?? Future<void>.value());
     _searchDebounce?.cancel();
     _search.removeListener(_onSearchChanged);
     _search.dispose();
