@@ -45,11 +45,14 @@ jobs:
           p = Path('android/app/build.gradle.kts')
           s = p.read_text()
           s = s.replace('minSdk = flutter.minSdkVersion', 'minSdk = 24')
-          p.write_text(s)
-          p = Path('android/app/src/main/AndroidManifest.xml')
+          s = s.replace('applicationId = "com.snote.snote"', 'applicationId = "com.snote.snote.beta"')
+         p.write_text(s)
+         p = Path('android/app/src/main/AndroidManifest.xml')
           s = p.read_text()
           if 'android.permission.CAMERA' not in s:
-              s = s.replace('</manifest>', '    <uses-permission android:name="android.permission.CAMERA" />\\n</manifest>')
+              s = s.replace('</manifest>', '    <uses-permission android:name="android.permission.CAMERA" />\n</manifest>')
+          import re
+          s = re.sub(r'android:label="[^"]+"', 'android:label="Snote Beta"', s, count=1)
           p.write_text(s)
           PY
 
@@ -69,10 +72,6 @@ jobs:
         working-directory: app
         run: flutter test
 
-      - name: Configure PDF.js web assets
-        working-directory: app
-        run: dart run pdfx:install_web
-
       - name: Build release APK
         working-directory: app
         run: flutter build apk --release
@@ -89,7 +88,7 @@ jobs:
           retention-days: 30
 
       - name: Publish beta prerelease
-        if: false
+        if: success()
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.1.0-beta.${{ github.run_number }}
