@@ -112,6 +112,7 @@ class _SettingsPageState extends State<SettingsPage> {
     children: [
       _group('Writing Operation', [
         _toggle('autoRecognition', 'Auto Recognition', 'Recognize a drawn shape after a short hold.'),
+        _toggle('palmRejection', 'Palm rejection', 'Ignore accidental finger touches while writing with a stylus. Turn this off to allow finger drawing.'),
         _toggle('independentGraphColor', 'Independent graph color / stroke', 'Keep graph and stroke styling separate.'),
         _toggle('longPressMenu', 'Long press to show menu', 'Use a long press for quick pen tools and selection.'),
         _toggle('selectionMenuOnTouch', 'Show menu by touch in selection mode', 'Touch empty canvas to reopen selection controls.'),
