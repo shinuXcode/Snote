@@ -347,7 +347,6 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _openScreenshotImport() async {
-    final notes = await NoteRepository().listAllVisible(limit: 1);
     if (!mounted) return;
     // Screenshot import creates a new note; an empty folder context is intentional here.
     await Navigator.push(context, MaterialPageRoute(builder: (_) => const ScreenshotImportPage()));
