@@ -865,7 +865,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       builder: (_, offset, child) {
         final y = offset.dy == 0 ? size.height - 112 : offset.dy;
         return Positioned(
-          left: offset.dx.clamp(_full ? 8 : 52, math.max(_full ? 8 : 52, size.width - 160)),
+          left: offset.dx.clamp(8, math.max(8, size.width - 160)),
           top: y.clamp(60, math.max(60, size.height - 92)),
           child: GestureDetector(
             onPanUpdate: (d) {
