@@ -664,6 +664,255 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     );
   }
 
+
+  List<Map<String, Object?>> get _pageImages {
+    final raw = pageData['images'];
+    if (raw is! List) return <Map<String, Object?>>[];
+    return raw.whereType<Map>().map((item) => item.cast<String, Object?>()).toList();
+  }
+
+  Widget _pageImageItem(Map<String, Object?> image, double pageWidth, double pageHeight) {
+    final id = image['id']?.toString() ?? '';
+    final x = (image['x'] as num?)?.toDouble() ?? .12;
+    final y = (image['y'] as num?)?.toDouble() ?? .16;
+    final width = (image['width'] as num?)?.toDouble() ?? .68;
+    final height = (image['height'] as num?)?.toDouble() ?? .42;
+    final data = image['data']?.toString() ?? '';
+    if (data.isEmpty) return const SizedBox.shrink();
+    final bytes = base64Decode(data);
+    return Positioned(
+      left: (x * pageWidth).clamp(0.0, math.max(0.0, pageWidth - 56)).toDouble(),
+      top: (y * pageHeight).clamp(0.0, math.max(0.0, pageHeight - 56)).toDouble(),
+      width: (width * pageWidth).clamp(56.0, math.max(56.0, pageWidth)).toDouble(),
+      height: (height * pageHeight).clamp(56.0, math.max(56.0, pageHeight)).toDouble(),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onPanUpdate: (details) {
+          setState(() {
+            image['x'] = (x + details.delta.dx / math.max(1.0, pageWidth)).clamp(0.0, .85);
+            image['y'] = (y + details.delta.dy / math.max(1.0, pageHeight)).clamp(0.0, .85);
+          });
+          _scheduleSave();
+        },
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: Theme.of(context).colorScheme.primary, width: 1.2),
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Image.memory(
+                bytes,
+                fit: BoxFit.contain,
+                gaplessPlayback: true,
+                errorBuilder: (_, __, ___) => const Center(child: Icon(Icons.broken_image_outlined)),
+              ),
+            ),
+            Positioned(
+              top: 0,
+              right: 0,
+              child: Material(
+                color: Theme.of(context).colorScheme.surface.withValues(alpha: .92),
+                shape: const CircleBorder(),
+                child: IconButton(
+                  tooltip: 'Remove inserted image',
+                  visualDensity: VisualDensity.compact,
+                  constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+                  padding: EdgeInsets.zero,
+                  iconSize: 16,
+                  onPressed: () {
+                    setState(() => _pageImages.removeWhere((candidate) => candidate['id'] == id));
+                    _scheduleSave();
+                  },
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _insertScreenshot() async {
+    final source = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.photo_library_outlined),
+            title: const Text('Choose a screenshot or image'),
+            onTap: () => Navigator.pop(sheetContext, 'gallery'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.camera_alt_outlined),
+            title: const Text('Capture with camera'),
+            onTap: () => Navigator.pop(sheetContext, 'camera'),
+          ),
+        ]),
+      ),
+    );
+    if (source == null) return;
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: source == 'camera' ? ImageSource.camera : ImageSource.gallery,
+        imageQuality: 90,
+      );
+      if (picked == null) return;
+      final bytes = await picked.readAsBytes();
+      if (bytes.isEmpty || !mounted) return;
+      setState(() {
+        _pageImages.add({
+          'id': DateTime.now().microsecondsSinceEpoch.toString(),
+          'name': picked.name,
+          'data': base64Encode(bytes),
+          'x': .12,
+          'y': .16,
+          'width': .68,
+          'height': .42,
+        });
+        pageData['images'] = _pageImages;
+      });
+      _scheduleSave();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not insert image: $error')),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportPagePdf() async {
+    if (_pdfExporting) return;
+    setState(() => _pdfExporting = true);
+    try {
+      await _flushSave();
+      await WidgetsBinding.instance.endOfFrame;
+      final renderObject = _pageCaptureKey.currentContext?.findRenderObject();
+      if (renderObject is! RenderRepaintBoundary) {
+        throw StateError('The page is not ready for PDF export.');
+      }
+      final image = await renderObject.toImage(pixelRatio: 2);
+      final pngData = await image.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
+      if (pngData == null) throw StateError('Could not render this page.');
+      final pdf = pw.Document();
+      pdf.addPage(pw.Page(
+        pageFormat: pw.PdfPageFormat.a4,
+        build: (_) => pw.Center(
+          child: pw.Image(pw.MemoryImage(pngData.buffer.asUint8List()), fit: pw.BoxFit.contain),
+        ),
+      ));
+      final safeTitle = _title.text.trim().replaceAll(RegExp(r'[^a-zA-Z0-9 _-]'), '').replaceAll(' ', '_');
+      final bytes = await pdf.save();
+      final saved = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save current note page as PDF',
+        fileName: '${safeTitle.isEmpty ? 'Snote' : safeTitle}-page-${_page + 1}.pdf',
+        type: FileType.custom,
+        allowedExtensions: const ['pdf'],
+        bytes: bytes,
+      );
+      if (mounted && saved != null) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('PDF export saved: $saved')));
+      }
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('PDF export failed: $error')));
+    } finally {
+      if (mounted) setState(() => _pdfExporting = false);
+    }
+  }
+
+  Future<void> _calculatorSheet() async {
+    const keys = [
+      'sin', 'cos', 'tan', 'sqrt',
+      '(', ')', 'AC', 'DEL',
+      '7', '8', '9', '÷',
+      '4', '5', '6', '×',
+      '1', '2', '3', '−',
+      '0', '.', 'π', '+',
+      '%', '^', 'Ans', '=',
+    ];
+    _calculatorInput.text = '0';
+    _calculatorResult = '0';
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (_, setModal) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Align(alignment: Alignment.centerLeft, child: Text('Calculator', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900))),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _calculatorInput,
+                  textAlign: TextAlign.end,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                  decoration: const InputDecoration(border: OutlineInputBorder(), labelText: 'Expression'),
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text('= $_calculatorResult', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+                  ),
+                ),
+                GridView.count(
+                  crossAxisCount: 4,
+                  shrinkWrap: true,
+                  mainAxisSpacing: 6,
+                  crossAxisSpacing: 6,
+                  childAspectRatio: 1.7,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: keys.map((key) => FilledButton.tonal(
+                    onPressed: () {
+                      setModal(() {
+                        final current = _calculatorInput.text;
+                        if (key == 'AC') {
+                          _calculatorInput.text = '0';
+                          _calculatorResult = '0';
+                        } else if (key == 'DEL') {
+                          _calculatorInput.text = current.length <= 1 ? '0' : current.substring(0, current.length - 1);
+                        } else if (key == 'Ans') {
+                          _calculatorInput.text = _calculatorResult;
+                        } else if (key == '=') {
+                          try {
+                            final value = _CalculatorParser(_calculatorInput.text).parse();
+                            if (!value.isFinite) {
+                              _calculatorResult = 'Undefined';
+                            } else {
+                              final formatted = value.toStringAsPrecision(10);
+                              _calculatorResult = formatted.contains('.')
+                                  ? formatted.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '')
+                                  : formatted;
+                            }
+                          } catch (_) {
+                            _calculatorResult = 'Error';
+                          }
+                        } else {
+                          final token = key == '×' ? '*' : key == '÷' ? '/' : key == '−' ? '-' : key == 'π' ? 'pi' : key;
+                          _calculatorInput.text = current == '0' && RegExp(r'^\d$').hasMatch(token) ? token : current + token;
+                        }
+                      });
+                    },
+                    child: Text(key, style: const TextStyle(fontWeight: FontWeight.w800)),
+                  )).toList(),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   PageTemplate _template() {
     final name = pageData['template']?.toString();
     return PageTemplate.values.firstWhere((v) => v.name == name, orElse: () => PageTemplate.dotted);
@@ -2155,5 +2404,109 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         ),
       ),
     );
+  }
+}
+
+class _CalculatorParser {
+  _CalculatorParser(this.source);
+  final String source;
+  int _cursor = 0;
+
+  double parse() {
+    final value = _sum();
+    _skipSpaces();
+    if (_cursor != source.length) throw const FormatException('Unexpected input');
+    if (!value.isFinite) throw const FormatException('Result is not finite');
+    return value;
+  }
+
+  double _sum() {
+    var value = _product();
+    while (true) {
+      if (_take('+')) {
+        value += _product();
+      } else if (_take('-')) {
+        value -= _product();
+      } else {
+        return value;
+      }
+    }
+  }
+
+  double _product() {
+    var value = _power();
+    while (true) {
+      if (_take('*')) {
+        value *= _power();
+      } else if (_take('/')) {
+        final divisor = _power();
+        if (divisor == 0) throw const FormatException('Division by zero');
+        value /= divisor;
+      } else if (_take('%')) {
+        final divisor = _power();
+        if (divisor == 0) throw const FormatException('Division by zero');
+        value %= divisor;
+      } else {
+        return value;
+      }
+    }
+  }
+
+  double _power() {
+    final base = _unary();
+    if (_take('^')) return math.pow(base, _power()).toDouble();
+    return base;
+  }
+
+  double _unary() {
+    if (_take('+')) return _unary();
+    if (_take('-')) return -_unary();
+    return _primary();
+  }
+
+  double _primary() {
+    _skipSpaces();
+    if (_take('(')) {
+      final value = _sum();
+      if (!_take(')')) throw const FormatException('Missing closing parenthesis');
+      return value;
+    }
+    final identifier = RegExp(r'[a-zA-Z]+').matchAsPrefix(source.substring(_cursor));
+    if (identifier != null) {
+      final name = identifier.group(0)!.toLowerCase();
+      _cursor += identifier.group(0)!.length;
+      if (name == 'pi') return math.pi;
+      if (name == 'e') return math.e;
+      if (!_take('(')) throw const FormatException('Function needs parentheses');
+      final value = _sum();
+      if (!_take(')')) throw const FormatException('Missing closing parenthesis');
+      switch (name) {
+        case 'sin': return math.sin(value);
+        case 'cos': return math.cos(value);
+        case 'tan': return math.tan(value);
+        case 'sqrt': if (value < 0) throw const FormatException('Negative square root'); return math.sqrt(value);
+        case 'abs': return value.abs();
+        case 'ln': if (value <= 0) throw const FormatException('Invalid logarithm'); return math.log(value);
+        case 'log': if (value <= 0) throw const FormatException('Invalid logarithm'); return math.log(value) / math.ln10;
+        default: throw const FormatException('Unknown function');
+      }
+    }
+    final number = RegExp(r'(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?').matchAsPrefix(source.substring(_cursor));
+    if (number == null) throw const FormatException('Expected a number');
+    _cursor += number.group(0)!.length;
+    return double.parse(number.group(0)!);
+  }
+
+  bool _take(String token) {
+    _skipSpaces();
+    if (!source.startsWith(token, _cursor)) return false;
+    _cursor += token.length;
+    return true;
+  }
+
+  void _skipSpaces() {
+    while (_cursor < source.length && source[_cursor].trim().isEmpty) {
+      _cursor++;
+    }
   }
 }
