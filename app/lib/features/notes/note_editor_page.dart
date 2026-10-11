@@ -83,8 +83,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   bool _readingMode = false;
   bool _eyedropperActive = false;
   bool _toolbar = true;
-  bool _docked = false;
-  String _dockSide = 'bottom';
+  bool _docked = true;
+  String _dockSide = 'left';
   // Keep the free toolbox outside the fixed left rail by default.
   double _toolbarX = 16;
   double _toolbarY = 0;
@@ -447,7 +447,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   void _restoreToolbar() {
     final x = pageData['toolbarX'];
     final y = pageData['toolbarY'];
-    final dock = pageData['toolbarDock']?.toString();
+    final dock = (pageData['toolbarDock'] ?? _settings.getString('toolbarDock'))?.toString();
     _docked = const {'left', 'right', 'top', 'bottom'}.contains(dock);
     if (_docked) {
       _dockSide = dock!;
@@ -529,11 +529,26 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     _scheduleSave();
   }
 
+  double _defaultToolSize(CanvasTool tool) {
+    if (tool == CanvasTool.eraser || tool == CanvasTool.pixelEraser) return 12;
+    if (tool == CanvasTool.highlighter) return 8;
+    if (tool == CanvasTool.marker || tool == CanvasTool.brush) return 5;
+    if (tool == CanvasTool.pencil) return 1.7;
+    if (tool.isShape) return 2.2;
+    return 3;
+  }
+
+  Color _defaultToolColor(CanvasTool tool) {
+    if (tool == CanvasTool.highlighter) return const Color(0xffffd54f);
+    if (tool == CanvasTool.marker) return const Color(0xff1565c0);
+    return const Color(0xff263238);
+  }
+
   void _selectTool(CanvasTool tool) {
     setState(() {
       _tool = tool;
-      _penSize = _toolSizeOverrides[tool.name] ?? _penSize;
-      _penColor = _toolColorOverrides[tool.name] ?? _penColor;
+      _penSize = _toolSizeOverrides[tool.name] ?? _defaultToolSize(tool);
+      _penColor = _toolColorOverrides[tool.name] ?? _defaultToolColor(tool);
       _dashed = _toolDashedOverrides[tool.name] ?? false;
       _pan = false;
       _shapePanel = false;
@@ -809,7 +824,12 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     final infiniteCanvas = sizeKey == 'Infinite';
 
     final pageSurface = Material(
-      elevation: SnoteThemeController.instance.eInk ? 0 : 4,
+      elevation: SnoteThemeController.instance.eInk ? 0 : 10,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(3),
+        side: BorderSide(color: Colors.black.withValues(alpha: .09), width: .8),
+      ),
+      clipBehavior: Clip.antiAlias,
       color: _pageColor(),
       child: Stack(
         fit: StackFit.expand,
@@ -1595,25 +1615,15 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         icon: const Icon(Icons.emoji_emotions_outlined),
         tooltip: 'Stickers',
       ),
+      IconButton.filledTonal(
+        onPressed: _paperSheet,
+        icon: const Icon(Icons.grid_4x4_rounded),
+        tooltip: 'Page templates',
+      ),
       IconButton(
         onPressed: _colorSheet,
         icon: Icon(Icons.circle, color: _toolColorOverrides[_tool.name] ?? _penColor, size: 22),
         tooltip: 'Current pen color',
-      ),
-      IconButton(
-        onPressed: _insertScreenshot,
-        icon: const Icon(Icons.add_photo_alternate_outlined),
-        tooltip: 'Insert screenshot or image',
-      ),
-      IconButton(
-        onPressed: _pdfExporting ? null : _exportPagePdf,
-        icon: const Icon(Icons.picture_as_pdf_outlined),
-        tooltip: 'Save current page as PDF',
-      ),
-      IconButton(
-        onPressed: _calculatorSheet,
-        icon: const Icon(Icons.calculate_outlined),
-        tooltip: 'Calculator',
       ),
       IconButton(
         onPressed: _styleSheet,
@@ -1623,12 +1633,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       IconButton(
         onPressed: _pencaseSheet,
         icon: const Icon(Icons.inventory_2_outlined),
-        tooltip: 'Pencase',
-      ),
-      IconButton(
-        onPressed: () => setState(() => _pan = !_pan),
-        icon: Icon(_pan ? Icons.pan_tool_rounded : Icons.pan_tool_outlined),
-        tooltip: 'Pan and zoom',
+        tooltip: 'Tool showcase',
       ),
       IconButton(
         onPressed: () => setState(() => _draw = !_draw),
@@ -1825,9 +1830,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   }
 
   Future<void> _showInlineToolOptions(CanvasTool target, Offset globalPosition) async {
-    var size = _toolSizeOverrides[target.name] ?? _penSize;
+    var size = _toolSizeOverrides[target.name] ?? _defaultToolSize(target);
     var opacity = target == _tool ? _opacity : 1.0;
-    var color = _toolColorOverrides[target.name] ?? _penColor;
+    var color = _toolColorOverrides[target.name] ?? _defaultToolColor(target);
     var fill = target == _tool && _fill;
     var showAdvanced = false;
     await showGeneralDialog<void>(
@@ -1954,6 +1959,15 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                                 ),
                               ),
                             ]),
+                            const SizedBox(height: 8),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: () => _collectToolToShowcase(target, size: size, color: color, opacity: opacity),
+                                icon: const Icon(Icons.bookmark_add_outlined, size: 18),
+                                label: const Text('Collect to showcase'),
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -2009,6 +2023,46 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           SnackBar(content: Text('Could not sample colour: $error')),
         );
       }
+    }
+  }
+
+  Future<void> _collectToolToShowcase(
+    CanvasTool target, {
+    required double size,
+    required Color color,
+    required double opacity,
+  }) async {
+    final controller = TextEditingController(text: target.label + ' ' + (_savedPenPresets.length + 1).toString());
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Collect to showcase'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Tool preset name', hintText: 'Blue fountain pen'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, controller.text), child: const Text('Collect')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name == null) return;
+    final presets = _savedPenPresets;
+    presets.insert(0, <String, dynamic>{
+      'id': DateTime.now().microsecondsSinceEpoch.toString(),
+      'name': name.trim().isEmpty ? target.label + ' ' + (presets.length + 1).toString() : name.trim(),
+      'tool': target.name,
+      'color': color.toARGB32(),
+      'size': size.clamp(.5, 60).toDouble(),
+      'opacity': opacity.clamp(.05, 1).toDouble(),
+    });
+    await _settings.setString('pencasePresets', jsonEncode(presets));
+    if (mounted) {
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tool added to your showcase.')));
     }
   }
 
@@ -2143,7 +2197,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
             child: Padding(
               padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
               child: Column(mainAxisSize: MainAxisSize.min, children: [
-                const Align(alignment: Alignment.centerLeft, child: Text('Pencase', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900))),
+                const Align(alignment: Alignment.centerLeft, child: Text('Tool showcase', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900))),
                 const SizedBox(height: 6),
                 const Align(
                   alignment: Alignment.centerLeft,
@@ -2384,38 +2438,40 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           final tool = tools[index];
           return Tooltip(
             message: tool.label,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: () => _selectTool(tool),
-              onDoubleTap: () => _styleSheet(tool),
-              child: Ink(
-                decoration: BoxDecoration(
-                  color: _tool == tool
-                      ? Theme.of(context).colorScheme.primaryContainer
-                      : Theme.of(context).colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
+            child: GestureDetector(
+              onDoubleTapDown: (details) => _showInlineToolOptions(tool, details.globalPosition),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => _selectTool(tool),
+                child: Ink(
+                  decoration: BoxDecoration(
                     color: _tool == tool
-                        ? Theme.of(context).colorScheme.primary
-                        : Colors.transparent,
-                  ),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(_toolIcon(tool), size: 25),
-                    const SizedBox(height: 5),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 3),
-                      child: Text(
-                        tool.label,
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 10, height: 1.05),
-                      ),
+                        ? Theme.of(context).colorScheme.primaryContainer
+                        : Theme.of(context).colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _tool == tool
+                          ? Theme.of(context).colorScheme.primary
+                          : Colors.transparent,
                     ),
-                  ],
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(_toolIcon(tool), size: 25),
+                      const SizedBox(height: 5),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 3),
+                        child: Text(
+                          tool.label,
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 10, height: 1.05),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -2449,7 +2505,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: Icon(Icons.drag_indicator_rounded, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      child: const Tooltip(message: 'Drag to move selection tools', child: Icon(Icons.drag_indicator_rounded, size: 18)),
                     ),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -3109,11 +3165,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
 
   Future<void> _styleSheet([CanvasTool? requestedTool]) async {
     final target = requestedTool ?? _tool;
-    var size = _toolSizeOverrides[target.name] ?? _penSize;
+    var size = _toolSizeOverrides[target.name] ?? _defaultToolSize(target);
     var opacity = _opacity;
     var fill = _fill;
     var sides = _sides;
-    var color = _toolColorOverrides[target.name] ?? _penColor;
+    var color = _toolColorOverrides[target.name] ?? _defaultToolColor(target);
     var dashed = _toolDashedOverrides[target.name] ?? _dashed;
     var curve = _settings.getString('pressureCurve');
     var exponent = _settings.getDouble('pressureExponent');
@@ -3287,7 +3343,14 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   }
 
   Future<void> _stickers() async {
-    const items = ['⭐','❤️','✅','❌','⚠️','💡','📌','🎯','🔥','🚀','📚','📝','😊','👍','✨','🎉','☀️','🌙','☕','💻','🔒','📖','🧠','🟢'];
+    const items = [
+      '⭐','❤️','✅','❌','⚠️','💡','📌','🎯','🔥','🚀','📚','📝','😊','👍','✨','🎉','☀️','🌙','☕','💻','🔒','📖','🧠','🟢',
+      '📐','📏','🧮','✏️','🖊️','🖋️','🖍️','🧷','📎','📍','🗂️','🗒️','📒','📕','📗','📘','📙','📓','📔','🔬','🧪','🧬','⚗️','🧫',
+      '🛰️','🌍','🌌','🌈','🌱','🌿','🍀','🌸','🌻','🍁','🪴','🐝','🦋','🪐','☄️','🌠','💎','🔷','🔶','🔺','🔻','⬛','⬜','🟣',
+      '🟡','🟠','🔵','🟤','🩷','🩵','🩶','💜','💙','💚','💛','🧡','🤍','🖤','🤎','💯','❗','❓','‼️','⁉️','➕','➖','✖️','➗',
+      '↗️','↘️','↔️','↕️','🔁','🔄','🔀','📈','📉','📊','🧭','🧩','🛠️','⚙️','🫀','🫁','🦴','🧑‍🔬','🎨','🎼','🎵','🎹',
+      '🏆','🥇','🥈','🥉','🚩','🏁','🕒','⏱️','📅','🗓️','🔔','🔖','📣','💬','🗯️','💭','☑️','☒','🔘','⭕','❇️','✳️','❎','💠',
+    ];
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
