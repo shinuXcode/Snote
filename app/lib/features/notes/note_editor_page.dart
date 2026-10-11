@@ -100,6 +100,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   Color? _fillColor;
   int _sides = 6;
   bool _shapePanel = false;
+  bool _showcaseOpen = false;
+  String _showcaseDock = 'right';
+  double _showcaseX = 12;
+  double _showcaseY = 140;
   String? _sticker;
   int _selected = 0;
   Timer? _saveTimer;
@@ -445,6 +449,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   }
 
   void _restoreToolbar() {
+    _showcaseDock = _settings.getString('toolShowcaseDockSide');
+    if (!const {'left', 'right', 'top', 'bottom', 'free'}.contains(_showcaseDock)) _showcaseDock = 'right';
     final x = pageData['toolbarX'];
     final y = pageData['toolbarY'];
     final dock = (pageData['toolbarDock'] ?? _settings.getString('toolbarDock'))?.toString();
@@ -739,6 +745,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
               if (_preview && !_full && !_readingMode) _previewRail(),
               if (_toolbar && _draw && !_readingMode) _toolbarWidget(),
               if (_shapePanel && !_full && !_readingMode) _shapePanelWidget(),
+              if (_showcaseOpen && !_full && !_readingMode) _showcaseWidget(),
               if (!_toolbar && !_full && !_readingMode) _toolbarOpen(),
               if (_full) _fullExit(),
               if (_selected > 0 && !_readingMode) _selectionTools(),
@@ -1629,9 +1636,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         tooltip: 'Tool style',
       ),
       IconButton(
-        onPressed: _pencaseSheet,
+        onPressed: () => setState(() => _showcaseOpen = !_showcaseOpen),
         icon: const Icon(Icons.inventory_2_outlined),
-        tooltip: 'Tool showcase',
+        tooltip: 'Open movable tool showcase',
       ),
       IconButton(
         onPressed: () => setState(() => _draw = !_draw),
@@ -2170,6 +2177,134 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           ),
         ),
         child: const Icon(Icons.edit_rounded, size: 12, color: Colors.white),
+      ),
+    );
+  }
+
+  Widget _showcaseWidget() {
+    final presets = _savedPenPresets;
+    final side = _showcaseDock;
+    return Positioned(
+      left: side == 'left' ? 8 : (side == 'free' ? _showcaseX : null),
+      right: side == 'right' ? 8 : null,
+      top: side == 'top' ? 54 : (side == 'free' ? _showcaseY : null),
+      bottom: side == 'bottom' ? 8 : null,
+      child: Material(
+        elevation: 14,
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        clipBehavior: Clip.antiAlias,
+        child: SizedBox(
+          width: 250,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              GestureDetector(
+                onPanUpdate: (details) {
+                  final size = MediaQuery.sizeOf(context);
+                  setState(() {
+                    _showcaseDock = 'free';
+                    _showcaseX = (_showcaseX + details.delta.dx).clamp(4.0, math.max(4.0, size.width - 260)).toDouble();
+                    _showcaseY = (_showcaseY + details.delta.dy).clamp(50.0, math.max(50.0, size.height - 300)).toDouble();
+                  });
+                },
+                onPanEnd: (_) {
+                  final size = MediaQuery.sizeOf(context);
+                  final distances = <String, double>{
+                    'left': _showcaseX,
+                    'right': size.width - (_showcaseX + 250),
+                    'top': _showcaseY - 50,
+                    'bottom': size.height - (_showcaseY + 280),
+                  };
+                  final nearest = distances.entries.reduce((a, b) => a.value < b.value ? a : b);
+                  if (nearest.value.abs() < 70) {
+                    setState(() => _showcaseDock = nearest.key);
+                    unawaited(_settings.setString('toolShowcaseDockSide', nearest.key));
+                  }
+                },
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 9, 4, 8),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.drag_indicator_rounded),
+                      const SizedBox(width: 6),
+                      const Expanded(child: Text('Tool showcase', style: TextStyle(fontWeight: FontWeight.w900))),
+                      PopupMenuButton<String>(
+                        tooltip: 'Attach showcase to an edge',
+                        onSelected: (value) {
+                          setState(() => _showcaseDock = value);
+                          unawaited(_settings.setString('toolShowcaseDockSide', value));
+                        },
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(value: 'left', child: Text('Attach left')),
+                          PopupMenuItem(value: 'right', child: Text('Attach right')),
+                          PopupMenuItem(value: 'top', child: Text('Attach top')),
+                          PopupMenuItem(value: 'bottom', child: Text('Attach bottom')),
+                          PopupMenuItem(value: 'free', child: Text('Float freely')),
+                        ],
+                        icon: const Icon(Icons.dock_rounded),
+                      ),
+                      IconButton(
+                        tooltip: 'Close showcase',
+                        onPressed: () => setState(() => _showcaseOpen = false),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const Divider(height: 1),
+              if (presets.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(18),
+                  child: Text('Open any tool options and choose “Collect to showcase” to save reusable colors and sizes.'),
+                )
+              else
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 280),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: presets.length,
+                    itemBuilder: (context, index) {
+                      final preset = presets[index];
+                      final color = Color((preset['color'] as num?)?.toInt() ?? 0xff263238);
+                      return ListTile(
+                        dense: true,
+                        leading: CircleAvatar(backgroundColor: color, radius: 13, child: const Icon(Icons.edit_rounded, size: 13, color: Colors.white)),
+                        title: Text(preset['name']?.toString() ?? 'Saved tool', maxLines: 1, overflow: TextOverflow.ellipsis),
+                        subtitle: Text((preset['tool']?.toString() ?? 'pen') + ' · ' + ((preset['size'] as num?)?.toStringAsFixed(1) ?? '3') + ' px'),
+                        onTap: () => unawaited(_applyPenPreset(preset)),
+                        trailing: IconButton(
+                          tooltip: 'Remove from showcase',
+                          icon: const Icon(Icons.remove_circle_outline_rounded),
+                          onPressed: () async {
+                            final items = _savedPenPresets;
+                            items.removeWhere((item) => item['id'] == preset['id']);
+                            await _settings.setString('pencasePresets', jsonEncode(items));
+                            if (mounted) setState(() {});
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() => _showcaseOpen = false);
+                      _pencaseSheet();
+                    },
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Manage showcase tools'),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2992,6 +3127,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
 
   Future<void> _colorSheet() async {
     var color = _toolColorOverrides[_tool.name] ?? _penColor;
+    var paletteOpacity = _opacity;
     var hexText = color.toARGB32().toRadixString(16).substring(2).toUpperCase();
     final hexController = TextEditingController(text: '#$hexText');
     var useEyedropper = false;
@@ -3106,6 +3242,14 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                       },
                     ),
                     const SizedBox(height: 12),
+                    Text('Opacity: ' + (paletteOpacity * 100).round().toString() + '%', style: const TextStyle(fontWeight: FontWeight.w800)),
+                    Slider(
+                      value: paletteOpacity.clamp(.05, 1).toDouble(),
+                      min: .05,
+                      max: 1,
+                      divisions: 19,
+                      onChanged: (value) => setDialogState(() => paletteOpacity = value),
+                    ),
                     const Text('Recent colors', style: TextStyle(fontWeight: FontWeight.w800)),
                     const SizedBox(height: 7),
                     Wrap(
@@ -3141,7 +3285,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   setState(() {
                     _penColor = color;
                     _toolColorOverrides[_tool.name] = color;
+                    _opacity = paletteOpacity;
                   });
+                  unawaited(_settings.setDouble('penOpacity', _opacity));
                   unawaited(_settings.setString('toolColors', jsonEncode({
                     for (final entry in _toolColorOverrides.entries) entry.key: entry.value.toARGB32(),
                   })));
