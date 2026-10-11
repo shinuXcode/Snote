@@ -26,6 +26,66 @@ enum CanvasTool {
   hexagon,
   star,
   customPolygon,
+  pentagon,
+  parallelogram,
+  trapezoid,
+  cube,
+  cuboid,
+  cylinder,
+  cone,
+  pyramid,
+  triangularPrism,
+  sphere,
+  arc,
+  semicircle,
+  sector,
+  ring,
+  crescent,
+  cross,
+  plus,
+  heart,
+  cloud,
+  speechBubble,
+  callout,
+  curlyBrace,
+  bracket,
+  dimensionLine,
+  numberLine,
+  unitCircle,
+  cubicGraph,
+  exponentialGraph,
+  logarithmicGraph,
+  tangentGraph,
+  ellipseAxes,
+  vectorField,
+  polarGraph,
+  histogram,
+  barChart,
+  pieChart,
+  flowchartTerminator,
+  flowchartProcess,
+  flowchartDecision,
+  flowchartInputOutput,
+  flowchartDocument,
+  flowchartDatabase,
+  flowchartConnector,
+  timeline,
+  tableGrid,
+  checklist,
+  waveform,
+  spring,
+  lever,
+  inclinedPlane,
+  gear,
+  magnet,
+  thermometer,
+  stopwatch,
+  ruler,
+  compass,
+  protractor,
+  dottedLine,
+  dashedLine,
+  cartesianPlane,
   // Mathematical diagrams.
   coordinateAxes,
   parabola,
@@ -115,6 +175,66 @@ extension CanvasToolX on CanvasTool {
     CanvasTool.neuron,
     CanvasTool.leaf,
     CanvasTool.microscope,
+    CanvasTool.pentagon,
+    CanvasTool.parallelogram,
+    CanvasTool.trapezoid,
+    CanvasTool.cube,
+    CanvasTool.cuboid,
+    CanvasTool.cylinder,
+    CanvasTool.cone,
+    CanvasTool.pyramid,
+    CanvasTool.triangularPrism,
+    CanvasTool.sphere,
+    CanvasTool.arc,
+    CanvasTool.semicircle,
+    CanvasTool.sector,
+    CanvasTool.ring,
+    CanvasTool.crescent,
+    CanvasTool.cross,
+    CanvasTool.plus,
+    CanvasTool.heart,
+    CanvasTool.cloud,
+    CanvasTool.speechBubble,
+    CanvasTool.callout,
+    CanvasTool.curlyBrace,
+    CanvasTool.bracket,
+    CanvasTool.dimensionLine,
+    CanvasTool.numberLine,
+    CanvasTool.unitCircle,
+    CanvasTool.cubicGraph,
+    CanvasTool.exponentialGraph,
+    CanvasTool.logarithmicGraph,
+    CanvasTool.tangentGraph,
+    CanvasTool.ellipseAxes,
+    CanvasTool.vectorField,
+    CanvasTool.polarGraph,
+    CanvasTool.histogram,
+    CanvasTool.barChart,
+    CanvasTool.pieChart,
+    CanvasTool.flowchartTerminator,
+    CanvasTool.flowchartProcess,
+    CanvasTool.flowchartDecision,
+    CanvasTool.flowchartInputOutput,
+    CanvasTool.flowchartDocument,
+    CanvasTool.flowchartDatabase,
+    CanvasTool.flowchartConnector,
+    CanvasTool.timeline,
+    CanvasTool.tableGrid,
+    CanvasTool.checklist,
+    CanvasTool.waveform,
+    CanvasTool.spring,
+    CanvasTool.lever,
+    CanvasTool.inclinedPlane,
+    CanvasTool.gear,
+    CanvasTool.magnet,
+    CanvasTool.thermometer,
+    CanvasTool.stopwatch,
+    CanvasTool.ruler,
+    CanvasTool.compass,
+    CanvasTool.protractor,
+    CanvasTool.dottedLine,
+    CanvasTool.dashedLine,
+    CanvasTool.cartesianPlane,
   }.contains(this);
 
   PenType get penType {
@@ -180,6 +300,66 @@ extension CanvasToolX on CanvasTool {
       case CanvasTool.neuron: return 'Neuron';
       case CanvasTool.leaf: return 'Leaf';
       case CanvasTool.microscope: return 'Microscope';
+      case CanvasTool.pentagon: return 'Pentagon';
+      case CanvasTool.parallelogram: return 'Parallelogram';
+      case CanvasTool.trapezoid: return 'Trapezoid';
+      case CanvasTool.cube: return 'Cube';
+      case CanvasTool.cuboid: return 'Cuboid';
+      case CanvasTool.cylinder: return 'Cylinder';
+      case CanvasTool.cone: return 'Cone';
+      case CanvasTool.pyramid: return 'Pyramid';
+      case CanvasTool.triangularPrism: return 'Triangular prism';
+      case CanvasTool.sphere: return 'Sphere';
+      case CanvasTool.arc: return 'Arc';
+      case CanvasTool.semicircle: return 'Semicircle';
+      case CanvasTool.sector: return 'Sector';
+      case CanvasTool.ring: return 'Ring';
+      case CanvasTool.crescent: return 'Crescent';
+      case CanvasTool.cross: return 'Cross';
+      case CanvasTool.plus: return 'Plus';
+      case CanvasTool.heart: return 'Heart';
+      case CanvasTool.cloud: return 'Cloud';
+      case CanvasTool.speechBubble: return 'Speech bubble';
+      case CanvasTool.callout: return 'Callout';
+      case CanvasTool.curlyBrace: return 'Curly brace';
+      case CanvasTool.bracket: return 'Bracket';
+      case CanvasTool.dimensionLine: return 'Dimension line';
+      case CanvasTool.numberLine: return 'Number line';
+      case CanvasTool.unitCircle: return 'Unit circle';
+      case CanvasTool.cubicGraph: return 'Cubic graph';
+      case CanvasTool.exponentialGraph: return 'Exponential graph';
+      case CanvasTool.logarithmicGraph: return 'Logarithmic graph';
+      case CanvasTool.tangentGraph: return 'Tangent graph';
+      case CanvasTool.ellipseAxes: return 'Ellipse with axes';
+      case CanvasTool.vectorField: return 'Vector field';
+      case CanvasTool.polarGraph: return 'Polar graph';
+      case CanvasTool.histogram: return 'Histogram';
+      case CanvasTool.barChart: return 'Bar chart';
+      case CanvasTool.pieChart: return 'Pie chart';
+      case CanvasTool.flowchartTerminator: return 'Flowchart terminator';
+      case CanvasTool.flowchartProcess: return 'Flowchart process';
+      case CanvasTool.flowchartDecision: return 'Flowchart decision';
+      case CanvasTool.flowchartInputOutput: return 'Flowchart input/output';
+      case CanvasTool.flowchartDocument: return 'Flowchart document';
+      case CanvasTool.flowchartDatabase: return 'Flowchart database';
+      case CanvasTool.flowchartConnector: return 'Flowchart connector';
+      case CanvasTool.timeline: return 'Timeline';
+      case CanvasTool.tableGrid: return 'Table grid';
+      case CanvasTool.checklist: return 'Checklist';
+      case CanvasTool.waveform: return 'Waveform';
+      case CanvasTool.spring: return 'Spring';
+      case CanvasTool.lever: return 'Lever';
+      case CanvasTool.inclinedPlane: return 'Inclined plane';
+      case CanvasTool.gear: return 'Gear';
+      case CanvasTool.magnet: return 'Magnet';
+      case CanvasTool.thermometer: return 'Thermometer';
+      case CanvasTool.stopwatch: return 'Stopwatch';
+      case CanvasTool.ruler: return 'Ruler';
+      case CanvasTool.compass: return 'Compass';
+      case CanvasTool.protractor: return 'Protractor';
+      case CanvasTool.dottedLine: return 'Dotted line';
+      case CanvasTool.dashedLine: return 'Dashed line';
+      case CanvasTool.cartesianPlane: return 'Cartesian plane';
       case CanvasTool.sticker: return 'Sticker';
     }
   }
