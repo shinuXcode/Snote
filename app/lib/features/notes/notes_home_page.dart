@@ -627,6 +627,45 @@ class _NotesHomePageState extends State<NotesHomePage> {
                     ],
                   ),
                   const SizedBox(height: 10),
+                  if (savedCovers.isNotEmpty) ...[
+                    const Text('Saved covers — tap to reuse', style: TextStyle(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      height: 74,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: savedCovers.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        itemBuilder: (_, index) {
+                          final saved = savedCovers[index];
+                          final savedStyle = (saved['style'] as num?)?.toInt() ?? 0;
+                          final savedImage = saved['image']?.toString();
+                          return InkWell(
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: () => setDialog(() {
+                              coverStyle = savedStyle;
+                              coverImage = savedImage;
+                              if (saved['icon'] != null) coverIcon = saved['icon'].toString();
+                              if (saved['title'] != null) customCoverTitle.text = saved['title'].toString();
+                            }),
+                            child: Container(
+                              width: 52,
+                              clipBehavior: Clip.antiAlias,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(colors: _coverStyleColors(savedStyle)),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Theme.of(dialogContext).colorScheme.outline),
+                              ),
+                              child: savedImage != null && savedImage.isNotEmpty
+                                  ? Image.memory(base64Decode(savedImage), fit: BoxFit.cover)
+                                  : const Icon(Icons.auto_awesome_rounded, color: Colors.white),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   Row(children: [
                     const Expanded(child: Text('100 ready-made cover designs', style: TextStyle(fontWeight: FontWeight.w900))),
                     Text('Selected: ${coverStyle + 1}/100'),
