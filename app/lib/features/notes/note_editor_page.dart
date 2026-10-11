@@ -1259,8 +1259,14 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       CanvasTool.marker,
       CanvasTool.brush,
       CanvasTool.eraser,
-      CanvasTool.pixelEraser,
       CanvasTool.lasso,
+      CanvasTool.line,
+      CanvasTool.arrow,
+      CanvasTool.rectangle,
+      CanvasTool.ellipse,
+      CanvasTool.cartesianPlane,
+      CanvasTool.dashedLine,
+      CanvasTool.dottedLine,
     ];
     final pencaseTools = defaultTools.where((tool) => configured.contains(tool.name)).toList();
 
@@ -1295,11 +1301,25 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         icon: const Icon(Icons.emoji_emotions_outlined),
         tooltip: 'Stickers',
       ),
-      ..._penPalette.map(_colorDot),
       IconButton(
         onPressed: _colorSheet,
-        icon: Icon(Icons.color_lens_outlined, color: _penColor),
-        tooltip: 'Colors',
+        icon: Icon(Icons.circle, color: _toolColorOverrides[_tool.name] ?? _penColor, size: 22),
+        tooltip: 'Current pen color',
+      ),
+      IconButton(
+        onPressed: _insertScreenshot,
+        icon: const Icon(Icons.add_photo_alternate_outlined),
+        tooltip: 'Insert screenshot or image',
+      ),
+      IconButton(
+        onPressed: _pdfExporting ? null : _exportPagePdf,
+        icon: const Icon(Icons.picture_as_pdf_outlined),
+        tooltip: 'Save current page as PDF',
+      ),
+      IconButton(
+        onPressed: _calculatorSheet,
+        icon: const Icon(Icons.calculate_outlined),
+        tooltip: 'Calculator',
       ),
       IconButton(
         onPressed: _styleSheet,
@@ -1332,7 +1352,16 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       scrollDirection: axis == Axis.horizontal ? Axis.horizontal : Axis.vertical,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
-        child: Flex(direction: axis, mainAxisSize: MainAxisSize.min, children: items),
+        child: IconButtonTheme(
+          data: IconButtonThemeData(
+            style: IconButton.styleFrom(
+              fixedSize: const Size(34, 34),
+              padding: EdgeInsets.zero,
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+          child: Flex(direction: axis, mainAxisSize: MainAxisSize.min, children: items),
+        ),
       ),
     );
   }
@@ -1797,21 +1826,35 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       );
 
   Widget _selectionTools() => Positioned(
-        left: 8,
-        right: 8,
-        bottom: 82,
-        child: Center(
+        left: _selectionToolbarX < 0 ? 8 : _selectionToolbarX,
+        right: _selectionToolbarX < 0 ? 8 : null,
+        top: _selectionToolbarY < 0 ? null : _selectionToolbarY,
+        bottom: _selectionToolbarY < 0 ? 82 : null,
+        child: GestureDetector(
+          onPanUpdate: (details) {
+            final bounds = MediaQuery.sizeOf(context);
+            setState(() {
+              final baseX = _selectionToolbarX < 0 ? 8.0 : _selectionToolbarX;
+              final baseY = _selectionToolbarY < 0 ? math.max(56.0, bounds.height - 150) : _selectionToolbarY;
+              _selectionToolbarX = (baseX + details.delta.dx).clamp(4.0, math.max(4.0, bounds.width - 100));
+              _selectionToolbarY = (baseY + details.delta.dy).clamp(52.0, math.max(52.0, bounds.height - 70));
+            });
+          },
           child: ClipRRect(
             borderRadius: BorderRadius.circular(22),
             child: BackdropFilter(
               filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
               child: Material(
-                color: Theme.of(context).colorScheme.surface.withValues(alpha: .78),
+                color: Theme.of(context).colorScheme.surface.withValues(alpha: .84),
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Icon(Icons.drag_indicator_rounded, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
                       child: Text('$_selected selected', style: const TextStyle(fontWeight: FontWeight.w800)),
                     ),
                     IconButton(onPressed: _selectionColorSheet, icon: const Icon(Icons.palette_outlined), tooltip: 'Color'),
@@ -1819,18 +1862,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     IconButton(onPressed: _canvas.toggleFill, icon: const Icon(Icons.format_color_fill_outlined), tooltip: 'Fill'),
                     IconButton(onPressed: _canvas.bringToFront, icon: const Icon(Icons.vertical_align_top_rounded), tooltip: 'Bring to front'),
                     IconButton(onPressed: _canvas.sendToBack, icon: const Icon(Icons.vertical_align_bottom_rounded), tooltip: 'Send to back'),
-                    IconButton(onPressed: () => _canvas.moveSelection(-8, 0), icon: const Icon(Icons.arrow_back_rounded)),
-                    IconButton(onPressed: () => _canvas.moveSelection(8, 0), icon: const Icon(Icons.arrow_forward_rounded)),
-                    IconButton(
-                      onPressed: () => _canvas.scaleSelection(.9),
-                      icon: const Icon(Icons.remove_circle_outline_rounded),
-                      tooltip: 'Scale down',
-                    ),
-                    IconButton(
-                      onPressed: () => _canvas.scaleSelection(1.1),
-                      icon: const Icon(Icons.add_circle_outline_rounded),
-                      tooltip: 'Scale up',
-                    ),
+                    IconButton(onPressed: () => _canvas.moveSelection(-8, 0), icon: const Icon(Icons.arrow_back_rounded), tooltip: 'Move left'),
+                    IconButton(onPressed: () => _canvas.moveSelection(8, 0), icon: const Icon(Icons.arrow_forward_rounded), tooltip: 'Move right'),
+                    IconButton(onPressed: () => _canvas.scaleSelection(.9), icon: const Icon(Icons.remove_circle_outline_rounded), tooltip: 'Scale down'),
+                    IconButton(onPressed: () => _canvas.scaleSelection(1.1), icon: const Icon(Icons.add_circle_outline_rounded), tooltip: 'Scale up'),
                     IconButton(onPressed: _canvas.duplicateSelection, icon: const Icon(Icons.copy_rounded), tooltip: 'Duplicate'),
                     IconButton(onPressed: _canvas.deleteSelection, icon: const Icon(Icons.delete_outline_rounded), tooltip: 'Delete'),
                     IconButton(onPressed: _canvas.selectAll, icon: const Icon(Icons.select_all_rounded), tooltip: 'Select all'),
