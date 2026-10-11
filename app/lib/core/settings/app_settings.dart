@@ -9,7 +9,7 @@ class SnoteSettings extends ChangeNotifier {
   final Map<String, dynamic> _values = {};
 
   static const boolDefaults = <String, bool>{
-    'autoRecognition': true, 'independentGraphColor': true, 'longPressMenu': true,
+    'autoRecognition': true, 'independentGraphColor': true, 'longPressMenu': true, 'palmRejection': true,
     'selectionMenuOnTouch': true, 'eraseClickSwitch': true, 'stylusDoubleTapUndo': true,
     'fingerLongPressSelection': true, 'showAuxiliaryLine': true, 'autoAuxiliaryPoint': true,
     'pressureErase': true, 'pressureEraseArea': true, 'stylusHoldActions': true, 'autoSave': true, 'volumeKeyTurnPage': false,
@@ -38,6 +38,7 @@ class SnoteSettings extends ChangeNotifier {
     'defaultPageTemplate': 'dotted',
     'defaultPaperPalette': 'paper-white',
     'pencaseTools': 'ballpoint,fountain,pencil,highlighter,marker,brush,eraser,lasso,line,arrow,rectangle,ellipse,cartesianPlane,dashedLine,dottedLine',
+    'pencasePresets': '[]',
     'pressureCurve': 'linear',
     'toolSizes': '{}',
     'toolColors': '{}',
