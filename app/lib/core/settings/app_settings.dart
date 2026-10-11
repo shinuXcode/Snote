@@ -38,6 +38,7 @@ class SnoteSettings extends ChangeNotifier {
     'defaultPageTemplate': 'dotted',
     'defaultPaperPalette': 'paper-white',
     'pencaseTools': 'ballpoint,fountain,pencil,highlighter,marker,brush,eraser,lasso,line,arrow,rectangle,ellipse,cartesianPlane,dashedLine,dottedLine,ruler,compass,protractor,divider',
+    'toolInstrumentDefaultsV1': '',
     'pencasePresets': '[]',
     'coverLibrary': '[]',
     'folderSort': 'nameAsc',
@@ -65,6 +66,23 @@ class SnoteSettings extends ChangeNotifier {
     for (final entry in stringDefaults.entries) {
       final raw = await _storage.read(key: 'snote.setting.' + entry.key);
       if (raw != null) _values[entry.key] = raw;
+    }
+
+    // One-time migration for users who already saved a customized toolbox
+    // before the measuring instruments were exposed in the default toolbox.
+    if (_values['toolInstrumentDefaultsV1'] != 'done') {
+      final current = getString('pencaseTools')
+          .split(',')
+          .where((tool) => tool.isNotEmpty)
+          .toList();
+      for (final instrument in const ['ruler', 'compass', 'protractor', 'divider']) {
+        if (!current.contains(instrument)) current.add(instrument);
+      }
+      final migrated = current.join(',');
+      _values['pencaseTools'] = migrated;
+      _values['toolInstrumentDefaultsV1'] = 'done';
+      await _storage.write(key: 'snote.setting.pencaseTools', value: migrated);
+      await _storage.write(key: 'snote.setting.toolInstrumentDefaultsV1', value: 'done');
     }
     notifyListeners();
   }
