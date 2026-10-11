@@ -363,6 +363,381 @@ class SnoteCanvasPainter extends CustomPainter {
           paint,
         );
         break;
+      case 'mathCoordinateAxes':
+        _drawCoordinateAxes(canvas, rect, paint);
+        break;
+      case 'mathParabola':
+        _drawParabola(canvas, rect, paint);
+        break;
+      case 'mathSineWave':
+        _drawSineWave(canvas, rect, paint);
+        break;
+      case 'mathAngle':
+        _drawAngle(canvas, rect, paint, rightAngle: false);
+        break;
+      case 'mathRightAngle':
+        _drawAngle(canvas, rect, paint, rightAngle: true);
+        break;
+      case 'physicsVector':
+        _drawArrow(canvas, rect, paint);
+        break;
+      case 'physicsResistor':
+        _drawResistor(canvas, rect, paint);
+        break;
+      case 'physicsCapacitor':
+        _drawCapacitor(canvas, rect, paint, battery: false);
+        break;
+      case 'physicsBattery':
+        _drawCapacitor(canvas, rect, paint, battery: true);
+        break;
+      case 'physicsDiode':
+        _drawDiode(canvas, rect, paint);
+        break;
+      case 'physicsConvexLens':
+        _drawLens(canvas, rect, paint);
+        break;
+      case 'chemistryBenzene':
+        _drawBenzene(canvas, rect, paint);
+        break;
+      case 'chemistryMolecule':
+        _drawMolecule(canvas, rect, paint);
+        break;
+      case 'chemistryAtom':
+        _drawAtom(canvas, rect, paint);
+        break;
+      case 'chemistryOrbital':
+        _drawOrbital(canvas, rect, paint);
+        break;
+      case 'chemistryFlask':
+        _drawFlask(canvas, rect, paint);
+        break;
+      case 'chemistryBeaker':
+        _drawBeaker(canvas, rect, paint);
+        break;
+      case 'biologyCell':
+        _drawCell(canvas, rect, paint);
+        break;
+      case 'biologyMitochondrion':
+        _drawMitochondrion(canvas, rect, paint);
+        break;
+      case 'biologyDna':
+        _drawDna(canvas, rect, paint);
+        break;
+      case 'biologyLeaf':
+        _drawLeaf(canvas, rect, paint);
+        break;
+      case 'biologyNeuron':
+        _drawNeuron(canvas, rect, paint);
+        break;
+    }
+  }
+
+  void _drawArrow(Canvas canvas, Rect rect, Paint paint) {
+    final a = Offset(rect.left, rect.bottom);
+    final b = Offset(rect.right, rect.top);
+    canvas.drawLine(a, b, paint);
+    final direction = b - a;
+    if (direction.distance < 1) return;
+    final unit = direction / direction.distance;
+    final normal = Offset(-unit.dy, unit.dx);
+    final tip = b - unit * math.min(16, direction.distance * .35);
+    canvas.drawLine(b, tip + normal * 6, paint);
+    canvas.drawLine(b, tip - normal * 6, paint);
+  }
+
+  void _drawCoordinateAxes(Canvas canvas, Rect r, Paint p) {
+    final origin = Offset(r.left + r.width * .12, r.bottom - r.height * .12);
+    final xEnd = Offset(r.right - r.width * .05, origin.dy);
+    final yEnd = Offset(origin.dx, r.top + r.height * .05);
+    canvas.drawLine(origin, xEnd, p);
+    canvas.drawLine(origin, yEnd, p);
+    final arrow = math.min(10.0, math.min(r.width, r.height) * .18);
+    canvas.drawLine(xEnd, xEnd - Offset(arrow, arrow * .45), p);
+    canvas.drawLine(xEnd, xEnd - Offset(arrow, -arrow * .45), p);
+    canvas.drawLine(yEnd, yEnd + Offset(-arrow * .45, arrow), p);
+    canvas.drawLine(yEnd, yEnd + Offset(arrow * .45, arrow), p);
+  }
+
+  void _drawParabola(Canvas canvas, Rect r, Paint p) {
+    final path = Path();
+    final count = 60;
+    for (var i = 0; i <= count; i++) {
+      final t = i / count;
+      final x = r.left + t * r.width;
+      final y = r.top + r.height * (.08 + .86 * 4 * (t - .5) * (t - .5));
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+    canvas.drawPath(path, p);
+  }
+
+  void _drawSineWave(Canvas canvas, Rect r, Paint p) {
+    final path = Path();
+    for (var i = 0; i <= 80; i++) {
+      final t = i / 80;
+      final x = r.left + t * r.width;
+      final y = r.center.dy - math.sin(t * math.pi * 2) * r.height * .42;
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+    canvas.drawPath(path, p);
+  }
+
+  void _drawAngle(Canvas canvas, Rect r, Paint p, {required bool rightAngle}) {
+    final origin = Offset(r.left + r.width * .12, r.bottom - r.height * .12);
+    final endA = Offset(r.right - r.width * .08, origin.dy);
+    final endB = Offset(r.left + r.width * .12, r.top + r.height * .08);
+    canvas.drawLine(origin, endA, p);
+    canvas.drawLine(origin, endB, p);
+    if (rightAngle) {
+      final side = math.min(r.width, r.height) * .18;
+      final path = Path()
+        ..moveTo(origin.dx + side, origin.dy)
+        ..lineTo(origin.dx + side, origin.dy - side)
+        ..lineTo(origin.dx, origin.dy - side);
+      canvas.drawPath(path, p);
+    } else {
+      final radius = math.min(r.width, r.height) * .22;
+      canvas.drawArc(
+        Rect.fromCircle(center: origin, radius: radius),
+        -math.pi / 2,
+        math.pi / 3,
+        false,
+        p,
+      );
+    }
+  }
+
+  void _drawResistor(Canvas canvas, Rect r, Paint p) {
+    final y = r.center.dy;
+    final lead = r.width * .16;
+    final left = r.left + lead;
+    final right = r.right - lead;
+    final segments = 8;
+    final path = Path()
+      ..moveTo(r.left, y)
+      ..lineTo(left, y);
+    for (var i = 0; i <= segments; i++) {
+      final x = left + (right - left) * i / segments;
+      final offset = i == 0 || i == segments ? 0.0 : (i.isOdd ? -1.0 : 1.0) * r.height * .25;
+      path.lineTo(x, y + offset);
+    }
+    path..lineTo(r.right, y);
+    canvas.drawPath(path, p);
+  }
+
+  void _drawCapacitor(Canvas canvas, Rect r, Paint p, {required bool battery}) {
+    final center = r.center.dx;
+    final y1 = r.top + r.height * .2;
+    final y2 = r.bottom - r.height * .2;
+    final gap = battery ? r.width * .1 : r.width * .045;
+    canvas.drawLine(Offset(r.left, r.center.dy), Offset(center - gap, r.center.dy), p);
+    canvas.drawLine(Offset(center + gap, r.center.dy), Offset(r.right, r.center.dy), p);
+    canvas.drawLine(Offset(center - gap, y1), Offset(center - gap, y2), p);
+    canvas.drawLine(
+      Offset(center + gap * (battery ? 1.8 : 1), battery ? r.center.dy - r.height * .17 : y1),
+      Offset(center + gap * (battery ? 1.8 : 1), battery ? r.center.dy + r.height * .17 : y2),
+      p,
+    );
+  }
+
+  void _drawDiode(Canvas canvas, Rect r, Paint p) {
+    final y = r.center.dy;
+    final centerX = r.center.dx;
+    final halfWidth = r.width * .16;
+    final halfHeight = r.height * .28;
+    canvas.drawLine(Offset(r.left, y), Offset(centerX - halfWidth, y), p);
+    final triangle = Path()
+      ..moveTo(centerX - halfWidth, y - halfHeight)
+      ..lineTo(centerX + halfWidth, y)
+      ..lineTo(centerX - halfWidth, y + halfHeight)
+      ..close();
+    canvas.drawPath(triangle, p);
+    canvas.drawLine(Offset(centerX + halfWidth, y - halfHeight), Offset(centerX + halfWidth, y + halfHeight), p);
+    canvas.drawLine(Offset(centerX + halfWidth, y), Offset(r.right, y), p);
+  }
+
+  void _drawLens(Canvas canvas, Rect r, Paint p) {
+    final path = Path()
+      ..moveTo(r.center.dx, r.top)
+      ..cubicTo(r.left - r.width * .15, r.top + r.height * .25, r.left - r.width * .15, r.bottom - r.height * .25, r.center.dx, r.bottom)
+      ..cubicTo(r.right + r.width * .15, r.bottom - r.height * .25, r.right + r.width * .15, r.top + r.height * .25, r.center.dx, r.top);
+    canvas.drawPath(path, p);
+  }
+
+  void _drawBenzene(Canvas canvas, Rect r, Paint p) {
+    final radius = math.min(r.width, r.height) * .44;
+    canvas.drawPath(_regularPolygon(r.center, radius, 6, -math.pi / 6), p);
+    canvas.drawCircle(r.center, radius * .52, p);
+  }
+
+  void _drawMolecule(Canvas canvas, Rect r, Paint p) {
+    final nodes = <Offset>[
+      Offset(r.left + r.width * .18, r.center.dy),
+      Offset(r.left + r.width * .43, r.top + r.height * .2),
+      Offset(r.left + r.width * .67, r.center.dy),
+      Offset(r.left + r.width * .86, r.top + r.height * .25),
+      Offset(r.left + r.width * .76, r.bottom - r.height * .2),
+    ];
+    for (var i = 1; i < nodes.length; i++) {
+      canvas.drawLine(nodes[i - 1], nodes[i], p);
+    }
+    final radius = math.min(r.width, r.height) * .08;
+    final atomPaint = Paint()
+      ..color = p.color
+      ..style = PaintingStyle.fill;
+    for (final node in nodes) {
+      canvas.drawCircle(node, radius, atomPaint);
+    }
+  }
+
+  void _drawAtom(Canvas canvas, Rect r, Paint p) {
+    canvas.drawOval(Rect.fromCenter(center: r.center, width: r.width * .9, height: r.height * .42), p);
+    canvas.save();
+    canvas.translate(r.center.dx, r.center.dy);
+    canvas.rotate(math.pi / 3);
+    canvas.drawOval(Rect.fromCenter(center: Offset.zero, width: r.width * .9, height: r.height * .42), p);
+    canvas.restore();
+    canvas.save();
+    canvas.translate(r.center.dx, r.center.dy);
+    canvas.rotate(-math.pi / 3);
+    canvas.drawOval(Rect.fromCenter(center: Offset.zero, width: r.width * .9, height: r.height * .42), p);
+    canvas.restore();
+    final nucleus = Paint()..color = p.color..style = PaintingStyle.fill;
+    canvas.drawCircle(r.center, math.min(r.width, r.height) * .07, nucleus);
+  }
+
+  void _drawOrbital(Canvas canvas, Rect r, Paint p) {
+    final w = r.width * .35;
+    final h = r.height * .20;
+    for (final x in [-1.0, 1.0]) {
+      canvas.drawOval(Rect.fromCenter(center: Offset(r.center.dx + x * r.width * .18, r.center.dy), width: w, height: h), p);
+    }
+    canvas.drawCircle(r.center, math.min(r.width, r.height) * .06, Paint()..color = p.color..style = PaintingStyle.fill);
+  }
+
+  void _drawFlask(Canvas canvas, Rect r, Paint p) {
+    final path = Path()
+      ..moveTo(r.center.dx - r.width * .09, r.top + r.height * .04)
+      ..lineTo(r.center.dx + r.width * .09, r.top + r.height * .04)
+      ..lineTo(r.center.dx + r.width * .09, r.top + r.height * .42)
+      ..lineTo(r.right - r.width * .12, r.bottom - r.height * .14)
+      ..quadraticBezierTo(r.center.dx, r.bottom + r.height * .05, r.left + r.width * .12, r.bottom - r.height * .14)
+      ..lineTo(r.center.dx - r.width * .09, r.top + r.height * .42)
+      ..close();
+    canvas.drawPath(path, p);
+    canvas.drawLine(Offset(r.center.dx - r.width * .1, r.top + r.height * .42), Offset(r.center.dx + r.width * .1, r.top + r.height * .42), p);
+  }
+
+  void _drawBeaker(Canvas canvas, Rect r, Paint p) {
+    final path = Path()
+      ..moveTo(r.left + r.width * .2, r.top + r.height * .05)
+      ..lineTo(r.left + r.width * .78, r.top + r.height * .05)
+      ..moveTo(r.left + r.width * .14, r.top + r.height * .16)
+      ..lineTo(r.left + r.width * .23, r.bottom - r.height * .12)
+      ..lineTo(r.left + r.width * .77, r.bottom - r.height * .12)
+      ..lineTo(r.right - r.width * .14, r.top + r.height * .16);
+    canvas.drawPath(path, p);
+    canvas.drawLine(Offset(r.left + r.width * .24, r.center.dy), Offset(r.right - r.width * .24, r.center.dy), p);
+  }
+
+  void _drawCell(Canvas canvas, Rect r, Paint p) {
+    canvas.drawOval(r.deflate(math.min(r.width, r.height) * .04), p);
+    final nucleus = Rect.fromCenter(center: Offset(r.center.dx + r.width * .06, r.center.dy), width: r.width * .24, height: r.height * .3);
+    canvas.drawOval(nucleus, p);
+    for (var i = 0; i < 5; i++) {
+      final angle = i * math.pi * 2 / 5;
+      canvas.drawCircle(
+        Offset(r.center.dx + math.cos(angle) * r.width * .28, r.center.dy + math.sin(angle) * r.height * .27),
+        math.min(r.width, r.height) * .035,
+        p,
+      );
+    }
+  }
+
+  void _drawMitochondrion(Canvas canvas, Rect r, Paint p) {
+    canvas.drawOval(r.deflate(math.min(r.width, r.height) * .1), p);
+    final path = Path();
+    for (var i = 0; i <= 36; i++) {
+      final t = i / 36;
+      final x = r.left + r.width * (.12 + .76 * t);
+      final y = r.center.dy + math.sin(t * math.pi * 8) * r.height * .2;
+      if (i == 0) path.moveTo(x, y); else path.lineTo(x, y);
+    }
+    canvas.drawPath(path, p);
+  }
+
+  void _drawDna(Canvas canvas, Rect r, Paint p) {
+    final left = Path();
+    final right = Path();
+    const count = 56;
+    for (var i = 0; i <= count; i++) {
+      final t = i / count;
+      final y = r.top + t * r.height;
+      final wave = math.sin(t * math.pi * 4);
+      final x1 = r.center.dx - wave * r.width * .34;
+      final x2 = r.center.dx + wave * r.width * .34;
+      if (i == 0) {
+        left.moveTo(x1, y);
+        right.moveTo(x2, y);
+      } else {
+        left.lineTo(x1, y);
+        right.lineTo(x2, y);
+      }
+    }
+    canvas.drawPath(left, p);
+    canvas.drawPath(right, p);
+    for (var i = 0; i <= 14; i++) {
+      final t = i / 14;
+      final y = r.top + t * r.height;
+      final wave = math.sin(t * math.pi * 4);
+      canvas.drawLine(
+        Offset(r.center.dx - wave * r.width * .32, y),
+        Offset(r.center.dx + wave * r.width * .32, y),
+        p..strokeWidth = math.max(.6, p.strokeWidth * .55),
+      );
+    }
+  }
+
+  void _drawLeaf(Canvas canvas, Rect r, Paint p) {
+    final path = Path()
+      ..moveTo(r.left + r.width * .08, r.bottom - r.height * .08)
+      ..cubicTo(r.left + r.width * .1, r.top + r.height * .18, r.right - r.width * .1, r.top + r.height * .05, r.right - r.width * .08, r.top + r.height * .05)
+      ..cubicTo(r.right - r.width * .18, r.bottom - r.height * .06, r.left + r.width * .25, r.bottom - r.height * .02, r.left + r.width * .08, r.bottom - r.height * .08)
+      ..close();
+    canvas.drawPath(path, p);
+    canvas.drawLine(Offset(r.left + r.width * .08, r.bottom - r.height * .08), Offset(r.right - r.width * .09, r.top + r.height * .08), p);
+    for (var i = 1; i <= 4; i++) {
+      final t = i / 5;
+      final x = r.left + r.width * t;
+      final y = r.bottom - r.height * t;
+      canvas.drawLine(Offset(x, y), Offset(x + r.width * .12, y - r.height * .13), p);
+    }
+  }
+
+  void _drawNeuron(Canvas canvas, Rect r, Paint p) {
+    final soma = Offset(r.left + r.width * .35, r.center.dy);
+    canvas.drawCircle(soma, math.min(r.width, r.height) * .12, p);
+    canvas.drawCircle(soma, math.min(r.width, r.height) * .035, Paint()..color = p.color..style = PaintingStyle.fill);
+    final axonStart = Offset(soma.dx + r.width * .12, soma.dy);
+    final axonEnd = Offset(r.right - r.width * .04, soma.dy);
+    canvas.drawLine(axonStart, axonEnd, p);
+    for (var i = 0; i < 4; i++) {
+      final t = i / 4;
+      final x = r.left + r.width * (.18 + t * .15);
+      canvas.drawLine(Offset(x, soma.dy), Offset(x - r.width * .12, r.top + r.height * (.12 + i * .12)), p);
+      canvas.drawLine(Offset(x, soma.dy), Offset(x - r.width * .12, r.bottom - r.height * (.12 + i * .12)), p);
+    }
+    for (var i = 0; i < 3; i++) {
+      final x = axonEnd - Offset(i * r.width * .08, 0);
+      canvas.drawLine(x, x + Offset(r.width * .08, -r.height * .1), p);
+      canvas.drawLine(x, x + Offset(r.width * .08, r.height * .1), p);
     }
   }
 
