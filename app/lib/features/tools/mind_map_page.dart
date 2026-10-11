@@ -432,13 +432,17 @@ class _MindMapGrid extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final light = background.computeLuminance() > .45;
     final paint = Paint()
-      ..color = (light ? Colors.blueGrey.shade300 : Colors.white).withValues(alpha: .24)
-      ..style = PaintingStyle.fill;
+      ..color = (light ? Colors.blueGrey.shade300 : Colors.white).withValues(alpha: .34)
+      ..strokeWidth = 1.8
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    final points = <Offset>[];
     for (double x = 28; x < size.width; x += 28) {
       for (double y = 28; y < size.height; y += 28) {
-        canvas.drawCircle(Offset(x, y), 1.15, paint);
+        points.add(Offset(x, y));
       }
     }
+    canvas.drawPoints(PointMode.points, points, paint);
   }
 
   @override

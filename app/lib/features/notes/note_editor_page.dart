@@ -3367,6 +3367,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     if (applyColorToFill) {
                       _fillColor = color;
                       _fill = true;
+                    } else {
+                      _fillColor = null;
+                      _fill = false;
                     }
                   });
                   unawaited(_settings.setDouble('penOpacity', _opacity));
