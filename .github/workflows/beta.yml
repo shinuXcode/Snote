@@ -60,7 +60,7 @@ jobs:
           if 'android.permission.CAMERA' not in text:
               text = text.replace(
                   '</manifest>',
-                  '    <uses-permission android:name="android.permission.CAMERA" />\n</manifest>',
+                  '    <uses-permission android:name="android.permission.CAMERA" />' + chr(10) + '</manifest>',
               )
           text = re.sub(r'android:label="[^"]+"', 'android:label="Snote Beta"', text, count=1)
           manifest.write_text(text)
