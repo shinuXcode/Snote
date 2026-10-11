@@ -261,6 +261,7 @@ class SnoteCanvas extends StatefulWidget {
   final Color? fillColor;
   final double smoothing;
   final bool showPerformanceOverlay;
+  final bool palmRejection;
   final InkGesturePolicy gesturePolicy;
 
   const SnoteCanvas({
@@ -289,6 +290,7 @@ class SnoteCanvas extends StatefulWidget {
     this.fillColor,
     this.smoothing = .72,
     this.showPerformanceOverlay = false,
+    this.palmRejection = true,
     this.gesturePolicy = const InkGesturePolicy(),
   });
 
@@ -721,10 +723,16 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
   }
 
   bool _accept(PointerEvent event) {
-    if (!_palm.accepts(event)) return false;
+    // With palm rejection enabled, touch is navigation only and never creates
+    // ink. Disabling it intentionally allows finger drawing for devices that
+    // do not have a stylus; trackpad input remains viewport navigation.
+    if (widget.palmRejection && !_palm.accepts(event)) return false;
     if (event.kind == PointerDeviceKind.stylus ||
         event.kind == PointerDeviceKind.invertedStylus) {
       return widget.gesturePolicy.isStylus(event.kind);
+    }
+    if (!widget.palmRejection && event.kind == PointerDeviceKind.touch) {
+      return true;
     }
     return event.kind == PointerDeviceKind.mouse;
   }
