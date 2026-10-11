@@ -192,6 +192,8 @@ class SnoteCanvasPainter extends CustomPainter {
     switch (stroke.shape) {
       case 'line':
       case 'arrow':
+      case 'dottedLine':
+      case 'dashedLine':
         path
           ..moveTo(a.dx, a.dy)
           ..lineTo(b.dx, b.dy);
@@ -219,9 +221,12 @@ class SnoteCanvasPainter extends CustomPainter {
         return;
     }
 
+    final dotted = stroke.shape == 'dottedLine';
+    final dashLength = dotted ? 1.5 : 8.0;
+    final step = dotted ? 6.0 : 14.0;
     for (final metric in path.computeMetrics()) {
-      for (double distance = 0; distance < metric.length; distance += 14) {
-        final end = math.min(distance + 8, metric.length);
+      for (double distance = 0; distance < metric.length; distance += step) {
+        final end = math.min(distance + dashLength, metric.length);
         canvas.drawPath(metric.extractPath(distance, end), paint);
       }
     }
@@ -239,6 +244,8 @@ class SnoteCanvasPainter extends CustomPainter {
 
     switch (stroke.shape) {
       case 'line':
+      case 'dottedLine':
+      case 'dashedLine':
         canvas.drawLine(a, b, paint);
         break;
       case 'arrow':
@@ -337,6 +344,66 @@ class SnoteCanvasPainter extends CustomPainter {
         'atom', 'molecule', 'benzeneRing', 'beaker', 'testTube',
         'conicalFlask', 'orbital', 'animalCell', 'plantCell',
         'dnaHelix', 'neuron', 'leaf', 'microscope',
+        'pentagon',
+        'parallelogram',
+        'trapezoid',
+        'cube',
+        'cuboid',
+        'cylinder',
+        'cone',
+        'pyramid',
+        'triangularPrism',
+        'sphere',
+        'arc',
+        'semicircle',
+        'sector',
+        'ring',
+        'crescent',
+        'cross',
+        'plus',
+        'heart',
+        'cloud',
+        'speechBubble',
+        'callout',
+        'curlyBrace',
+        'bracket',
+        'dimensionLine',
+        'numberLine',
+        'unitCircle',
+        'cubicGraph',
+        'exponentialGraph',
+        'logarithmicGraph',
+        'tangentGraph',
+        'ellipseAxes',
+        'vectorField',
+        'polarGraph',
+        'histogram',
+        'barChart',
+        'pieChart',
+        'flowchartTerminator',
+        'flowchartProcess',
+        'flowchartDecision',
+        'flowchartInputOutput',
+        'flowchartDocument',
+        'flowchartDatabase',
+        'flowchartConnector',
+        'timeline',
+        'tableGrid',
+        'checklist',
+        'waveform',
+        'spring',
+        'lever',
+        'inclinedPlane',
+        'gear',
+        'magnet',
+        'thermometer',
+        'stopwatch',
+        'ruler',
+        'compass',
+        'protractor',
+        'dottedLine',
+        'dashedLine',
+        'cartesianPlane',
       }.contains(shape);
 
   void _drawScienceShape(Canvas canvas, String shape, Rect rect, Paint source) {
@@ -386,6 +453,13 @@ class SnoteCanvasPainter extends CustomPainter {
         textDirection: TextDirection.ltr,
       )..layout();
       tp.paint(canvas, at(x, y));
+    }
+    void polygon(List<Offset> points) {
+      if (points.length < 2) return;
+      final path = Path()..moveTo(points.first.dx, points.first.dy);
+      for (final point in points.skip(1)) { path.lineTo(point.dx, point.dy); }
+      path.close();
+      canvas.drawPath(path, p);
     }
 
     switch (shape) {
@@ -639,6 +713,268 @@ class SnoteCanvasPainter extends CustomPainter {
         line(.54, .66, .54, .83);
         line(.25, .84, .82, .84);
         drawOval(.52, .55, .13, .08);
+        break;
+
+      case 'cartesianPlane':
+        for (var i = 1; i < 10; i++) {
+          final t = i / 10;
+          line(t, .08, t, .92);
+          line(.08, t, .92, t);
+        }
+        arrow(.08, .5, .94, .5);
+        arrow(.5, .92, .5, .06);
+        circle(.5, .5, .018);
+        break;
+      case 'pentagon':
+        polygon([at(.5,.08),at(.91,.4),at(.75,.9),at(.25,.9),at(.09,.4)]);
+        break;
+      case 'parallelogram':
+        polygon([at(.3,.15),at(.92,.15),at(.7,.85),at(.08,.85)]);
+        break;
+      case 'trapezoid':
+        polygon([at(.28,.15),at(.72,.15),at(.94,.85),at(.06,.85)]);
+        break;
+      case 'cube':
+        polygon([at(.18,.25),at(.56,.25),at(.56,.7),at(.18,.7)]);
+        polygon([at(.18,.25),at(.4,.08),at(.78,.08),at(.56,.25)]);
+        polygon([at(.56,.25),at(.78,.08),at(.78,.53),at(.56,.7)]);
+        line(.18,.7,.4,.53); line(.4,.53,.78,.53); line(.4,.53,.4,.08);
+        break;
+      case 'cuboid':
+        polygon([at(.12,.32),at(.62,.32),at(.62,.83),at(.12,.83)]);
+        polygon([at(.12,.32),at(.32,.12),at(.82,.12),at(.62,.32)]);
+        polygon([at(.62,.32),at(.82,.12),at(.82,.63),at(.62,.83)]);
+        line(.12,.83,.32,.63); line(.32,.63,.82,.63); line(.32,.63,.32,.12);
+        break;
+      case 'cylinder':
+        drawOval(.5,.22,.34,.12);
+        line(.16,.22,.16,.78); line(.84,.22,.84,.78);
+        canvas.drawArc(Rect.fromCenter(center:at(.5,.78),width:w*.68,height:h*.24),0,math.pi,false,p);
+        canvas.drawArc(Rect.fromCenter(center:at(.5,.78),width:w*.68,height:h*.24),math.pi,math.pi,false,p);
+        break;
+      case 'cone':
+        line(.5,.1,.12,.84); line(.5,.1,.88,.84);
+        canvas.drawArc(Rect.fromCenter(center:at(.5,.82),width:w*.76,height:h*.18),0,math.pi,false,p);
+        canvas.drawArc(Rect.fromCenter(center:at(.5,.82),width:w*.76,height:h*.18),math.pi,math.pi,false,p);
+        break;
+      case 'pyramid':
+        polygon([at(.5,.08),at(.12,.84),at(.9,.84)]);
+        line(.5,.08,.5,.56); line(.5,.56,.12,.84); line(.5,.56,.9,.84);
+        break;
+      case 'triangularPrism':
+        polygon([at(.12,.38),at(.38,.12),at(.38,.76)]);
+        polygon([at(.62,.38),at(.88,.12),at(.88,.76)]);
+        line(.12,.38,.62,.38); line(.38,.12,.88,.12); line(.38,.76,.88,.76);
+        break;
+      case 'sphere':
+        drawOval(.5,.5,.36,.36); drawOval(.5,.5,.36,.14);
+        canvas.drawArc(Rect.fromCenter(center:at(.5,.5),width:w*.24,height:h*.72),math.pi/2,math.pi,false,p);
+        canvas.drawArc(Rect.fromCenter(center:at(.5,.5),width:w*.24,height:h*.72),-math.pi/2,math.pi,false,p);
+        break;
+      case 'arc':
+        canvas.drawArc(Rect.fromCenter(center:at(.5,.52),width:w*.72,height:h*.72),math.pi*1.05,math.pi*.9,false,p);
+        break;
+      case 'semicircle':
+        canvas.drawArc(Rect.fromCenter(center:at(.5,.55),width:w*.74,height:h*.74),math.pi,math.pi,false,p);
+        line(.13,.55,.87,.55);
+        break;
+      case 'sector':
+        final sectorRect=Rect.fromCenter(center:at(.5,.5),width:w*.72,height:h*.72);
+        final cp=at(.5,.5); final edge=at(.86,.5);
+        final sectorPath=Path()..moveTo(cp.dx,cp.dy)..lineTo(edge.dx,edge.dy)
+          ..arcTo(sectorRect,0,math.pi*.68,false)..close();
+        canvas.drawPath(sectorPath,p);
+        break;
+      case 'ring':
+        drawOval(.5,.5,.39,.39); drawOval(.5,.5,.2,.2);
+        break;
+      case 'crescent':
+        final crescent=Path()..moveTo(left+w*.76,top+h*.16)
+          ..cubicTo(left+w*.14,top+h*.08,left+w*.12,top+h*.89,left+w*.76,top+h*.84)
+          ..cubicTo(left+w*.43,top+h*.65,left+w*.45,top+h*.34,left+w*.76,top+h*.16)..close();
+        canvas.drawPath(crescent,p);
+        break;
+      case 'cross':
+        canvas.drawRect(Rect.fromLTWH(left+w*.4,top+h*.12,w*.2,h*.76),p);
+        canvas.drawRect(Rect.fromLTWH(left+w*.12,top+h*.4,w*.76,h*.2),p);
+        break;
+      case 'plus':
+        line(.5,.12,.5,.88); line(.12,.5,.88,.5);
+        break;
+      case 'heart':
+        final heart=Path()..moveTo(left+w*.5,top+h*.88)
+          ..cubicTo(left+w*.35,top+h*.72,left+w*.04,top+h*.5,left+w*.11,top+h*.3)
+          ..cubicTo(left+w*.18,top+h*.06,left+w*.42,top+h*.16,left+w*.5,top+h*.32)
+          ..cubicTo(left+w*.64,top+h*.06,left+w*.9,top+h*.06,left+w*.92,top+h*.32)
+          ..cubicTo(left+w*.96,top+h*.54,left+w*.64,top+h*.78,left+w*.5,top+h*.88)..close();
+        canvas.drawPath(heart,p);
+        break;
+      case 'cloud':
+        canvas.drawArc(Rect.fromLTWH(left+w*.12,top+h*.38,w*.34,h*.42),math.pi*.95,math.pi*1.1,false,p);
+        canvas.drawArc(Rect.fromLTWH(left+w*.31,top+h*.18,w*.4,h*.52),math.pi*1.05,math.pi*1.1,false,p);
+        canvas.drawArc(Rect.fromLTWH(left+w*.58,top+h*.36,w*.3,h*.38),math.pi*.96,math.pi*1.1,false,p);
+        line(.2,.74,.81,.74);
+        break;
+      case 'speechBubble':
+      case 'callout':
+        final bubble=Path()..moveTo(left+w*.15,top+h*.18)..lineTo(left+w*.85,top+h*.18)
+          ..lineTo(left+w*.85,top+h*.68)..lineTo(left+w*.56,top+h*.68)
+          ..lineTo(left+w*.4,top+h*.88)..lineTo(left+w*.42,top+h*.68)
+          ..lineTo(left+w*.15,top+h*.68)..close();
+        canvas.drawPath(bubble,p);
+        if(shape=='callout'){line(.25,.36,.7,.36);line(.25,.49,.62,.49);}
+        break;
+      case 'curlyBrace':
+        final brace=Path()..moveTo(left+w*.72,top+h*.08)
+          ..cubicTo(left+w*.4,top+h*.08,left+w*.62,top+h*.4,left+w*.43,top+h*.48)
+          ..cubicTo(left+w*.62,top+h*.56,left+w*.4,top+h*.9,left+w*.72,top+h*.9);
+        canvas.drawPath(brace,p);
+        break;
+      case 'bracket':
+        line(.68,.1,.3,.1);line(.3,.1,.3,.9);line(.3,.9,.68,.9);
+        break;
+      case 'dimensionLine':
+        arrow(.13,.5,.87,.5); line(.13,.32,.13,.68); line(.87,.32,.87,.68);
+        break;
+      case 'numberLine':
+        arrow(.08,.58,.92,.58);
+        for(var i=0;i<=8;i++){final x=.15+i*.0875;line(x,.52,x,.64);drawLabel((i-4).toString(),x-.025,.68);}
+        break;
+      case 'unitCircle':
+        drawOval(.5,.5,.34,.34);line(.1,.5,.9,.5);line(.5,.1,.5,.9);
+        line(.5,.5,.74,.25);circle(.5,.5,.02);
+        break;
+      case 'cubicGraph':
+      case 'exponentialGraph':
+      case 'logarithmicGraph':
+      case 'tangentGraph':
+        arrow(.08,.8,.94,.8); arrow(.16,.92,.16,.08);
+        {
+          final graph=Path(); var started=false;
+          for(var i=0;i<=100;i++){
+            final x=-2.4+i*4.8/100;
+            double y;
+            if(shape=='cubicGraph'){y=.5-(x*x*x)/12;}
+            else if(shape=='exponentialGraph'){y=.8-math.exp(x*.8)*.13;}
+            else if(shape=='logarithmicGraph'){y=.55-math.log(math.max(.03,x+2.45))*.2;}
+            else {y=.5-math.tan(x)*.15;}
+            final nx=.16+(x+2.4)/4.8*.76; final ny=y.clamp(.08,.92).toDouble();
+            if(shape=='tangentGraph' && math.cos(x).abs()<.12){started=false;continue;}
+            if(!started){graph.moveTo(left+w*nx,top+h*ny);started=true;}else{graph.lineTo(left+w*nx,top+h*ny);}
+          }
+          canvas.drawPath(graph,p);
+        }
+        break;
+      case 'ellipseAxes':
+        drawOval(.5,.5,.37,.23);line(.08,.5,.92,.5);line(.5,.12,.5,.88);
+        break;
+      case 'vectorField':
+        for(var x=.2;x<=.8;x+=.2){for(var y=.22;y<=.78;y+=.2){arrow(x,y,math.min(.92,x+.1),math.max(.08,y-.1));}}
+        break;
+      case 'polarGraph':
+        for(var i=1;i<=4;i++){drawOval(.5,.5,.09*i,.09*i);}
+        for(var i=0;i<12;i++){final a=i*math.pi/6;line(.5,.5,.5+.4*math.cos(a),.5+.4*math.sin(a));}
+        break;
+      case 'histogram':
+      case 'barChart':
+        line(.12,.88,.12,.12);line(.12,.88,.92,.88);
+        final heights=[.35,.58,.46,.72,.51];
+        for(var i=0;i<heights.length;i++){final x=.2+i*.14;canvas.drawRect(Rect.fromLTRB(left+w*x,top+h*(.88-heights[i]),left+w*(x+.09),top+h*.88),p);}
+        break;
+      case 'pieChart':
+        final pie=Path()..moveTo(at(.5,.5).dx,at(.5,.5).dy)
+          ..lineTo(at(.5,.16).dx,at(.5,.16).dy)
+          ..arcTo(Rect.fromCenter(center:at(.5,.5),width:w*.68,height:h*.68),-math.pi/2,math.pi*1.25,false)..close();
+        canvas.drawPath(pie,p);line(.5,.5,.5,.84);
+        break;
+      case 'flowchartTerminator':
+        canvas.drawRRect(RRect.fromRectAndRadius(rect,Radius.circular(h*.2)),p);
+        break;
+      case 'flowchartProcess':
+        canvas.drawRect(rect,p);
+        break;
+      case 'flowchartDecision':
+        polygon([at(.5,.08),at(.92,.5),at(.5,.92),at(.08,.5)]);
+        break;
+      case 'flowchartInputOutput':
+        polygon([at(.25,.14),at(.92,.14),at(.75,.86),at(.08,.86)]);
+        break;
+      case 'flowchartDocument':
+        final docPath=Path()..moveTo(left+w*.12,top+h*.12)..lineTo(left+w*.88,top+h*.12)..lineTo(left+w*.88,top+h*.72)
+          ..quadraticBezierTo(left+w*.7,top+h*.92,left+w*.5,top+h*.78)
+          ..quadraticBezierTo(left+w*.28,top+h*.65,left+w*.12,top+h*.82)..close();
+        canvas.drawPath(docPath,p);
+        break;
+      case 'flowchartDatabase':
+        drawOval(.5,.22,.34,.1);
+        line(.16,.22,.16,.8);line(.84,.22,.84,.8);
+        canvas.drawArc(Rect.fromCenter(center:at(.5,.8),width:w*.68,height:h*.2),0,math.pi,false,p);
+        canvas.drawArc(Rect.fromCenter(center:at(.5,.8),width:w*.68,height:h*.2),math.pi,math.pi,false,p);
+        break;
+      case 'flowchartConnector':
+        drawOval(.5,.5,.28,.28);
+        break;
+      case 'timeline':
+        line(.08,.5,.92,.5);
+        for(var i=0;i<5;i++){final x=.12+i*.19;circle(x,.5,.025);line(x,.5,x,.28+(i.isEven ? .22 : -.22));}
+        break;
+      case 'tableGrid':
+        canvas.drawRect(Rect.fromLTWH(left+w*.12,top+h*.18,w*.76,h*.64),p);
+        for(var i=1;i<=2;i++){line(.12,.18+i*.213,.88,.18+i*.213);line(.12+i*.253,.18,.12+i*.253,.82);}
+        break;
+      case 'checklist':
+        for(var i=0;i<4;i++){final y=.18+i*.2;canvas.drawRect(Rect.fromLTWH(left+w*.1,top+h*y,w*.11,h*.1),p);line(.3,y+.05,.88,y+.05);}
+        break;
+      case 'waveform':
+        final wave=Path()..moveTo(left+w*.05,top+h*.5);
+        for(var i=1;i<=80;i++){final x=i/80;wave.lineTo(left+w*(.05+.9*x),top+h*(.5-.38*math.sin(x*math.pi*8)*(.4+.6*math.sin(x*math.pi))));}
+        canvas.drawPath(wave,p);
+        break;
+      case 'spring':
+        line(.1,.14,.9,.14);line(.1,.86,.9,.86);
+        final spring=Path()..moveTo(left+w*.1,top+h*.5);
+        for(var i=1;i<=12;i++){spring.lineTo(left+w*(.1+i*.066),top+h*(i.isEven ? .28 : .72));}
+        canvas.drawPath(spring,p);
+        break;
+      case 'lever':
+        line(.12,.36,.9,.36);polygon([at(.44,.38),at(.56,.38),at(.5,.7)]);
+        canvas.drawRect(Rect.fromLTWH(left+w*.18,top+h*.18,w*.18,h*.18),p);
+        break;
+      case 'inclinedPlane':
+        line(.1,.84,.9,.84);line(.12,.84,.82,.2);line(.12,.84,.12,.2);
+        canvas.save();canvas.translate(left+w*.48,top+h*.48);canvas.rotate(-.74);canvas.drawRect(Rect.fromCenter(center:Offset.zero,width:w*.2,height:h*.17),p);canvas.restore();
+        break;
+      case 'gear':
+        drawOval(.5,.5,.25,.25);drawOval(.5,.5,.1,.1);
+        for(var i=0;i<12;i++){final a=i*math.pi/6;line(.5+.25*math.cos(a),.5+.25*math.sin(a),.5+.34*math.cos(a),.5+.34*math.sin(a));}
+        break;
+      case 'magnet':
+        final magnet=Path()..moveTo(left+w*.25,top+h*.15)..lineTo(left+w*.25,top+h*.58)
+          ..quadraticBezierTo(left+w*.25,top+h*.88,left+w*.5,top+h*.88)
+          ..quadraticBezierTo(left+w*.75,top+h*.88,left+w*.75,top+h*.58)..lineTo(left+w*.75,top+h*.15);
+        canvas.drawPath(magnet,p);line(.25,.15,.42,.15);line(.58,.15,.75,.15);
+        break;
+      case 'thermometer':
+        line(.5,.15,.5,.72);drawOval(.5,.78,.14,.14);line(.42,.72,.42,.5);line(.58,.72,.58,.5);
+        break;
+      case 'stopwatch':
+        drawOval(.5,.55,.31,.31);line(.5,.24,.5,.1);line(.39,.1,.61,.1);line(.5,.55,.65,.4);
+        break;
+      case 'ruler':
+        canvas.drawRect(Rect.fromLTWH(left+w*.1,top+h*.28,w*.8,h*.36),p);
+        for(var i=0;i<=10;i++){final x=.12+i*.076;line(x,.28,x,.28+(i.isEven ? .16 : .09));}
+        break;
+      case 'compass':
+        drawOval(.5,.5,.34,.34);line(.5,.5,.5,.17);line(.5,.5,.78,.68);circle(.5,.5,.025);
+        break;
+      case 'protractor':
+        canvas.drawArc(Rect.fromCenter(center:at(.5,.72),width:w*.76,height:h*.76),math.pi,math.pi,false,p);
+        line(.12,.72,.88,.72);
+        for(var i=0;i<=10;i++){final a=math.pi+i*math.pi/10;line(.5+.35*math.cos(a),.72+.35*math.sin(a),.5+.3*math.cos(a),.72+.3*math.sin(a));}
+        break;
+      case 'dottedLine':
+      case 'dashedLine':
+        line(.08,.5,.92,.5);
         break;
       default:
         // Unknown future science tools still render as their bounding box
