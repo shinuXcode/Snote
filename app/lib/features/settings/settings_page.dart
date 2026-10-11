@@ -13,10 +13,17 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   final _settings = SnoteSettings.instance;
   final _theme = SnoteThemeController.instance;
+  final _settingsSearch = TextEditingController();
+
+  String get _query => _settingsSearch.text.trim().toLowerCase();
+
+  bool _matches(Widget widget) =>
+      _query.isEmpty || widget.toStringDeep().toLowerCase().contains(_query);
 
   @override
   void initState() {
     super.initState();
+    _settingsSearch.addListener(_refresh);
     _settings.addListener(_refresh);
     _theme.addListener(_refresh);
   }
@@ -25,6 +32,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   void dispose() {
+    _settingsSearch.dispose();
     _settings.removeListener(_refresh);
     _theme.removeListener(_refresh);
     super.dispose();
@@ -33,7 +41,30 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings', style: TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(
+        title: SizedBox(
+          height: 44,
+          child: TextField(
+            controller: _settingsSearch,
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              hintText: 'Search settings',
+              prefixIcon: const Icon(Icons.search_rounded),
+              suffixIcon: _settingsSearch.text.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'Clear search',
+                      onPressed: _settingsSearch.clear,
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+              border: InputBorder.none,
+              filled: true,
+              fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+              contentPadding: const EdgeInsets.symmetric(vertical: 8),
+            ),
+          ),
+        ),
+      ),
       body: LayoutBuilder(builder: (context, c) {
         final wide = c.maxWidth >= 900;
         return wide
@@ -95,6 +126,7 @@ class _SettingsPageState extends State<SettingsPage> {
         _toggle('autoSave', 'Auto-save notes', 'Save automatically after changes. Turn this off to save manually from the editor toolbar.'),
         _toggle('volumeKeyTurnPage', 'Volume key turn page', 'Turn pages with volume keys where the platform exposes the event.'),
       ]),
+      if (_query.isEmpty || 'trigger pressure value'.contains(_query))
       Card(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 5, 16, 8),
@@ -153,7 +185,7 @@ class _SettingsPageState extends State<SettingsPage> {
         _toggle('autoAddPage', 'Auto add page', 'Create the next numbered page when swiping past the end.'),
         _toggle('securePagePreviews', 'Preview lock / privacy', 'Hide handwritten content in the page preview rail.'),
       ]),
-      _group('Privacy & Security', [
+      if (_query.isEmpty || 'privacy security custom note password'.contains(_query)) _group('Privacy & Security', [
         Card(
           child: ListTile(
             leading: const Icon(Icons.lock_outline_rounded),
@@ -162,7 +194,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ),
       ]),
-      _group('Notebook Transfer', [
+      if (_query.isEmpty || 'notebook transfer import export notes'.contains(_query)) _group('Notebook Transfer', [
         Card(
           child: ListTile(
             leading: const Icon(Icons.import_export_rounded),
@@ -172,7 +204,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ),
       ]),
-      _group('Updates & About', [
+      if (_query.isEmpty || 'updates about release app notices'.contains(_query)) _group('Updates & About', [
         Card(
           child: ListTile(
             leading: const Icon(Icons.system_update_alt_rounded),
@@ -214,16 +246,22 @@ class _SettingsPageState extends State<SettingsPage> {
     ),
   );
 
-  Widget _group(String title, List<Widget> children) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(4, 18, 4, 8),
-        child: Text(title.toUpperCase(), style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 1.1)),
-      ),
-      Card(child: Column(children: children)),
-    ],
-  );
+  Widget _group(String title, List<Widget> children) {
+    final visibleChildren = _query.isEmpty || title.toLowerCase().contains(_query)
+        ? children
+        : children.where(_matches).toList();
+    if (visibleChildren.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 18, 4, 8),
+          child: Text(title.toUpperCase(), style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 1.1)),
+        ),
+        Card(child: Column(children: visibleChildren)),
+      ],
+    );
+  }
 
   Widget _toggle(String key, String title, String subtitle) => SwitchListTile.adaptive(
     contentPadding: const EdgeInsets.symmetric(horizontal: 16),
