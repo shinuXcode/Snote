@@ -360,7 +360,53 @@ class FolderRepository {
       'work',
       'archive',
     };
-    return known.contains(value) ? value : 'folder';
+    if (known.contains(value)) return value;
+    final coverMatch = RegExp(r'^cover:(\d{1,2})
+
+  Future<void> _queue(DatabaseExecutor db, String id, String operation) async {
+    await db.delete(
+      'sync_queue',
+      where: 'entity_type = ? AND entity_id = ? AND owner_id = ?',
+      whereArgs: ['folder', id, SnoteAccountScope.ownerId],
+    );
+    await db.insert('sync_queue', {
+      'id': _uuid.v4(),
+      'owner_id': SnoteAccountScope.ownerId,
+      'entity_type': 'folder',
+      'entity_id': id,
+      'operation': operation,
+      'created_at': DateTime.now().millisecondsSinceEpoch,
+      'attempts': 0,
+    });
+  }
+
+  Future<void> queueNote(
+    DatabaseExecutor db,
+    String noteId,
+    String operation,
+  ) async {
+    await db.delete(
+      'sync_queue',
+      where: 'entity_type = ? AND entity_id = ? AND owner_id = ?',
+      whereArgs: ['note', noteId, SnoteAccountScope.ownerId],
+    );
+    await db.insert('sync_queue', {
+      'id': _uuid.v4(),
+      'owner_id': SnoteAccountScope.ownerId,
+      'entity_type': 'note',
+      'entity_id': noteId,
+      'operation': operation,
+      'created_at': DateTime.now().millisecondsSinceEpoch,
+      'attempts': 0,
+    });
+  }
+}
+).firstMatch(value);
+    final coverIndex = int.tryParse(coverMatch?.group(1) ?? '');
+    if (coverIndex != null && coverIndex >= 0 && coverIndex < 100) {
+      return 'cover:$coverIndex';
+    }
+    return 'folder';
   }
 
   Future<void> _queue(DatabaseExecutor db, String id, String operation) async {
