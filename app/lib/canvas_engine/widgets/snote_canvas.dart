@@ -311,7 +311,6 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
 
   bool _selectionTransformActive = false;
   Offset? _selectionStart;
-  Rect? _selectionBoundsAtStart;
   int? _resizeCorner;
   Offset? _resizeFixedAnchor;
   List<Stroke> _selectionOriginalStrokes = const <Stroke>[];
@@ -969,7 +968,6 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _snapshot();
     _selectionTransformActive = true;
     _selectionStart = point;
-    _selectionBoundsAtStart = bounds;
     _resizeCorner = cornerIndex;
     _resizeFixedAnchor = fixedAnchor;
     _selectionOriginalStrokes = selectedStrokes;
@@ -1040,7 +1038,6 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     }
     _selectionTransformActive = false;
     _selectionStart = null;
-    _selectionBoundsAtStart = null;
     _resizeCorner = null;
     _resizeFixedAnchor = null;
     _selectionOriginalStrokes = const <Stroke>[];
@@ -1060,7 +1057,6 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     if (!_selectionTransformActive) return;
     _selectionTransformActive = false;
     _selectionStart = null;
-    _selectionBoundsAtStart = null;
     _resizeCorner = null;
     _resizeFixedAnchor = null;
     _selectionOriginalStrokes = const <Stroke>[];
