@@ -58,24 +58,49 @@ class _NotesHomePageState extends State<NotesHomePage> {
   void initState() {
     super.initState();
     _search.addListener(_onSearchChanged);
-    _shareSubscription = ReceiveSharingIntent.instance.getMediaStream().listen(
-      (files) => unawaited(_handleSharedImages(files)),
-      onError: (Object error) => debugPrint('Snote share receiver: $error'),
-    );
-    unawaited(ReceiveSharingIntent.instance.getInitialMedia().then((files) async {
-      if (files.isNotEmpty) {
-        // Wait for the home page's first note/folder query before showing the
-        // destination chooser on a cold start from Android's share sheet.
-        await Future<void>.delayed(const Duration(milliseconds: 500));
-        await _handleSharedImages(files);
-      }
-      await ReceiveSharingIntent.instance.reset();
-    }));
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      _shareSubscription = ReceiveSharingIntent.instance.getMediaStream().listen(
+        (files) => unawaited(_handleSharedImages(files)),
+        onError: (Object error) => debugPrint('Snote share receiver: $error'),
+      );
+      unawaited(_loadInitialSharedImages());
+    }
     unawaited(_load());
     if (!widget.localOnly) unawaited(_startSync());
   }
 
+  bool _processingSharedImages = false;
+
+  Future<void> _loadInitialSharedImages() async {
+    try {
+      final files = await ReceiveSharingIntent.instance.getInitialMedia();
+      if (files.isNotEmpty) {
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        await _handleSharedImages(files);
+      }
+    } catch (error) {
+      debugPrint('Snote initial shared-media load: $error');
+    } finally {
+      try {
+        await ReceiveSharingIntent.instance.reset();
+      } catch (_) {}
+    }
+  }
+
   Future<void> _handleSharedImages(List<SharedMediaFile> files) async {
+    if (_processingSharedImages) return;
+    _processingSharedImages = true;
+    try {
+      await _processSharedImages(files);
+    } finally {
+      _processingSharedImages = false;
+      try {
+        await ReceiveSharingIntent.instance.reset();
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _processSharedImages(List<SharedMediaFile> files) async {
     final imageFiles = files.where((file) {
       final path = file.path.toLowerCase();
       final mime = file.mimeType?.toLowerCase() ?? '';
@@ -211,7 +236,6 @@ class _NotesHomePageState extends State<NotesHomePage> {
       content['version'] = content['version'] ?? 5;
       await _notes.saveContent(target.id, content);
       await _load();
-      await ReceiveSharingIntent.instance.reset();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Added $inserted shared image(s) to "${target.title}".')),
