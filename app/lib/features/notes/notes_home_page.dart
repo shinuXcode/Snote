@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
@@ -39,7 +40,6 @@ class _NotesHomePageState extends State<NotesHomePage> {
 
   List<LocalFolder> _allFolders = const [];
   List<LocalNote> _noteList = const [];
-  List<LocalNote> _recentNotes = const [];
   bool _sidebarCollapsed = false;
   bool _gridView = true;
   String? _folderId;
@@ -87,7 +87,6 @@ class _NotesHomePageState extends State<NotesHomePage> {
     final notes = searching
         ? await _notes.listAllVisible()
         : await _notes.list(folderId: _folderId);
-    final recentNotes = await _notes.listAllVisible(limit: 6);
     if (!mounted || generation != _loadGeneration) return;
 
     final selectedId = _selected?.id;
@@ -105,7 +104,6 @@ class _NotesHomePageState extends State<NotesHomePage> {
     setState(() {
       _allFolders = allFolders;
       _noteList = notes;
-      _recentNotes = recentNotes;
       _selected = selected;
       _loading = false;
     });
@@ -176,10 +174,64 @@ class _NotesHomePageState extends State<NotesHomePage> {
     if (MediaQuery.sizeOf(context).width < 900) {
       await Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => NoteEditorPage(note: note)),
+        MaterialPageRoute(builder: (_) => _noteContentPage(note)),
       );
       await _load();
     }
+  }
+
+  String _noteContentKind(LocalNote note) {
+    try {
+      final decoded = jsonDecode(note.contentJson ?? '{}');
+      if (decoded is Map) {
+        final kind = decoded['noteType']?.toString();
+        if (kind == 'flashcard' || kind == 'mindmap') return kind!;
+      }
+    } catch (_) {}
+    return note.noteType;
+  }
+
+  Widget _noteContentPage(LocalNote note) {
+    switch (_noteContentKind(note)) {
+      case 'flashcard':
+        return FlashcardPage(folderId: note.folderId, note: note);
+      case 'mindmap':
+        return MindMapPage(folderId: note.folderId, note: note);
+      default:
+        return NoteEditorPage(note: note);
+    }
+  }
+
+  String _noteCoverKey(LocalNote note) {
+    try {
+      final decoded = jsonDecode(note.contentJson ?? '{}');
+      if (decoded is Map) {
+        final key = decoded['coverKey']?.toString();
+        if (key != null && key.startsWith('cover:')) return key;
+      }
+    } catch (_) {}
+    return 'cover:' + (note.id.hashCode.abs() % 100).toString();
+  }
+
+  Future<void> _changeNoteCover(LocalNote note) async {
+    final chosen = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FolderCoverLibraryPage(
+          selectionMode: true,
+          initialCoverKey: _noteCoverKey(note),
+        ),
+      ),
+    );
+    if (chosen == null || !mounted) return;
+    final content = <String, Object?>{};
+    try {
+      final decoded = jsonDecode(note.contentJson ?? '{}');
+      if (decoded is Map) content.addAll(decoded.cast<String, Object?>());
+    } catch (_) {}
+    content['coverKey'] = chosen;
+    await _notes.saveContent(note.id, content);
+    await _load();
   }
 
   void _openTreeFolder(LocalFolder folder) {
@@ -849,6 +901,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
                         onOpenNote: _openNote,
                         onRenameNote: _renameNote,
                         onDeleteNote: _deleteNote,
+                        onChangeNoteCover: _changeNoteCover,
                         folderSort: _folderSort,
                         onFolderSort: _setFolderSort,
                         selectedFolderIds: _selectedFolderIds,
@@ -874,7 +927,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
                           ? const _WorkspaceEmpty()
                           : KeyedSubtree(
                               key: ValueKey(_selected!.id),
-                              child: NoteEditorPage(note: _selected!),
+                              child: _noteContentPage(_selected!),
                             ),
                     ),
                   ],
@@ -975,6 +1028,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
             onOpenNote: _openNote,
             onRenameNote: _renameNote,
             onDeleteNote: _deleteNote,
+                        onChangeNoteCover: _changeNoteCover,
                         folderSort: _folderSort,
                         onFolderSort: _setFolderSort,
                         selectedFolderIds: _selectedFolderIds,
@@ -1203,6 +1257,7 @@ class _HierarchyPanel extends StatelessWidget {
   final ValueChanged<LocalNote> onOpenNote;
   final ValueChanged<LocalNote> onRenameNote;
   final ValueChanged<LocalNote> onDeleteNote;
+  final ValueChanged<LocalNote> onChangeNoteCover;
   final String folderSort;
   final ValueChanged<String> onFolderSort;
   final Set<String> selectedFolderIds;
@@ -1242,6 +1297,7 @@ class _HierarchyPanel extends StatelessWidget {
     required this.onOpenNote,
     required this.onRenameNote,
     required this.onDeleteNote,
+    required this.onChangeNoteCover,
     required this.folderSort,
     required this.onFolderSort,
     required this.selectedFolderIds,
@@ -1421,10 +1477,11 @@ class _HierarchyPanel extends StatelessWidget {
           ),
         if (gridView)
           Wrap(
-            spacing: 8,
-            runSpacing: 8,
+            spacing: 10,
+            runSpacing: 10,
             children: notes.map((note) {
               final isSelected = selected?.id == note.id;
+              final cover = _noteCoverKey(note);
               return SizedBox(
                 width: compact ? 155 : 166,
                 child: Card(
@@ -1432,53 +1489,72 @@ class _HierarchyPanel extends StatelessWidget {
                   color: isSelected
                       ? theme.colorScheme.primaryContainer.withValues(alpha: .65)
                       : theme.colorScheme.surfaceContainerLow,
+                  elevation: isSelected ? 4 : 1,
                   child: InkWell(
                     onTap: () => onOpenNote(note),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: SizedBox(
-                        height: 96,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(Icons.description_outlined, color: theme.colorScheme.primary),
-                            const Spacer(),
-                            Text(
-                              note.title,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontWeight: FontWeight.w800),
-                            ),
-                            const SizedBox(height: 3),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    note.noteType,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.labelSmall,
-                                  ),
+                    child: SizedBox(
+                      height: 190,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(
+                                child: FolderCoverArt(
+                                  coverKey: cover,
+                                  title: note.title,
+                                  showTitle: false,
+                                  borderRadius: BorderRadius.zero,
                                 ),
-                                PopupMenuButton<String>(
-                                  padding: EdgeInsets.zero,
-                                  iconSize: 18,
-                                  onSelected: (value) {
-                                    if (value == 'rename') {
-                                      onRenameNote(note);
-                                    } else {
-                                      onDeleteNote(note);
-                                    }
-                                  },
-                                  itemBuilder: (_) => const [
-                                    PopupMenuItem(value: 'rename', child: Text('Rename')),
-                                    PopupMenuItem(value: 'delete', child: Text('Move to trash')),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(9, 8, 9, 27),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      note.title.isEmpty ? 'Untitled note' : note.title,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(fontWeight: FontWeight.w800),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      _noteContentKind(note),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.labelSmall,
+                                    ),
                                   ],
                                 ),
+                              ),
+                            ],
+                          ),
+                          Positioned(
+                            right: 3,
+                            bottom: 2,
+                            child: PopupMenuButton<String>(
+                              tooltip: 'Note options',
+                              padding: EdgeInsets.zero,
+                              iconSize: 19,
+                              onSelected: (value) {
+                                if (value == 'cover') {
+                                  onChangeNoteCover(note);
+                                } else if (value == 'rename') {
+                                  onRenameNote(note);
+                                } else if (value == 'delete') {
+                                  onDeleteNote(note);
+                                }
+                              },
+                              itemBuilder: (_) => const [
+                                PopupMenuItem(value: 'cover', child: Text('Change cover')),
+                                PopupMenuItem(value: 'rename', child: Text('Rename')),
+                                PopupMenuItem(value: 'delete', child: Text('Move to bin')),
                               ],
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -1491,9 +1567,12 @@ class _HierarchyPanel extends StatelessWidget {
             (note) => _HomeNoteTile(
               note: note,
               selected: selected?.id == note.id,
+              coverKey: _noteCoverKey(note),
+              displayKind: _noteContentKind(note),
               onOpen: () => onOpenNote(note),
               onRename: () => onRenameNote(note),
               onDelete: () => onDeleteNote(note),
+              onChangeCover: () => onChangeNoteCover(note),
             ),
           ),
         const SizedBox(height: 8),
@@ -1549,10 +1628,10 @@ class _FolderCoverCard extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  FolderCoverArt(coverKey: coverKey, title: folder.name),
+                  FolderCoverArt(coverKey: coverKey, title: folder.name, showTitle: false),
                   Positioned(
                     right: 2,
-                    top: 2,
+                    bottom: 2,
                     child: PopupMenuButton<String>(
                       tooltip: 'Folder options',
                       onSelected: (action) {
@@ -1615,73 +1694,54 @@ class _FolderCoverCard extends StatelessWidget {
 class _HomeNoteTile extends StatelessWidget {
   final LocalNote note;
   final bool selected;
+  final String coverKey;
+  final String displayKind;
   final VoidCallback onOpen;
   final VoidCallback onRename;
   final VoidCallback onDelete;
+  final VoidCallback onChangeCover;
 
   const _HomeNoteTile({
     required this.note,
     required this.selected,
+    required this.coverKey,
+    required this.displayKind,
     required this.onOpen,
     required this.onRename,
     required this.onDelete,
+    required this.onChangeCover,
   });
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Card(
-      color: selected
-          ? scheme.primaryContainer.withValues(alpha: .65)
-          : scheme.surfaceContainerLow,
-      child: ListTile(
-        leading: const Icon(Icons.description_outlined),
-        title: Text(
-          note.title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontWeight: FontWeight.w800),
-        ),
-        subtitle: Text(note.noteType),
+      clipBehavior: Clip.antiAlias,
+      color: selected ? scheme.primaryContainer.withValues(alpha: .65) : scheme.surfaceContainerLow,
+      elevation: selected ? 3 : 1,
+      child: InkWell(
         onTap: onOpen,
-        trailing: PopupMenuButton<String>(
-          tooltip: 'Note actions',
-          onSelected: (value) {
-            if (value == 'rename') {
-              onRename();
-            } else if (value == 'delete') {
-              onDelete();
-            }
-          },
-          itemBuilder: (_) => const [
-            PopupMenuItem(value: 'rename', child: Text('Rename')),
-            PopupMenuItem(value: 'delete', child: Text('Move to trash')),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _WorkspaceEmpty extends StatelessWidget {
+        child: SizedBox(
+          height: 104,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 92,
+                      child: FolderCoverArt(
+                        coverKey: coverKey,
+                        title: note.title,
+                        showTitle: false,
+                        borderRadius: BorderRadius.zero,
+                      ),
+                    ),
+                 class _WorkspaceEmpty extends StatelessWidget {
   const _WorkspaceEmpty();
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(36),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.edit_note_rounded, size: 64, color: Theme.of(context).colorScheme.primary),
-          const SizedBox(height: 14),
-          const Text('Your writing workspace', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
-          const SizedBox(height: 6),
-          const Text('Choose a note from the folder hierarchy, or use + to add a new note, PDF, import or study tool.', textAlign: TextAlign.center),
-        ],
-      ),
-    ),
-  );
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
 class _PlusSheet extends StatelessWidget {
