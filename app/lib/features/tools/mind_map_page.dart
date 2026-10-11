@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -442,7 +443,7 @@ class _MindMapGrid extends CustomPainter {
         points.add(Offset(x, y));
       }
     }
-    canvas.drawPoints(PointMode.points, points, paint);
+    canvas.drawPoints(ui.PointMode.points, points, paint);
   }
 
   @override
