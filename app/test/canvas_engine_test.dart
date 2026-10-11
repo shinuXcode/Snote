@@ -59,9 +59,7 @@ void main() {
     expect(fast, greaterThan(1));
   });
 
-  test('every shape tool has a label and renders through the vector painter', () {
-    final recorder = PictureRecorder();
-    final canvas = Canvas(recorder);
+  test('every shape tool has a label and paints visible pixels', () async {
     const pen = PenConfig(
       type: PenType.ballpoint,
       color: Color(0xff253047),
@@ -72,6 +70,8 @@ void main() {
     expect(tools.length, greaterThanOrEqualTo(30));
     for (final tool in tools) {
       expect(tool.label, isNotEmpty, reason: tool.name);
+      final recorder = PictureRecorder();
+      final canvas = Canvas(recorder);
       final stroke = Stroke(
         id: tool.name,
         points: const [
@@ -94,8 +94,23 @@ void main() {
         lassoPath: const [],
         drawActive: false,
       ).paint(canvas, const Size(220, 220));
+
+      final picture = recorder.endRecording();
+      final image = await picture.toImage(220, 220);
+      final pixels = await image.toByteData(format: ImageByteFormat.rawRgba);
+      expect(pixels, isNotNull, reason: tool.name);
+      var visiblePixels = 0;
+      for (var i = 3; i < pixels!.lengthInBytes; i += 4) {
+        if (pixels.getUint8(i) > 0) visiblePixels++;
+      }
+      image.dispose();
+      picture.dispose();
+      expect(
+        visiblePixels,
+        greaterThan(0),
+        reason: 'Shape tool "${tool.name}" produced no visible pixels',
+      );
     }
-    recorder.endRecording().dispose();
   });
 
   test('every paper template paints without throwing', () {
