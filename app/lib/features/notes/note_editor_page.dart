@@ -1746,7 +1746,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
               page['lineOpacity'] = pageData['lineOpacity'];
               page['spacing'] = pageData['spacing'];
               page['cornellAssist'] = pageData['cornellAssist'];
+              page.remove('backgroundAssetId');
             }
+            _backgroundRequest++;
+            _pageBackgroundAssetId = null;
+            _pageBackgroundBytes = null;
             setState(() {});
             _scheduleSave();
             Navigator.pop(context);
@@ -1787,19 +1791,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   }
 
   void _applyTemplate(PageTemplate template) {
-    setState(() {
-      _pages[_page]['template'] = template.name;
-    });
-    _scheduleSave();
-    // The template sheet is a separate route; dismiss it so the user sees
-    // the new paper immediately instead of leaving the preview grid stale.
-    Navigator.of(context).pop();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${template.name} paper applied to this page'),
-        duration: const Duration(seconds: 2),
-      ),
-    );
+    _setTemplate(template);
   }
 
   Future<void> _confirmPageClear() async {
@@ -1862,11 +1854,17 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   void _setTemplate(PageTemplate template) {
     setState(() {
       pageData['template'] = template.name;
+      // A custom background image sits above the paper painter. Clear it when
+      // choosing a paper preset so the selected template can actually appear.
+      pageData.remove('backgroundAssetId');
+      _backgroundRequest++;
+      _pageBackgroundAssetId = null;
+      _pageBackgroundBytes = null;
     });
     _scheduleSave();
     // Close the independent modal route after selection so the live page
     // background is visible immediately.
-    Navigator.of(context).pop();
+    Navigator.of(context).maybePop();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('${template.name} paper applied to this page'),
