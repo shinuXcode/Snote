@@ -39,6 +39,7 @@ class SnoteSettings extends ChangeNotifier {
     'defaultPaperPalette': 'paper-white',
     'pencaseTools': 'ballpoint,fountain,pencil,highlighter,marker,brush,eraser,lasso,line,arrow,rectangle,ellipse,cartesianPlane,dashedLine,dottedLine',
     'pencasePresets': '[]',
+    'coverLibrary': '[]',
     'pressureCurve': 'linear',
     'toolSizes': '{}',
     'toolColors': '{}',
