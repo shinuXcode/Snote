@@ -31,7 +31,18 @@ final ValueNotifier<List<LocalNote>> _snoteOpenNoteTabs = ValueNotifier<List<Loc
 
 class NoteEditorPage extends StatefulWidget {
   final LocalNote note;
-  const NoteEditorPage({super.key, required this.note});
+  final bool embedded;
+  final ValueChanged<LocalNote>? onSwitchTab;
+  final ValueChanged<LocalNote?>? onCloseTab;
+
+  const NoteEditorPage({
+    super.key,
+    required this.note,
+    this.embedded = false,
+    this.onSwitchTab,
+    this.onCloseTab,
+  });
+
   @override
   State<NoteEditorPage> createState() => _NoteEditorPageState();
 }
@@ -210,6 +221,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           .toList();
       return;
     }
+    if (widget.embedded && widget.onSwitchTab != null) {
+      widget.onSwitchTab!(fresh);
+      return;
+    }
     Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(builder: (_) => NoteEditorPage(note: fresh)),
     );
@@ -228,12 +243,18 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     if (!mounted) return;
     _snoteOpenNoteTabs.value = remaining;
     if (remaining.isEmpty) {
-      Navigator.maybePop(context);
+      if (widget.embedded && widget.onCloseTab != null) {
+        widget.onCloseTab!(null);
+      } else {
+        Navigator.maybePop(context);
+      }
       return;
     }
     final next = await _repo.get(remaining.last.id);
     if (!mounted) return;
-    if (next != null) {
+    if (widget.embedded && widget.onCloseTab != null) {
+      widget.onCloseTab!(next);
+    } else if (next != null) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(builder: (_) => NoteEditorPage(note: next)),
       );
@@ -658,7 +679,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           child: Stack(
             children: [
               Positioned.fill(
-                top: _full ? 0 : 82,
+                top: _full ? 0 : 34,
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   supportedDevices: const {
