@@ -1071,7 +1071,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       fill: widget.shapeFill && shape != null,
       customSides: widget.customShapeSides,
       stickerText: _activeSticker,
-      dashed: widget.dashed || _activeTool == CanvasTool.dashedLine || _activeTool == CanvasTool.dottedLine,
+      dashed: widget.dashed || _activeTool == CanvasTool.dottedLine || _activeTool == CanvasTool.dashedLine || _activeTool == CanvasTool.dottedLine,
       fillColor: widget.fillColor,
     );
 
