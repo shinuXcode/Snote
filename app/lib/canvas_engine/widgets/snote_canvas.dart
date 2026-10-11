@@ -957,7 +957,27 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
 
     if (_selectionTransformMode != null) {
       _finishSelectionTransform();
+      _lock.end(event);
       _activePointer = -1;
+      _stylusDownPosition = null;
+      _stylusHoldHandled = false;
+      return;
+    }
+
+    // A stationary stylus hold consumes the original drawing gesture. Release
+    // all state explicitly; otherwise pointer-up can flow through finish()
+    // with an already-reset input buffer and leave the next stroke feeling
+    // intermittently dead on devices that emit a late up/cancel event.
+    if (_stylusHoldHandled) {
+      _eraseSnapshotTaken = false;
+      _temporaryEraser = false;
+      _clearActiveState();
+      _lock.end(event);
+      _activePointer = -1;
+      _stylusDownPosition = null;
+      _stylusHoldHandled = false;
+      _lastStylusTap = null;
+      _lastStylusPosition = null;
       return;
     }
 
@@ -1003,7 +1023,10 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _stylusHoldTimer = null;
     if (_selectionTransformMode != null) {
       _finishSelectionTransform();
+      _lock.end(event);
       _activePointer = -1;
+      _stylusDownPosition = null;
+      _stylusHoldHandled = false;
       return;
     }
     _eraseSnapshotTaken = false;
