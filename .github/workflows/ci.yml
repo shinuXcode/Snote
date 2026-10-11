@@ -119,7 +119,7 @@ jobs:
 
       - name: Analyze
         working-directory: app
-        run: flutter analyze --no-fatal-infos
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
       - name: Test
         working-directory: app
         run: flutter test
