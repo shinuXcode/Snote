@@ -3,6 +3,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' as ui;
 
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/rendering.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:pdf/widgets.dart' as pw;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
@@ -36,6 +41,13 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   final _title = TextEditingController();
   final _lock = const NoteLockService();
   final _settings = SnoteSettings.instance;
+  final GlobalKey _pageCaptureKey = GlobalKey();
+  final Map<String, double> _toolSizeOverrides = <String, double>{};
+  final Map<String, Color> _toolColorOverrides = <String, Color>{};
+  final Map<String, bool> _toolDashedOverrides = <String, bool>{};
+  double _pageChangerX = -1;
+  double _pageChangerY = 130;
+  bool _pdfExporting = false;
 
   List<Map<String, Object?>> _pages = [];
   int _page = 0;
@@ -50,9 +62,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   bool _docked = false;
   String _dockSide = 'bottom';
   // Keep the free toolbox outside the fixed left rail by default.
-  double _toolbarX = 56;
+  double _toolbarX = 16;
   double _toolbarY = 0;
-  final ValueNotifier<Offset> _toolbarOffset = ValueNotifier(const Offset(56, 0));
+  final ValueNotifier<Offset> _toolbarOffset = ValueNotifier(const Offset(16, 0));
   CanvasTool _tool = CanvasTool.ballpoint;
   Color _penColor = const Color(0xff263238);
   double _penSize = 3;
@@ -79,8 +91,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     );
     return PenConfig(
       type: _tool.penType,
-      color: _penColor,
-      size: _penSize,
+      color: _toolColorOverrides[_tool.name] ?? _penColor,
+      size: _toolSizeOverrides[_tool.name] ?? _penSize,
       opacity: _tool == CanvasTool.highlighter
           ? _opacity.clamp(.08, .55)
           : _opacity,
@@ -96,6 +108,26 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _title.text = widget.note.title;
+    try {
+      final sizes = jsonDecode(_settings.getString('toolSizes'));
+      if (sizes is Map) {
+        for (final entry in sizes.entries) {
+          if (entry.value is num) _toolSizeOverrides[entry.key.toString()] = (entry.value as num).toDouble();
+        }
+      }
+      final colors = jsonDecode(_settings.getString('toolColors'));
+      if (colors is Map) {
+        for (final entry in colors.entries) {
+          if (entry.value is num) _toolColorOverrides[entry.key.toString()] = Color((entry.value as num).toInt());
+        }
+      }
+      final dashed = jsonDecode(_settings.getString('toolDashed'));
+      if (dashed is Map) {
+        for (final entry in dashed.entries) {
+          if (entry.value is bool) _toolDashedOverrides[entry.key.toString()] = entry.value as bool;
+        }
+      }
+    } catch (_) {}
     _quill.addListener(_scheduleSave);
     _prepare();
   }
@@ -162,6 +194,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     p['cornellAssist'] ??= false;
     p['orientation'] ??= 'vertical';
     p['strokes'] ??= <Object?>[];
+    p['images'] ??= <Object?>[];
     return p;
   }
 
@@ -192,6 +225,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       'cornellAssist': inheritedCornell,
       'orientation': inheritedOrientation,
       'strokes': <Object?>[],
+      'images': <Object?>[],
     };
   }
 
@@ -206,7 +240,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       if (y is num) _toolbarY = y.toDouble();
     } else {
       // Older saved positions defaulted to 16px and overlapped the fixed rail.
-      _toolbarX = math.max(52, x is num ? x.toDouble() : 56.0);
+      _toolbarX = math.max(8, x is num ? x.toDouble() : 16.0);
       _toolbarY = y is num ? y.toDouble() : 0;
     }
     _toolbarOffset.value = Offset(_toolbarX, _toolbarY);
@@ -216,6 +250,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     if (_loading || (_locked && !_unlocked)) return;
     _savePending = true;
     _saveTimer?.cancel();
+    if (!_settings.getBool('autoSave')) return;
     _saveTimer = Timer(const Duration(milliseconds: 700), () {
       unawaited(_save());
     });
