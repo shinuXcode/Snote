@@ -489,7 +489,10 @@ class FolderRepository {
     if (coverIndex != null && coverIndex >= 0 && coverIndex < 100) {
       return 'cover:$coverIndex';
     }
-    if (RegExp(r'^cover:custom-[a-zA-Z0-9_-]{1,48}
+    if (RegExp(r'^cover:custom-[a-zA-Z0-9_-]{1,48}$').hasMatch(value)) {
+      return value;
+    }
+    return 'folder';
   }
 
   Future<void> _queue(DatabaseExecutor db, String id, String operation) async {
