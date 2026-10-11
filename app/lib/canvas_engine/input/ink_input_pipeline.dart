@@ -136,9 +136,16 @@ class InkInputPipeline {
   }
 
   bool _append(InkSample sample, [StrokePoint? point]) {
-    final timestamp = sample.timestampMs;
-    if (_lastTimestamp != null && timestamp < _lastTimestamp!) return false;
-    final canonical = point ?? sample.toStrokePoint();
+    var timestamp = sample.timestampMs;
+    // Some tablet drivers deliver coalesced samples slightly out of order.
+    // Dropping those events can create visible gaps or a stroke that appears
+    // to stop mid-way. Preserve the sample and clamp only its timestamp to a
+    // strictly increasing sequence; spatial positions and pressure stay raw.
+    if (_lastTimestamp != null && timestamp <= _lastTimestamp!) {
+      timestamp = _lastTimestamp! + 0.001;
+    }
+    final source = point ?? sample.toStrokePoint();
+    final canonical = source.copyWith(timestamp: timestamp);
     final added = _buffer.add(canonical);
     if (added) _lastTimestamp = timestamp;
     return added;
