@@ -1253,121 +1253,158 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   }
 
   Widget _shapePanelWidget() {
-    final mathShapes = <List<Object>>[
-      [CanvasTool.line, Icons.horizontal_rule_rounded],
-      [CanvasTool.arrow, Icons.arrow_forward_rounded],
-      [CanvasTool.rectangle, Icons.crop_square_rounded],
-      [CanvasTool.triangle, Icons.change_history_outlined],
-      [CanvasTool.circle, Icons.radio_button_checked_rounded],
-      [CanvasTool.ellipse, Icons.circle_outlined],
-      [CanvasTool.diamond, Icons.diamond_outlined],
-      [CanvasTool.hexagon, Icons.hexagon_outlined],
-    ];
-    final physicsShapes = <List<Object>>[
-      [CanvasTool.line, Icons.horizontal_rule_rounded],
-      [CanvasTool.arrow, Icons.arrow_forward_rounded],
-      [CanvasTool.rectangle, Icons.crop_square_rounded],
-      [CanvasTool.circle, Icons.radio_button_checked_rounded],
-      [CanvasTool.ellipse, Icons.circle_outlined],
-      [CanvasTool.triangle, Icons.change_history_outlined],
-      [CanvasTool.customPolygon, Icons.hdr_strong_rounded],
-    ];
-    final chemistryShapes = <List<Object>>[
-      [CanvasTool.line, Icons.horizontal_rule_rounded],
-      [CanvasTool.arrow, Icons.arrow_forward_rounded],
-      [CanvasTool.circle, Icons.radio_button_checked_rounded],
-      [CanvasTool.ellipse, Icons.circle_outlined],
-      [CanvasTool.hexagon, Icons.hexagon_outlined],
-      [CanvasTool.triangle, Icons.change_history_outlined],
-      [CanvasTool.customPolygon, Icons.hdr_strong_rounded],
-    ];
-    final biologyShapes = <List<Object>>[
-      [CanvasTool.circle, Icons.radio_button_checked_rounded],
-      [CanvasTool.ellipse, Icons.circle_outlined],
-      [CanvasTool.line, Icons.horizontal_rule_rounded],
-      [CanvasTool.arrow, Icons.arrow_forward_rounded],
-      [CanvasTool.triangle, Icons.change_history_outlined],
-      [CanvasTool.roundedRectangle, Icons.rounded_corner_rounded],
-      [CanvasTool.customPolygon, Icons.hdr_strong_rounded],
-    ];
-
-    Widget palette(List<List<Object>> entries) => SingleChildScrollView(
-          padding: const EdgeInsets.all(8),
-          child: Wrap(
-            spacing: 4,
-            runSpacing: 4,
-            children: entries.map((entry) {
-              final tool = entry[0] as CanvasTool;
-              return IconButton(
-                tooltip: tool.label,
-                onPressed: () {
-                  _selectTool(tool);
-                  if (tool == CanvasTool.customPolygon) _styleSheet();
-                },
-                icon: Icon(entry[1] as IconData),
-              );
-            }).toList(),
-          ),
-        );
+    final categories = <String, List<CanvasTool>>{
+      'Basic': [
+        CanvasTool.line, CanvasTool.arrow, CanvasTool.rectangle,
+        CanvasTool.roundedRectangle, CanvasTool.ellipse, CanvasTool.circle,
+        CanvasTool.triangle, CanvasTool.diamond, CanvasTool.hexagon,
+        CanvasTool.star, CanvasTool.customPolygon,
+      ],
+      'Maths': [
+        CanvasTool.mathCoordinateAxes, CanvasTool.mathParabola,
+        CanvasTool.mathSineWave, CanvasTool.mathAngle,
+        CanvasTool.mathRightAngle,
+      ],
+      'Physics': [
+        CanvasTool.physicsVector, CanvasTool.physicsResistor,
+        CanvasTool.physicsCapacitor, CanvasTool.physicsBattery,
+        CanvasTool.physicsDiode, CanvasTool.physicsConvexLens,
+      ],
+      'Chemistry': [
+        CanvasTool.chemistryBenzene, CanvasTool.chemistryMolecule,
+        CanvasTool.chemistryAtom, CanvasTool.chemistryOrbital,
+        CanvasTool.chemistryFlask, CanvasTool.chemistryBeaker,
+      ],
+      'Biology': [
+        CanvasTool.biologyCell, CanvasTool.biologyMitochondrion,
+        CanvasTool.biologyDna, CanvasTool.biologyLeaf,
+        CanvasTool.biologyNeuron,
+      ],
+    };
+    final icons = <CanvasTool, IconData>{
+      CanvasTool.line: Icons.horizontal_rule_rounded,
+      CanvasTool.arrow: Icons.arrow_forward_rounded,
+      CanvasTool.rectangle: Icons.crop_square_rounded,
+      CanvasTool.roundedRectangle: Icons.rounded_corner_rounded,
+      CanvasTool.ellipse: Icons.circle_outlined,
+      CanvasTool.circle: Icons.radio_button_checked_rounded,
+      CanvasTool.triangle: Icons.change_history_outlined,
+      CanvasTool.diamond: Icons.diamond_outlined,
+      CanvasTool.hexagon: Icons.hexagon_outlined,
+      CanvasTool.star: Icons.star_border_rounded,
+      CanvasTool.customPolygon: Icons.hdr_strong_rounded,
+      CanvasTool.mathCoordinateAxes: Icons.show_chart_rounded,
+      CanvasTool.mathParabola: Icons.multiline_chart_rounded,
+      CanvasTool.mathSineWave: Icons.waves_rounded,
+      CanvasTool.mathAngle: Icons.architecture_rounded,
+      CanvasTool.mathRightAngle: Icons.crop_square_rounded,
+      CanvasTool.physicsVector: Icons.north_east_rounded,
+      CanvasTool.physicsResistor: Icons.electrical_services_rounded,
+      CanvasTool.physicsCapacitor: Icons.battery_0_bar_rounded,
+      CanvasTool.physicsBattery: Icons.battery_full_rounded,
+      CanvasTool.physicsDiode: Icons.change_history_rounded,
+      CanvasTool.physicsConvexLens: Icons.lens_blur_rounded,
+      CanvasTool.chemistryBenzene: Icons.hexagon_outlined,
+      CanvasTool.chemistryMolecule: Icons.hub_outlined,
+      CanvasTool.chemistryAtom: Icons.blur_circular_rounded,
+      CanvasTool.chemistryOrbital: Icons.radio_button_unchecked_rounded,
+      CanvasTool.chemistryFlask: Icons.science_outlined,
+      CanvasTool.chemistryBeaker: Icons.local_drink_outlined,
+      CanvasTool.biologyCell: Icons.circle_outlined,
+      CanvasTool.biologyMitochondrion: Icons.grain_rounded,
+      CanvasTool.biologyDna: Icons.biotech_outlined,
+      CanvasTool.biologyLeaf: Icons.eco_outlined,
+      CanvasTool.biologyNeuron: Icons.hub_outlined,
+    };
 
     return Positioned(
-      right: 50,
-      bottom: 118,
-      child: Material(
-        elevation: 14,
-        borderRadius: BorderRadius.circular(18),
-        clipBehavior: Clip.antiAlias,
-        child: SizedBox(
-          width: 252,
-          height: 286,
-          child: DefaultTabController(
-            length: 4,
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 4, 2),
-                  child: Row(
-                    children: [
-                      const Expanded(
-                        child: Text('Shape library', style: TextStyle(fontWeight: FontWeight.w800)),
-                      ),
-                      IconButton(
-                        visualDensity: VisualDensity.compact,
-                        tooltip: 'Close shape library',
-                        onPressed: () => setState(() => _shapePanel = false),
-                        icon: const Icon(Icons.close_rounded),
-                      ),
-                    ],
+      right: 52,
+      top: 90,
+      bottom: 110,
+      child: SafeArea(
+        child: Material(
+          elevation: 14,
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(18),
+          clipBehavior: Clip.antiAlias,
+          child: SizedBox(
+            width: 310,
+            child: DefaultTabController(
+              length: categories.length,
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 7, 6, 2),
+                    child: Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Shapes & diagrams',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Close shapes',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () => setState(() => _shapePanel = false),
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const TabBar(
-                  isScrollable: true,
-                  tabs: [
-                    Tab(text: 'Math'),
-                    Tab(text: 'Physics'),
-                    Tab(text: 'Chemistry'),
-                    Tab(text: 'Biology'),
-                  ],
-                ),
-                Expanded(
-                  child: TabBarView(
-                    children: [
-                      palette(mathShapes),
-                      palette(physicsShapes),
-                      palette(chemistryShapes),
-                      palette(biologyShapes),
-                    ],
+                  TabBar(
+                    isScrollable: true,
+                    tabs: categories.keys.map((name) => Tab(text: name)).toList(),
                   ),
-                ),
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(10, 0, 10, 8),
-                  child: Text(
-                    'Combine lines, arrows, and geometric shapes to build diagrams.',
-                    style: TextStyle(fontSize: 10),
-                    textAlign: TextAlign.center,
+                  Expanded(
+                    child: TabBarView(
+                      children: categories.values.map((tools) {
+                        return GridView.builder(
+                          padding: const EdgeInsets.all(10),
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 4,
+                            mainAxisSpacing: 5,
+                            crossAxisSpacing: 5,
+                            childAspectRatio: .82,
+                          ),
+                          itemCount: tools.length,
+                          itemBuilder: (context, index) {
+                            final tool = tools[index];
+                            return Tooltip(
+                              message: tool.label,
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(12),
+                                onTap: () {
+                                  _selectTool(tool);
+                                  setState(() => _shapePanel = false);
+                                  if (tool == CanvasTool.customPolygon) _styleSheet();
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(icons[tool] ?? Icons.category_outlined, size: 23),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        tool.label,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(fontSize: 9.5, height: 1.1),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      }).toList(),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
