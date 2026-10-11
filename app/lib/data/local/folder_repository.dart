@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/config/account_scope.dart';
+import 'local_file_store.dart';
 import 'database.dart';
 
 const defaultFolderColor = 0xff5b6cf9;
@@ -342,20 +343,36 @@ class FolderRepository {
           });
           final pages = await tx.query('pages', where: 'note_id = ?', whereArgs: [oldNoteId]);
           for (final page in pages) {
+            final newPageId = _uuid.v4();
+            final oldStrokePath = page['stroke_file']?.toString();
+            var newStrokePath = oldStrokePath;
+            if (oldStrokePath != null && oldStrokePath.isNotEmpty) {
+              final fileName = oldStrokePath.replaceAll('\\', '/').split('/').last;
+              newStrokePath = await copyLocalFile(oldStrokePath, newPageId, fileName);
+            }
             await tx.insert('pages', {
               ...page,
-              'id': _uuid.v4(),
+              'id': newPageId,
               'note_id': newNoteId,
+              if (oldStrokePath != null) 'stroke_file': newStrokePath,
               'created_at': now,
               'updated_at': now,
             });
           }
           final attachments = await tx.query('attachments', where: 'note_id = ?', whereArgs: [oldNoteId]);
           for (final attachment in attachments) {
+            final newAttachmentId = _uuid.v4();
+            final oldPath = attachment['local_path']?.toString();
+            var newPath = oldPath;
+            if (oldPath != null && oldPath.isNotEmpty) {
+              final fileName = oldPath.replaceAll('\\', '/').split('/').last;
+              newPath = await copyLocalFile(oldPath, newAttachmentId, fileName);
+            }
             await tx.insert('attachments', {
               ...attachment,
-              'id': _uuid.v4(),
+              'id': newAttachmentId,
               'note_id': newNoteId,
+              if (oldPath != null) 'local_path': newPath,
               'created_at': now,
             });
           }
