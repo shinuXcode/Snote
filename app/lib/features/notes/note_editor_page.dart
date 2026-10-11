@@ -1625,24 +1625,26 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
 
     final items = <Widget>[
       GestureDetector(
-        onPanUpdate: docked
-            ? (details) {
-                final toolbarObject = _toolbarKey.currentContext?.findRenderObject();
-                final stackObject = _editorStackKey.currentContext?.findRenderObject();
-                var origin = Offset(_toolbarX, _toolbarY);
-                if (toolbarObject is RenderBox && stackObject is RenderBox) {
-                  origin = stackObject.globalToLocal(toolbarObject.localToGlobal(Offset.zero));
-                }
-                final viewport = MediaQuery.sizeOf(context);
-                setState(() {
-                  _docked = false;
-                  _toolbarX = (origin.dx + details.delta.dx).clamp(8.0, math.max(8.0, viewport.width - 170)).toDouble();
-                  _toolbarY = (origin.dy + details.delta.dy).clamp(54.0, math.max(54.0, viewport.height - 100)).toDouble();
-                  _toolbarOffset.value = Offset(_toolbarX, _toolbarY);
-                });
-              }
-            : null,
-        onPanEnd: docked ? (_) => _snapToolbar(MediaQuery.sizeOf(context)) : null,
+        onPanUpdate: (details) {
+          final viewport = MediaQuery.sizeOf(context);
+          var origin = Offset(_toolbarX, _toolbarY);
+          if (_docked) {
+            final toolbarObject = _toolbarKey.currentContext?.findRenderObject();
+            final stackObject = _editorStackKey.currentContext?.findRenderObject();
+            if (toolbarObject is RenderBox && stackObject is RenderBox) {
+              origin = stackObject.globalToLocal(toolbarObject.localToGlobal(Offset.zero));
+            }
+          }
+          setState(() {
+            _docked = false;
+            _toolbarX = (origin.dx + details.delta.dx).clamp(4.0, math.max(4.0, viewport.width - 170)).toDouble();
+            _toolbarY = (origin.dy + details.delta.dy).clamp(54.0, math.max(54.0, viewport.height - 100)).toDouble();
+            _toolbarOffset.value = Offset(_toolbarX, _toolbarY);
+          });
+        },
+        // Keep this callback installed when a drag undocks the toolbar, otherwise
+        // the rebuilding GestureDetector may discard the release event.
+        onPanEnd: (_) => _snapToolbar(MediaQuery.sizeOf(context)),
         child: Padding(
           padding: const EdgeInsets.all(7),
           child: Icon(Icons.drag_indicator_rounded, size: 19, color: Theme.of(context).colorScheme.onSurfaceVariant),
