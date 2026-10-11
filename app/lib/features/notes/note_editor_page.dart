@@ -49,9 +49,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   bool _toolbar = true;
   bool _docked = false;
   String _dockSide = 'bottom';
-  double _toolbarX = 16;
+  // Keep the free toolbox outside the fixed left rail by default.
+  double _toolbarX = 56;
   double _toolbarY = 0;
-  final ValueNotifier<Offset> _toolbarOffset = ValueNotifier(const Offset(16, 0));
+  final ValueNotifier<Offset> _toolbarOffset = ValueNotifier(const Offset(56, 0));
   CanvasTool _tool = CanvasTool.ballpoint;
   Color _penColor = const Color(0xff263238);
   double _penSize = 3;
@@ -198,13 +199,17 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     final x = pageData['toolbarX'];
     final y = pageData['toolbarY'];
     final dock = pageData['toolbarDock']?.toString();
-    if (x is num) _toolbarX = x.toDouble();
-    if (y is num) _toolbarY = y.toDouble();
-    _toolbarOffset.value = Offset(_toolbarX, _toolbarY);
-    if (dock != null && dock != 'free') {
-      _docked = true;
-      _dockSide = dock;
+    _docked = const {'left', 'right', 'top', 'bottom'}.contains(dock);
+    if (_docked) {
+      _dockSide = dock!;
+      if (x is num) _toolbarX = x.toDouble();
+      if (y is num) _toolbarY = y.toDouble();
+    } else {
+      // Older saved positions defaulted to 16px and overlapped the fixed rail.
+      _toolbarX = math.max(52, x is num ? x.toDouble() : 56.0);
+      _toolbarY = y is num ? y.toDouble() : 0;
     }
+    _toolbarOffset.value = Offset(_toolbarX, _toolbarY);
   }
 
   void _scheduleSave() {
@@ -441,18 +446,27 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           child: Stack(
             children: [
               Positioned.fill(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  supportedDevices: const {
-                    PointerDeviceKind.touch,
-                    PointerDeviceKind.trackpad,
-                  },
-                  onHorizontalDragEnd: (_pan || _selected > 0) ? null : _pageSwipe,
-                  onDoubleTap: () => setState(() => _toolbar = !_toolbar),
-                  onLongPress: _settings.getBool('fingerLongPressSelection')
-                      ? () => _selectTool(CanvasTool.lasso)
-                      : null,
-                  child: _pageView(),
+                child: Padding(
+                  // Reserve space for both fixed tool rails. Without this
+                  // inset, the paper is centered beneath the rails and ink
+                  // near either edge is partially hidden by the toolbars.
+                  padding: EdgeInsets.only(
+                    left: _full ? 0 : 44,
+                    right: _full ? 0 : 42,
+                  ),
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    supportedDevices: const {
+                      PointerDeviceKind.touch,
+                      PointerDeviceKind.trackpad,
+                    },
+                    onHorizontalDragEnd: (_pan || _selected > 0) ? null : _pageSwipe,
+                    onDoubleTap: () => setState(() => _toolbar = !_toolbar),
+                    onLongPress: _settings.getBool('fingerLongPressSelection')
+                        ? () => _selectTool(CanvasTool.lasso)
+                        : null,
+                    child: _pageView(),
+                  ),
                 ),
               ),
               if (!_full) _header(),
@@ -690,7 +704,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(vertical: 5),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              for (final tool in tools.take(9))
+              // Pens and erasers above; the lasso appears once below the
+              // text/shapes shortcuts, like the reference tool rail.
+              for (final tool in tools.take(8))
                 _railToolButton(tool),
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 7, vertical: 3),
@@ -849,7 +865,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       builder: (_, offset, child) {
         final y = offset.dy == 0 ? size.height - 112 : offset.dy;
         return Positioned(
-          left: offset.dx.clamp(8, math.max(8, size.width - 160)),
+          left: offset.dx.clamp(_full ? 8 : 52, math.max(_full ? 8 : 52, size.width - 160)),
           top: y.clamp(60, math.max(60, size.height - 92)),
           child: GestureDetector(
             onPanUpdate: (d) {
@@ -1046,6 +1062,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         _docked = true;
         _dockSide = side;
       });
+    } else {
+      // If the toolbox was released near (but not docked to) the left edge,
+      // snap it clear of the fixed tool rail instead of leaving an overlap.
+      _toolbarX = math.max(_full ? 8 : 52, _toolbarX);
+      _toolbarOffset.value = Offset(_toolbarX, _toolbarY);
     }
     pageData['toolbarX'] = _toolbarX;
     pageData['toolbarY'] = _toolbarY;
