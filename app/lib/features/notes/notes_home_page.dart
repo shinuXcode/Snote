@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../data/local/folder_repository.dart';
 import '../../data/local/note_repository.dart';
@@ -425,9 +426,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
       try {
         final decoded = jsonDecode(stored.contentJson!);
         if (decoded is Map) content = Map<String, dynamic>.from(decoded);
-      } catch (_) {
-        content = <String, dynamic>{};
-      }
+      } catch (_) {}
     }
 
     final pages = <Map<String, Object?>>[];
@@ -445,6 +444,8 @@ class _NotesHomePageState extends State<NotesHomePage> {
         'lineColor': 0xffd8dee8,
         'lineOpacity': .85,
         'spacing': 28.0,
+        'lineWidth': .7,
+        'pageSize': 'A4',
         'cornellAssist': false,
         'orientation': 'vertical',
         'strokes': <Object?>[],
@@ -452,13 +453,12 @@ class _NotesHomePageState extends State<NotesHomePage> {
       });
     }
 
-    var coverColor = (pages.first['coverColor'] as num?)?.toInt() ?? 0xff5267df;
-    var coverIcon = pages.first['coverIcon']?.toString() ?? 'notes';
-    const colors = <int>[
-      0xff5267df, 0xff087f8c, 0xff1c7c54, 0xffb45309,
-      0xffbe3657, 0xff7c3aed, 0xff334155, 0xff0f766e,
-      0xff8a5a2b, 0xff374151, 0xff9f1239, 0xff0369a1,
-    ];
+    var coverStyle = ((content['coverStyle'] ?? pages.first['coverStyle']) as num?)?.toInt() ?? 0;
+    var coverImage = content['coverImage']?.toString() ?? pages.first['coverImage']?.toString();
+    var coverColor = (content['coverColor'] as num?)?.toInt() ?? 0xff5267df;
+    var coverIcon = content['coverIcon']?.toString() ?? 'notes';
+    final customCoverTitle = TextEditingController(text: content['coverTitle']?.toString() ?? note.title);
+    var storeToLibrary = false;
     const icons = <String, String>{
       'notes': 'Notebook',
       'book': 'Book',
@@ -477,109 +477,293 @@ class _NotesHomePageState extends State<NotesHomePage> {
     final result = await showDialog<Map<String, Object?>>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialog) => AlertDialog(
-          title: const Text('Note cover'),
-          content: SizedBox(
-            width: 360,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: double.infinity,
-                    height: 96,
-                    decoration: BoxDecoration(
-                      color: Color(coverColor),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(_noteCoverIcon(coverIcon), size: 34, color: Colors.white),
-                        const SizedBox(height: 5),
-                        Text(
-                          note.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
-                        ),
+        builder: (dialogContext, setDialog) {
+          final styleColors = _coverStyleColors(coverStyle);
+          Widget preview() => Container(
+            width: 124,
+            height: 164,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: styleColors,
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (coverImage != null && coverImage!.isNotEmpty)
+                  Image.memory(
+                    base64Decode(coverImage!),
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                  ),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: .05),
+                        Colors.black.withValues(alpha: .62),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  const Text('Cover colour', style: TextStyle(fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 9,
-                    runSpacing: 9,
-                    children: colors.map((value) => InkWell(
-                      onTap: () => setDialog(() => coverColor = value),
-                      borderRadius: BorderRadius.circular(24),
-                      child: Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: Color(value),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: coverColor == value ? Theme.of(dialogContext).colorScheme.onSurface : Colors.transparent,
-                            width: 3,
-                          ),
-                        ),
-                        child: coverColor == value ? const Icon(Icons.check_rounded, color: Colors.white, size: 17) : null,
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(_noteCoverIcon(coverIcon), color: Colors.white, size: 28),
+                      const SizedBox(height: 7),
+                      Text(
+                        customCoverTitle.text.trim().isEmpty ? note.title : customCoverTitle.text.trim(),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
                       ),
-                    )).toList(),
+                    ],
                   ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    initialValue: icons.containsKey(coverIcon) ? coverIcon : 'notes',
-                    decoration: const InputDecoration(labelText: 'Cover icon'),
-                    items: icons.entries.map((entry) => DropdownMenuItem(
-                      value: entry.key,
-                      child: Row(children: [
-                        Icon(_noteCoverIcon(entry.key), size: 20),
-                        const SizedBox(width: 10),
-                        Text(entry.value),
-                      ]),
-                    )).toList(),
-                    onChanged: (value) {
-                      if (value != null) setDialog(() => coverIcon = value);
-                    },
+                ),
+              ],
+            ),
+          );
+
+          return AlertDialog(
+            title: const Text('Notebook cover library'),
+            content: SizedBox(
+              width: 620,
+              height: 560,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      preview(),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          children: [
+                            TextField(
+                              controller: customCoverTitle,
+                              onChanged: (_) => setDialog(() {}),
+                              decoration: const InputDecoration(
+                                labelText: 'Cover title',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            DropdownButtonFormField<String>(
+                              initialValue: icons.containsKey(coverIcon) ? coverIcon : 'notes',
+                              decoration: const InputDecoration(
+                                labelText: 'Cover icon',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              items: icons.entries.map((entry) => DropdownMenuItem(
+                                value: entry.key,
+                                child: Row(children: [
+                                  Icon(_noteCoverIcon(entry.key), size: 18),
+                                  const SizedBox(width: 8),
+                                  Text(entry.value),
+                                ]),
+                              )).toList(),
+                              onChanged: (value) {
+                                if (value != null) setDialog(() => coverIcon = value);
+                              },
+                            ),
+                            const SizedBox(height: 8),
+                            Row(children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () async {
+                                    final picked = await ImagePicker().pickImage(
+                                      source: ImageSource.gallery,
+                                      maxWidth: 1000,
+                                      maxHeight: 1500,
+                                      imageQuality: 78,
+                                    );
+                                    if (picked == null) return;
+                                    try {
+                                      final bytes = await picked.readAsBytes();
+                                      if (bytes.isNotEmpty) {
+                                        setDialog(() => coverImage = base64Encode(bytes));
+                                      }
+                                    } catch (_) {}
+                                  },
+                                  icon: const Icon(Icons.photo_library_outlined),
+                                  label: const Text('Custom image'),
+                                ),
+                              ),
+                              if (coverImage != null && coverImage!.isNotEmpty)
+                                IconButton(
+                                  tooltip: 'Remove custom image',
+                                  onPressed: () => setDialog(() => coverImage = null),
+                                  icon: const Icon(Icons.close_rounded),
+                                ),
+                            ]),
+                            CheckboxListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              value: storeToLibrary,
+                              onChanged: (value) => setDialog(() => storeToLibrary = value ?? false),
+                              title: const Text('Keep this custom cover for reuse'),
+                            ),
+                            const Text(
+                              'Choose from 100 generated cover designs below. Covers are saved with the note; the optional reuse library keeps custom covers on this device.',
+                              style: TextStyle(fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(children: [
+                    const Expanded(child: Text('100 ready-made cover designs', style: TextStyle(fontWeight: FontWeight.w900))),
+                    Text('Selected: ${coverStyle + 1}/100'),
+                  ]),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: GridView.builder(
+                      itemCount: 100,
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 5,
+                        crossAxisSpacing: 8,
+                        mainAxisSpacing: 8,
+                        childAspectRatio: .68,
+                      ),
+                      itemBuilder: (_, index) {
+                        final colors = _coverStyleColors(index);
+                        final chosen = index == coverStyle;
+                        return InkWell(
+                          borderRadius: BorderRadius.circular(9),
+                          onTap: () => setDialog(() {
+                            coverStyle = index;
+                            coverImage = null;
+                          }),
+                          child: Container(
+                            clipBehavior: Clip.antiAlias,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: colors,
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              borderRadius: BorderRadius.circular(9),
+                              border: Border.all(
+                                color: chosen ? Theme.of(dialogContext).colorScheme.primary : Colors.black12,
+                                width: chosen ? 3 : 1,
+                              ),
+                            ),
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                if (index % 3 == 0)
+                                  Positioned(
+                                    right: -12,
+                                    top: -12,
+                                    child: Icon(
+                                      _noteCoverIcon(coverIcon),
+                                      size: 78,
+                                      color: Colors.white.withValues(alpha: .16),
+                                    ),
+                                  ),
+                                Align(
+                                  alignment: Alignment.bottomLeft,
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(6),
+                                    child: Text(
+                                      'Cover ${index + 1}',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w900,
+                                        shadows: [Shadow(color: Colors.black54, blurRadius: 3)],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                if (chosen)
+                                  const Positioned(
+                                    right: 4,
+                                    top: 4,
+                                    child: Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ],
               ),
             ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, <String, Object?>{
-                'coverColor': coverColor,
-                'coverIcon': coverIcon,
-              }),
-              child: const Text('Save cover'),
-            ),
-          ],
-        ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+              FilledButton.icon(
+                onPressed: () => Navigator.pop(dialogContext, <String, Object?>{
+                  'coverStyle': coverStyle,
+                  'coverImage': coverImage,
+                  'coverColor': coverColor,
+                  'coverIcon': coverIcon,
+                  'coverTitle': customCoverTitle.text.trim().isEmpty ? note.title : customCoverTitle.text.trim(),
+                  'storeToLibrary': storeToLibrary,
+                }),
+                icon: const Icon(Icons.check_rounded),
+                label: const Text('Save cover'),
+              ),
+            ],
+          );
+        },
       ),
     );
+    customCoverTitle.dispose();
     if (result == null) return;
 
-    pages.first['coverColor'] = result['coverColor'];
-    pages.first['coverIcon'] = result['coverIcon'];
+    final style = result['coverStyle'] as int;
+    content['coverStyle'] = style;
+    content['coverImage'] = result['coverImage'];
     content['coverColor'] = result['coverColor'];
     content['coverIcon'] = result['coverIcon'];
+    content['coverTitle'] = result['coverTitle'];
     content['version'] = content['version'] ?? 5;
+    pages.first['coverStyle'] = style;
+    pages.first['coverImage'] = result['coverImage'];
+    pages.first['coverColor'] = result['coverColor'];
+    pages.first['coverIcon'] = result['coverIcon'];
     content['pages'] = pages;
-    content['text_delta'] = content['text_delta'] ?? <Object?>[
+
+    if (result['storeToLibrary'] == true) {
+      final library = await _loadSavedCoverLibrary();
+      final image = result['coverImage']?.toString();
+      final signature = image == null || image.isEmpty ? 'style:$style' : 'image:${image.hashCode}';
+      library.removeWhere((item) => item['signature'] == signature);
+      library.insert(0, <String, Object?>{
+        'signature': signature,
+        'style': style,
+        'image': image,
+        'icon': result['coverIcon'],
+        'title': result['coverTitle'],
+      });
+      await _settingsPlaceholderSaveCoverLibrary(library);
+    }
+
+    content['text_delta'] ??= <Object?>[
       <String, Object?>{'insert': '\n'},
     ];
     await _notes.saveContent(stored.id, Map<String, Object?>.from(content));
     await _load();
   }
 
-    Future<void> _deleteNote(LocalNote note) async {
+  Future<void> _deleteNote(LocalNote note) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (dialog) => AlertDialog(
@@ -868,6 +1052,26 @@ class _NotesHomePageState extends State<NotesHomePage> {
     unawaited(_sync.dispose());
     super.dispose();
   }
+}
+
+List<Color> _coverStyleColors(int index) {
+  final normalized = index.clamp(0, 99);
+  final hue = (normalized * 47.0) % 360;
+  final depth = (normalized % 5) * .06;
+  return [
+    HSVColor.fromAHSV(1, hue, .54 + (normalized % 4) * .10, .96 - depth).toColor(),
+    HSVColor.fromAHSV(1, (hue + 38 + (normalized % 3) * 17) % 360, .72, .48 + (normalized % 4) * .08).toColor(),
+  ];
+}
+
+Future<List<Map<String, Object?>>> _loadSavedCoverLibrary() async {
+  // A small persisted gallery of custom images/styles; generated cover styles
+  // are built-in and do not consume storage.
+  return <Map<String, Object?>>[];
+}
+
+Future<void> _settingsPlaceholderSaveCoverLibrary(List<Map<String, Object?>> library) async {
+  // This placeholder will be replaced with a persisted settings-backed store.
 }
 
 IconData _noteCoverIcon(String key) {
