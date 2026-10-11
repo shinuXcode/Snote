@@ -225,16 +225,6 @@ class _SettingsPageState extends State<SettingsPage> {
           onTap: _transfer,
         )),
       ]),
-      if (_query.isEmpty || 'notebook transfer import export notes'.contains(_query)) _group('Notebook Transfer', [
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.import_export_rounded),
-            title: const Text('Import / export notes', style: TextStyle(fontWeight: FontWeight.w800)),
-            subtitle: const Text('Portable Snote package, JSON and best-effort archive import.'),
-            onTap: _transfer,
-          ),
-        ),
-      ]),
       if (_query.isEmpty || 'updates about release app notices'.contains(_query)) _group('Updates & About', [
         Card(
           child: ListTile(

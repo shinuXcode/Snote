@@ -1619,7 +1619,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       CanvasTool.dottedLine,
       CanvasTool.ruler,
       CanvasTool.compass,
-      CanvasTool.protractor,
+      CanvasTool.protractor, CanvasTool.divider,
     ];
     final pencaseTools = defaultTools.where((tool) => tool != CanvasTool.pixelEraser && configured.contains(tool.name)).toList();
 
@@ -1749,6 +1749,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       CanvasTool.ruler: Icons.straighten_rounded,
       CanvasTool.compass: Icons.explore_outlined,
       CanvasTool.protractor: Icons.architecture_rounded,
+      CanvasTool.divider: Icons.straighten_rounded,
       CanvasTool.rayDiagram: Icons.light_mode_outlined,
       CanvasTool.convexLens: Icons.lens_outlined,
       CanvasTool.concaveLens: Icons.remove_red_eye_outlined,
