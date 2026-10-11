@@ -100,6 +100,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   Timer? _saveTimer;
   bool _savePending = false;
   bool _saveInFlight = false;
+  int? _noteCoverColor;
+  String? _noteCoverIcon;
   StateSetter? _templateSheetRefresh;
 
   Map<String, Object?> get pageData => _pages[_page];
@@ -348,14 +350,23 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   Future<void> _load() async {
     final note = await _repo.get(widget.note.id);
     final parsed = <Map<String, Object?>>[];
+    int? storedCoverColor;
+    String? storedCoverIcon;
     if (note?.contentJson != null) {
       try {
         final json = jsonDecode(note!.contentJson!);
         if (json is Map<String, dynamic>) {
+          storedCoverColor = (json['coverColor'] as num?)?.toInt();
+          storedCoverIcon = json['coverIcon']?.toString();
           final raw = json['pages'];
           if (raw is List) {
             for (final item in raw) {
-              if (item is Map) parsed.add(_normalize(item.cast<String, Object?>()));
+              if (item is Map) {
+                final page = _normalize(item.cast<String, Object?>());
+                storedCoverColor ??= (page['coverColor'] as num?)?.toInt();
+                storedCoverIcon ??= page['coverIcon']?.toString();
+                parsed.add(page);
+              }
             }
           }
           final delta = json['text_delta'];
@@ -370,6 +381,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     setState(() {
       _pages = parsed;
       _page = 0;
+      _noteCoverColor = storedCoverColor;
+      _noteCoverIcon = storedCoverIcon;
       _loading = false;
     });
     _restoreToolbar();
@@ -463,6 +476,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     try {
       await _repo.saveContent(widget.note.id, {
         'version': 5,
+        'coverColor': _noteCoverColor,
+        'coverIcon': _noteCoverIcon,
         'pages': _pages,
         'text_delta': _quill.document.toDelta().toJson(),
       });
