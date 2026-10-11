@@ -44,6 +44,9 @@ jobs:
           from pathlib import Path
           build = Path('android/app/build.gradle.kts')
           text = build.read_text()
+          # receive_sharing_intent requires Android API 37 metadata.
+          text = text.replace('compileSdk = flutter.compileSdkVersion', 'compileSdk = 37')
+          text = text.replace('compileSdk = 36', 'compileSdk = 37')
           text = text.replace('minSdk = flutter.minSdkVersion', 'minSdk = 24')
           if 'applicationId = "com.snote.snote"' not in text and 'applicationId = "com.snote.snote.beta"' not in text:
               raise SystemExit('Could not locate generated Android applicationId; refusing to build an in-place beta')
@@ -118,13 +121,13 @@ jobs:
         if: success() && github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.1.0-beta.41
-          name: Snote 1.1 Beta 41
+          tag_name: v1.1.0-beta.42
+          name: Snote 1.1 Beta 42
           prerelease: true
           make_latest: false
           target_commitish: ${{ github.sha }}
           files: Snote-Android-Beta.apk
           body: |
-            Snote 1.1 beta 41 build for testing only.
+            Snote 1.1 beta 42 build for testing only.
             This APK uses the separate Android application ID com.snote.snote.beta, so it can be installed beside the stable Snote app without replacing it or touching the stable app's local data.
-            Beta 2 also fixes overlap between the canvas and fixed rails, prevents the movable toolbox from opening under the left rail, and adds assertions for shape rendering and lasso duplication.
+            Includes the canvas/toolbar overlap fixes and tests for shape rendering and lasso duplication. Android build targets API 37 to satisfy the receive_sharing_intent dependency.
