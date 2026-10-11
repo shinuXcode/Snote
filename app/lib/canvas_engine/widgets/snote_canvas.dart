@@ -34,6 +34,9 @@ class _CanvasRepaint extends ChangeNotifier {
   double eraserRadius = 0;
   bool showEraser = false;
   Color? fillColor;
+  List<Stroke> selectionPreview = const <Stroke>[];
+  Rect? selectionBounds;
+  Set<String> selectedIds = const <String>{};
 
   void update({
     required List<StrokePoint> points,
@@ -47,6 +50,9 @@ class _CanvasRepaint extends ChangeNotifier {
     required double eraserRadius,
     required bool showEraser,
     required Color? fillColor,
+    List<Stroke> selectionPreview = const <Stroke>[],
+    Rect? selectionBounds,
+    Set<String> selectedIds = const <String>{},
   }) {
     this.points = points;
     this.pen = pen;
@@ -59,6 +65,9 @@ class _CanvasRepaint extends ChangeNotifier {
     this.eraserRadius = eraserRadius;
     this.showEraser = showEraser;
     this.fillColor = fillColor;
+    this.selectionPreview = selectionPreview;
+    this.selectionBounds = selectionBounds;
+    this.selectedIds = selectedIds;
     notifyListeners();
   }
 
@@ -139,7 +148,56 @@ class _LiveInkPainter extends CustomPainter {
       }
     }
 
-    if (points.isEmpty && lassoPath.length <= 1 && !showEraser) return;
+    if (liveState.selectionPreview.isNotEmpty) {
+      SnoteCanvasPainter(
+        strokes: liveState.selectionPreview,
+        activeStroke: null,
+        activePoints: const <StrokePoint>[],
+        activePen: null,
+        activeTool: null,
+        activeFill: false,
+        activeCustomSides: 6,
+        activeStickerText: null,
+        selectedIds: liveState.selectedIds,
+        lassoPath: const <Offset>[],
+        drawStrokes: true,
+        drawActive: false,
+      ).paint(canvas, size);
+    }
+
+    final selectionBounds = liveState.selectionBounds;
+    if (selectionBounds != null) {
+      final box = selectionBounds.inflate(7);
+      final outline = Paint()
+        ..color = const Color(0xff4f6df6)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5;
+      canvas.drawRect(box, outline);
+      final handles = <Offset>[
+        box.topLeft,
+        box.topRight,
+        box.bottomRight,
+        box.bottomLeft,
+      ];
+      final handlePaint = Paint()
+        ..color = const Color(0xff4f6df6)
+        ..style = PaintingStyle.fill;
+      for (final handle in handles) {
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromCenter(center: handle, width: 9, height: 9),
+            const Radius.circular(2),
+          ),
+          handlePaint,
+        );
+      }
+    }
+
+    if (points.isEmpty &&
+        lassoPath.length <= 1 &&
+        !showEraser &&
+        liveState.selectionPreview.isEmpty &&
+        selectionBounds == null) return;
 
     if (lassoPath.length > 1) {
       final p = Paint()
@@ -247,6 +305,14 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
 
   ui.Picture? _documentPicture;
 
+  bool _selectionTransformActive = false;
+  Offset? _selectionStart;
+  Rect? _selectionBoundsAtStart;
+  int? _resizeCorner;
+  Offset? _resizeFixedAnchor;
+  List<Stroke> _selectionOriginalStrokes = const <Stroke>[];
+  List<Stroke> _selectionPreviewStrokes = const <Stroke>[];
+
   Offset? _eraserPoint;
   double _eraserRadius = 0;
   int _activePointer = -1;
@@ -335,11 +401,14 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _notifySelection();
   }
 
-  void _recordDocumentPicture() {
+  void _recordDocumentPicture({bool excludeSelected = false}) {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
+    final visibleStrokes = excludeSelected
+        ? _strokes.where((stroke) => !_selected.contains(stroke.id)).toList(growable: false)
+        : List<Stroke>.unmodifiable(_strokes);
     SnoteCanvasPainter(
-      strokes: List<Stroke>.unmodifiable(_strokes),
+      strokes: visibleStrokes,
       activeStroke: null,
       activePoints: const <StrokePoint>[],
       activePen: null,
@@ -636,6 +705,12 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
             (event.kind == PointerDeviceKind.stylus &&
                 (event.buttons & kSecondaryStylusButton) != 0));
 
+    if (!_temporaryEraser &&
+        widget.tool == CanvasTool.lasso &&
+        _beginSelectionTransform(event.localPosition)) {
+      return;
+    }
+
     if (_temporaryEraser ||
         widget.tool == CanvasTool.eraser ||
         widget.tool == CanvasTool.pixelEraser) {
@@ -701,6 +776,11 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
   void _pointerMove(PointerMoveEvent event) {
     if (event.pointer != _activePointer || _ignorePointer) return;
     _recordInput();
+
+    if (_selectionTransformActive) {
+      _updateSelectionTransform(event.localPosition);
+      return;
+    }
 
     if (_activeTool == CanvasTool.eraser ||
         _activeTool == CanvasTool.pixelEraser ||
@@ -769,6 +849,13 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
 
     _recordInput();
 
+    if (_selectionTransformActive) {
+      _finishSelectionTransform();
+      _lock.end(event);
+      _activePointer = -1;
+      return;
+    }
+
     if (_temporaryEraser) {
       _eraseSnapshotTaken = false;
       _temporaryEraser = false;
@@ -809,10 +896,159 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
 
     _eraseSnapshotTaken = false;
     _temporaryEraser = false;
+    if (_selectionTransformActive) {
+      _cancelSelectionTransform();
+    }
     _clearActiveState();
     _input?.reset();
     _lock.end(event);
     _activePointer = -1;
+  }
+
+  bool _beginSelectionTransform(Offset point) {
+    if (_selected.isEmpty) return false;
+    final selectedStrokes = _strokes
+        .where((stroke) => _selected.contains(stroke.id))
+        .toList(growable: false);
+    final bounds = _boundsForStrokes(selectedStrokes);
+    if (bounds == null) return false;
+
+    final corners = <Offset>[
+      bounds.topLeft,
+      bounds.topRight,
+      bounds.bottomRight,
+      bounds.bottomLeft,
+    ];
+    int? cornerIndex;
+    for (var i = 0; i < corners.length; i++) {
+      if ((corners[i] - point).distance <= 20) {
+        cornerIndex = i;
+        break;
+      }
+    }
+    if (cornerIndex == null && !bounds.inflate(12).contains(point)) {
+      return false;
+    }
+
+    _snapshot();
+    _selectionTransformActive = true;
+    _selectionStart = point;
+    _selectionBoundsAtStart = bounds;
+    _resizeCorner = cornerIndex;
+    _resizeFixedAnchor = cornerIndex == null
+        ? null
+        : corners[(cornerIndex + 2) % 4];
+    _selectionOriginalStrokes = selectedStrokes;
+    _selectionPreviewStrokes = selectedStrokes;
+    _activeTool = CanvasTool.lasso;
+    _activePen = widget.pen;
+    _live = const <StrokePoint>[];
+    _real = const <StrokePoint>[];
+    _recordDocumentPicture(excludeSelected: true);
+    _syncLivePainter();
+    return true;
+  }
+
+  void _updateSelectionTransform(Offset point) {
+    final start = _selectionStart;
+    if (start == null || _selectionOriginalStrokes.isEmpty) return;
+
+    final corner = _resizeCorner;
+    final fixed = _resizeFixedAnchor;
+    if (corner == null || fixed == null) {
+      final delta = point - start;
+      _selectionPreviewStrokes = _selectionOriginalStrokes.map((stroke) {
+        return stroke.copyWith(
+          points: stroke.points
+              .map((sample) => sample.copyWith(position: sample.position + delta))
+              .toList(growable: false),
+        );
+      }).toList(growable: false);
+    } else {
+      final bounds = _selectionBoundsAtStart!;
+      final corners = <Offset>[
+        bounds.topLeft,
+        bounds.topRight,
+        bounds.bottomRight,
+        bounds.bottomLeft,
+      ];
+      final movingStart = corners[corner];
+      final startDx = movingStart.dx - fixed.dx;
+      final startDy = movingStart.dy - fixed.dy;
+      var scaleX = startDx.abs() < 1e-6 ? 1.0 : (point.dx - fixed.dx) / startDx;
+      var scaleY = startDy.abs() < 1e-6 ? 1.0 : (point.dy - fixed.dy) / startDy;
+      scaleX = scaleX.clamp(-20.0, 20.0).toDouble();
+      scaleY = scaleY.clamp(-20.0, 20.0).toDouble();
+      if (scaleX.abs() < .04) scaleX = scaleX.isNegative ? -.04 : .04;
+      if (scaleY.abs() < .04) scaleY = scaleY.isNegative ? -.04 : .04;
+
+      _selectionPreviewStrokes = _selectionOriginalStrokes.map((stroke) {
+        return stroke.copyWith(
+          points: stroke.points.map((sample) {
+            final p = sample.position;
+            return sample.copyWith(
+              position: Offset(
+                fixed.dx + (p.dx - fixed.dx) * scaleX,
+                fixed.dy + (p.dy - fixed.dy) * scaleY,
+              ),
+            );
+          }).toList(growable: false),
+        );
+      }).toList(growable: false);
+    }
+    _syncLivePainter();
+  }
+
+  void _finishSelectionTransform() {
+    if (!_selectionTransformActive) return;
+    final replacements = {
+      for (final stroke in _selectionPreviewStrokes) stroke.id: stroke,
+    };
+    for (var i = 0; i < _strokes.length; i++) {
+      final replacement = replacements[_strokes[i].id];
+      if (replacement != null) _strokes[i] = replacement;
+    }
+    _selectionTransformActive = false;
+    _selectionStart = null;
+    _selectionBoundsAtStart = null;
+    _resizeCorner = null;
+    _resizeFixedAnchor = null;
+    _selectionOriginalStrokes = const <Stroke>[];
+    _selectionPreviewStrokes = const <Stroke>[];
+    _activePen = null;
+    _activeTool = null;
+    _live = const <StrokePoint>[];
+    _real = const <StrokePoint>[];
+    _lasso.clear();
+    _input?.reset();
+    _finishDocumentMutation();
+    _notifySelection();
+    _syncLivePainter();
+  }
+
+  void _cancelSelectionTransform() {
+    if (!_selectionTransformActive) return;
+    _selectionTransformActive = false;
+    _selectionStart = null;
+    _selectionBoundsAtStart = null;
+    _resizeCorner = null;
+    _resizeFixedAnchor = null;
+    _selectionOriginalStrokes = const <Stroke>[];
+    _selectionPreviewStrokes = const <Stroke>[];
+    _activePen = null;
+    _activeTool = null;
+    _live = const <StrokePoint>[];
+    _real = const <StrokePoint>[];
+    _lasso.clear();
+    _input?.reset();
+    _recordDocumentPicture();
+    _syncLivePainter();
+  }
+
+  Rect? _boundsForStrokes(Iterable<Stroke> strokes) {
+    final points = strokes.expand((stroke) => stroke.points).toList(growable: false);
+    if (points.isEmpty) return null;
+    return _bounds(points);
   }
 
   void _clearActiveState() {
@@ -1076,6 +1312,15 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
               _activeTool == CanvasTool.pixelEraser ||
               _temporaryEraser),
       fillColor: widget.fillColor,
+      selectionPreview: _selectionTransformActive
+          ? _selectionPreviewStrokes
+          : const <Stroke>[],
+      selectionBounds: _boundsForStrokes(
+        _selectionTransformActive
+            ? _selectionPreviewStrokes
+            : _strokes.where((stroke) => _selected.contains(stroke.id)),
+      ),
+      selectedIds: Set<String>.unmodifiable(_selected),
     );
   }
 
