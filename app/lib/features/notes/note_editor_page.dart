@@ -319,6 +319,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   void _selectTool(CanvasTool tool) {
     setState(() {
       _tool = tool;
+      _penSize = _toolSizeOverrides[tool.name] ?? _penSize;
+      _penColor = _toolColorOverrides[tool.name] ?? _penColor;
+      _dashed = _toolDashedOverrides[tool.name] ?? false;
       _pan = false;
       _shapePanel = false;
       if (tool != CanvasTool.sticker) _sticker = null;
@@ -951,6 +954,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   onSubmitted: (_) => _save(force: true),
                 ),
               ),
+              _compactAction(tooltip: 'Save note', icon: Icons.save_outlined, onPressed: () => _save(force: true)),
               _compactAction(tooltip: 'Pages / thumbnails', icon: Icons.view_sidebar_outlined, onPressed: () => setState(() => _preview = !_preview)),
               _compactAction(tooltip: 'Page templates', icon: Icons.grid_4x4_rounded, onPressed: _paperSheet),
               _compactAction(tooltip: 'Shapes and diagrams', icon: Icons.category_outlined, onPressed: () => setState(() => _shapePanel = !_shapePanel)),
@@ -1381,7 +1385,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       CanvasTool.lasso: Icons.gesture_rounded,
       CanvasTool.line: Icons.horizontal_rule_rounded,
       CanvasTool.dottedLine: Icons.more_horiz_rounded,
-      CanvasTool.dashedLine: Icons.more_rounded,
+      CanvasTool.dashedLine: Icons.more_horiz_rounded,
       CanvasTool.arrow: Icons.arrow_right_alt_rounded,
       CanvasTool.vectorArrow: Icons.north_east_rounded,
       CanvasTool.projectilePath: Icons.trending_up_rounded,
@@ -1417,7 +1421,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       CanvasTool.forceDiagram: Icons.device_hub_outlined,
       CanvasTool.pulley: Icons.settings_input_component_outlined,
       CanvasTool.circuitResistor: Icons.electrical_services_outlined,
-      CanvasTool.circuitBattery: Icons.battery_4_bar_outlined,
+      CanvasTool.circuitBattery: Icons.battery_charging_full_rounded,
       CanvasTool.capacitor: Icons.electrical_services_outlined,
       CanvasTool.circuitSwitch: Icons.toggle_on_outlined,
       CanvasTool.circuitLamp: Icons.lightbulb_outline_rounded,
@@ -2039,8 +2043,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                             ),
                           ),
                           Positioned(
-                            left: 4,
-                            top: 4,
+                            right: 4,
+                            bottom: 4,
                             child: Material(
                               color: Theme.of(context).colorScheme.surface.withValues(alpha: .84),
                               borderRadius: BorderRadius.circular(9),
@@ -2073,8 +2077,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                             ),
                           ),
                           Positioned(
-                            right: 7,
-                            bottom: 6,
+                            left: 7,
+                            bottom: 7,
                             child: Text((index + 1).toString(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800)),
                           ),
                         ],
@@ -2299,7 +2303,16 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           ]),
           actions: [
             TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
-            FilledButton(onPressed: () { setState(() => _penColor = color); Navigator.pop(dialogContext); }, child: const Text('Use')),
+            FilledButton(onPressed: () {
+              setState(() {
+                _penColor = color;
+                _toolColorOverrides[_tool.name] = color;
+              });
+              unawaited(_settings.setString('toolColors', jsonEncode({
+                for (final entry in _toolColorOverrides.entries) entry.key: entry.value.toARGB32(),
+              })));
+              Navigator.pop(dialogContext);
+            }, child: const Text('Use')),
           ],
         ),
       ),
@@ -2318,6 +2331,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     var exponent = _settings.getDouble('pressureExponent');
     var lassoStyle = _settings.getString('lassoStyle');
     var eraserMode = _settings.getString('eraserMode');
+    var pressureErase = _settings.getBool('pressureErase');
+    var pressureEraseArea = _settings.getBool('pressureEraseArea');
 
     await showModalBottomSheet<void>(
       context: context,
@@ -2372,10 +2387,21 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     ),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
-                      value: true,
-                      onChanged: (_) {},
+                      value: pressureErase,
+                      onChanged: (value) {
+                        setModal(() => pressureErase = value);
+                        unawaited(_settings.setBool('pressureErase', value));
+                      },
                       title: const Text('Pressure-responsive radius'),
-                      subtitle: const Text('The eraser radius changes with stylus pressure; configure the response in Settings.'),
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: pressureEraseArea,
+                      onChanged: (value) {
+                        setModal(() => pressureEraseArea = value);
+                        unawaited(_settings.setBool('pressureEraseArea', value));
+                      },
+                      title: const Text('Increase radius with pressure'),
                     ),
                   ],
                   if (target == CanvasTool.lasso) ...[
