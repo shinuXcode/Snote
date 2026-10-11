@@ -42,18 +42,28 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          p = Path('android/app/build.gradle.kts')
-          s = p.read_text()
-          s = s.replace('minSdk = flutter.minSdkVersion', 'minSdk = 24')
-          s = s.replace('applicationId = "com.snote.snote"', 'applicationId = "com.snote.snote.beta"')
-         p.write_text(s)
-         p = Path('android/app/src/main/AndroidManifest.xml')
-          s = p.read_text()
-          if 'android.permission.CAMERA' not in s:
-              s = s.replace('</manifest>', '    <uses-permission android:name="android.permission.CAMERA" />\n</manifest>')
           import re
-          s = re.sub(r'android:label="[^"]+"', 'android:label="Snote Beta"', s, count=1)
-          p.write_text(s)
+
+          gradle = Path('android/app/build.gradle.kts')
+          text = gradle.read_text()
+          text = text.replace('minSdk = flutter.minSdkVersion', 'minSdk = 24')
+          text = text.replace(
+              'applicationId = "com.snote.snote"',
+              'applicationId = "com.snote.snote.beta"',
+          )
+          if 'applicationId = "com.snote.snote.beta"' not in text:
+              raise SystemExit('Could not set the separate beta application ID')
+          gradle.write_text(text)
+
+          manifest = Path('android/app/src/main/AndroidManifest.xml')
+          text = manifest.read_text()
+          if 'android.permission.CAMERA' not in text:
+              text = text.replace(
+                  '</manifest>',
+                  '    <uses-permission android:name="android.permission.CAMERA" />\\n</manifest>',
+              )
+          text = re.sub(r'android:label="[^"]+"', 'android:label="Snote Beta"', text, count=1)
+          manifest.write_text(text)
           PY
 
       - name: Install dependencies
@@ -62,7 +72,7 @@ jobs:
 
       - name: Format check
         working-directory: app
-        run: dart format .
+        run: dart format --output=none --set-exit-if-changed .
 
       - name: Analyze
         working-directory: app
@@ -99,5 +109,5 @@ jobs:
           files: Snote-Android-Beta.apk
           body: |
             Snote 1.1 beta build for testing only.
-            This is a prerelease build from the editor redesign branch. It is separate from the stable production release.
-            Test stylus live ink, lasso selection and transforms, page templates, page navigation, persistence, and report any issues before stable release.
+            This APK uses a separate Android application ID so it can be tested alongside stable Snote.
+            Test stylus live ink, lasso selection and transforms, page templates, scientific shapes, and persistence before stable release.
