@@ -165,9 +165,9 @@ class SnoteCanvasPainter extends CustomPainter {
       ..strokeJoin = paint.strokeJoin
       ..isAntiAlias = true;
 
-    if (stroke.fill && !_isScienceShape(stroke.shape)) {
+    if (stroke.fill) {
       final fill = Paint()
-        ..color = stroke.pen.color.withValues(alpha: stroke.fillOpacity.clamp(0, 1))
+        ..color = (stroke.fillColor ?? stroke.pen.color).withValues(alpha: stroke.fillOpacity.clamp(0, 1))
         ..style = PaintingStyle.fill
         ..isAntiAlias = true;
       _drawShapePath(canvas, stroke, fill, rect);
@@ -401,6 +401,7 @@ class SnoteCanvasPainter extends CustomPainter {
         'ruler',
         'compass',
         'protractor',
+        'divider',
         'dottedLine',
         'dashedLine',
         'cartesianPlane',
@@ -409,7 +410,7 @@ class SnoteCanvasPainter extends CustomPainter {
   void _drawScienceShape(Canvas canvas, String shape, Rect rect, Paint source) {
     final p = Paint()
       ..color = source.color
-      ..style = PaintingStyle.stroke
+      ..style = source.style
       ..strokeWidth = source.strokeWidth.clamp(0.7, 8).toDouble()
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
@@ -971,6 +972,14 @@ class SnoteCanvasPainter extends CustomPainter {
         canvas.drawArc(Rect.fromCenter(center:at(.5,.72),width:w*.76,height:h*.76),math.pi,math.pi,false,p);
         line(.12,.72,.88,.72);
         for(var i=0;i<=10;i++){final a=math.pi+i*math.pi/10;line(.5+.35*math.cos(a),.72+.35*math.sin(a),.5+.3*math.cos(a),.72+.3*math.sin(a));}
+        break;
+      case 'divider':
+        drawOval(.5,.2,.10,.08);
+        line(.5,.24,.31,.78);
+        line(.5,.24,.69,.78);
+        line(.5,.24,.5,.12);
+        circle(.31,.78,.025);
+        circle(.69,.78,.025);
         break;
       case 'dottedLine':
       case 'dashedLine':

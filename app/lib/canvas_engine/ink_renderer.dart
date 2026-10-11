@@ -80,6 +80,13 @@ class InkRenderer {
           velocity: velocity * (.55 + pen.velocitySensitivity * 1.45),
           pressure: .45 + pressure * (.55 + pen.pressureSensitivity * .45),
         );
+        final tangentAngle = math.atan2(
+          point.position.dy - previous.position.dy,
+          point.position.dx - previous.position.dx,
+        );
+        final nibAngle = point.orientation.isFinite ? point.orientation : 0.0;
+        final nibAcrossStroke = math.sin(tangentAngle - nibAngle).abs();
+        width *= .32 + nibAcrossStroke * 1.18;
       } else {
         final velocityFactor = 1 -
             (velocity / 3.2).clamp(0, 1).toDouble() *

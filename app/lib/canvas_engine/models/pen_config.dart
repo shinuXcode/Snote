@@ -121,6 +121,7 @@ enum CanvasTool {
   leaf,
   microscope,
   sticker,
+  divider,
 }
 
 extension CanvasToolX on CanvasTool {
@@ -232,6 +233,7 @@ extension CanvasToolX on CanvasTool {
     CanvasTool.ruler,
     CanvasTool.compass,
     CanvasTool.protractor,
+    CanvasTool.divider,
     CanvasTool.dottedLine,
     CanvasTool.dashedLine,
     CanvasTool.cartesianPlane,
@@ -357,6 +359,7 @@ extension CanvasToolX on CanvasTool {
       case CanvasTool.ruler: return 'Ruler';
       case CanvasTool.compass: return 'Compass';
       case CanvasTool.protractor: return 'Protractor';
+      case CanvasTool.divider: return 'Divider';
       case CanvasTool.dottedLine: return 'Dotted line';
       case CanvasTool.dashedLine: return 'Dashed line';
       case CanvasTool.cartesianPlane: return 'Cartesian plane';

@@ -241,6 +241,7 @@ class SnoteCanvas extends StatefulWidget {
   final CanvasTool tool;
   final ValueChanged<Map<String, Object?>>? onChanged;
   final ValueChanged<int>? onSelectionChanged;
+  final ValueChanged<Rect?>? onSelectionBoundsChanged;
   final VoidCallback? onEraserMiss;
   final bool autoRecognition;
   final Map<String, Object?>? initialDocument;
@@ -270,6 +271,7 @@ class SnoteCanvas extends StatefulWidget {
     this.tool = CanvasTool.ballpoint,
     this.onChanged,
     this.onSelectionChanged,
+    this.onSelectionBoundsChanged,
     this.onEraserMiss,
     this.autoRecognition = true,
     this.initialDocument,
@@ -689,8 +691,29 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     );
   }
 
+  Rect? _selectedStrokeBounds() {
+    final points = _strokes
+        .where((stroke) => _selected.contains(stroke.id))
+        .expand((stroke) => stroke.points)
+        .map((point) => point.position)
+        .toList(growable: false);
+    if (points.isEmpty) return null;
+    var left = points.first.dx;
+    var right = points.first.dx;
+    var top = points.first.dy;
+    var bottom = points.first.dy;
+    for (final point in points.skip(1)) {
+      left = math.min(left, point.dx);
+      right = math.max(right, point.dx);
+      top = math.min(top, point.dy);
+      bottom = math.max(bottom, point.dy);
+    }
+    return Rect.fromLTRB(left, top, right, bottom);
+  }
+
   void _notifySelection() {
     widget.onSelectionChanged?.call(_selected.length);
+    widget.onSelectionBoundsChanged?.call(_selectedStrokeBounds());
     _bindController();
     if (mounted) setState(() {});
   }
