@@ -34,7 +34,7 @@ jobs:
       - name: Generate Android runner
         working-directory: app
         run: |
-          flutter create --platforms=android --org=com.snote .
+          flutter create --platforms=android --org=com.snote --no-pub .
           rm -f test/widget_test.dart
 
       - name: Configure Android beta identity
