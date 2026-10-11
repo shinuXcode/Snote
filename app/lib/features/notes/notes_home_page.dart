@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../core/settings/app_settings.dart';
 import '../../data/local/folder_repository.dart';
 import '../../data/local/note_repository.dart';
 import '../../data/local/notebook_transfer_service.dart';
@@ -418,6 +419,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
   }
 
   Future<void> _customizeNoteCover(LocalNote note) async {
+    final savedCovers = await _loadSavedCoverLibrary();
     final stored = await _notes.get(note.id);
     if (stored == null || !mounted) return;
 
@@ -1065,13 +1067,17 @@ List<Color> _coverStyleColors(int index) {
 }
 
 Future<List<Map<String, Object?>>> _loadSavedCoverLibrary() async {
-  // A small persisted gallery of custom images/styles; generated cover styles
-  // are built-in and do not consume storage.
+  try {
+    final decoded = jsonDecode(SnoteSettings.instance.getString('coverLibrary'));
+    if (decoded is List) {
+      return decoded.whereType<Map>().map((item) => Map<String, Object?>.from(item)).toList();
+    }
+  } catch (_) {}
   return <Map<String, Object?>>[];
 }
 
 Future<void> _settingsPlaceholderSaveCoverLibrary(List<Map<String, Object?>> library) async {
-  // This placeholder will be replaced with a persisted settings-backed store.
+  await SnoteSettings.instance.setString('coverLibrary', jsonEncode(library.take(50).toList()));
 }
 
 IconData _noteCoverIcon(String key) {
