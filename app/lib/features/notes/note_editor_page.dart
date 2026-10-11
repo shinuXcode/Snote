@@ -1954,67 +1954,167 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     );
   }
 
-  Future<void> _styleSheet() async {
-    var size = _penSize;
+  Future<void> _styleSheet([CanvasTool? requestedTool]) async {
+    final target = requestedTool ?? _tool;
+    var size = _toolSizeOverrides[target.name] ?? _penSize;
     var opacity = _opacity;
     var fill = _fill;
     var sides = _sides;
+    var color = _toolColorOverrides[target.name] ?? _penColor;
+    var dashed = _toolDashedOverrides[target.name] ?? _dashed;
     var curve = _settings.getString('pressureCurve');
     var exponent = _settings.getDouble('pressureExponent');
+    var lassoStyle = _settings.getString('lassoStyle');
+    var eraserMode = _settings.getString('eraserMode');
+
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       builder: (sheetContext) => StatefulBuilder(
-        builder: (_, setModal) => Padding(
-          padding: const EdgeInsets.all(22),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Align(alignment: Alignment.centerLeft, child: Text('Tool customization', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900))),
-            ListTile(title: Text('Stroke size ' + size.toStringAsFixed(1)), subtitle: Slider(value: size, min: .7, max: 18, divisions: 68, onChanged: (v) => setModal(() => size = v))),
-            ListTile(title: Text('Opacity ' + (opacity * 100).round().toString() + '%'), subtitle: Slider(value: opacity, min: .05, max: 1, onChanged: (v) => setModal(() => opacity = v))),
-            SwitchListTile(contentPadding: EdgeInsets.zero, value: fill, onChanged: (v) => setModal(() => fill = v), title: const Text('Fill shapes')),
-            if (_tool == CanvasTool.customPolygon)
-              ListTile(title: Text('Polygon sides ' + sides.toString()), subtitle: Slider(value: sides.toDouble(), min: 3, max: 24, divisions: 21, onChanged: (v) => setModal(() => sides = v.round()))),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text('Pressure response', style: Theme.of(context).textTheme.titleSmall),
-            ),
-            DropdownButtonFormField<String>(
-              value: curve,
-              items: const [
-                DropdownMenuItem(value: 'soft', child: Text('Soft')),
-                DropdownMenuItem(value: 'linear', child: Text('Linear')),
-                DropdownMenuItem(value: 'firm', child: Text('Firm')),
-                DropdownMenuItem(value: 'custom', child: Text('Custom')),
-              ],
-              onChanged: (value) {
-                if (value != null) setModal(() => curve = value);
-              },
-            ),
-            if (curve == 'custom')
-              ListTile(
-                title: Text('Custom curve ' + exponent.toStringAsFixed(2)),
-                subtitle: Slider(
-                  value: exponent.clamp(.35, 2.5),
-                  min: .35,
-                  max: 2.5,
-                  onChanged: (v) => setModal(() => exponent = v),
-                ),
+        builder: (_, setModal) => SafeArea(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.viewInsetsOf(context).bottom + 20),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${target.label} options', style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 8),
+                  Text('Stroke size: ${size.toStringAsFixed(1)}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                  Slider(value: size.clamp(.5, 60), min: .5, max: 60, divisions: 119, onChanged: (v) => setModal(() => size = v)),
+                  Text('Opacity: ${(opacity * 100).round()}%'),
+                  Slider(value: opacity.clamp(.05, 1), min: .05, max: 1, onChanged: (v) => setModal(() => opacity = v)),
+                  const SizedBox(height: 4),
+                  const Text('Color', style: TextStyle(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _penPalette.map((choice) => InkWell(
+                      onTap: () => setModal(() => color = choice),
+                      borderRadius: BorderRadius.circular(30),
+                      child: Container(
+                        width: 30,
+                        height: 30,
+                        decoration: BoxDecoration(
+                          color: choice,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: choice.toARGB32() == color.toARGB32() ? Theme.of(context).colorScheme.primary : Colors.black26, width: choice.toARGB32() == color.toARGB32() ? 3 : 1),
+                        ),
+                      ),
+                    )).toList(),
+                  ),
+                  const SizedBox(height: 10),
+                  if (target == CanvasTool.eraser || target == CanvasTool.pixelEraser) ...[
+                    const Text('Erasing mode', style: TextStyle(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 4),
+                    SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(value: 'stroke', label: Text('Stroke eraser'), icon: Icon(Icons.gesture_rounded)),
+                        ButtonSegment(value: 'pixel', label: Text('Pixel eraser'), icon: Icon(Icons.auto_fix_high_rounded)),
+                      ],
+                      selected: {eraserMode},
+                      onSelectionChanged: (values) => setModal(() => eraserMode = values.first),
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: true,
+                      onChanged: (_) {},
+                      title: const Text('Pressure-responsive radius'),
+                      subtitle: const Text('The eraser radius changes with stylus pressure; configure the response in Settings.'),
+                    ),
+                  ],
+                  if (target == CanvasTool.lasso) ...[
+                    const SizedBox(height: 8),
+                    const Text('Selection outline', style: TextStyle(fontWeight: FontWeight.w800)),
+                    SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(value: 'solid', label: Text('Solid'), icon: Icon(Icons.horizontal_rule_rounded)),
+                        ButtonSegment(value: 'dashed', label: Text('Dashed'), icon: Icon(Icons.more_horiz_rounded)),
+                      ],
+                      selected: {lassoStyle},
+                      onSelectionChanged: (values) => setModal(() => lassoStyle = values.first),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text('Draw around content with the lasso, then drag the selection toolbar to place its options wherever you need them.'),
+                  ] else if (target.isShape) ...[
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: dashed,
+                      onChanged: (value) => setModal(() => dashed = value),
+                      title: const Text('Dashed outline'),
+                    ),
+                  ],
+                  if (target.isShape)
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: fill,
+                      onChanged: (value) => setModal(() => fill = value),
+                      title: const Text('Fill shape'),
+                    ),
+                  if (target == CanvasTool.customPolygon)
+                    ListTile(
+                      title: Text('Polygon sides: $sides'),
+                      subtitle: Slider(value: sides.toDouble(), min: 3, max: 24, divisions: 21, onChanged: (v) => setModal(() => sides = v.round())),
+                    ),
+                  if (target.isPen) ...[
+                    const SizedBox(height: 6),
+                    const Text('Pressure response', style: TextStyle(fontWeight: FontWeight.w800)),
+                    DropdownButtonFormField<String>(
+                      value: curve,
+                      items: const [
+                        DropdownMenuItem(value: 'soft', child: Text('Soft')),
+                        DropdownMenuItem(value: 'linear', child: Text('Linear')),
+                        DropdownMenuItem(value: 'firm', child: Text('Firm')),
+                        DropdownMenuItem(value: 'custom', child: Text('Custom')),
+                      ],
+                      onChanged: (value) { if (value != null) setModal(() => curve = value); },
+                    ),
+                    if (curve == 'custom')
+                      ListTile(
+                        title: Text('Custom pressure curve: ${exponent.toStringAsFixed(2)}'),
+                        subtitle: Slider(value: exponent.clamp(.35, 2.5), min: .35, max: 2.5, onChanged: (v) => setModal(() => exponent = v)),
+                      ),
+                  ],
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () async {
+                        setState(() {
+                          _toolSizeOverrides[target.name] = size;
+                          _toolColorOverrides[target.name] = color;
+                          _toolDashedOverrides[target.name] = dashed;
+                          if (target == _tool) {
+                            _penSize = size;
+                            _penColor = color;
+                            _opacity = opacity;
+                            _fill = fill;
+                            _dashed = dashed;
+                            _sides = sides;
+                          }
+                        });
+                        await _settings.setString('toolSizes', jsonEncode(_toolSizeOverrides));
+                        await _settings.setString('toolColors', jsonEncode({for (final entry in _toolColorOverrides.entries) entry.key: entry.value.toARGB32()}));
+                        await _settings.setString('toolDashed', jsonEncode(_toolDashedOverrides));
+                        await _settings.setString('pressureCurve', curve);
+                        await _settings.setDouble('pressureExponent', exponent);
+                        if (target == CanvasTool.lasso) await _settings.setString('lassoStyle', lassoStyle);
+                        if (target == CanvasTool.eraser || target == CanvasTool.pixelEraser) {
+                          await _settings.setString('eraserMode', eraserMode);
+                        }
+                        if (mounted) Navigator.pop(sheetContext);
+                      },
+                      icon: const Icon(Icons.check_rounded),
+                      label: const Text('Save tool options'),
+                    ),
+                  ),
+                ],
               ),
-            FilledButton(
-              onPressed: () {
-                setState(() {
-                  _penSize = size;
-                  _opacity = opacity;
-                  _fill = fill;
-                  _sides = sides;
-                });
-                unawaited(_settings.setString('pressureCurve', curve));
-                unawaited(_settings.setDouble('pressureExponent', exponent));
-                Navigator.pop(sheetContext);
-              },
-              child: const Text('Apply'),
             ),
-          ]),
+          ),
         ),
       ),
     );
