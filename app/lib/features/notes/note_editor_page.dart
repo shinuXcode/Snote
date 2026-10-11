@@ -26,6 +26,9 @@ import '../../core/settings/app_settings.dart';
 import '../../data/local/note_repository.dart';
 import '../settings/settings_page.dart';
 
+// Open-note tabs are shared by editor routes during the current app session.
+final ValueNotifier<List<LocalNote>> _snoteOpenNoteTabs = ValueNotifier<List<LocalNote>>(<LocalNote>[]);
+
 class NoteEditorPage extends StatefulWidget {
   final LocalNote note;
   const NoteEditorPage({super.key, required this.note});
@@ -113,6 +116,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _title.text = widget.note.title;
+    _registerCurrentOpenTab();
+    _snoteOpenNoteTabs.addListener(_onOpenTabsChanged);
     try {
       final sizes = jsonDecode(_settings.getString('toolSizes'));
       if (sizes is Map) {
@@ -145,6 +150,168 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       unawaited(_flushSave());
     }
   }
+
+  LocalNote _currentTabRecord() {
+    final title = _title.text.trim();
+    return LocalNote(
+      id: widget.note.id,
+      title: title.isEmpty ? 'Untitled note' : title,
+      folderId: widget.note.folderId,
+      noteType: widget.note.noteType,
+      contentJson: widget.note.contentJson,
+      createdAt: widget.note.createdAt,
+      updatedAt: widget.note.updatedAt,
+      deletedAt: widget.note.deletedAt,
+      version: widget.note.version,
+    );
+  }
+
+  void _registerCurrentOpenTab() {
+    final tabs = List<LocalNote>.from(_snoteOpenNoteTabs.value);
+    final note = _currentTabRecord();
+    final index = tabs.indexWhere((tab) => tab.id == note.id);
+    if (index < 0) {
+      tabs.add(note);
+    } else {
+      tabs[index] = note;
+    }
+    _snoteOpenNoteTabs.value = tabs;
+  }
+
+  void _refreshCurrentOpenTab() {
+    final tabs = List<LocalNote>.from(_snoteOpenNoteTabs.value);
+    final note = _currentTabRecord();
+    final index = tabs.indexWhere((tab) => tab.id == note.id);
+    if (index < 0) {
+      tabs.add(note);
+    } else {
+      tabs[index] = note;
+    }
+    _snoteOpenNoteTabs.value = tabs;
+    _scheduleSave();
+  }
+
+  void _onOpenTabsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _switchOpenNoteTab(LocalNote note) async {
+    if (note.id == widget.note.id) return;
+    await _flushSave();
+    if (!mounted) return;
+    final fresh = await _repo.get(note.id);
+    if (!mounted) return;
+    if (fresh == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('That note is no longer available.')),
+      );
+      _snoteOpenNoteTabs.value = _snoteOpenNoteTabs.value
+          .where((tab) => tab.id != note.id)
+          .toList();
+      return;
+    }
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(builder: (_) => NoteEditorPage(note: fresh)),
+    );
+  }
+
+  Future<void> _closeOpenNoteTab(LocalNote note) async {
+    final remaining = _snoteOpenNoteTabs.value
+        .where((tab) => tab.id != note.id)
+        .toList(growable: false);
+    if (note.id != widget.note.id) {
+      _snoteOpenNoteTabs.value = remaining;
+      return;
+    }
+
+    await _flushSave();
+    if (!mounted) return;
+    _snoteOpenNoteTabs.value = remaining;
+    if (remaining.isEmpty) {
+      Navigator.maybePop(context);
+      return;
+    }
+    final next = await _repo.get(remaining.last.id);
+    if (!mounted) return;
+    if (next != null) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(builder: (_) => NoteEditorPage(note: next)),
+      );
+    } else {
+      Navigator.maybePop(context);
+    }
+  }
+
+  Widget _openNotesTabsBar() => Positioned(
+        left: 8,
+        right: 8,
+        top: 46,
+        height: 34,
+        child: Material(
+          color: Theme.of(context).colorScheme.surface.withValues(alpha: .92),
+          borderRadius: BorderRadius.circular(10),
+          clipBehavior: Clip.antiAlias,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final tab in _snoteOpenNoteTabs.value)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 3),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: tab.id == widget.note.id
+                            ? Theme.of(context).colorScheme.primaryContainer
+                            : Theme.of(context).colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: tab.id == widget.note.id
+                              ? Theme.of(context).colorScheme.primary
+                              : Colors.transparent,
+                        ),
+                      ),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        InkWell(
+                          onTap: () => unawaited(_switchOpenNoteTab(tab)),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(10, 5, 6, 5),
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 160),
+                              child: Text(
+                                tab.id == widget.note.id
+                                    ? (_title.text.trim().isEmpty
+                                        ? 'Untitled note'
+                                        : _title.text.trim())
+                                    : tab.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: tab.id == widget.note.id
+                                      ? FontWeight.w900
+                                      : FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                          constraints: const BoxConstraints.tightFor(width: 25, height: 26),
+                          padding: EdgeInsets.zero,
+                          tooltip: 'Close tab',
+                          onPressed: () => unawaited(_closeOpenNoteTab(tab)),
+                          icon: const Icon(Icons.close_rounded, size: 14),
+                        ),
+                      ]),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
 
   Future<void> _prepare() async {
     final locked = await _lock.isLocked(widget.note.id);
@@ -458,6 +625,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _snoteOpenNoteTabs.removeListener(_onOpenTabsChanged);
     _saveTimer?.cancel();
     _quill.removeListener(_scheduleSave);
     _quill.dispose();
@@ -490,6 +658,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           child: Stack(
             children: [
               Positioned.fill(
+                top: _full ? 0 : 82,
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   supportedDevices: const {
@@ -505,6 +674,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                 ),
               ),
               if (!_full) _header(),
+              if (!_full) _openNotesTabsBar(),
               if (!_full) _movablePageChanger(),
               if (_preview && !_full) _previewRail(),
               if (_toolbar && _draw) _toolbarWidget(),
@@ -952,6 +1122,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     border: InputBorder.none,
                     hintText: 'Untitled note',
                   ),
+                  onChanged: (_) => _refreshCurrentOpenTab(),
                   onSubmitted: (_) => _save(force: true),
                 ),
               ),
