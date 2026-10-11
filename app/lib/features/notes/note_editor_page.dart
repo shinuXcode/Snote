@@ -1060,10 +1060,35 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
             title: const Text('Capture with camera'),
             onTap: () => Navigator.pop(sheetContext, 'camera'),
           ),
+          ListTile(
+            leading: const Icon(Icons.mobile_screen_share_rounded),
+            title: const Text('Share a screenshot from another app'),
+            subtitle: const Text('Use Android screenshot preview → Share → Snote Beta'),
+            onTap: () => Navigator.pop(sheetContext, 'share-help'),
+          ),
         ]),
       ),
     );
     if (source == null) return;
+    if (source == 'share-help') {
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Add screenshots without opening Gallery'),
+          content: const Text(
+            'Open the other app and take a screenshot. In Android’s screenshot preview, tap Share and choose Snote Beta. Snote will ask which note to add the image to, then open that note. This uses Android’s share permission and does not capture other apps in the background.',
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Got it'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
     try {
       final picked = await ImagePicker().pickImage(
         source: source == 'camera' ? ImageSource.camera : ImageSource.gallery,
