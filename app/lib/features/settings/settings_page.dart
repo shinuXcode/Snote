@@ -147,6 +147,7 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
       _group('Display', [
         _themeStyleSelector(),
+        _colorThemeSelector(),
         _customToggle(
           value: _theme.eInk,
           title: 'Physical E-Ink display',
@@ -244,6 +245,27 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       ]),
     ],
+  );
+
+  Widget _colorThemeSelector() => Card(
+    margin: const EdgeInsets.only(bottom: 8),
+    child: ListTile(
+      leading: const Icon(Icons.color_lens_outlined),
+      title: const Text('App color theme', style: TextStyle(fontWeight: FontWeight.w800)),
+      subtitle: Text(_theme.colorTheme.label),
+      trailing: DropdownButtonHideUnderline(
+        child: DropdownButton<SnoteColorTheme>(
+          value: _theme.colorTheme,
+          items: SnoteColorTheme.values.map((theme) => DropdownMenuItem(
+            value: theme,
+            child: Text(theme.label),
+          )).toList(),
+          onChanged: (theme) {
+            if (theme != null) _theme.setColorTheme(theme);
+          },
+        ),
+      ),
+    ),
   );
 
   Widget _themeStyleSelector() => Card(

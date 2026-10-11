@@ -1437,6 +1437,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
               ),
               _compactAction(tooltip: 'Save note', icon: Icons.save_outlined, onPressed: () => _save(force: true)),
               _compactAction(tooltip: 'Note cover', icon: Icons.photo_album_outlined, onPressed: _chooseNoteCover),
+              _compactAction(
+                tooltip: _showcaseOpen ? 'Hide tool showcase' : 'Open tool showcase',
+                icon: Icons.inventory_2_outlined,
+                onPressed: () => setState(() => _showcaseOpen = !_showcaseOpen),
+              ),
               _compactAction(tooltip: 'Add screenshot / gallery image', icon: Icons.photo_library_outlined, onPressed: _insertScreenshot),
               _compactAction(tooltip: 'Insert PDF pages', icon: Icons.picture_as_pdf_outlined, onPressed: _importPdfIntoNote),
               _compactAction(tooltip: 'Calculator', icon: Icons.calculate_outlined, onPressed: _calculatorSheet),
@@ -1671,11 +1676,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         onPressed: _styleSheet,
         icon: const Icon(Icons.tune_rounded),
         tooltip: 'Tool style',
-      ),
-      IconButton(
-        onPressed: () => setState(() => _showcaseOpen = !_showcaseOpen),
-        icon: const Icon(Icons.inventory_2_outlined),
-        tooltip: 'Open movable tool showcase',
       ),
       IconButton(
         onPressed: () => setState(() => _draw = !_draw),
