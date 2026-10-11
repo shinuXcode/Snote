@@ -55,10 +55,29 @@ jobs:
           if 'android.permission.CAMERA' not in text:
               text = text.replace('</manifest>', '    <uses-permission android:name="android.permission.CAMERA" />\n</manifest>')
           text = text.replace('android:label="snote"', 'android:label="Snote Beta"')
+          if 'android:launchMode="singleTop"' in text:
+              text = text.replace('android:launchMode="singleTop"', 'android:launchMode="singleTask"')
+          if 'android.intent.action.SEND' not in text:
+              share_filters = '''
+                  <intent-filter>
+                      <action android:name="android.intent.action.SEND" />
+                      <category android:name="android.intent.category.DEFAULT" />
+                      <data android:mimeType="image/*" />
+                  </intent-filter>
+                  <intent-filter>
+                      <action android:name="android.intent.action.SEND_MULTIPLE" />
+                      <category android:name="android.intent.category.DEFAULT" />
+                      <data android:mimeType="image/*" />
+                  </intent-filter>
+              '''
+              if '</activity>' not in text:
+                  raise SystemExit('Could not find activity closing tag for Android share filters')
+              text = text.replace('</activity>', share_filters + '\n            </activity>', 1)
           manifest.write_text(text)
 
           assert 'com.snote.snote.beta' in build.read_text(), 'Beta application ID was not set'
           assert 'Snote Beta' in manifest.read_text(), 'Beta app label was not set'
+          assert 'android.intent.action.SEND' in manifest.read_text(), 'Android image share filters were not configured'
           PY
 
       - name: Install dependencies
