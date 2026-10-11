@@ -948,9 +948,11 @@ class _NotesHomePageState extends State<NotesHomePage> {
 
   Future<void> _noteDetails(LocalNote note) async {
     final full = await _notes.get(note.id) ?? note;
-    final folderName = full.folderId == null
-        ? 'Root'
-        : _allFolders.where((folder) => folder.id == full.folderId).map((folder) => folder.name).firstOrNull ?? 'Folder unavailable';
+    var folderName = 'Root';
+    if (full.folderId != null) {
+      final matches = _allFolders.where((folder) => folder.id == full.folderId);
+      folderName = matches.isEmpty ? 'Folder unavailable' : matches.first.name;
+    }
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
