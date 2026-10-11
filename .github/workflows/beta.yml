@@ -41,13 +41,134 @@ jobs:
         working-directory: app
         run: |
           python3 - <<'PY'
+          import re
           from pathlib import Path
+
           build = Path('android/app/build.gradle.kts')
+          if not build.exists():
+              raise SystemExit('Generated Android app Gradle file is missing')
           text = build.read_text()
-          # receive_sharing_intent requires Android API 37 metadata.
-          text = text.replace('compileSdk = flutter.compileSdkVersion', 'compileSdk = 37')
-          text = text.replace('compileSdk = 36', 'compileSdk = 37')
+          text, sdk_matches = re.subn(
+              r'(?m)^([ \\t]*)compileSdk[ \\t]*=[ \\t]*(?:flutter\\.compileSdkVersion|\\d+)[ \\t]*
+          if 'applicationId = "com.snote.snote"' not in text and 'applicationId = "com.snote.snote.beta"' not in text:
+              raise SystemExit('Could not locate generated Android applicationId; refusing to build an in-place beta')
+          text = text.replace('applicationId = "com.snote.snote"', 'applicationId = "com.snote.snote.beta"')
+          build.write_text(text)
+
+          manifest = Path('android/app/src/main/AndroidManifest.xml')
+          text = manifest.read_text()
+          if 'android.permission.CAMERA' not in text:
+              text = text.replace('</manifest>', '    <uses-permission android:name="android.permission.CAMERA" />\n</manifest>')
+          text = text.replace('android:label="snote"', 'android:label="Snote Beta"')
+          if 'android:launchMode="singleTop"' in text:
+              text = text.replace('android:launchMode="singleTop"', 'android:launchMode="singleTask"')
+          if 'android.intent.action.SEND' not in text:
+              share_filters = '''
+                  <intent-filter>
+                      <action android:name="android.intent.action.SEND" />
+                      <category android:name="android.intent.category.DEFAULT" />
+                      <data android:mimeType="image/*" />
+                  </intent-filter>
+                  <intent-filter>
+                      <action android:name="android.intent.action.SEND_MULTIPLE" />
+                      <category android:name="android.intent.category.DEFAULT" />
+                      <data android:mimeType="image/*" />
+                  </intent-filter>
+              '''
+              if '</activity>' not in text:
+                  raise SystemExit('Could not find activity closing tag for Android share filters')
+              text = text.replace('</activity>', share_filters + '\n            </activity>', 1)
+          manifest.write_text(text)
+
+          assert 'com.snote.snote.beta' in build.read_text(), 'Beta application ID was not set'
+          assert 'Snote Beta' in manifest.read_text(), 'Beta app label was not set'
+          assert 'android.intent.action.SEND' in manifest.read_text(), 'Android image share filters were not configured'
+          PY
+
+      - name: Install dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Format
+        working-directory: app
+        run: dart format .
+
+      - name: Analyze
+        working-directory: app
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Run tests
+        working-directory: app
+        run: flutter test
+
+      # This job builds Android only. pdfx:install_web needs web/index.html
+      # and is intentionally run by the separate Web build workflow instead.
+
+      - name: Build release APK
+        working-directory: app
+        run: flutter build apk --release
+
+      - name: Rename beta APK
+        run: cp app/build/app/outputs/flutter-apk/app-release.apk Snote-Android-Beta.apk
+
+      - name: Upload beta APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: snote-android-beta
+          path: Snote-Android-Beta.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish beta prerelease
+        if: success() && github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.1.0-beta.43
+          name: Snote 1.1 Beta 43
+          prerelease: true
+          make_latest: false
+          target_commitish: ${{ github.sha }}
+          files: Snote-Android-Beta.apk
+          body: |
+            Snote 1.1 beta 43 build for testing only.
+            This APK uses the separate Android application ID com.snote.snote.beta, so it can be installed beside the stable Snote app without replacing it or touching the stable app's local data.
+            Includes the canvas/toolbar overlap fixes and tests for shape rendering and lasso duplication. Android build targets API 37 to satisfy the receive_sharing_intent dependency.
+,
+              r'\\1compileSdk = 37',
+              text,
+          )
+          if sdk_matches != 1:
+              raise SystemExit(f'Expected one compileSdk declaration; found {sdk_matches}')
           text = text.replace('minSdk = flutter.minSdkVersion', 'minSdk = 24')
+          if 'applicationId = "com.snote.snote"' not in text and 'applicationId = "com.snote.snote.beta"' not in text:
+              raise SystemExit('Could not locate generated Android applicationId; refusing to build an in-place beta')
+          text = text.replace('applicationId = "com.snote.snote"', 'applicationId = "com.snote.snote.beta"')
+          build.write_text(text)
+
+          settings_candidates = [Path('android/settings.gradle.kts'), Path('android/settings.gradle')]
+          settings = next((path for path in settings_candidates if path.exists()), None)
+          if settings is None:
+              raise SystemExit('Generated Gradle settings file is missing')
+          settings_text = settings.read_text()
+          plugin_pattern = r'(id\\(["\\']com\\.android\\.application["\\']\\)\\s+version\\s+["\\'])[^"\\']+(["\\'])'
+          settings_text, plugin_matches = re.subn(plugin_pattern, r'\\g<1>9.2.0\\2', settings_text, count=1)
+          if plugin_matches != 1 and not re.search(r'id\\(["\\']com\\.android\\.application["\\']\\)\\s+version\\s+["\\']9\\.2\\.0["\\']', settings_text):
+              raise SystemExit('Could not configure Android Gradle Plugin 9.2.0 for API 37')
+          settings.write_text(settings_text)
+
+          wrapper = Path('android/gradle/wrapper/gradle-wrapper.properties')
+          if not wrapper.exists():
+              raise SystemExit('Generated Gradle wrapper properties are missing')
+          wrapper_text = wrapper.read_text()
+          wrapper_text, wrapper_matches = re.subn(
+              r'(gradle-)[0-9.]+-(all|bin)(\\.zip)',
+              r'\\g<1>9.4.1-\\g<2>\\g<3>',
+              wrapper_text,
+              count=1,
+          )
+          if wrapper_matches != 1 and 'gradle-9.4.1-' not in wrapper_text:
+              raise SystemExit('Could not configure Gradle 9.4.1 for Android Gradle Plugin 9.2')
+          wrapper.write_text(wrapper_text)
           if 'applicationId = "com.snote.snote"' not in text and 'applicationId = "com.snote.snote.beta"' not in text:
               raise SystemExit('Could not locate generated Android applicationId; refusing to build an in-place beta')
           text = text.replace('applicationId = "com.snote.snote"', 'applicationId = "com.snote.snote.beta"')
