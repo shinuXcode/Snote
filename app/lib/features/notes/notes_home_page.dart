@@ -222,14 +222,8 @@ class _NotesHomePageState extends State<NotesHomePage> {
 
   Future<void> _customizeFolder(LocalFolder folder) async {
     const colors = <int>[
-      0xff5b6cf9,
-      0xff16a085,
-      0xfff39c12,
-      0xffe74c3c,
-      0xff9b59b6,
-      0xff34495e,
-      0xffd35400,
-      0xff2d9cdb,
+      0xff5b6cf9, 0xff16a085, 0xfff39c12, 0xffe74c3c,
+      0xff9b59b6, 0xff34495e, 0xffd35400, 0xff2d9cdb,
     ];
     const icons = <String, String>{
       'folder': 'Folder',
@@ -241,8 +235,11 @@ class _NotesHomePageState extends State<NotesHomePage> {
       'work': 'Work',
       'archive': 'Archive',
     };
+    final storedCover = RegExp(r'^cover:(\d{1,2})$').firstMatch(folder.iconKey);
+    var coverStyle = int.tryParse(storedCover?.group(1) ?? '') ?? 0;
+    var useCover = storedCover != null;
     var colorValue = folder.colorValue;
-    final storedCover = RegExp(r'^cover:(\d{1,2})
+    var iconKey = useCover ? 'folder' : folder.iconKey;
     final result = await showDialog<Map<String, Object?>>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -252,10 +249,9 @@ class _NotesHomePageState extends State<NotesHomePage> {
             width: 420,
             height: 500,
             child: Column(
-              mainAxisSize: MainAxisSize.max,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Color'),
+                const Text('Folder colour', style: TextStyle(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 10,
@@ -264,8 +260,8 @@ class _NotesHomePageState extends State<NotesHomePage> {
                     onTap: () => setDialog(() => colorValue = value),
                     borderRadius: BorderRadius.circular(24),
                     child: Container(
-                      width: 34,
-                      height: 34,
+                      width: 32,
+                      height: 32,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: Color(value),
@@ -282,19 +278,17 @@ class _NotesHomePageState extends State<NotesHomePage> {
                     ),
                   )).toList(),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  initialValue: iconKey,
+                  initialValue: icons.containsKey(iconKey) ? iconKey : 'folder',
                   decoration: const InputDecoration(labelText: 'Folder icon'),
                   items: icons.entries.map((entry) => DropdownMenuItem(
                     value: entry.key,
-                    child: Row(
-                      children: [
-                        Icon(folderIconForKey(entry.key), size: 19),
-                        const SizedBox(width: 10),
-                        Text(entry.value),
-                      ],
-                    ),
+                    child: Row(children: [
+                      Icon(folderIconForKey(entry.key), size: 18),
+                      const SizedBox(width: 8),
+                      Text(entry.value),
+                    ]),
                   )).toList(),
                   onChanged: (value) {
                     if (value != null) setDialog(() {
@@ -305,10 +299,10 @@ class _NotesHomePageState extends State<NotesHomePage> {
                 ),
                 const SizedBox(height: 12),
                 Row(children: [
-                  const Expanded(child: Text('Folder covers', style: TextStyle(fontWeight: FontWeight.w900))),
-                  Text('100 designs · ${coverStyle + 1} selected'),
+                  const Expanded(child: Text('100 cover designs', style: TextStyle(fontWeight: FontWeight.w900))),
+                  Text('${coverStyle + 1}/100'),
                 ]),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 Expanded(
                   child: GridView.builder(
                     itemCount: 100,
@@ -320,11 +314,11 @@ class _NotesHomePageState extends State<NotesHomePage> {
                     ),
                     itemBuilder: (_, index) {
                       final hue = (index * 47.0) % 360;
-                      final colors = [
+                      final gradient = [
                         HSVColor.fromAHSV(1, hue, .58 + (index % 3) * .1, .96).toColor(),
                         HSVColor.fromAHSV(1, (hue + 42) % 360, .76, .48 + (index % 4) * .08).toColor(),
                       ];
-                      final chosen = useCover && coverStyle == index;
+                      final selected = useCover && coverStyle == index;
                       return InkWell(
                         borderRadius: BorderRadius.circular(8),
                         onTap: () => setDialog(() {
@@ -333,14 +327,14 @@ class _NotesHomePageState extends State<NotesHomePage> {
                         }),
                         child: Container(
                           decoration: BoxDecoration(
-                            gradient: LinearGradient(colors: colors),
+                            gradient: LinearGradient(colors: gradient),
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                              color: chosen ? Theme.of(context).colorScheme.primary : Colors.black12,
-                              width: chosen ? 3 : 1,
+                              color: selected ? Theme.of(context).colorScheme.primary : Colors.black12,
+                              width: selected ? 3 : 1,
                             ),
                           ),
-                          child: chosen
+                          child: selected
                               ? const Icon(Icons.check_circle_rounded, color: Colors.white, size: 19)
                               : const Icon(Icons.folder_rounded, color: Colors.white70, size: 19),
                         ),
@@ -357,11 +351,11 @@ class _NotesHomePageState extends State<NotesHomePage> {
               child: const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, {
+              onPressed: () => Navigator.pop(dialogContext, <String, Object?>{
                 'colorValue': colorValue,
                 'iconKey': useCover ? 'cover:$coverStyle' : iconKey,
               }),
-              child: const Text('Save'),
+              child: const Text('Save cover'),
             ),
           ],
         ),
