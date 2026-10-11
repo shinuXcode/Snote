@@ -1737,7 +1737,58 @@ class _HomeNoteTile extends StatelessWidget {
                         borderRadius: BorderRadius.zero,
                       ),
                     ),
-                 class _WorkspaceEmpty extends StatelessWidget {
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 10, 42, 10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              note.title.isEmpty ? 'Untitled note' : note.title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontWeight: FontWeight.w800),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(displayKind, maxLines: 1, overflow: TextOverflow.ellipsis),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Positioned(
+                right: 1,
+                bottom: 1,
+                child: PopupMenuButton<String>(
+                  tooltip: 'Note options',
+                  onSelected: (value) {
+                    if (value == 'cover') {
+                      onChangeCover();
+                    } else if (value == 'rename') {
+                      onRename();
+                    } else if (value == 'delete') {
+                      onDelete();
+                    }
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'cover', child: Text('Change cover')),
+                    PopupMenuItem(value: 'rename', child: Text('Rename')),
+                    PopupMenuItem(value: 'delete', child: Text('Move to bin')),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WorkspaceEmpty extends StatelessWidget {
   const _WorkspaceEmpty();
 
   @override
