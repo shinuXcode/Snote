@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
@@ -406,7 +407,168 @@ class _NotesHomePageState extends State<NotesHomePage> {
     await _load();
   }
 
-  Future<void> _deleteNote(LocalNote note) async {
+  Future<void> _customizeNoteCover(LocalNote note) async {
+    final stored = await _notes.get(note.id);
+    if (stored == null || !mounted) return;
+
+    var content = <String, dynamic>{};
+    if (stored.contentJson != null && stored.contentJson!.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(stored.contentJson!);
+        if (decoded is Map) content = Map<String, dynamic>.from(decoded);
+      } catch (_) {
+        content = <String, dynamic>{};
+      }
+    }
+
+    final pages = <Map<String, Object?>>[];
+    final rawPages = content['pages'];
+    if (rawPages is List) {
+      for (final raw in rawPages) {
+        if (raw is Map) pages.add(Map<String, Object?>.from(raw));
+      }
+    }
+    if (pages.isEmpty) {
+      pages.add(<String, Object?>{
+        'id': DateTime.now().microsecondsSinceEpoch.toString(),
+        'template': 'dotted',
+        'paperColor': 0xffffffff,
+        'lineColor': 0xffd8dee8,
+        'lineOpacity': .85,
+        'spacing': 28.0,
+        'cornellAssist': false,
+        'orientation': 'vertical',
+        'strokes': <Object?>[],
+        'images': <Object?>[],
+      });
+    }
+
+    var coverColor = (pages.first['coverColor'] as num?)?.toInt() ?? 0xff5267df;
+    var coverIcon = pages.first['coverIcon']?.toString() ?? 'notes';
+    const colors = <int>[
+      0xff5267df, 0xff087f8c, 0xff1c7c54, 0xffb45309,
+      0xffbe3657, 0xff7c3aed, 0xff334155, 0xff0f766e,
+      0xff8a5a2b, 0xff374151, 0xff9f1239, 0xff0369a1,
+    ];
+    const icons = <String, String>{
+      'notes': 'Notebook',
+      'book': 'Book',
+      'math': 'Mathematics',
+      'science': 'Science',
+      'physics': 'Physics',
+      'chemistry': 'Chemistry',
+      'biology': 'Biology',
+      'code': 'Code',
+      'lightbulb': 'Ideas',
+      'star': 'Favourite',
+      'flask': 'Lab',
+      'calendar': 'Planner',
+    };
+
+    final result = await showDialog<Map<String, Object?>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialog) => AlertDialog(
+          title: const Text('Note cover'),
+          content: SizedBox(
+            width: 360,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: double.infinity,
+                    height: 96,
+                    decoration: BoxDecoration(
+                      color: Color(coverColor),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(_noteCoverIcon(coverIcon), size: 34, color: Colors.white),
+                        const SizedBox(height: 5),
+                        Text(
+                          note.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Cover colour', style: TextStyle(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 9,
+                    runSpacing: 9,
+                    children: colors.map((value) => InkWell(
+                      onTap: () => setDialog(() => coverColor = value),
+                      borderRadius: BorderRadius.circular(24),
+                      child: Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: Color(value),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: coverColor == value ? Theme.of(dialogContext).colorScheme.onSurface : Colors.transparent,
+                            width: 3,
+                          ),
+                        ),
+                        child: coverColor == value ? const Icon(Icons.check_rounded, color: Colors.white, size: 17) : null,
+                      ),
+                    )).toList(),
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    initialValue: icons.containsKey(coverIcon) ? coverIcon : 'notes',
+                    decoration: const InputDecoration(labelText: 'Cover icon'),
+                    items: icons.entries.map((entry) => DropdownMenuItem(
+                      value: entry.key,
+                      child: Row(children: [
+                        Icon(_noteCoverIcon(entry.key), size: 20),
+                        const SizedBox(width: 10),
+                        Text(entry.value),
+                      ]),
+                    )).toList(),
+                    onChanged: (value) {
+                      if (value != null) setDialog(() => coverIcon = value);
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, <String, Object?>{
+                'coverColor': coverColor,
+                'coverIcon': coverIcon,
+              }),
+              child: const Text('Save cover'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (result == null) return;
+
+    pages.first['coverColor'] = result['coverColor'];
+    pages.first['coverIcon'] = result['coverIcon'];
+    content['version'] = content['version'] ?? 5;
+    content['pages'] = pages;
+    content['text_delta'] = content['text_delta'] ?? <Object?>[
+      <String, Object?>{'insert': '\n'},
+    ];
+    await _notes.saveContent(stored.id, Map<String, Object?>.from(content));
+    await _load();
+  }
+
+    Future<void> _deleteNote(LocalNote note) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (dialog) => AlertDialog(
@@ -571,6 +733,8 @@ class _NotesHomePageState extends State<NotesHomePage> {
                         onOpenNote: _openNote,
                         onRenameNote: _renameNote,
                         onDeleteNote: _deleteNote,
+            onCustomizeNote: _customizeNoteCover,
+                        onCustomizeNote: _customizeNoteCover,
                       ),
                     ),
                     const VerticalDivider(width: 1),
@@ -688,6 +852,49 @@ class _NotesHomePageState extends State<NotesHomePage> {
     unawaited(_sync.dispose());
     super.dispose();
   }
+}
+
+IconData _noteCoverIcon(String key) {
+  switch (key) {
+    case 'book': return Icons.menu_book_rounded;
+    case 'math': return Icons.functions_rounded;
+    case 'science': return Icons.science_rounded;
+    case 'physics': return Icons.bolt_rounded;
+    case 'chemistry': return Icons.biotech_rounded;
+    case 'biology': return Icons.spa_rounded;
+    case 'code': return Icons.code_rounded;
+    case 'lightbulb': return Icons.lightbulb_rounded;
+    case 'star': return Icons.star_rounded;
+    case 'flask': return Icons.science_outlined;
+    case 'calendar': return Icons.calendar_month_rounded;
+    default: return Icons.auto_stories_rounded;
+  }
+}
+
+Widget _noteCoverPreview(LocalNote note, {double size = 44}) {
+  var colorValue = 0xff5267df;
+  var iconKey = 'notes';
+  final raw = note.contentJson;
+  if (raw != null && raw.isNotEmpty) {
+    try {
+      final decoded = jsonDecode(raw);
+      final pages = decoded is Map ? decoded['pages'] : null;
+      if (pages is List && pages.isNotEmpty && pages.first is Map) {
+        final cover = pages.first as Map;
+        colorValue = (cover['coverColor'] as num?)?.toInt() ?? colorValue;
+        iconKey = cover['coverIcon']?.toString() ?? iconKey;
+      }
+    } catch (_) {}
+  }
+  return Container(
+    width: size,
+    height: size,
+    decoration: BoxDecoration(
+      color: Color(colorValue),
+      borderRadius: BorderRadius.circular(9),
+    ),
+    child: Icon(_noteCoverIcon(iconKey), color: Colors.white, size: size * .56),
+  );
 }
 
 class _SideRail extends StatelessWidget {
@@ -875,6 +1082,7 @@ class _HierarchyPanel extends StatelessWidget {
   final ValueChanged<LocalNote> onOpenNote;
   final ValueChanged<LocalNote> onRenameNote;
   final ValueChanged<LocalNote> onDeleteNote;
+  final ValueChanged<LocalNote> onCustomizeNote;
 
   const _HierarchyPanel({
     required this.allFolders,
@@ -897,6 +1105,7 @@ class _HierarchyPanel extends StatelessWidget {
     required this.onOpenNote,
     required this.onRenameNote,
     required this.onDeleteNote,
+    required this.onCustomizeNote,
   });
 
   @override
@@ -1061,7 +1270,7 @@ class _HierarchyPanel extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(Icons.description_outlined, color: theme.colorScheme.primary),
+                            _noteCoverPreview(note, size: 46),
                             const Spacer(),
                             Text(
                               note.title,
@@ -1086,11 +1295,14 @@ class _HierarchyPanel extends StatelessWidget {
                                   onSelected: (value) {
                                     if (value == 'rename') {
                                       onRenameNote(note);
-                                    } else {
+                                    } else if (value == 'cover') {
+                                      onCustomizeNote(note);
+                                    } else if (value == 'delete') {
                                       onDeleteNote(note);
                                     }
                                   },
                                   itemBuilder: (_) => const [
+                                    PopupMenuItem(value: 'cover', child: Text('Customize cover')),
                                     PopupMenuItem(value: 'rename', child: Text('Rename')),
                                     PopupMenuItem(value: 'delete', child: Text('Move to trash')),
                                   ],
@@ -1114,6 +1326,7 @@ class _HierarchyPanel extends StatelessWidget {
               onOpen: () => onOpenNote(note),
               onRename: () => onRenameNote(note),
               onDelete: () => onDeleteNote(note),
+              onCover: () => onCustomizeNote(note),
             ),
           ),
         const SizedBox(height: 8),
@@ -1133,6 +1346,7 @@ class _HomeNoteTile extends StatelessWidget {
   final VoidCallback onOpen;
   final VoidCallback onRename;
   final VoidCallback onDelete;
+  final VoidCallback onCover;
 
   const _HomeNoteTile({
     required this.note,
@@ -1140,6 +1354,7 @@ class _HomeNoteTile extends StatelessWidget {
     required this.onOpen,
     required this.onRename,
     required this.onDelete,
+    required this.onCover,
   });
 
   @override
@@ -1150,7 +1365,7 @@ class _HomeNoteTile extends StatelessWidget {
           ? scheme.primaryContainer.withValues(alpha: .65)
           : scheme.surfaceContainerLow,
       child: ListTile(
-        leading: const Icon(Icons.description_outlined),
+        leading: _noteCoverPreview(note, size: 44),
         title: Text(
           note.title,
           maxLines: 1,
@@ -1162,13 +1377,16 @@ class _HomeNoteTile extends StatelessWidget {
         trailing: PopupMenuButton<String>(
           tooltip: 'Note actions',
           onSelected: (value) {
-            if (value == 'rename') {
+            if (value == 'cover') {
+              onCover();
+            } else if (value == 'rename') {
               onRename();
             } else if (value == 'delete') {
               onDelete();
             }
           },
           itemBuilder: (_) => const [
+            PopupMenuItem(value: 'cover', child: Text('Customize cover')),
             PopupMenuItem(value: 'rename', child: Text('Rename')),
             PopupMenuItem(value: 'delete', child: Text('Move to trash')),
           ],
