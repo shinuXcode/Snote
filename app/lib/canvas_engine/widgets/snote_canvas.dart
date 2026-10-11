@@ -929,7 +929,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     ];
     int? cornerIndex;
     for (var i = 0; i < handles.length; i++) {
-      if ((handles[i] - point).distance <= 20) {
+      if ((handles[i] - point).distance <= 16) {
         cornerIndex = i;
         break;
       }
