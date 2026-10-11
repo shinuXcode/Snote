@@ -568,6 +568,8 @@ class _NotesHomePageState extends State<NotesHomePage> {
 
     pages.first['coverColor'] = result['coverColor'];
     pages.first['coverIcon'] = result['coverIcon'];
+    content['coverColor'] = result['coverColor'];
+    content['coverIcon'] = result['coverIcon'];
     content['version'] = content['version'] ?? 5;
     content['pages'] = pages;
     content['text_delta'] = content['text_delta'] ?? <Object?>[
@@ -893,6 +895,10 @@ Widget _noteCoverPreview(LocalNote note, {double size = 44}) {
     try {
       final decoded = jsonDecode(raw);
       final pages = decoded is Map ? decoded['pages'] : null;
+      if (decoded is Map) {
+        colorValue = (decoded['coverColor'] as num?)?.toInt() ?? colorValue;
+        iconKey = decoded['coverIcon']?.toString() ?? iconKey;
+      }
       if (pages is List && pages.isNotEmpty && pages.first is Map) {
         final cover = pages.first as Map;
         colorValue = (cover['coverColor'] as num?)?.toInt() ?? colorValue;
