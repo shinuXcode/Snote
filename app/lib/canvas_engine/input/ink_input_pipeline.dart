@@ -91,10 +91,12 @@ class InkInputPipeline {
       return _frame(null, actual);
     }
 
-    // The newest real sample is always the visible endpoint. Continuous
-    // ribbon geometry smooths the path without moving the tip away from the
-    // physical stylus location.
-    _livePoints.add(actual);
+    // Use the exact canonical sample stored in the buffer for both layers.
+    // _append clamps non-monotonic timestamps by copying the point; rendering
+    // the pre-copy object caused identity-based live-tip checks to fail and
+    // could make the active tip disappear on devices with coalesced samples.
+    final committedActual = _buffer.last ?? actual;
+    _livePoints.add(committedActual);
 
     final prediction = _predictor.predict(_buffer.points);
     if (prediction != null) {
@@ -102,7 +104,7 @@ class InkInputPipeline {
       _previousPrediction = prediction;
     }
 
-    return _frame(prediction, actual);
+    return _frame(prediction, committedActual);
   }
 
   List<StrokePoint> finish(PointerUpEvent event) {
