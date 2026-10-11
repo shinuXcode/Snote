@@ -2339,35 +2339,192 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     );
   }
 
+  List<Color> _spectrumColorGrid() {
+    final colors = <Color>[];
+    // A 13-column palette: grayscale at the left and a smooth hue spectrum
+    // with progressively stronger saturation and lower value down the grid.
+    for (var row = 0; row < 10; row++) {
+      final grey = (255 * (1 - row / 9)).round().clamp(0, 255);
+      colors.add(Color.fromARGB(255, grey, grey, grey));
+      for (var column = 0; column < 12; column++) {
+        final hue = column * 30.0;
+        final saturation = (.12 + row * .095).clamp(0.0, 1.0).toDouble();
+        final value = (1.0 - row * .075).clamp(.22, 1.0).toDouble();
+        colors.add(HSVColor.fromAHSV(1, hue, saturation, value).toColor());
+      }
+    }
+    return colors;
+  }
+
   Future<void> _colorSheet() async {
-    var color = _penColor;
+    var color = _toolColorOverrides[_tool.name] ?? _penColor;
+    var hexText = color.toARGB32().toRadixString(16).substring(2).toUpperCase();
+    final hexController = TextEditingController(text: '#$hexText');
+    var useEyedropper = false;
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (_, setDialog) => AlertDialog(
-          title: const Text('Pen color'),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            Container(width: 70, height: 70, decoration: BoxDecoration(color: color, shape: BoxShape.circle, border: Border.all())),
-            Slider(value: color.red.toDouble(), min: 0, max: 255, onChanged: (v) => setDialog(() => color = color.withRed(v.round()))),
-            Slider(value: color.green.toDouble(), min: 0, max: 255, onChanged: (v) => setDialog(() => color = color.withGreen(v.round()))),
-            Slider(value: color.blue.toDouble(), min: 0, max: 255, onChanged: (v) => setDialog(() => color = color.withBlue(v.round()))),
-          ]),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
-            FilledButton(onPressed: () {
-              setState(() {
-                _penColor = color;
-                _toolColorOverrides[_tool.name] = color;
-              });
-              unawaited(_settings.setString('toolColors', jsonEncode({
-                for (final entry in _toolColorOverrides.entries) entry.key: entry.value.toARGB32(),
-              })));
-              Navigator.pop(dialogContext);
-            }, child: const Text('Use')),
-          ],
-        ),
+        builder: (_, setDialog) {
+          void updateColor(Color next) {
+            setDialog(() {
+              color = next;
+              hexText = '#${next.toARGB32().toRadixString(16).substring(2).toUpperCase()}';
+              hexController.value = TextEditingValue(
+                text: hexText,
+                selection: TextSelection.collapsed(offset: hexText.length),
+              );
+            });
+          }
+
+          final palette = _spectrumColorGrid();
+          final hsv = HSVColor.fromColor(color);
+          return AlertDialog(
+            title: const Text('Color palette'),
+            content: SizedBox(
+              width: 520,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(children: [
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: color,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Theme.of(context).colorScheme.outline),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: hexController,
+                          textCapitalization: TextCapitalization.characters,
+                          decoration: const InputDecoration(
+                            labelText: 'HEX color',
+                            hintText: '#313131',
+                            isDense: true,
+                            border: OutlineInputBorder(),
+                          ),
+                          onChanged: (value) {
+                            final normalized = value.trim().replaceFirst('#', '');
+                            if (normalized.length == 6) {
+                              final parsed = int.tryParse(normalized, radix: 16);
+                              if (parsed != null) {
+                                setDialog(() => color = Color(0xff000000 | parsed));
+                              }
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      IconButton(
+                        tooltip: 'Darken color',
+                        onPressed: () => updateColor(HSVColor.fromColor(color).withValue((hsv.value - .08).clamp(.08, 1).toDouble()).toColor()),
+                        icon: const Icon(Icons.remove_circle_outline_rounded),
+                      ),
+                      IconButton(
+                        tooltip: 'Lighten color',
+                        onPressed: () => updateColor(HSVColor.fromColor(color).withValue((hsv.value + .08).clamp(.08, 1).toDouble()).toColor()),
+                        icon: const Icon(Icons.add_circle_outline_rounded),
+                      ),
+                      IconButton(
+                        tooltip: 'Sample color from this page',
+                        onPressed: () {
+                          useEyedropper = true;
+                          Navigator.pop(dialogContext);
+                        },
+                        icon: const Icon(Icons.colorize_rounded),
+                      ),
+                    ]),
+                    const SizedBox(height: 12),
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: palette.length,
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 13,
+                        crossAxisSpacing: 2,
+                        mainAxisSpacing: 2,
+                        childAspectRatio: 1.05,
+                      ),
+                      itemBuilder: (_, index) {
+                        final choice = palette[index];
+                        final selected = choice.toARGB32() == color.toARGB32();
+                        return Tooltip(
+                          message: '#${choice.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
+                          child: InkWell(
+                            onTap: () => updateColor(choice),
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: choice,
+                                borderRadius: BorderRadius.circular(3),
+                                border: Border.all(
+                                  color: selected ? Theme.of(context).colorScheme.primary : Colors.black12,
+                                  width: selected ? 3 : 1,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('Recent colors', style: TextStyle(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 7),
+                    Wrap(
+                      spacing: 7,
+                      runSpacing: 7,
+                      children: _penPalette.map((choice) => InkWell(
+                        onTap: () => updateColor(choice),
+                        borderRadius: BorderRadius.circular(22),
+                        child: Container(
+                          width: 28,
+                          height: 28,
+                          decoration: BoxDecoration(
+                            color: choice,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: choice.toARGB32() == color.toARGB32()
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Colors.black26,
+                              width: choice.toARGB32() == color.toARGB32() ? 3 : 1,
+                            ),
+                          ),
+                        ),
+                      )).toList(),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+              FilledButton(
+                onPressed: () {
+                  setState(() {
+                    _penColor = color;
+                    _toolColorOverrides[_tool.name] = color;
+                  });
+                  unawaited(_settings.setString('toolColors', jsonEncode({
+                    for (final entry in _toolColorOverrides.entries) entry.key: entry.value.toARGB32(),
+                  })));
+                  Navigator.pop(dialogContext);
+                },
+                child: const Text('Use color'),
+              ),
+            ],
+          );
+        },
       ),
-    );
+    ).whenComplete(() {
+      hexController.dispose();
+      if (useEyedropper && mounted) {
+        setState(() => _eyedropperActive = true);
+      }
+    });
   }
 
   Future<void> _styleSheet([CanvasTool? requestedTool]) async {
