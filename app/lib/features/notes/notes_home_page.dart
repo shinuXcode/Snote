@@ -1139,6 +1139,9 @@ IconData _noteCoverIcon(String key) {
 Widget _noteCoverPreview(LocalNote note, {double size = 44}) {
   var colorValue = 0xff5267df;
   var iconKey = 'notes';
+  var style = 0;
+  String? coverImage;
+  var coverTitle = note.title;
   final raw = note.contentJson;
   if (raw != null && raw.isNotEmpty) {
     try {
@@ -1147,22 +1150,76 @@ Widget _noteCoverPreview(LocalNote note, {double size = 44}) {
       if (decoded is Map) {
         colorValue = (decoded['coverColor'] as num?)?.toInt() ?? colorValue;
         iconKey = decoded['coverIcon']?.toString() ?? iconKey;
+        style = (decoded['coverStyle'] as num?)?.toInt() ?? style;
+        coverImage = decoded['coverImage']?.toString();
+        coverTitle = decoded['coverTitle']?.toString() ?? note.title;
       }
       if (pages is List && pages.isNotEmpty && pages.first is Map) {
         final cover = pages.first as Map;
         colorValue = (cover['coverColor'] as num?)?.toInt() ?? colorValue;
         iconKey = cover['coverIcon']?.toString() ?? iconKey;
+        style = (cover['coverStyle'] as num?)?.toInt() ?? style;
+        coverImage ??= cover['coverImage']?.toString();
       }
     } catch (_) {}
   }
   return Container(
     width: size,
-    height: size,
+    height: size * 1.35,
+    clipBehavior: Clip.antiAlias,
     decoration: BoxDecoration(
       color: Color(colorValue),
-      borderRadius: BorderRadius.circular(9),
+      gradient: LinearGradient(
+        colors: _coverStyleColors(style),
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+      borderRadius: BorderRadius.circular(8),
     ),
-    child: Icon(_noteCoverIcon(iconKey), color: Colors.white, size: size * .56),
+    child: Stack(
+      fit: StackFit.expand,
+      children: [
+        if (coverImage != null && coverImage.isNotEmpty)
+          Image.memory(
+            base64Decode(coverImage),
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+          ),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Colors.black.withValues(alpha: .03),
+                Colors.black.withValues(alpha: .68),
+              ],
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(5),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Icon(_noteCoverIcon(iconKey), color: Colors.white, size: size * .33),
+              const SizedBox(height: 3),
+              Text(
+                coverTitle,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: size < 50 ? 6.5 : 9,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
   );
 }
 
