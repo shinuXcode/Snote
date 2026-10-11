@@ -41,6 +41,7 @@ class SnoteSettings extends ChangeNotifier {
     'pressureCurve': 'linear',
     'toolSizes': '{}',
     'toolColors': '{}',
+    'toolDashed': '{}',
     'lassoStyle': 'solid',
     'eraserMode': 'stroke',
   };
