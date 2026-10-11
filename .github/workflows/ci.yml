@@ -40,11 +40,17 @@ jobs:
           flutter create --platforms=android,web --org=com.snote --no-pub .
           rm -f test/widget_test.dart
 
-      - name: Configure camera permissions
+      - name: Configure Android SDK and camera permissions
         working-directory: app
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          build = Path('android/app/build.gradle.kts')
+          if build.exists():
+            s = build.read_text()
+            s = s.replace('compileSdk = flutter.compileSdkVersion', 'compileSdk = 37')
+            s = s.replace('compileSdk = 36', 'compileSdk = 37')
+            build.write_text(s)
           p = Path('android/app/src/main/AndroidManifest.xml')
           if p.exists():
             s = p.read_text()
