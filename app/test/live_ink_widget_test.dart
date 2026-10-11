@@ -170,6 +170,16 @@ void main() {
     final resizedStrokes = StrokeCodec.documentToStrokes(latestDocument!);
     final resizedBounds = _testBounds(resizedStrokes.single.points);
     expect(resizedBounds.width, greaterThan(movedBounds.width + 8));
+
+    // Duplicate must create an independent stroke and leave it selected.
+    controller.duplicateSelection();
+    await tester.pump();
+    await tester.pumpAndSettle();
+    final duplicatedStrokes = StrokeCodec.documentToStrokes(latestDocument!);
+    expect(duplicatedStrokes, hasLength(2));
+    expect(duplicatedStrokes.map((stroke) => stroke.id).toSet(), hasLength(2));
+    expect(controller.selectionCount, 1);
+
     controller.dispose();
     tool.dispose();
   });
