@@ -67,7 +67,10 @@ void main() {
     );
 
     final tools = CanvasTool.values.where((tool) => tool.isShape).toList();
-    expect(tools.length, greaterThanOrEqualTo(30));
+    expect(tools.length, greaterThanOrEqualTo(100));
+    expect(CanvasTool.dottedLine.isShape, isTrue);
+    expect(CanvasTool.dashedLine.isShape, isTrue);
+    expect(CanvasTool.cartesianPlane.isShape, isTrue);
     for (final tool in tools) {
       expect(tool.label, isNotEmpty, reason: tool.name);
       final recorder = PictureRecorder();
