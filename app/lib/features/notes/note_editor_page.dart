@@ -1404,7 +1404,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       CanvasTool.lasso: Icons.gesture_rounded,
       CanvasTool.line: Icons.horizontal_rule_rounded,
       CanvasTool.dottedLine: Icons.more_horiz_rounded,
-      CanvasTool.dashedLine: Icons.more_horiz_rounded,
+      CanvasTool.dashedLine: Icons.linear_scale_rounded,
       CanvasTool.arrow: Icons.arrow_right_alt_rounded,
       CanvasTool.vectorArrow: Icons.north_east_rounded,
       CanvasTool.projectilePath: Icons.trending_up_rounded,
@@ -1771,6 +1771,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
             child: InkWell(
               borderRadius: BorderRadius.circular(12),
               onTap: () => _selectTool(tool),
+              onDoubleTap: () => _styleSheet(tool),
               child: Ink(
                 decoration: BoxDecoration(
                   color: _tool == tool
