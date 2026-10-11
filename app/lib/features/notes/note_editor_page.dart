@@ -26,6 +26,7 @@ import '../../core/security/note_lock_service.dart';
 import '../../core/settings/app_settings.dart';
 import '../../data/local/note_repository.dart';
 import '../settings/settings_page.dart';
+import '../folders/folder_cover_library_page.dart';
 
 // Open-note tabs are shared by editor routes during the current app session.
 final ValueNotifier<List<LocalNote>> _snoteOpenNoteTabs = ValueNotifier<List<LocalNote>>(<LocalNote>[]);
@@ -59,6 +60,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   final _settings = SnoteSettings.instance;
   final GlobalKey _pageCaptureKey = GlobalKey();
   final GlobalKey _toolbarKey = GlobalKey();
+  final GlobalKey _editorStackKey = GlobalKey();
+  final GlobalKey _canvasRenderKey = GlobalKey();
+  final GlobalKey _showcaseKey = GlobalKey();
   final Map<String, double> _toolSizeOverrides = <String, double>{};
   final Map<String, Color> _toolColorOverrides = <String, Color>{};
   final Map<String, bool> _toolDashedOverrides = <String, bool>{};
@@ -111,6 +115,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   bool _saveInFlight = false;
   int? _noteCoverColor;
   String? _noteCoverIcon;
+  String? _noteCoverKey;
   StateSetter? _templateSheetRefresh;
 
   Map<String, Object?> get pageData => _pages[_page];
@@ -361,12 +366,14 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     final parsed = <Map<String, Object?>>[];
     int? storedCoverColor;
     String? storedCoverIcon;
+    String? storedCoverKey;
     if (note?.contentJson != null) {
       try {
         final json = jsonDecode(note!.contentJson!);
         if (json is Map<String, dynamic>) {
           storedCoverColor = (json['coverColor'] as num?)?.toInt();
           storedCoverIcon = json['coverIcon']?.toString();
+          storedCoverKey = json['coverKey']?.toString();
           final raw = json['pages'];
           if (raw is List) {
             for (final item in raw) {
@@ -392,6 +399,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       _page = 0;
       _noteCoverColor = storedCoverColor;
       _noteCoverIcon = storedCoverIcon;
+      _noteCoverKey = storedCoverKey;
       _loading = false;
     });
     _restoreToolbar();
@@ -450,6 +458,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
 
   void _restoreToolbar() {
     _showcaseDock = _settings.getString('toolShowcaseDockSide');
+    _showcaseX = _settings.getDouble('toolShowcaseX') == 0 ? 12 : _settings.getDouble('toolShowcaseX');
+    _showcaseY = _settings.getDouble('toolShowcaseY') == 0 ? 140 : _settings.getDouble('toolShowcaseY');
     if (!const {'left', 'right', 'top', 'bottom', 'free'}.contains(_showcaseDock)) _showcaseDock = 'right';
     final x = pageData['toolbarX'];
     final y = pageData['toolbarY'];
@@ -493,6 +503,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         'version': 5,
         'coverColor': _noteCoverColor,
         'coverIcon': _noteCoverIcon,
+        'coverKey': _noteCoverKey,
         'pages': _pages,
         'text_delta': _quill.document.toDelta().toJson(),
       });
@@ -597,6 +608,21 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     final speed = d.primaryVelocity ?? 0;
     if (speed < -350) _nextPage();
     if (speed > 350) _previousPage();
+  }
+
+  Future<void> _chooseNoteCover() async {
+    final chosen = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FolderCoverLibraryPage(
+          selectionMode: true,
+          initialCoverKey: _noteCoverKey ?? 'cover:0',
+        ),
+      ),
+    );
+    if (chosen == null || !mounted) return;
+    setState(() => _noteCoverKey = chosen);
+    await _save(force: true);
   }
 
   Future<void> _lockNote() async {
@@ -722,6 +748,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         backgroundColor: const Color(0xffe9edf2),
         body: SafeArea(
           child: Stack(
+            key: _editorStackKey,
             children: [
               Positioned.fill(
                 top: _full ? 0 : 34,
@@ -870,6 +897,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
             IgnorePointer(
               ignoring: _readingMode,
               child: RepaintBoundary(
+                key: _canvasRenderKey,
                 child: SnoteCanvas(
                   key: ValueKey(widget.note.id + '-' + _page.toString()),
                   pen: pen,
@@ -886,6 +914,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                       setState(() => _selected = count);
                     }
                   },
+                  onSelectionBoundsChanged: _positionSelectionTools,
                   autoRecognition: _settings.getBool('autoRecognition'),
                   onEraserMiss: _settings.getBool('eraseClickSwitch') &&
                           _tool == CanvasTool.eraser
@@ -1406,6 +1435,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                 ),
               ),
               _compactAction(tooltip: 'Save note', icon: Icons.save_outlined, onPressed: () => _save(force: true)),
+              _compactAction(tooltip: 'Note cover', icon: Icons.photo_album_outlined, onPressed: _chooseNoteCover),
               _compactAction(tooltip: 'Add screenshot / gallery image', icon: Icons.photo_library_outlined, onPressed: _insertScreenshot),
               _compactAction(tooltip: 'Insert PDF pages', icon: Icons.picture_as_pdf_outlined, onPressed: _importPdfIntoNote),
               _compactAction(tooltip: 'Calculator', icon: Icons.calculate_outlined, onPressed: _calculatorSheet),
@@ -1596,18 +1626,23 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     final items = <Widget>[
       GestureDetector(
         onPanUpdate: docked
-            ? (_) {
-                if (!mounted) return;
+            ? (details) {
+                final toolbarObject = _toolbarKey.currentContext?.findRenderObject();
+                final stackObject = _editorStackKey.currentContext?.findRenderObject();
+                var origin = Offset(_toolbarX, _toolbarY);
+                if (toolbarObject is RenderBox && stackObject is RenderBox) {
+                  origin = stackObject.globalToLocal(toolbarObject.localToGlobal(Offset.zero));
+                }
+                final viewport = MediaQuery.sizeOf(context);
                 setState(() {
                   _docked = false;
-                  // Undock into the usable canvas area, not underneath the
-                  // fixed left toolbar.
-                  _toolbarX = 16;
-                  _toolbarY = 100;
+                  _toolbarX = (origin.dx + details.delta.dx).clamp(8.0, math.max(8.0, viewport.width - 170)).toDouble();
+                  _toolbarY = (origin.dy + details.delta.dy).clamp(54.0, math.max(54.0, viewport.height - 100)).toDouble();
                   _toolbarOffset.value = Offset(_toolbarX, _toolbarY);
                 });
               }
             : null,
+        onPanEnd: docked ? (_) => _snapToolbar(MediaQuery.sizeOf(context)) : null,
         child: Padding(
           padding: const EdgeInsets.all(7),
           child: Icon(Icons.drag_indicator_rounded, size: 19, color: Theme.of(context).colorScheme.onSurfaceVariant),
@@ -1831,6 +1866,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     pageData['toolbarX'] = _toolbarX;
     pageData['toolbarY'] = _toolbarY;
     pageData['toolbarDock'] = _docked ? _dockSide : 'free';
+    unawaited(_settings.setString('toolbarDock', _docked ? _dockSide : 'free'));
     _scheduleSave();
   }
 
@@ -2190,6 +2226,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       top: side == 'top' ? 54 : (side == 'free' ? _showcaseY : null),
       bottom: side == 'bottom' ? 8 : null,
       child: Material(
+        key: _showcaseKey,
         elevation: 14,
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
@@ -2202,10 +2239,16 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
               GestureDetector(
                 onPanUpdate: (details) {
                   final size = MediaQuery.sizeOf(context);
+                  final panelObject = _showcaseKey.currentContext?.findRenderObject();
+                  final stackObject = _editorStackKey.currentContext?.findRenderObject();
+                  var origin = Offset(_showcaseX, _showcaseY);
+                  if (panelObject is RenderBox && stackObject is RenderBox) {
+                    origin = stackObject.globalToLocal(panelObject.localToGlobal(Offset.zero));
+                  }
                   setState(() {
                     _showcaseDock = 'free';
-                    _showcaseX = (_showcaseX + details.delta.dx).clamp(4.0, math.max(4.0, size.width - 260)).toDouble();
-                    _showcaseY = (_showcaseY + details.delta.dy).clamp(50.0, math.max(50.0, size.height - 300)).toDouble();
+                    _showcaseX = (origin.dx + details.delta.dx).clamp(4.0, math.max(4.0, size.width - 260)).toDouble();
+                    _showcaseY = (origin.dy + details.delta.dy).clamp(50.0, math.max(50.0, size.height - 300)).toDouble();
                   });
                 },
                 onPanEnd: (_) {
@@ -2220,6 +2263,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   if (nearest.value.abs() < 70) {
                     setState(() => _showcaseDock = nearest.key);
                     unawaited(_settings.setString('toolShowcaseDockSide', nearest.key));
+                  } else {
+                    unawaited(_settings.setString('toolShowcaseDockSide', 'free'));
+                    unawaited(_settings.setDouble('toolShowcaseX', _showcaseX));
+                    unawaited(_settings.setDouble('toolShowcaseY', _showcaseY));
                   }
                 },
                 child: Padding(
@@ -2611,6 +2658,28 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           );
         },
       );
+
+  void _positionSelectionTools(Rect? localBounds) {
+    if (!mounted || localBounds == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final canvasObject = _canvasRenderKey.currentContext?.findRenderObject();
+      final stackObject = _editorStackKey.currentContext?.findRenderObject();
+      if (canvasObject is! RenderBox || stackObject is! RenderBox) return;
+      final globalPoint = canvasObject.localToGlobal(localBounds.topRight);
+      final point = stackObject.globalToLocal(globalPoint);
+      const toolbarWidth = 270.0;
+      final preferredX = point.dx + 12 + toolbarWidth <= stackObject.size.width
+          ? point.dx + 12
+          : point.dx - toolbarWidth - 12;
+      final nextX = preferredX.clamp(4.0, math.max(4.0, stackObject.size.width - toolbarWidth)).toDouble();
+      final nextY = (point.dy - 18).clamp(52.0, math.max(52.0, stackObject.size.height - 76)).toDouble();
+      setState(() {
+        _selectionToolbarX = nextX;
+        _selectionToolbarY = nextY;
+      });
+    });
+  }
 
   Widget _selectionTools() => Positioned(
         left: _selectionToolbarX < 0 ? 8 : _selectionToolbarX,
@@ -3128,6 +3197,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   Future<void> _colorSheet() async {
     var color = _toolColorOverrides[_tool.name] ?? _penColor;
     var paletteOpacity = _opacity;
+    var applyColorToFill = _fillColor != null;
     var hexText = color.toARGB32().toRadixString(16).substring(2).toUpperCase();
     final hexController = TextEditingController(text: '#$hexText');
     var useEyedropper = false;
@@ -3242,13 +3312,19 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                       },
                     ),
                     const SizedBox(height: 12),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: applyColorToFill,
+                      onChanged: (value) => setDialog(() => applyColorToFill = value),
+                      title: const Text('Use this color for shape fill'),
+                    ),
                     Text('Opacity: ' + (paletteOpacity * 100).round().toString() + '%', style: const TextStyle(fontWeight: FontWeight.w800)),
                     Slider(
                       value: paletteOpacity.clamp(.05, 1).toDouble(),
                       min: .05,
                       max: 1,
                       divisions: 19,
-                      onChanged: (value) => setDialogState(() => paletteOpacity = value),
+                      onChanged: (value) => setDialog(() => paletteOpacity = value),
                     ),
                     const Text('Recent colors', style: TextStyle(fontWeight: FontWeight.w800)),
                     const SizedBox(height: 7),
@@ -3286,6 +3362,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     _penColor = color;
                     _toolColorOverrides[_tool.name] = color;
                     _opacity = paletteOpacity;
+                    if (applyColorToFill) {
+                      _fillColor = color;
+                      _fill = true;
+                    }
                   });
                   unawaited(_settings.setDouble('penOpacity', _opacity));
                   unawaited(_settings.setString('toolColors', jsonEncode({
@@ -3487,24 +3567,66 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   }
 
   Future<void> _stickers() async {
-    const items = [
-      '⭐','❤️','✅','❌','⚠️','💡','📌','🎯','🔥','🚀','📚','📝','😊','👍','✨','🎉','☀️','🌙','☕','💻','🔒','📖','🧠','🟢',
-      '📐','📏','🧮','✏️','🖊️','🖋️','🖍️','🧷','📎','📍','🗂️','🗒️','📒','📕','📗','📘','📙','📓','📔','🔬','🧪','🧬','⚗️','🧫',
-      '🛰️','🌍','🌌','🌈','🌱','🌿','🍀','🌸','🌻','🍁','🪴','🐝','🦋','🪐','☄️','🌠','💎','🔷','🔶','🔺','🔻','⬛','⬜','🟣',
-      '🟡','🟠','🔵','🟤','🩷','🩵','🩶','💜','💙','💚','💛','🧡','🤍','🖤','🤎','💯','❗','❓','‼️','⁉️','➕','➖','✖️','➗',
-      '↗️','↘️','↔️','↕️','🔁','🔄','🔀','📈','📉','📊','🧭','🧩','🛠️','⚙️','🫀','🫁','🦴','🧑‍🔬','🎨','🎼','🎵','🎹',
-      '🏆','🥇','🥈','🥉','🚩','🏁','🕒','⏱️','📅','🗓️','🔔','🔖','📣','💬','🗯️','💭','☑️','☒','🔘','⭕','❇️','✳️','❎','💠',
-    ];
+    const categories = <String, List<String>>{
+      'Study': ['📚','📖','📝','📓','📒','📔','📕','📗','📘','📙','🗂️','🗒️','📌','✅','❌','⭐','💡','🎯','🧠','🔖','📅','🗓️'],
+      'Science': ['🔬','🧪','🧬','⚗️','🧫','🛰️','🌍','🪐','☄️','📐','📏','🧮','💻','🔒','🫀','🫁','🦴','🧑‍🔬'],
+      'Nature': ['☀️','🌙','🌈','🌱','🌿','🍀','🌸','🌻','🍁','🪴','🐝','🦋','🌌','💎'],
+      'Symbols': ['⚠️','❗','❓','‼️','⁉️','➕','➖','✖️','➗','⭕','☑️','☒','🔘','❇️','✳️','❎','💠','⬛','⬜','🔷','🔶','🔺','🔻'],
+      'Arrows & Math': ['↗️','↘️','↔️','↕️','🔁','🔄','🔀','📈','📉','📊','🧭','🧩','⚙️','🛠️','📐','📏','🧮','➕','➖','✖️','➗'],
+      'Fun': ['⭐','❤️','😊','👍','✨','🎉','☕','🔥','🚀','🎨','🎼','🎵','🎹','🏆','🥇','🥈','🥉','🚩','🏁','💯','💬','🗯️','💭','🟢','🟡','🟠','🔵','🟣','🟤','🩷','🩵','🩶','💜','💙','💚','💛','🧡','🤍','🖤','🤎'],
+    };
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (sheetContext) => GridView.builder(
-        padding: const EdgeInsets.all(18),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 6, crossAxisSpacing: 8, mainAxisSpacing: 8),
-        itemCount: items.length,
-        itemBuilder: (_, index) => InkWell(
-          onTap: () { setState(() { _tool = CanvasTool.sticker; _sticker = items[index]; }); Navigator.pop(sheetContext); },
-          child: Center(child: Text(items[index], style: const TextStyle(fontSize: 30))),
+      isScrollControlled: true,
+      builder: (sheetContext) => DefaultTabController(
+        length: categories.length,
+        child: SafeArea(
+          child: SizedBox(
+            height: MediaQuery.sizeOf(sheetContext).height * .78,
+            child: Column(
+              children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(18, 4, 18, 10),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('Sticker library', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
+                  ),
+                ),
+                TabBar(
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.start,
+                  tabs: [for (final name in categories.keys) Tab(text: name)],
+                ),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      for (final items in categories.values)
+                        GridView.builder(
+                          padding: const EdgeInsets.all(18),
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 6,
+                            crossAxisSpacing: 8,
+                            mainAxisSpacing: 8,
+                          ),
+                          itemCount: items.length,
+                          itemBuilder: (_, index) => InkWell(
+                            onTap: () {
+                              setState(() {
+                                _tool = CanvasTool.sticker;
+                                _sticker = items[index];
+                              });
+                              Navigator.pop(sheetContext);
+                            },
+                            child: Center(child: Text(items[index], style: const TextStyle(fontSize: 30))),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
