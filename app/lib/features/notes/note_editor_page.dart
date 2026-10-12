@@ -1029,6 +1029,16 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                 ),
               ),
             ),
+          if (_settings.getBool('showAuxiliaryLine'))
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: _AuxiliaryGuidePainter(
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+              ),
+            ),
           if (_draw)
             IgnorePointer(
               ignoring: _readingMode,
@@ -1043,6 +1053,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   backgroundColor: Colors.transparent,
                   shapeFill: _fill,
                   customShapeSides: _sides,
+                  showAuxiliaryLine: _settings.getBool('showAuxiliaryLine'),
+                  autoAuxiliaryPoint: _settings.getBool('autoAuxiliaryPoint'),
                   stickerText: _sticker,
                   onChanged: _changed,
                   onSelectionChanged: (count) {
@@ -4514,6 +4526,59 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   }
 }
 
+
+
+class _AuxiliaryGuidePainter extends CustomPainter {
+  final Color color;
+
+  const _AuxiliaryGuidePainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
+    final center = Offset(size.width / 2, size.height / 2);
+    final guidePaint = Paint()
+      ..color = color.withValues(alpha: .22)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1
+      ..isAntiAlias = true;
+    const dashLength = 5.0;
+    const gapLength = 5.0;
+
+    void dashedLine(Offset start, Offset end) {
+      final distance = (end - start).distance;
+      if (distance <= 0) return;
+      final direction = (end - start) / distance;
+      var offset = 0.0;
+      while (offset < distance) {
+        final next = math.min(offset + dashLength, distance);
+        canvas.drawLine(
+          start + direction * offset,
+          start + direction * next,
+          guidePaint,
+        );
+        offset = next + gapLength;
+      }
+    }
+
+    dashedLine(Offset(0, center.dy), Offset(size.width, center.dy));
+    dashedLine(Offset(center.dx, 0), Offset(center.dx, size.height));
+    canvas.drawCircle(
+      center,
+      4,
+      Paint()
+        ..color = color.withValues(alpha: .85)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4
+        ..isAntiAlias = true,
+    );
+    canvas.drawCircle(center, 1.4, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(covariant _AuxiliaryGuidePainter oldDelegate) =>
+      color != oldDelegate.color;
+}
 
 class _StudyTimerFloating extends StatefulWidget {
   final bool visible;
