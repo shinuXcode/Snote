@@ -1706,7 +1706,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   Future<void> _calculatorSheet() async {
     const keys = [
       'sin', 'cos', 'tan', 'sqrt',
-      '(', ')', 'AC', 'DEL',
+      '(', ')', 'abs', 'ln',
+      'log', 'e', 'AC', 'DEL',
       '7', '8', '9', '÷',
       '4', '5', '6', '×',
       '1', '2', '3', '−',
@@ -1820,7 +1821,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                         final isClear = key == 'AC';
                         final isDelete = key == 'DEL';
                         final isFunction = const {
-                          'sin', 'cos', 'tan', 'sqrt', '(', ')', '%', '^', 'π', 'Ans',
+                          'sin', 'cos', 'tan', 'sqrt', 'abs', 'ln', 'log', 'e', '(', ')', '%', '^', 'π', 'Ans',
                         }.contains(key);
                         final isOperator = const {'÷', '×', '−', '+'}.contains(key);
                         final background = isResult
@@ -1877,17 +1878,26 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                                   _calculatorResult = 'Error';
                                 }
                               } else {
-                                final token = key == '×'
-                                    ? '*'
-                                    : key == '÷'
-                                        ? '/'
-                                        : key == '−'
-                                            ? '-'
-                                            : key == 'π'
-                                                ? 'pi'
-                                                : key;
-                                _calculatorInput.text = current == '0' &&
-                                        RegExp(r'^\d$').hasMatch(token)
+                                final isFunction = const {
+                                  'sin', 'cos', 'tan', 'sqrt', 'abs', 'ln', 'log',
+                                }.contains(key);
+                                final token = isFunction
+                                    ? key + '('
+                                    : key == '×'
+                                        ? '*'
+                                        : key == '÷'
+                                            ? '/'
+                                            : key == '−'
+                                                ? '-'
+                                                : key == 'π'
+                                                    ? 'pi'
+                                                    : key;
+                                final replaceLeadingZero = current == '0' &&
+                                    (RegExp(r'^\d$').hasMatch(token) ||
+                                        isFunction ||
+                                        token == 'pi' ||
+                                        token == 'e');
+                                _calculatorInput.text = replaceLeadingZero
                                     ? token
                                     : current + token;
                               }
