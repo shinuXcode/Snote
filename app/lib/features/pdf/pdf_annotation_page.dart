@@ -13,6 +13,7 @@ import '../../core/settings/app_settings.dart';
 import '../../data/local/file_document_repository.dart';
 import '../../data/local/folder_repository.dart';
 import '../../data/local/note_repository.dart';
+import '../notes/note_editor_page.dart';
 
 class PdfAnnotationPage extends StatefulWidget {
   final String? folderId;
@@ -67,25 +68,25 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
         metadata: <String, dynamic>{'source': 'pdf-import', 'isCover': true},
       );
 
-      final controller = PdfControllerPinch(document: PdfDocument.openData(bytes));
+
       if (!mounted) {
-        controller.dispose();
         await _documents.delete(asset);
         await _notes.delete(note.id);
         return;
       }
 
-      _controller?.dispose();
-      setState(() {
-        _bytes = bytes;
-        _asset = asset;
-        _note = note;
-        _controller = controller;
-        _pageCount = controller.pagesCount ?? 0;
-        _page = 1;
-        _selectedPages.clear();
-        _selectionMode = false;
-      });
+      // PDF import creates a real Snote notebook. Each rendered PDF page is
+      // stored as a page background, so the normal pen, lasso, eraser, undo,
+      // autosave, and note-reopen workflow can be used immediately.
+      await Navigator.of(context).pushReplacement<void, void>(
+        MaterialPageRoute<void>(
+          builder: (_) => NoteEditorPage(
+            note: note,
+            initialPdfBytes: bytes,
+            initialPdfName: file.name,
+          ),
+        ),
+      );
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
