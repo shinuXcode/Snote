@@ -833,14 +833,54 @@ class SnoteCanvasPainter extends CustomPainter {
         break;
 
       case 'cartesianPlane':
+        // Separate the guide grid from the coordinate axes. The former used
+        // the same stroke as the axes, making the origin and X/Y lines hard to
+        // read on both notebook paper and dark themes.
+        final sourceColor = source.color;
+        final axisColor = sourceColor.computeLuminance() > .58
+            ? const Color(0xff263238)
+            : sourceColor;
+        final gridPaint = Paint()
+          ..color = axisColor.withValues(alpha: .22)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = math.max(.55, p.strokeWidth * .55)
+          ..strokeCap = StrokeCap.round
+          ..isAntiAlias = true;
+        final axisPaint = Paint()
+          ..color = axisColor
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = math.max(1.6, p.strokeWidth * 1.65)
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..isAntiAlias = true;
+
         for (var i = 1; i < 10; i++) {
           final t = i / 10;
-          line(t, .08, t, .92);
-          line(.08, t, .92, t);
+          canvas.drawLine(at(t, .08), at(t, .92), gridPaint);
+          canvas.drawLine(at(.08, t), at(.92, t), gridPaint);
         }
-        arrow(.08, .5, .94, .5);
-        arrow(.5, .92, .5, .06);
-        circle(.5, .5, .018);
+
+        void coordinateAxis(double x1, double y1, double x2, double y2) {
+          final start = at(x1, y1);
+          final tip = at(x2, y2);
+          canvas.drawLine(start, tip, axisPaint);
+          final delta = tip - start;
+          if (delta.distance <= 1) return;
+          final unit = delta / delta.distance;
+          final normal = Offset(-unit.dy, unit.dx);
+          final arrowLength = math.min(11.0, delta.distance * .16);
+          final base = tip - unit * arrowLength;
+          canvas.drawLine(tip, base + normal * arrowLength * .42, axisPaint);
+          canvas.drawLine(tip, base - normal * arrowLength * .42, axisPaint);
+        }
+
+        coordinateAxis(.07, .5, .95, .5);
+        coordinateAxis(.5, .93, .5, .05);
+        canvas.drawCircle(
+          at(.5, .5),
+          math.max(2.2, math.min(w, h) * .024),
+          Paint()..color = axisColor..isAntiAlias = true,
+        );
         break;
       case 'pentagon':
         polygon([at(.5,.08),at(.91,.4),at(.75,.9),at(.25,.9),at(.09,.4)]);
