@@ -1522,23 +1522,55 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       ),
     );
 
-    final Widget child;
-    if (infiniteCanvas) {
-      child = Center(
-        child: SizedBox(
-          width: 2400,
-          height: 2400,
-          child: pageSurface,
-        ),
-      );
-    } else {
-      child = Center(
-        child: AspectRatio(
-          aspectRatio: aspectRatio,
-          child: pageSurface,
-        ),
-      );
-    }
+    // Size the paper against the *actual viewport constraints*. AspectRatio
+    // alone can receive loose/unbounded constraints inside the nested
+    // Scaffold + Transform tree on Android split-pane layouts; in that case
+    // the page can collapse or be laid out outside the visible canvas while
+    // the floating tools remain visible. An explicit bounded size keeps the
+    // sheet visible in both embedded desktop/tablet and full-screen routes.
+    final Widget child = LayoutBuilder(
+      builder: (context, constraints) {
+        final maxWidth = constraints.maxWidth.isFinite
+            ? math.max(0.0, constraints.maxWidth)
+            : MediaQuery.sizeOf(context).width;
+        final maxHeight = constraints.maxHeight.isFinite
+            ? math.max(0.0, constraints.maxHeight)
+            : MediaQuery.sizeOf(context).height;
+        if (infiniteCanvas) {
+          final side = math.max(1.0, math.min(2400.0, math.min(maxWidth, maxHeight)));
+          return Center(
+            child: SizedBox(width: side, height: side, child: pageSurface),
+          );
+        }
+        final safeAspect = aspectRatio.isFinite && aspectRatio > 0
+            ? aspectRatio
+            : 210 / 297;
+        final width = math.max(1.0, math.min(maxWidth, maxHeight * safeAspect));
+        final height = math.max(1.0, width / safeAspect);
+        return Center(
+          child: SizedBox(
+            width: width,
+            height: height,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: _pageColor(),
+                border: Border.all(color: const Color(0x33000000), width: 1),
+                boxShadow: SnoteThemeController.instance.eInk
+                    ? const <BoxShadow>[]
+                    : const <BoxShadow>[
+                        BoxShadow(
+                          color: Color(0x22000000),
+                          blurRadius: 12,
+                          offset: Offset(0, 3),
+                        ),
+                      ],
+              ),
+              child: pageSurface,
+            ),
+          ),
+        );
+      },
+    );
 
     return RepaintBoundary(
       key: _pageCaptureKey,
