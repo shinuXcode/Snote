@@ -28,6 +28,7 @@ import '../../core/security/note_lock_service.dart';
 import '../../core/settings/app_settings.dart';
 import '../../data/local/file_document_repository.dart';
 import '../../data/local/note_repository.dart';
+import 'note_content_compatibility.dart';
 import '../settings/settings_page.dart';
 import '../folders/folder_cover_library_page.dart';
 
@@ -86,6 +87,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   int _page = 0;
   bool _loading = true;
   String? _loadError;
+  String? _pageRenderError;
+  final Map<String, Uint8List> _backgroundImageCache = <String, Uint8List>{};
+  final Map<String, String> _backgroundImageEncodedByPageId = <String, String>{};
   bool _locked = false;
   bool _unlocked = true;
   bool _draw = true;
@@ -456,6 +460,12 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       }
       if (raw is List && raw.isNotEmpty && parsed.isEmpty) {
         throw const FormatException('Saved note pages could not be restored.');
+      }
+      // Early Snote builds stored a single canvas page at the root of
+      // content_json. Recover that page instead of opening a fresh blank page.
+      if (parsed.isEmpty && (raw == null || (raw is List && raw.isEmpty))) {
+        final legacyPage = legacyPageFromNoteContent(json.cast<String, Object?>());
+        if (legacyPage != null) parsed.add(_normalize(legacyPage));
       }
     }
 
@@ -912,7 +922,22 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return _lockedView();
+    if (_loading) {
+      if (_locked) return _lockedView();
+      return Scaffold(
+        appBar: AppBar(title: Text(widget.note.title)),
+        body: const Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Opening note and restoring saved pages…'),
+            ],
+          ),
+        ),
+      );
+    }
     if (_loadError != null) {
       return Scaffold(
         appBar: AppBar(title: Text(widget.note.title)),
@@ -1122,11 +1147,88 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   }
 
   Widget _pageView() {
+    try {
+      return _buildPageViewContent();
+    } catch (error, stackTrace) {
+      debugPrint('Snote page rendering failed: $error\n$stackTrace');
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.description_outlined, size: 42),
+              const SizedBox(height: 12),
+              const Text(
+                'This page could not be rendered. Your saved content has not been changed.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: () {
+                  _backgroundImageCache.clear();
+                  _backgroundImageEncodedByPageId.clear();
+                  setState(() {
+                    _pages = <Map<String, Object?>>[];
+                    _page = 0;
+                    _loading = true;
+                    _loadError = null;
+                    _pageRenderError = null;
+                  });
+                  unawaited(_prepare());
+                },
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Retry loading note'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+  }
+
+  Uint8List? _backgroundImageBytesForCurrentPage() {
+    final raw = pageData['backgroundImage'];
+    if (raw is! String || raw.isEmpty) {
+      _pageRenderError = null;
+      return null;
+    }
+    final pageId = pageData['id']?.toString() ?? 'page-$_page';
+    if (_backgroundImageEncodedByPageId[pageId] == raw) {
+      return _backgroundImageCache[pageId];
+    }
+    try {
+      final bytes = base64Decode(raw);
+      if (bytes.isEmpty) throw const FormatException('The background image is empty.');
+      _backgroundImageCache[pageId] = bytes;
+      _backgroundImageEncodedByPageId[pageId] = raw;
+      while (_backgroundImageCache.length > 2) {
+        final oldest = _backgroundImageCache.keys.first;
+        _backgroundImageCache.remove(oldest);
+        _backgroundImageEncodedByPageId.remove(oldest);
+      }
+      _pageRenderError = null;
+      return bytes;
+    } catch (error, stackTrace) {
+      debugPrint('Snote saved background image is unreadable ($pageId): $error\n$stackTrace');
+      _backgroundImageEncodedByPageId[pageId] = raw;
+      while (_backgroundImageEncodedByPageId.length > 2) {
+        final oldest = _backgroundImageEncodedByPageId.keys.first;
+        _backgroundImageEncodedByPageId.remove(oldest);
+        _backgroundImageCache.remove(oldest);
+      }
+      _pageRenderError = 'The saved page background could not be decoded. Other page content is preserved.';
+      return null;
+    }
+  }
+
+  Widget _buildPageViewContent() {
     // Defensive guard: asynchronous loads, route restoration, or a future
     // malformed import must never crash the shared note/PDF editor.
     if (_pages.isEmpty || _page < 0 || _page >= _pages.length) {
       return const Center(child: CircularProgressIndicator());
     }
+    final backgroundImageBytes = _backgroundImageBytesForCurrentPage();
     final sizeKey = pageData['pageSize']?.toString() ?? 'A4';
     final horizontal = pageData['orientation']?.toString() == 'horizontal';
     final storedAspectRatio = pageData['pageAspectRatio'];
@@ -1167,15 +1269,33 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
               ),
             ),
           ),
-          if (pageData['backgroundImage'] is String &&
-              (pageData['backgroundImage'] as String).isNotEmpty)
+          if (backgroundImageBytes != null)
             Positioned.fill(
               child: IgnorePointer(
                 child: Image.memory(
-                  base64Decode(pageData['backgroundImage']! as String),
+                  backgroundImageBytes,
                   fit: BoxFit.fill,
                   gaplessPlayback: true,
                   errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              ),
+            ),
+          if (_pageRenderError != null)
+            Positioned(
+              left: 8,
+              right: 8,
+              top: 8,
+              child: IgnorePointer(
+                child: Material(
+                  color: Theme.of(context).colorScheme.errorContainer,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Text(
+                      _pageRenderError!,
+                      style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer, fontSize: 11),
+                    ),
+                  ),
                 ),
               ),
             ),
