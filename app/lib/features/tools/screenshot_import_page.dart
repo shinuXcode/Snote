@@ -20,10 +20,10 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
   final _docs = FileDocumentRepository();
   Uint8List? _bytes;
   bool _busy = false;
-  String _name = 'Screenshot note';
+  final TextEditingController _nameController = TextEditingController(text: 'Screenshot note');
 
-  Future<void> _pick() async {
-    final image = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 96);
+  Future<void> _pick(ImageSource source) async {
+    final image = await _picker.pickImage(source: source, imageQuality: 96);
     if (image == null) return;
     setState(() => _busy = true);
     try {
@@ -31,7 +31,87 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       if (!mounted) return;
       setState(() {
         _bytes = bytes;
-        _name = image.name.replaceFirst(RegExp(r'\.[^.]+$'), '');
+        _nameController.text = image.name.replaceFirst(RegExp(r'\.[^.]+
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _save() async {
+    final bytes = _bytes;
+    if (bytes == null) return;
+    setState(() => _busy = true);
+    try {
+      final title = _nameController.text.trim().isEmpty ? 'Screenshot note' : _nameController.text.trim();
+      final note = await _notes.create(title: title, folderId: widget.folderId);
+      await _docs.saveBytes(
+        noteId: note.id,
+        name: title + '.png',
+        type: 'image',
+        bytes: bytes,
+        metadata: {'source': 'screenshot-import'},
+      );
+      await _notes.saveContent(note.id, {
+        'version': 5,
+        'pages': <Map<String, Object?>>[],
+        'mediaNote': true,
+        'attachmentName': title + '.png',
+      });
+      if (mounted) Navigator.pop(context, note);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not save image: $error')));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('Screenshot / image note')),
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 760),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  Expanded(
+                    child: _bytes == null
+                        ? const Center(child: Text('Choose a screenshot or image to keep it inside the current folder.'))
+                        : InteractiveViewer(child: Image.memory(_bytes!, fit: BoxFit.contain)),
+                  ),
+                  TextField(
+                    controller: _nameController,
+                    onChanged: (v) => _name = v,
+                    decoration: const InputDecoration(labelText: 'Note title'),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(child: OutlinedButton.icon(onPressed: _busy ? null : () => _pick(ImageSource.gallery), icon: const Icon(Icons.photo_library_outlined), label: const Text('Gallery'))),
+                      const SizedBox(width: 12),
+                      Expanded(child: OutlinedButton.icon(onPressed: _busy ? null : () => _pick(ImageSource.camera), icon: const Icon(Icons.camera_alt_outlined), label: const Text('Camera'))),
+                      const SizedBox(width: 12),
+                      Expanded(child: FilledButton.icon(onPressed: _busy || _bytes == null ? null : _save, icon: const Icon(Icons.save_rounded), label: Text(_busy ? 'Saving…' : 'Save here'))),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+}
+), '');
       });
     } finally {
       if (mounted) setState(() => _busy = false);

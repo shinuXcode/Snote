@@ -20,6 +20,7 @@ class _SettingsPageState extends State<SettingsPage> {
   final _settings = SnoteSettings.instance;
   final _theme = SnoteThemeController.instance;
   final _settingsSearch = TextEditingController();
+  bool _noteOnly = false;
 
   String get _query => _settingsSearch.text.trim().toLowerCase();
 
@@ -159,6 +160,32 @@ class _SettingsPageState extends State<SettingsPage> {
           ]),
         ),
       ),
+      if (_noteOnly)
+        Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Note canvas zoom', style: TextStyle(fontWeight: FontWeight.w800)),
+                Text((_settings.getDouble('noteZoom') * 100).round().toString() + '%'),
+                Slider(
+                  value: _settings.getDouble('noteZoom').clamp(.5, 4).toDouble(),
+                  min: .5,
+                  max: 4,
+                  divisions: 14,
+                  label: (_settings.getDouble('noteZoom') * 100).round().toString() + '%',
+                  onChanged: (value) {
+                    setState(() {});
+                    unawaited(_settings.setDouble('noteZoom', value));
+                  },
+                ),
+                const Text('Use two fingers to zoom the page; double-tap resets to the selected zoom.'),
+              ],
+            ),
+          ),
+        ),
       if (!_noteOnly) _group('Display', [
         _themeModeSelector(),
         _themeStyleSelector(),

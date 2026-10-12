@@ -1024,6 +1024,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         allowSingleFingerPan: _pan || _readingMode,
         minScale: .5,
         maxScale: 4,
+        initialScale: _settings.getDouble('noteZoom'),
         child: Padding(
           padding: EdgeInsets.only(
             left: 8,
@@ -1437,6 +1438,24 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         ),
       ),
     );
+  }
+
+  PageTemplate _template() {
+    final name = pageData['template']?.toString();
+    return PageTemplate.values.firstWhere(
+      (value) => value.name == name,
+      orElse: () => PageTemplate.dotted,
+    );
+  }
+
+  Color _pageColor([String key = 'paperColor', Color fallback = Colors.white]) {
+    final value = pageData[key];
+    return value is num ? Color(value.toInt()) : fallback;
+  }
+
+  double _pageDouble(String key, double fallback) {
+    final value = pageData[key];
+    return value is num ? value.toDouble() : fallback;
   }
 
   Widget _header() => Positioned(

@@ -21,6 +21,7 @@ class SnoteSettings extends ChangeNotifier {
     'autoBackupLocal': true, 'writingPostureRightHand': true, 'disableBackGesture': false,
     'turnOffPush': false, 'pageSwipe': true, 'autoAddPage': true,
     'securePagePreviews': true, 'eInk': false, 'grayscaleEInk': true, 'reduceMotion': false,
+    'welcomeGuideSeen': false,
   };
 
   static const doubleDefaults = <String, double>{
@@ -28,6 +29,7 @@ class SnoteSettings extends ChangeNotifier {
     'strokeSmoothing': .72,
     'velocitySensitivity': .65,
     'pressureExponent': 1.0,
+    'noteZoom': 1.0,
   };
 
   static const stringDefaults = <String, String>{
@@ -42,7 +44,6 @@ class SnoteSettings extends ChangeNotifier {
     'pencasePresets': '[]',
     'coverLibrary': '[]',
     'folderSort': 'nameAsc',
-    'welcomeGuideSeen': 'false',
     'pressureCurve': 'linear',
     'toolSizes': '{}',
     'toolColors': '{}',
