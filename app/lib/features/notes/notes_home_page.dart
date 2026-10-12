@@ -51,6 +51,8 @@ class _NotesHomePageState extends State<NotesHomePage> {
   bool _searchVisible = false;
   Timer? _searchDebounce;
   int _loadGeneration = 0;
+  int _homeNoteRenderLimit = 60;
+  int _homeFolderRenderLimit = 60;
   bool _welcomeCheckScheduled = false;
   String _folderSort = 'nameAsc';
   bool _folderSelectionMode = false;
@@ -74,12 +76,21 @@ class _NotesHomePageState extends State<NotesHomePage> {
 
   void _onSearchChanged() {
     if (!mounted) return;
+    _homeNoteRenderLimit = 60;
+    _homeFolderRenderLimit = 60;
     setState(() {});
     _searchDebounce?.cancel();
     _searchDebounce = Timer(
       const Duration(milliseconds: 180),
       () => unawaited(_load()),
     );
+  }
+
+  void _loadMoreHomeItems() {
+    setState(() {
+      _homeNoteRenderLimit += 60;
+      _homeFolderRenderLimit += 60;
+    });
   }
 
   Future<void> _load() async {
@@ -937,6 +948,9 @@ class _NotesHomePageState extends State<NotesHomePage> {
                         onDeleteSelectedFolders: _deleteSelectedFolders,
                         canPasteFolders: _folderClipboardIds.isNotEmpty,
                         onOpenCoverLibrary: _openCoverLibrary,
+                        noteRenderLimit: _homeNoteRenderLimit,
+                        folderRenderLimit: _homeFolderRenderLimit,
+                        onLoadMore: _loadMoreHomeItems,
                       ),
                     ),
                     const VerticalDivider(width: 1),
@@ -1064,6 +1078,9 @@ class _NotesHomePageState extends State<NotesHomePage> {
                         onDeleteSelectedFolders: _deleteSelectedFolders,
                         canPasteFolders: _folderClipboardIds.isNotEmpty,
                         onOpenCoverLibrary: _openCoverLibrary,
+                        noteRenderLimit: _homeNoteRenderLimit,
+                        folderRenderLimit: _homeFolderRenderLimit,
+                        onLoadMore: _loadMoreHomeItems,
           ),
         ),
       ],
@@ -1293,6 +1310,9 @@ class _HierarchyPanel extends StatelessWidget {
   final VoidCallback onDeleteSelectedFolders;
   final bool canPasteFolders;
   final VoidCallback onOpenCoverLibrary;
+  final int noteRenderLimit;
+  final int folderRenderLimit;
+  final VoidCallback onLoadMore;
 
   const _HierarchyPanel({
     required this.allFolders,
@@ -1333,6 +1353,9 @@ class _HierarchyPanel extends StatelessWidget {
     required this.onDeleteSelectedFolders,
     required this.canPasteFolders,
     required this.onOpenCoverLibrary,
+    required this.noteRenderLimit,
+    required this.folderRenderLimit,
+    required this.onLoadMore,
   });
 
   String _noteContentKind(LocalNote note) {
@@ -1362,6 +1385,8 @@ class _HierarchyPanel extends StatelessWidget {
     if (loading) return const Center(child: CircularProgressIndicator());
     final theme = Theme.of(context);
     final visibleFolders = allFolders.where((folder) => folder.parentId == currentFolderId).toList();
+    final renderedFolders = visibleFolders.take(folderRenderLimit).toList();
+    final renderedNotes = notes.take(noteRenderLimit).toList();
     switch (folderSort) {
       case 'nameDesc':
         visibleFolders.sort((a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()));
@@ -1467,7 +1492,7 @@ class _HierarchyPanel extends StatelessWidget {
             Wrap(
               spacing: 12,
               runSpacing: 12,
-              children: visibleFolders.map((folder) {
+              children: renderedFolders.map((folder) {
                 final isSelected = selectedFolderIds.contains(folder.id);
                 return SizedBox(
                   width: compact ? 152 : 174,
@@ -1519,7 +1544,7 @@ class _HierarchyPanel extends StatelessWidget {
           Wrap(
             spacing: 10,
             runSpacing: 10,
-            children: notes.map((note) {
+            children: renderedNotes.map((note) {
               final isSelected = selected?.id == note.id;
               final cover = _noteCoverKey(note);
               return SizedBox(
@@ -1603,7 +1628,7 @@ class _HierarchyPanel extends StatelessWidget {
             }).toList(),
           )
         else
-          ...notes.map(
+          ...renderedNotes.map(
             (note) => _HomeNoteTile(
               note: note,
               selected: selected?.id == note.id,
@@ -1613,6 +1638,18 @@ class _HierarchyPanel extends StatelessWidget {
               onRename: () => onRenameNote(note),
               onDelete: () => onDeleteNote(note),
               onChangeCover: () => onChangeNoteCover(note),
+            ),
+          ),
+        if (notes.length > renderedNotes.length ||
+            (compact && visibleFolders.length > renderedFolders.length))
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 14, 4, 24),
+            child: Center(
+              child: OutlinedButton.icon(
+                onPressed: onLoadMore,
+                icon: const Icon(Icons.expand_more_rounded),
+                label: const Text('Load more folders and notes'),
+              ),
             ),
           ),
         const SizedBox(height: 8),

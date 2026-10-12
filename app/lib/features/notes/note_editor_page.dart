@@ -1622,31 +1622,54 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       );
 
   Widget _toolbarWidget() {
-    final size = MediaQuery.sizeOf(context);
-    if (_docked) {
-      final vertical = _dockSide == 'left' || _dockSide == 'right';
-      return Positioned(
-        left: _dockSide == 'left' ? 0 : null,
-        right: _dockSide == 'right' ? 0 : null,
-        top: _dockSide == 'top' ? (_full ? 0 : 46) : null,
-        bottom: _dockSide == 'bottom' ? 0 : null,
-        child: SafeArea(child: _toolbarSurface(_toolbarContent(vertical ? Axis.vertical : Axis.horizontal, docked: true), key: _toolbarKey)),
-      );
-    }
+    final screen = MediaQuery.sizeOf(context);
+    final axis = _docked
+        ? (_dockSide == 'left' || _dockSide == 'right'
+            ? Axis.vertical
+            : Axis.horizontal)
+        : _floatingAxis;
+    final constraints = axis == Axis.vertical
+        ? BoxConstraints(
+            maxWidth: 128,
+            maxHeight: math.max(160, screen.height - 76),
+          )
+        : BoxConstraints(
+            maxWidth: math.max(120, screen.width - 16),
+            maxHeight: 92,
+          );
+    final toolbar = ConstrainedBox(
+      constraints: constraints,
+      child: _toolbarSurface(
+        _toolbarContent(axis, docked: _docked),
+        key: _toolbarKey,
+      ),
+    );
 
+    // Always keep the same Positioned -> toolbar subtree. Only the position
+    // changes, so a drag can be released and snapped repeatedly.
     return ValueListenableBuilder<Offset>(
       valueListenable: _toolbarOffset,
       builder: (_, offset, child) {
-        final y = offset.dy == 0 ? size.height - 112 : offset.dy;
+        if (_docked) {
+          return Positioned(
+            left: _dockSide == 'left' ? 0 : null,
+            right: _dockSide == 'right' ? 0 : null,
+            top: _dockSide == 'top' ? (_full ? 0 : 46) : null,
+            bottom: _dockSide == 'bottom' ? 0 : null,
+            child: child!,
+          );
+        }
+
+        final fallbackY = screen.height - math.min(screen.height - 72, 112);
         return Positioned(
-          left: offset.dx.clamp(8, math.max(8, size.width - 160)),
-          top: y.clamp(60, math.max(60, size.height - 92)),
-          // The drag grip inside _toolbarContent owns drag + snap consistently
-          // whether the toolbox is attached or floating.
+          left: offset.dx.clamp(4.0, math.max(4.0, screen.width - 144)).toDouble(),
+          top: (offset.dy == 0 ? fallbackY : offset.dy)
+              .clamp(_full ? 4.0 : 54.0, math.max(_full ? 4.0 : 54.0, screen.height - 104))
+              .toDouble(),
           child: child!,
         );
       },
-      child: _toolbarSurface(_toolbarContent(_floatingAxis, docked: false), key: _toolbarKey),
+      child: toolbar,
     );
   }
 
@@ -1693,7 +1716,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     final items = <Widget>[
       GestureDetector(
         onPanUpdate: (details) {
-          final viewport = MediaQuery.sizeOf(context);
+          final stackRenderObject = _editorStackKey.currentContext?.findRenderObject();
+          final viewport = stackRenderObject is RenderBox
+              ? stackRenderObject.size
+              : MediaQuery.sizeOf(context);
           final wasDocked = _docked;
           final renderObject = _toolbarKey.currentContext?.findRenderObject();
           final currentSize = renderObject is RenderBox ? renderObject.size : const Size(64, 360);
@@ -1973,38 +1999,46 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     Color(0xff65a30d), Color(0xff0d9488), Color(0xff0284c7), Color(0xfff8fafc),
   ];
 
-  void _snapToolbar(Size size) {
+  void _snapToolbar(Size screenSize) {
+    final stackObject = _editorStackKey.currentContext?.findRenderObject();
+    final bounds = stackObject is RenderBox ? stackObject.size : screenSize;
     final box = _toolbarKey.currentContext?.findRenderObject();
-    final toolboxSize = box is RenderBox ? box.size : const Size(240, 44);
-    final actualY = _toolbarY == 0 ? size.height - toolboxSize.height - 12 : _toolbarY;
-    final map = <String, double>{
+    final toolbarSize = box is RenderBox ? box.size : const Size(128, 360);
+    final topLimit = _full ? 0.0 : 46.0;
+    final distances = <String, double>{
       'left': _toolbarX,
-      'right': size.width - (_toolbarX + toolboxSize.width),
-      'top': actualY - (_full ? 0 : 46),
-      'bottom': size.height - (actualY + toolboxSize.height),
+      'right': bounds.width - (_toolbarX + toolbarSize.width),
+      'top': _toolbarY - topLimit,
+      'bottom': bounds.height - (_toolbarY + toolbarSize.height),
     };
-    final side = map.entries.reduce(
+    final nearest = distances.entries.reduce(
       (a, b) => a.value.abs() <= b.value.abs() ? a : b,
-    ).key;
-    final distance = map[side]!.abs();
-    if (distance < 84) {
+    );
+    if (nearest.value.abs() < 84) {
       setState(() {
         _docked = true;
-        _dockSide = side;
+        _dockSide = nearest.key;
       });
     } else {
       setState(() {
         _docked = false;
-        _toolbarX = _toolbarX.clamp(8, math.max(8, size.width - toolboxSize.width)).toDouble();
-        _toolbarY = actualY.clamp(_full ? 8 : 54, math.max(_full ? 8 : 54, size.height - toolboxSize.height - 8)).toDouble();
+        _toolbarX = _toolbarX
+            .clamp(4.0, math.max(4.0, bounds.width - toolbarSize.width - 4))
+            .toDouble();
+        _toolbarY = _toolbarY
+            .clamp(topLimit + 4, math.max(topLimit + 4, bounds.height - toolbarSize.height - 4))
+            .toDouble();
       });
     }
+
     _toolbarOffset.value = Offset(_toolbarX, _toolbarY);
     pageData['toolbarX'] = _toolbarX;
     pageData['toolbarY'] = _toolbarY;
     pageData['toolbarDock'] = _docked ? _dockSide : 'free';
     pageData['toolbarAxis'] = _floatingAxis.name;
     unawaited(_settings.setString('toolbarDock', _docked ? _dockSide : 'free'));
+    unawaited(_settings.setDouble('toolbarX', _toolbarX));
+    unawaited(_settings.setDouble('toolbarY', _toolbarY));
     _scheduleSave();
   }
 
@@ -2565,13 +2599,16 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                           avatar: Icon(_toolIcon(tool), size: 18),
                           label: Text(tool.label),
                           selected: selected.contains(tool.name),
-                          onSelected: (value) => setModal(() {
-                            if (value) {
-                              selected.add(tool.name);
-                            } else {
-                              selected.remove(tool.name);
-                            }
-                          }),
+                          onSelected: (value) {
+                            setModal(() {
+                              if (value) {
+                                selected.add(tool.name);
+                              } else {
+                                selected.remove(tool.name);
+                              }
+                            });
+                            unawaited(_settings.setString('pencaseTools', selected.join(',')));
+                          },
                         )).toList(),
                       ),
                       const Divider(height: 28),
@@ -2660,16 +2697,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   ),
                 ),
                 const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: () async {
-                      await _settings.setString('pencaseTools', selected.join(','));
-                      if (mounted) Navigator.pop(sheetContext);
-                    },
-                    child: const Text('Save pencase layout'),
-                  ),
-                ),
               ]),
             ),
           ),
