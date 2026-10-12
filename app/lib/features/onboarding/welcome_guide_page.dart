@@ -21,13 +21,13 @@ class _WelcomeGuidePageState extends State<WelcomeGuidePage> {
     _GuideStep(
       icon: Icons.draw_rounded,
       title: 'Write naturally',
-      body: 'Choose a pen and double-tap a tool for its settings. Drag the toolbox grip to float it or snap it to an edge. Add favorite color and size variants to the separate Tool Showcase.',
+      body: 'Choose a pen and double-tap a tool for its settings. Drag the toolbox grip to float it or snap it to any edge. Save favorite pen/color/size combinations in Tool Showcase and tap a favorite to use it immediately. In narrow or landscape layouts, use the editor overflow menu for secondary controls.',
       tip: 'Use a stylus for precise writing and keep palm rejection enabled when appropriate.',
     ),
     _GuideStep(
       icon: Icons.picture_as_pdf_rounded,
       title: 'Use PDFs and screenshots',
-      body: 'Import PDFs for annotation, export pages, or add images to your note. On Android, use the system screenshot preview Share action to send an image into Snote.',
+      body: 'Import PDFs for annotation, export pages, or add images to your note. Use More tools → Save page screenshot to export the current note page as a PNG. On Android, use the system screenshot preview Share action to send a screenshot from another app into Snote.',
       tip: 'Snote does not silently capture other apps; system screenshots require your action.',
     ),
     _GuideStep(
@@ -39,8 +39,8 @@ class _WelcomeGuidePageState extends State<WelcomeGuidePage> {
     _GuideStep(
       icon: Icons.lock_outline_rounded,
       title: 'Keep control of your notes',
-      body: 'Snote is offline-first. Private transfer is intended for local QR handoff. Your notes remain on this device unless you enable optional synchronization or export them.',
-      tip: 'Make a backup before resetting your device or moving notes to another device.',
+      body: 'Snote is offline-first. Use App settings for appearance and application behavior, and Note settings for handwriting, palm rejection, page navigation and zoom. Pinch with two fingers to zoom the page; double-tap resets to your configured zoom.',
+      tip: 'Make a backup before resetting your device or moving notes to another device. Notes stay on this device unless you export them or enable optional sync.',
     ),
   ];
 

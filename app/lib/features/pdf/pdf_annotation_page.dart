@@ -263,7 +263,7 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
         : (_controller?.pagesCount ?? 0);
     if (total <= 0) return;
 
-    var draft = Set<int>.from(_selectedPages);
+    final draft = Set<int>.from(_selectedPages);
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -286,6 +286,12 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
                         draft.remove(page);
                       }
                     });
+                    setState(() {
+                      _selectedPages
+                        ..clear()
+                        ..addAll(draft);
+                      _selectionMode = _selectedPages.isNotEmpty;
+                    });
                   },
                   title: Text('Page ' + page.toString()),
                 );
@@ -295,19 +301,7 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                setState(() {
-                  _selectedPages
-                    ..clear()
-                    ..addAll(draft);
-                  _selectionMode = _selectedPages.isNotEmpty;
-                });
-                Navigator.pop(dialogContext);
-              },
-              child: const Text('Apply'),
+              child: const Text('Done'),
             ),
           ],
         ),

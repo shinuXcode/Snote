@@ -1312,6 +1312,47 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     }
   }
 
+  Future<void> _exportLiveScreenshot() async {
+    try {
+      await _flushSave();
+      await WidgetsBinding.instance.endOfFrame;
+      final renderObject = _pageCaptureKey.currentContext?.findRenderObject();
+      if (renderObject is! RenderRepaintBoundary) {
+        throw StateError('The note page is not ready for capture.');
+      }
+      final ratio = MediaQuery.devicePixelRatioOf(context).clamp(1.0, 3.0).toDouble();
+      final image = await renderObject.toImage(pixelRatio: ratio);
+      try {
+        final data = await image.toByteData(format: ui.ImageByteFormat.png);
+        if (data == null) throw StateError('Could not encode screenshot.');
+        final bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+        final safeTitle = _title.text.trim()
+            .replaceAll(RegExp(r'[^a-zA-Z0-9 _-]'), '')
+            .replaceAll(' ', '_');
+        final saved = await FilePicker.saveFile(
+          dialogTitle: 'Save current Snote page screenshot',
+          fileName: '${safeTitle.isEmpty ? 'Snote' : safeTitle}-page-${_page + 1}.png',
+          type: FileType.custom,
+          allowedExtensions: const ['png'],
+          bytes: bytes,
+        );
+        if (mounted && saved != null && saved.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Screenshot saved: $saved')),
+          );
+        }
+      } finally {
+        image.dispose();
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Screenshot failed: $error')),
+        );
+      }
+    }
+  }
+
   Future<void> _studyTimerSheet() async {
     await showDialog<void>(
       context: context,
@@ -1399,10 +1440,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(17)),
                                 backgroundColor: key == '='
                                     ? Theme.of(context).colorScheme.primary
-                                    : const Color(0xffe7eaf0),
+                                    : Theme.of(context).colorScheme.surfaceContainerHighest,
                                 foregroundColor: key == '='
                                     ? Theme.of(context).colorScheme.onPrimary
-                                    : const Color(0xff17191d),
+                                    : Theme.of(context).colorScheme.onSurface,
                               ),
                               onPressed: () {
                                 setModal(() {
@@ -1468,31 +1509,49 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     return value is num ? value.toDouble() : fallback;
   }
 
-  Widget _header() => Positioned(
-        left: 0,
-        right: 0,
-        top: 0,
-        child: Material(
-          color: Theme.of(context).colorScheme.surface.withValues(alpha: .98),
-          child: SizedBox(
-            height: 46,
-            child: Row(children: [
+  Widget _header() {
+    final viewport = MediaQuery.sizeOf(context);
+    final compact = viewport.width < 760 || viewport.height < 440;
+    return Positioned(
+      left: 0,
+      right: 0,
+      top: 0,
+      child: Material(
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: .98),
+        child: SizedBox(
+          height: 46,
+          child: Row(
+            children: [
               _compactAction(
                 tooltip: 'Back to notes',
                 icon: Icons.menu_rounded,
-                onPressed: () async { await _flushSave(); if (mounted) Navigator.maybePop(context); },
+                onPressed: () async {
+                  await _flushSave();
+                  if (mounted) Navigator.maybePop(context);
+                },
               ),
               AnimatedBuilder(
                 animation: _canvas,
-                builder: (_, __) => Row(mainAxisSize: MainAxisSize.min, children: [
-                  _compactAction(tooltip: 'Undo', icon: Icons.undo_rounded, onPressed: _canvas.canUndo ? _canvas.undo : null),
-                  _compactAction(tooltip: 'Redo', icon: Icons.redo_rounded, onPressed: _canvas.canRedo ? _canvas.redo : null),
-                  _compactAction(
-                    tooltip: _tabsVisible ? 'Hide note tabs' : 'Show note tabs',
-                    icon: Icons.tab_outlined,
-                    onPressed: () => setState(() => _tabsVisible = !_tabsVisible),
-                  ),
-                ]),
+                builder: (_, __) => Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _compactAction(
+                      tooltip: 'Undo',
+                      icon: Icons.undo_rounded,
+                      onPressed: _canvas.canUndo ? _canvas.undo : null,
+                    ),
+                    _compactAction(
+                      tooltip: 'Redo',
+                      icon: Icons.redo_rounded,
+                      onPressed: _canvas.canRedo ? _canvas.redo : null,
+                    ),
+                    _compactAction(
+                      tooltip: _tabsVisible ? 'Hide note tabs' : 'Show note tabs',
+                      icon: Icons.tab_outlined,
+                      onPressed: () => setState(() => _tabsVisible = !_tabsVisible),
+                    ),
+                  ],
+                ),
               ),
               Expanded(
                 child: TextField(
@@ -1507,37 +1566,104 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   onSubmitted: (_) => _save(force: true),
                 ),
               ),
-              _compactAction(tooltip: 'Save note', icon: Icons.save_outlined, onPressed: () => _save(force: true)),
-
-
-
-
-
-
-
-              _compactAction(tooltip: 'Pages / thumbnails', icon: Icons.view_sidebar_outlined, onPressed: () => setState(() => _preview = !_preview)),
-
-              _compactAction(tooltip: 'Shapes and diagrams', icon: Icons.category_outlined, onPressed: () => setState(() => _shapePanel = !_shapePanel)),
-              _compactAction(tooltip: _draw ? 'Text mode' : 'Handwriting mode', icon: _draw ? Icons.text_fields_rounded : Icons.draw_rounded, onPressed: () => setState(() => _draw = !_draw)),
-              _compactAction(tooltip: 'Lock note', icon: _locked ? Icons.lock_rounded : Icons.lock_outline_rounded, onPressed: _lockNote),
-              _compactAction(tooltip: 'Fullscreen', icon: _full ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded, onPressed: _toggleFullscreen),
               _compactAction(
-                 tooltip: 'Note settings',
-                 icon: Icons.settings_outlined,
-                 onPressed: () => Navigator.push(
-                   context,
-                   MaterialPageRoute(builder: (_) => const SettingsPage(noteOnly: true)),
-                 ).then((_) {
-                   if (mounted) {
-                     setState(() {});
-                     _keepAwake();
-                   }
-                 }),
-               ),
-            ]),
+                tooltip: 'Save note',
+                icon: Icons.save_outlined,
+                onPressed: () => _save(force: true),
+              ),
+              if (!compact) ...[
+                _compactAction(
+                  tooltip: 'Pages / thumbnails',
+                  icon: Icons.view_sidebar_outlined,
+                  onPressed: () => setState(() => _preview = !_preview),
+                ),
+                _compactAction(
+                  tooltip: 'Shapes and diagrams',
+                  icon: Icons.category_outlined,
+                  onPressed: () => setState(() => _shapePanel = !_shapePanel),
+                ),
+                _compactAction(
+                  tooltip: _draw ? 'Text mode' : 'Handwriting mode',
+                  icon: _draw ? Icons.text_fields_rounded : Icons.draw_rounded,
+                  onPressed: () => setState(() => _draw = !_draw),
+                ),
+                _compactAction(
+                  tooltip: 'Lock note',
+                  icon: _locked ? Icons.lock_rounded : Icons.lock_outline_rounded,
+                  onPressed: _lockNote,
+                ),
+                _compactAction(
+                  tooltip: 'Fullscreen',
+                  icon: _full ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded,
+                  onPressed: _toggleFullscreen,
+                ),
+                _compactAction(
+                  tooltip: 'Note settings',
+                  icon: Icons.settings_outlined,
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const SettingsPage(noteOnly: true)),
+                  ).then((_) {
+                    if (mounted) {
+                      setState(() {});
+                      _keepAwake();
+                    }
+                  }),
+                ),
+              ] else
+                PopupMenuButton<String>(
+                  tooltip: 'More editor controls',
+                  icon: const Icon(Icons.more_vert_rounded),
+                  onSelected: (action) async {
+                    switch (action) {
+                      case 'pages':
+                        setState(() => _preview = !_preview);
+                        break;
+                      case 'shapes':
+                        setState(() => _shapePanel = !_shapePanel);
+                        break;
+                      case 'mode':
+                        setState(() => _draw = !_draw);
+                        break;
+                      case 'lock':
+                        _lockNote();
+                        break;
+                      case 'fullscreen':
+                        _toggleFullscreen();
+                        break;
+                      case 'settings':
+                        await Navigator.push<void>(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const SettingsPage(noteOnly: true),
+                          ),
+                        );
+                        if (mounted) {
+                          setState(() {});
+                          _keepAwake();
+                        }
+                        break;
+                      case 'screenshot':
+                        await _exportLiveScreenshot();
+                        break;
+                    }
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'pages', child: Text('Pages / thumbnails')),
+                    PopupMenuItem(value: 'shapes', child: Text('Shapes and diagrams')),
+                    PopupMenuItem(value: 'mode', child: Text('Toggle text / handwriting')),
+                    PopupMenuItem(value: 'lock', child: Text('Lock note')),
+                    PopupMenuItem(value: 'fullscreen', child: Text('Fullscreen')),
+                    PopupMenuItem(value: 'settings', child: Text('Note settings')),
+                    PopupMenuItem(value: 'screenshot', child: Text('Save page screenshot')),
+                  ],
+                ),
+            ],
           ),
         ),
-      );
+      ),
+    );
+  }
 
   Widget _compactAction({
     required String tooltip,
@@ -1810,6 +1936,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
             case 'cover':
               await _chooseNoteCover();
               break;
+            case 'screenshot':
+              await _exportLiveScreenshot();
+              break;
           }
         },
         itemBuilder: (_) => const [
@@ -1821,6 +1950,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           PopupMenuItem(value: 'pdf', child: Row(children: [Icon(Icons.picture_as_pdf_outlined, size: 19), SizedBox(width: 10), Text('Insert PDF pages')])),
           PopupMenuItem(value: 'showcase', child: Row(children: [Icon(Icons.inventory_2_outlined, size: 19), SizedBox(width: 10), Text('Tool showcase')])),
           PopupMenuItem(value: 'cover', child: Row(children: [Icon(Icons.photo_album_outlined, size: 19), SizedBox(width: 10), Text('Note cover page')])),
+          PopupMenuItem(value: 'screenshot', child: Row(children: [Icon(Icons.screenshot_monitor_rounded, size: 19), SizedBox(width: 10), Text('Save page screenshot')])),
         ],
       ),
       IconButton(
