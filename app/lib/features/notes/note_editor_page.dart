@@ -74,6 +74,77 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   bool _pdfExporting = false;
   final TextEditingController _calculatorInput = TextEditingController(text: '0');
   String _calculatorResult = '0';
+  Timer? _studyTimerTicker;
+  int _studyTimerDurationSeconds = 25 * 60;
+  int _studyTimerRemainingSeconds = 25 * 60;
+  bool _studyTimerVisible = false;
+  bool _studyTimerRunning = false;
+  double _studyTimerX = 12;
+  double _studyTimerY = 96;
+
+  String get _studyTimerClock {
+    final minutes = (_studyTimerRemainingSeconds ~/ 60).toString().padLeft(2, '0');
+    final seconds = (_studyTimerRemainingSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+
+  void _adjustStudyTimer(int deltaSeconds) {
+    if (_studyTimerRunning) return;
+    setState(() {
+      _studyTimerDurationSeconds =
+          (_studyTimerDurationSeconds + deltaSeconds).clamp(60, 3 * 60 * 60);
+      _studyTimerRemainingSeconds = _studyTimerDurationSeconds;
+    });
+  }
+
+  void _setStudyTimerPreset(int minutes) {
+    _studyTimerTicker?.cancel();
+    setState(() {
+      _studyTimerRunning = false;
+      _studyTimerDurationSeconds = minutes * 60;
+      _studyTimerRemainingSeconds = _studyTimerDurationSeconds;
+    });
+  }
+
+  void _toggleStudyTimerRunning() {
+    if (_studyTimerRunning) {
+      _studyTimerTicker?.cancel();
+      _studyTimerTicker = null;
+      setState(() => _studyTimerRunning = false);
+      return;
+    }
+    if (_studyTimerRemainingSeconds <= 0) {
+      setState(() => _studyTimerRemainingSeconds = _studyTimerDurationSeconds);
+    }
+    setState(() => _studyTimerRunning = true);
+    _studyTimerTicker?.cancel();
+    _studyTimerTicker = Timer.periodic(const Duration(seconds: 1), (ticker) {
+      if (!mounted) {
+        ticker.cancel();
+        return;
+      }
+      if (_studyTimerRemainingSeconds <= 1) {
+        ticker.cancel();
+        _studyTimerTicker = null;
+        setState(() {
+          _studyTimerRemainingSeconds = 0;
+          _studyTimerRunning = false;
+        });
+        return;
+      }
+      setState(() => _studyTimerRemainingSeconds -= 1);
+    });
+  }
+
+  void _resetStudyTimer() {
+    _studyTimerTicker?.cancel();
+    _studyTimerTicker = null;
+    setState(() {
+      _studyTimerRunning = false;
+      _studyTimerRemainingSeconds = _studyTimerDurationSeconds;
+    });
+  }
+
 
   List<Map<String, Object?>> _pages = [];
   int _page = 0;
@@ -736,6 +807,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     WidgetsBinding.instance.removeObserver(this);
     _snoteOpenNoteTabs.removeListener(_onOpenTabsChanged);
     _saveTimer?.cancel();
+    _studyTimerTicker?.cancel();
     _quill.removeListener(_scheduleSave);
     _quill.dispose();
     _title.dispose();
@@ -790,6 +862,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
               if (_toolbar && _draw && !_readingMode) _toolbarWidget(),
               if (_shapePanel && !_full && !_readingMode) _shapePanelWidget(),
               if (_showcaseOpen && !_full && !_readingMode) _showcaseWidget(),
+              if (_studyTimerVisible && !_full) _studyTimerWidget(),
               if (!_toolbar && !_full && !_readingMode) _toolbarOpen(),
               if (_full) _fullExit(),
               if (_selected > 0 && !_readingMode) _selectionTools(),
@@ -1354,9 +1427,139 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   }
 
   Future<void> _studyTimerSheet() async {
-    await showDialog<void>(
-      context: context,
-      builder: (_) => const _StudyTimerDialog(),
+    if (!mounted) return;
+    setState(() => _studyTimerVisible = !_studyTimerVisible);
+  }
+
+  Widget _studyTimerWidget() {
+    final scheme = Theme.of(context).colorScheme;
+    final screen = MediaQuery.sizeOf(context);
+    return Positioned(
+      left: _studyTimerX.clamp(4.0, math.max(4.0, screen.width - 274)).toDouble(),
+      top: _studyTimerY.clamp(48.0, math.max(48.0, screen.height - 230)).toDouble(),
+      child: Material(
+        elevation: 18,
+        color: scheme.surface.withValues(alpha: .97),
+        borderRadius: BorderRadius.circular(18),
+        clipBehavior: Clip.antiAlias,
+        child: SizedBox(
+          width: 262,
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                GestureDetector(
+                  onPanUpdate: (details) {
+                    setState(() {
+                      _studyTimerX = (_studyTimerX + details.delta.dx)
+                          .clamp(4.0, math.max(4.0, screen.width - 274)).toDouble();
+                      _studyTimerY = (_studyTimerY + details.delta.dy)
+                          .clamp(48.0, math.max(48.0, screen.height - 230)).toDouble();
+                    });
+                  },
+                  child: Row(children: [
+                    Icon(Icons.drag_indicator_rounded, size: 18, color: scheme.onSurfaceVariant),
+                    const SizedBox(width: 5),
+                    const Expanded(
+                      child: Text('Focus timer', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900)),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints.tightFor(width: 26, height: 26),
+                      padding: EdgeInsets.zero,
+                      tooltip: 'Close timer',
+                      onPressed: () => setState(() => _studyTimerVisible = false),
+                      icon: const Icon(Icons.close_rounded, size: 17),
+                    ),
+                  ]),
+                ),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [scheme.primaryContainer, scheme.tertiaryContainer],
+                    ),
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  child: Column(children: [
+                    Text(
+                      _studyTimerClock,
+                      style: TextStyle(
+                        fontSize: 29,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.1,
+                        color: scheme.onPrimaryContainer,
+                        fontFeatures: const [ui.FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    Text(
+                      _studyTimerRunning
+                          ? 'Timer running — keep writing'
+                          : _studyTimerRemainingSeconds == 0
+                              ? 'Session complete'
+                              : 'Adjust time, then start',
+                      style: TextStyle(fontSize: 10, color: scheme.onPrimaryContainer),
+                    ),
+                  ]),
+                ),
+                const SizedBox(height: 7),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    for (final minutes in const [15, 25, 45])
+                      ChoiceChip(
+                        label: Text('\u0024{minutes}m'),
+                        selected: _studyTimerDurationSeconds == minutes * 60,
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        onSelected: _studyTimerRunning ? null : (_) => _setStudyTimerPreset(minutes),
+                      ),
+                  ],
+                ),
+                Row(children: [
+                  IconButton(
+                    tooltip: 'Subtract one minute',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: _studyTimerRunning ? null : () => _adjustStudyTimer(-60),
+                    icon: const Icon(Icons.remove_circle_outline_rounded),
+                  ),
+                  const Expanded(
+                    child: Center(child: Text('Minutes', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700))),
+                  ),
+                  IconButton(
+                    tooltip: 'Add one minute',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: _studyTimerRunning ? null : () => _adjustStudyTimer(60),
+                    icon: const Icon(Icons.add_circle_outline_rounded),
+                  ),
+                ]),
+                Row(children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(vertical: 7),
+                      ),
+                      onPressed: _toggleStudyTimerRunning,
+                      icon: Icon(_studyTimerRunning ? Icons.pause_rounded : Icons.play_arrow_rounded, size: 18),
+                      label: Text(_studyTimerRunning ? 'Pause' : 'Start'),
+                    ),
+                  ),
+                  const SizedBox(width: 7),
+                  IconButton.filledTonal(
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'Reset timer',
+                    onPressed: _resetStudyTimer,
+                    icon: const Icon(Icons.restart_alt_rounded),
+                  ),
+                ]),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -4176,87 +4379,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           ),
         ),
       ),
-    );
-  }
-}
-
-class _StudyTimerDialog extends StatefulWidget {
-  const _StudyTimerDialog();
-
-  @override
-  State<_StudyTimerDialog> createState() => _StudyTimerDialogState();
-}
-
-class _StudyTimerDialogState extends State<_StudyTimerDialog> {
-  final Stopwatch _watch = Stopwatch();
-  Timer? _ticker;
-
-  String get _clock {
-    final elapsed = _watch.elapsed;
-    final hours = elapsed.inHours.toString().padLeft(2, '0');
-    final minutes = (elapsed.inMinutes % 60).toString().padLeft(2, '0');
-    final seconds = (elapsed.inSeconds % 60).toString().padLeft(2, '0');
-    return hours + ':' + minutes + ':' + seconds;
-  }
-
-  void _startPause() {
-    setState(() {
-      if (_watch.isRunning) {
-        _watch.stop();
-        _ticker?.cancel();
-        _ticker = null;
-      } else {
-        _watch.start();
-        _ticker ??= Timer.periodic(const Duration(seconds: 1), (_) {
-          if (mounted) setState(() {});
-        });
-      }
-    });
-  }
-
-  void _reset() {
-    setState(() {
-      _watch
-        ..stop()
-        ..reset();
-      _ticker?.cancel();
-      _ticker = null;
-    });
-  }
-
-  @override
-  void dispose() {
-    _ticker?.cancel();
-    _watch.stop();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final running = _watch.isRunning;
-    return AlertDialog(
-      title: const Text('Study timer'),
-      content: SizedBox(
-        width: 320,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(running ? Icons.timer_rounded : Icons.hourglass_empty_rounded, size: 42, color: Theme.of(context).colorScheme.primary),
-            const SizedBox(height: 12),
-            Text(_clock, style: Theme.of(context).textTheme.displaySmall?.copyWith(fontFeatures: const [ui.FontFeature.tabularFigures()], fontWeight: FontWeight.w800)),
-            const SizedBox(height: 8),
-            Text(running ? 'Study session in progress' : 'Session paused', style: Theme.of(context).textTheme.bodyMedium),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton.icon(onPressed: _reset, icon: const Icon(Icons.restart_alt_rounded), label: const Text('Reset')),
-        FilledButton.icon(
-          onPressed: _startPause,
-          icon: Icon(running ? Icons.pause_rounded : Icons.play_arrow_rounded),
-          label: Text(running ? 'Pause' : 'Start'),
-        ),
-      ],
     );
   }
 }
