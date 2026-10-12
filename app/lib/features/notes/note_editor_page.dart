@@ -494,7 +494,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     Uint8List? pdfBytes = widget.initialPdfBytes;
     String? pdfName = widget.initialPdfName;
     var hasPdfAttachment = false;
-    if ((pdfBytes == null || pdfBytes.isEmpty) && parsed.isEmpty) {
+    // Look for the original PDF even when a stale placeholder page exists.
+    // Earlier betas could save a non-empty pages envelope before rasterizing
+    // the PDF, which incorrectly skipped the old `parsed.isEmpty` recovery.
+    if (pdfBytes == null || pdfBytes.isEmpty) {
       final assets = await FileDocumentRepository().listForNote(widget.note.id);
       DocumentAsset? sourcePdf;
       for (final asset in assets.reversed) {
@@ -523,7 +526,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       }
     }
 
-    if (parsed.isEmpty && pdfBytes != null && pdfBytes.isNotEmpty) {
+    if (pdfBytes != null &&
+        pdfBytes.isNotEmpty &&
+        shouldRestorePdfPageBackgrounds(parsed)) {
       try {
         final result = await _renderPdfPages(
           pdfBytes,
@@ -532,7 +537,15 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         if (result.totalPages < 1 || result.pages.isEmpty) {
           throw StateError('The PDF renderer returned no pages.');
         }
-        parsed.addAll(result.pages);
+        // Keep any existing annotations while replacing stale/absent PDF
+        // raster backgrounds with freshly rendered pages from the attachment.
+        final recoveredPages = mergeSavedAnnotationsWithPdfPages(
+          savedPages: List<Map<String, Object?>>.from(parsed),
+          renderedPages: result.pages,
+        );
+        parsed
+          ..clear()
+          ..addAll(recoveredPages);
         originalPdfPageCount = result.totalPages;
         importedOnFirstOpen = true;
       } catch (error) {
