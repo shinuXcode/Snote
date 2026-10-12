@@ -112,6 +112,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   int _sides = 6;
   bool _shapePanel = false;
   bool _showcaseOpen = false;
+  bool _studyTimerVisible = false;
   String _showcaseDock = 'right';
   double _showcaseX = 12;
   double _showcaseY = 140;
