@@ -70,6 +70,14 @@ class SnoteDatabase {
           'CREATE INDEX IF NOT EXISTS idx_notes_folder ON notes(folder_id, updated_at)',
         );
         await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_notes_owner_folder_updated '
+          'ON notes(owner_id, folder_id, updated_at DESC)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_notes_owner_title '
+          'ON notes(owner_id, title COLLATE NOCASE)',
+        );
+        await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_notes_title ON notes(title COLLATE NOCASE)',
         );
         await db.execute(
@@ -78,6 +86,10 @@ class SnoteDatabase {
         await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_folders_parent '
           'ON folders(parent_id, sort_order, name)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_folders_owner_parent_order '
+          'ON folders(owner_id, parent_id, sort_order, name)',
         );
         await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_attachments_note '
