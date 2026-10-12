@@ -89,6 +89,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   bool _toolbar = true;
   bool _docked = true;
   String _dockSide = 'left';
+  Axis _floatingAxis = Axis.vertical;
   // Keep the free toolbox outside the fixed left rail by default.
   double _toolbarX = 16;
   double _toolbarY = 0;
@@ -472,6 +473,14 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         ? savedDock
         : (dockSides.contains(pageDock) ? pageDock! : 'left');
     _docked = const {'left', 'right', 'top', 'bottom'}.contains(dock);
+    final savedAxis = pageData['toolbarAxis']?.toString();
+    _floatingAxis = savedAxis == 'horizontal'
+        ? Axis.horizontal
+        : savedAxis == 'vertical'
+            ? Axis.vertical
+            : (_dockSide == 'left' || _dockSide == 'right')
+                ? Axis.vertical
+                : Axis.horizontal;
     if (_docked) {
       _dockSide = dock!;
       if (x is num) _toolbarX = x.toDouble();
@@ -1637,7 +1646,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           child: child!,
         );
       },
-      child: _toolbarSurface(_toolbarContent(Axis.horizontal, docked: false), key: _toolbarKey),
+      child: _toolbarSurface(_toolbarContent(_floatingAxis, docked: false), key: _toolbarKey),
     );
   }
 
@@ -1685,6 +1694,13 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       GestureDetector(
         onPanUpdate: (details) {
           final viewport = MediaQuery.sizeOf(context);
+          final wasDocked = _docked;
+          final renderObject = _toolbarKey.currentContext?.findRenderObject();
+          final currentSize = renderObject is RenderBox ? renderObject.size : const Size(64, 360);
+          final freeWidth = wasDocked
+              ? math.min(viewport.width - 8, _dockSide == 'left' || _dockSide == 'right' ? 420.0 : currentSize.width)
+              : currentSize.width;
+          final freeHeight = currentSize.height;
           var origin = Offset(_toolbarX, _toolbarY);
           if (_docked) {
             final toolbarObject = _toolbarKey.currentContext?.findRenderObject();
@@ -1694,15 +1710,26 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
             }
           }
           setState(() {
+            if (wasDocked) {
+              _floatingAxis = (_dockSide == 'left' || _dockSide == 'right')
+                  ? Axis.vertical
+                  : Axis.horizontal;
+            }
             _docked = false;
-            _toolbarX = (origin.dx + details.delta.dx).clamp(4.0, math.max(4.0, viewport.width - 170)).toDouble();
-            _toolbarY = (origin.dy + details.delta.dy).clamp(54.0, math.max(54.0, viewport.height - 100)).toDouble();
+            _toolbarX = (origin.dx + details.delta.dx)
+                .clamp(4.0, math.max(4.0, viewport.width - freeWidth - 4))
+                .toDouble();
+            _toolbarY = (origin.dy + details.delta.dy)
+                .clamp(54.0, math.max(54.0, viewport.height - freeHeight - 8))
+                .toDouble();
             _toolbarOffset.value = Offset(_toolbarX, _toolbarY);
           });
+          pageData['toolbarAxis'] = _floatingAxis.name;
         },
         // Keep this callback installed when a drag undocks the toolbar, otherwise
         // the rebuilding GestureDetector may discard the release event.
         onPanEnd: (_) => _snapToolbar(MediaQuery.sizeOf(context)),
+        onPanCancel: () => _snapToolbar(MediaQuery.sizeOf(context)),
         child: Padding(
           padding: const EdgeInsets.all(7),
           child: Icon(Icons.drag_indicator_rounded, size: 19, color: Theme.of(context).colorScheme.onSurfaceVariant),
@@ -1953,7 +1980,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       (a, b) => a.value.abs() <= b.value.abs() ? a : b,
     ).key;
     final distance = map[side]!.abs();
-    if (distance < 72) {
+    if (distance < 84) {
       setState(() {
         _docked = true;
         _dockSide = side;
@@ -1969,6 +1996,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     pageData['toolbarX'] = _toolbarX;
     pageData['toolbarY'] = _toolbarY;
     pageData['toolbarDock'] = _docked ? _dockSide : 'free';
+    pageData['toolbarAxis'] = _floatingAxis.name;
     unawaited(_settings.setString('toolbarDock', _docked ? _dockSide : 'free'));
     _scheduleSave();
   }
