@@ -37,6 +37,8 @@ class NotesHomePage extends StatefulWidget {
 }
 
 class _NotesHomePageState extends State<NotesHomePage> {
+  static const int _databasePageSize = 100;
+
   final _notes = NoteRepository();
   final _folders = FolderRepository();
   final _transfer = NotebookTransferService(NoteRepository());
@@ -57,6 +59,9 @@ class _NotesHomePageState extends State<NotesHomePage> {
   int _loadGeneration = 0;
   int _homeNoteRenderLimit = 60;
   int _homeFolderRenderLimit = 60;
+  int _databaseOffset = 0;
+  bool _hasMoreDatabaseNotes = false;
+  bool _loadingMoreDatabaseNotes = false;
   bool _welcomeCheckScheduled = false;
   String _folderSort = 'nameAsc';
   bool _folderSelectionMode = false;
@@ -171,6 +176,45 @@ class _NotesHomePageState extends State<NotesHomePage> {
       _homeNoteRenderLimit += 60;
       _homeFolderRenderLimit += 60;
     });
+    if (!_loadingMoreDatabaseNotes && _hasMoreDatabaseNotes) {
+      unawaited(_loadNextDatabasePage());
+    }
+  }
+
+  Future<void> _loadNextDatabasePage() async {
+    if (_loadingMoreDatabaseNotes || !_hasMoreDatabaseNotes) return;
+    final generation = _loadGeneration;
+    final query = _search.text.trim();
+    final folderId = _folderId;
+    setState(() => _loadingMoreDatabaseNotes = true);
+    try {
+      final batch = query.isNotEmpty
+          ? await _notes.searchVisible(
+              query,
+              limit: _databasePageSize,
+              offset: _databaseOffset,
+            )
+          : await _notes.list(
+              folderId: folderId,
+              limit: _databasePageSize,
+              offset: _databaseOffset,
+            );
+      if (!mounted || generation != _loadGeneration) return;
+      final ids = _noteList.map((note) => note.id).toSet();
+      final additions = batch.where((note) => ids.add(note.id)).toList();
+      setState(() {
+        _noteList = [..._noteList, ...additions];
+        _databaseOffset += batch.length;
+        _hasMoreDatabaseNotes = batch.length == _databasePageSize;
+        _loadingMoreDatabaseNotes = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _loadingMoreDatabaseNotes = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not load more notes: $error')),
+      );
+    }
   }
 
   Future<void> _load() async {
@@ -179,8 +223,8 @@ class _NotesHomePageState extends State<NotesHomePage> {
     final searching = query.isNotEmpty;
     final allFolders = await _folders.listAllVisible();
     final notes = searching
-        ? await _notes.searchVisible(query)
-        : await _notes.list(folderId: _folderId);
+        ? await _notes.searchVisible(query, limit: _databasePageSize)
+        : await _notes.list(folderId: _folderId, limit: _databasePageSize);
     if (!mounted || generation != _loadGeneration) return;
 
     final selectedId = _selected?.id;
@@ -198,6 +242,9 @@ class _NotesHomePageState extends State<NotesHomePage> {
     setState(() {
       _allFolders = allFolders;
       _noteList = notes;
+      _databaseOffset = notes.length;
+      _hasMoreDatabaseNotes = notes.length == _databasePageSize;
+      _loadingMoreDatabaseNotes = false;
       _selected = selected;
       _loading = false;
     });
@@ -456,12 +503,12 @@ class _NotesHomePageState extends State<NotesHomePage> {
                   },
                 ),
                 const SizedBox(height: 14),
-                const Text('Cover page', style: TextStyle(fontWeight: FontWeight.w800)),
+                const Text('Cover artwork', style: TextStyle(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 8),
                 SizedBox(
                   height: 112,
                   width: double.infinity,
-                  child: FolderCoverArt(coverKey: coverKey ?? 'cover:0', title: folder.name),
+                  child: FolderCoverArt(coverKey: coverKey ?? 'cover:0', title: folder.name, showTitle: false),
                 ),
                 const SizedBox(height: 8),
                 Wrap(
@@ -1030,6 +1077,8 @@ class _NotesHomePageState extends State<NotesHomePage> {
                         onOpenCoverLibrary: _openCoverLibrary,
                         noteRenderLimit: _homeNoteRenderLimit,
                         folderRenderLimit: _homeFolderRenderLimit,
+                        hasMoreDatabaseNotes: _hasMoreDatabaseNotes,
+                        loadingMoreDatabaseNotes: _loadingMoreDatabaseNotes,
                         onLoadMore: _loadMoreHomeItems,
                       ),
                     ),
@@ -1160,6 +1209,8 @@ class _NotesHomePageState extends State<NotesHomePage> {
                         onOpenCoverLibrary: _openCoverLibrary,
                         noteRenderLimit: _homeNoteRenderLimit,
                         folderRenderLimit: _homeFolderRenderLimit,
+                        hasMoreDatabaseNotes: _hasMoreDatabaseNotes,
+                        loadingMoreDatabaseNotes: _loadingMoreDatabaseNotes,
                         onLoadMore: _loadMoreHomeItems,
           ),
         ),
@@ -1393,6 +1444,8 @@ class _HierarchyPanel extends StatelessWidget {
   final VoidCallback onOpenCoverLibrary;
   final int noteRenderLimit;
   final int folderRenderLimit;
+  final bool hasMoreDatabaseNotes;
+  final bool loadingMoreDatabaseNotes;
   final VoidCallback onLoadMore;
 
   const _HierarchyPanel({
@@ -1436,6 +1489,8 @@ class _HierarchyPanel extends StatelessWidget {
     required this.onOpenCoverLibrary,
     required this.noteRenderLimit,
     required this.folderRenderLimit,
+    required this.hasMoreDatabaseNotes,
+    required this.loadingMoreDatabaseNotes,
     required this.onLoadMore,
   });
 
@@ -1722,14 +1777,23 @@ class _HierarchyPanel extends StatelessWidget {
             ),
           ),
         if (notes.length > renderedNotes.length ||
-            (compact && visibleFolders.length > renderedFolders.length))
+            (compact && visibleFolders.length > renderedFolders.length) ||
+            hasMoreDatabaseNotes ||
+            loadingMoreDatabaseNotes)
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 14, 4, 24),
             child: Center(
               child: OutlinedButton.icon(
-                onPressed: onLoadMore,
-                icon: const Icon(Icons.expand_more_rounded),
-                label: const Text('Load more folders and notes'),
+                onPressed: loadingMoreDatabaseNotes ? null : onLoadMore,
+                icon: loadingMoreDatabaseNotes
+                    ? const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.expand_more_rounded),
+                label: Text(
+                  loadingMoreDatabaseNotes ? 'Loading more notes…' : 'Load more folders and notes',
+                ),
               ),
             ),
           ),

@@ -83,6 +83,11 @@ class SnoteCanvasPainter extends CustomPainter {
 
   void _drawLivePath(Canvas canvas) {
     if (activePath == null || activePen == null || activeTool == null) return;
+    if (activePen!.type == PenType.fountain && activePoints.isNotEmpty) {
+      // Use the same dynamic ink model during the stroke and after it is saved.
+      InkRenderer.drawInk(canvas, activePoints, activePen!);
+      return;
+    }
     final opacity = activePen!.type == PenType.highlighter
         ? activePen!.opacity.clamp(.08, .55).toDouble()
         : activePen!.opacity.clamp(.05, 1).toDouble();
