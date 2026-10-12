@@ -29,6 +29,19 @@ class _FolderCoverLibraryPageState extends State<FolderCoverLibraryPage> {
   bool _loading = true;
   bool _busy = false;
   int _libraryTab = 0;
+  String _builtInCategory = 'All';
+
+  static const _coverCategories = <String>[
+    'All', 'Study', 'Science', 'Nature', 'Creative', 'Abstract',
+  ];
+
+  List<int> get _builtInIndices {
+    if (_builtInCategory == 'All') return List<int>.generate(200, (i) => i);
+    final category = _coverCategories.indexOf(_builtInCategory);
+    if (category < 1) return List<int>.generate(200, (i) => i);
+    final start = (category - 1) * 40;
+    return List<int>.generate(40, (i) => start + i);
+  }
 
   @override
   void initState() {
@@ -111,7 +124,7 @@ class _FolderCoverLibraryPageState extends State<FolderCoverLibraryPage> {
     });
   }
 
-  String _builtInName(int index) => 'Cover ' + (index + 1).toString().padLeft(2, '0');
+  String _builtInName(int index) => 'Cover ' + (index + 1).toString().padLeft(3, '0');
 
   @override
   void dispose() {
@@ -122,7 +135,8 @@ class _FolderCoverLibraryPageState extends State<FolderCoverLibraryPage> {
   @override
   Widget build(BuildContext context) {
     final showingCustom = _libraryTab == 1;
-    final total = showingCustom ? _customCovers.length : 100;
+    final builtInIndices = _builtInIndices;
+    final total = showingCustom ? _customCovers.length : builtInIndices.length;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Cover library'),
@@ -136,13 +150,33 @@ class _FolderCoverLibraryPageState extends State<FolderCoverLibraryPage> {
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
             child: SegmentedButton<int>(
               segments: [
-                const ButtonSegment(value: 0, label: Text('Built-in (100)'), icon: Icon(Icons.auto_awesome_outlined)),
+                const ButtonSegment(value: 0, label: Text('Built-in (200)'), icon: Icon(Icons.auto_awesome_outlined)),
                 ButtonSegment(value: 1, label: Text('Custom (' + _customCovers.length.toString() + ')'), icon: const Icon(Icons.photo_library_outlined)),
               ],
               selected: {_libraryTab},
               onSelectionChanged: (value) => setState(() => _libraryTab = value.first),
             ),
           ),
+          if (!showingCustom)
+            SizedBox(
+              height: 46,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                children: [
+                  for (final category in _coverCategories)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 7),
+                      child: ChoiceChip(
+                        label: Text(category),
+                        selected: _builtInCategory == category,
+                        onSelected: (_) => setState(() => _builtInCategory = category),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                ],
+              ),
+            ),
           if (_busy) const LinearProgressIndicator(minHeight: 2),
           Expanded(
             child: _loading ? const Center(child: CircularProgressIndicator()) : GridView.builder(
@@ -151,8 +185,9 @@ class _FolderCoverLibraryPageState extends State<FolderCoverLibraryPage> {
               gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                 maxCrossAxisExtent: 178, mainAxisSpacing: 12, crossAxisSpacing: 12, childAspectRatio: .72,
               ),
-              itemBuilder: (context, index) {
-                final custom = showingCustom ? _customCovers[index] : null;
+              itemBuilder: (context, slot) {
+                final custom = showingCustom ? _customCovers[slot] : null;
+                final index = showingCustom ? slot : builtInIndices[slot];
                 final key = custom == null ? 'cover:' + index.toString() : custom.key;
                 final title = custom == null ? _builtInName(index) : custom.name;
                 final selected = _selectedKey == key;
