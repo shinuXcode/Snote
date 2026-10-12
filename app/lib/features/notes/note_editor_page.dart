@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' as ui;
@@ -24,6 +25,7 @@ import '../../canvas_engine/widgets/snote_canvas.dart';
 import '../../canvas_engine/widgets/snote_canvas_controller.dart';
 import '../../core/security/note_lock_service.dart';
 import '../../core/settings/app_settings.dart';
+import '../../data/local/file_document_repository.dart';
 import '../../data/local/note_repository.dart';
 import '../settings/settings_page.dart';
 import '../folders/folder_cover_library_page.dart';
@@ -32,6 +34,8 @@ import '../folders/folder_cover_library_page.dart';
 final ValueNotifier<List<LocalNote>> _snoteOpenNoteTabs = ValueNotifier<List<LocalNote>>(<LocalNote>[]);
 
 class NoteEditorPage extends StatefulWidget {
+  final Uint8List? initialPdfBytes;
+  final String? initialPdfName;
   final LocalNote note;
   final bool embedded;
   final ValueChanged<LocalNote>? onSwitchTab;
@@ -40,6 +44,8 @@ class NoteEditorPage extends StatefulWidget {
   const NoteEditorPage({
     super.key,
     required this.note,
+    this.initialPdfBytes,
+    this.initialPdfName,
     this.embedded = false,
     this.onSwitchTab,
     this.onCloseTab,
@@ -466,6 +472,26 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         }
       } catch (_) {}
     }
+
+    var importedOnFirstOpen = false;
+    var originalPdfPageCount = 0;
+    if (parsed.isEmpty && widget.initialPdfBytes != null && widget.initialPdfBytes!.isNotEmpty) {
+      try {
+        final result = await _renderPdfPages(
+          widget.initialPdfBytes!,
+          widget.initialPdfName ?? (widget.note.title + '.pdf'),
+        );
+        parsed.addAll(result.pages);
+        originalPdfPageCount = result.totalPages;
+        importedOnFirstOpen = parsed.isNotEmpty;
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('PDF opened but could not be converted to note pages: ' + error.toString())),
+          );
+        }
+      }
+    }
     if (parsed.isEmpty) parsed.add(_newPage());
     if (!mounted) return;
     setState(() {
@@ -476,8 +502,24 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       _noteCoverKey = storedCoverKey;
       _loading = false;
     });
+
     _restoreToolbar();
     await _keepAwake();
+    if (importedOnFirstOpen && mounted) {
+      _savePending = true;
+      await _save(force: true);
+      if (mounted && originalPdfPageCount > parsed.length) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Imported ' + parsed.length.toString() + ' of ' +
+                  originalPdfPageCount.toString() +
+                  ' PDF pages for performance. The original file remains attached to this note.',
+            ),
+          ),
+        );
+      }
+    }
   }
 
   Map<String, Object?> _normalize(Map<String, Object?> source) {
@@ -937,7 +979,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   Widget _pageView() {
     final sizeKey = pageData['pageSize']?.toString() ?? 'A4';
     final horizontal = pageData['orientation']?.toString() == 'horizontal';
-    final baseAspectRatio = switch (sizeKey) {
+    final storedAspectRatio = pageData['pageAspectRatio'];
+    final baseAspectRatio = storedAspectRatio is num && storedAspectRatio > 0
+        ? storedAspectRatio.toDouble()
+        : switch (sizeKey) {
       'A3' => 297 / 420,
       'A5' => 148 / 210,
       'Letter' => 215.9 / 279.4,
@@ -1268,6 +1313,63 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     }
   }
 
+
+  Future<({List<Map<String, Object?>> pages, int totalPages})> _renderPdfPages(
+    Uint8List sourceBytes,
+    String sourceName,
+  ) async {
+    if (sourceBytes.isEmpty) throw StateError('The selected PDF is empty.');
+    final document = await PdfDocument.openData(sourceBytes);
+    final totalPages = document.pagesCount;
+    final importCount = math.min(totalPages, 40);
+    final imported = <Map<String, Object?>>[];
+    try {
+      for (var index = 1; index <= importCount; index++) {
+        final pdfPage = await document.getPage(index);
+        try {
+          const maxDimension = 1500.0;
+          final scale = math.min(
+            maxDimension / pdfPage.width,
+            maxDimension / pdfPage.height,
+          );
+          final rendered = await pdfPage.render(
+            width: (pdfPage.width * scale).roundToDouble(),
+            height: (pdfPage.height * scale).roundToDouble(),
+            format: PdfPageImageFormat.png,
+            backgroundColor: '#ffffff',
+          );
+          if (rendered == null || rendered.bytes.isEmpty) {
+            throw StateError('Could not render PDF page ' + index.toString() + '.');
+          }
+          imported.add({
+            'id': DateTime.now().microsecondsSinceEpoch.toString() + '-' + index.toString(),
+            'template': PageTemplate.blank.name,
+            'paperColor': 0xffffffff,
+            'lineColor': 0xffd8dee8,
+            'lineOpacity': .85,
+            'spacing': 28.0,
+            'lineWidth': .7,
+            'pageSize': 'A4',
+            'pageAspectRatio': math.min(pdfPage.width, pdfPage.height) /
+                math.max(pdfPage.width, pdfPage.height),
+            'cornellAssist': false,
+            'orientation': pdfPage.width > pdfPage.height ? 'horizontal' : 'vertical',
+            'backgroundImage': base64Encode(rendered.bytes),
+            'pdfSourceName': sourceName,
+            'pdfSourcePage': index,
+            'strokes': <Object?>[],
+            'images': <Object?>[],
+          });
+        } finally {
+          await pdfPage.close();
+        }
+      }
+    } finally {
+      await document.close();
+    }
+    return (pages: imported, totalPages: totalPages);
+  }
+
   Future<void> _importPdfIntoNote() async {
     try {
       final file = await FilePicker.pickFile(
@@ -1276,53 +1378,23 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       );
       if (file == null) return;
       final sourceBytes = await file.readAsBytes();
-      if (sourceBytes.isEmpty) throw StateError('The selected PDF is empty.');
-      final document = await PdfDocument.openData(sourceBytes);
-      final totalPages = document.pagesCount;
-      final importCount = math.min(totalPages, 40);
-      final imported = <Map<String, Object?>>[];
-      try {
-        for (var index = 1; index <= importCount; index++) {
-          final pdfPage = await document.getPage(index);
-          try {
-            const maxDimension = 1500.0;
-            final scale = math.min(
-              maxDimension / pdfPage.width,
-              maxDimension / pdfPage.height,
-            );
-            final rendered = await pdfPage.render(
-              width: (pdfPage.width * scale).roundToDouble(),
-              height: (pdfPage.height * scale).roundToDouble(),
-              format: PdfPageImageFormat.png,
-              backgroundColor: '#ffffff',
-            );
-            if (rendered == null || rendered.bytes.isEmpty) {
-              throw StateError('Could not render PDF page $index.');
-            }
-            imported.add({
-              'id': '${DateTime.now().microsecondsSinceEpoch}-$index',
-              'template': PageTemplate.blank.name,
-              'paperColor': 0xffffffff,
-              'lineColor': 0xffd8dee8,
-              'lineOpacity': .85,
-              'spacing': 28.0,
-              'lineWidth': .7,
-              'pageSize': 'A4',
-              'cornellAssist': false,
-              'orientation': pdfPage.width > pdfPage.height ? 'horizontal' : 'vertical',
-              'backgroundImage': base64Encode(rendered.bytes),
-              'pdfSourceName': file.name,
-              'pdfSourcePage': index,
-              'strokes': <Object?>[],
-              'images': <Object?>[],
-            });
-          } finally {
-            await pdfPage.close();
-          }
-        }
-      } finally {
-        await document.close();
+      final existingAssets = await FileDocumentRepository().listForNote(widget.note.id);
+      final existingPdf = existingAssets.any((asset) =>
+          asset.type == 'pdf' &&
+          asset.name == file.name &&
+          asset.size == sourceBytes.length);
+      if (!existingPdf) {
+        await FileDocumentRepository().saveBytes(
+          noteId: widget.note.id,
+          name: file.name,
+          type: 'pdf',
+          bytes: sourceBytes,
+          metadata: const <String, dynamic>{'source': 'pdf-import'},
+        );
       }
+
+      final result = await _renderPdfPages(sourceBytes, file.name);
+      final imported = result.pages;
       if (!mounted || imported.isEmpty) return;
       setState(() {
         final insertionIndex = (_page + 1).clamp(0, _pages.length);
@@ -1332,15 +1404,18 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       });
       _scheduleSave();
       if (mounted) {
-        final message = totalPages > importCount
-            ? 'Imported $importCount of $totalPages PDF pages. Split large PDFs into smaller files to keep this note responsive.'
-            : 'Imported $totalPages PDF pages into this note.';
+        final message = result.totalPages > imported.length
+            ? 'Imported ' + imported.length.toString() + ' of ' +
+                result.totalPages.toString() +
+                ' pages. The original PDF is preserved in note attachments.'
+            : 'Imported ' + result.totalPages.toString() +
+                ' PDF pages. The original PDF is preserved in note attachments.';
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
       }
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('PDF import failed: $error')),
+          SnackBar(content: Text('PDF import failed: ' + error.toString())),
         );
       }
     }
