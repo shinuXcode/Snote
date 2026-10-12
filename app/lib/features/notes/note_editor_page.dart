@@ -1336,7 +1336,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           allowedExtensions: const ['png'],
           bytes: bytes,
         );
-        if (mounted && saved != null && saved.isNotEmpty) {
+        if (mounted && saved != null) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Screenshot saved: $saved')),
           );
