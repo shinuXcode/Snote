@@ -1850,7 +1850,7 @@ class _FolderCoverCard extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  FolderCoverArt(coverKey: coverKey, title: folder.name, showTitle: false),
+                  FolderCoverArt(coverKey: coverKey, title: folder.name, showTitle: false, showBrandLabel: false),
                   Positioned(
                     right: 2,
                     bottom: 2,

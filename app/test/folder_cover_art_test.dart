@@ -37,3 +37,26 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 }
+
+  testWidgets('home folder covers omit the cover-title and brand labels', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 180,
+            height: 120,
+            child: FolderCoverArt(
+              coverKey: 'cover:7',
+              title: 'My folder',
+              showTitle: false,
+              showBrandLabel: false,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('My folder'), findsNothing);
+    expect(find.textContaining('SNOTE'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });

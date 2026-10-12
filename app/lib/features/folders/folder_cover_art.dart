@@ -9,6 +9,7 @@ class FolderCoverArt extends StatelessWidget {
   final double? height;
   final BorderRadius borderRadius;
   final bool showTitle;
+  final bool showBrandLabel;
 
   const FolderCoverArt({
     super.key,
@@ -18,6 +19,7 @@ class FolderCoverArt extends StatelessWidget {
     this.height,
     this.borderRadius = const BorderRadius.all(Radius.circular(12)),
     this.showTitle = true,
+    this.showBrandLabel = true,
   });
 
   int get _seed {
@@ -62,17 +64,18 @@ class FolderCoverArt extends StatelessWidget {
             symbols[seed % symbols.length], size: 52,
             color: Colors.white.withValues(alpha: .85),
           )),
-          Positioned(left: 12, top: 12, child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: .16),
-              borderRadius: BorderRadius.circular(7),
-            ),
-            child: Text(
-              'SNOTE  •  ' + (seed + 1).toString().padLeft(2, '0'),
-              style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1),
-            ),
-          )),
+          if (showBrandLabel)
+            Positioned(left: 12, top: 12, child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: .16),
+                borderRadius: BorderRadius.circular(7),
+              ),
+              child: Text(
+                'SNOTE  •  ' + (seed + 1).toString().padLeft(2, '0'),
+                style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1),
+              ),
+            )),
           Positioned(left: 17, bottom: 23, child: Icon(
             symbols[(seed * 7 + 3) % symbols.length],
             size: 58, color: Colors.white.withValues(alpha: .22),
