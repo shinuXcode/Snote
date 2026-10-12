@@ -1177,6 +1177,11 @@ class _NotesHomePageState extends State<NotesHomePage> {
                         onOpenNote: _openNote,
                         onRenameNote: _renameNote,
                         onDeleteNote: _deleteNote,
+                        onMoveNote: _moveNotePrompt,
+                        onCopyNote: (note) => _setNoteClipboard(note, 'copy'),
+                        onCutNote: (note) => _setNoteClipboard(note, 'cut'),
+                        onPasteNotes: _pasteNoteClipboard,
+                        canPasteNotes: _noteClipboard != null,
                         onChangeNoteCover: _changeNoteCover,
                         folderSort: _folderSort,
                         onFolderSort: _setFolderSort,
@@ -1309,6 +1314,11 @@ class _NotesHomePageState extends State<NotesHomePage> {
             onOpenNote: _openNote,
             onRenameNote: _renameNote,
             onDeleteNote: _deleteNote,
+                        onMoveNote: _moveNotePrompt,
+                        onCopyNote: (note) => _setNoteClipboard(note, 'copy'),
+                        onCutNote: (note) => _setNoteClipboard(note, 'cut'),
+                        onPasteNotes: _pasteNoteClipboard,
+                        canPasteNotes: _noteClipboard != null,
                         onChangeNoteCover: _changeNoteCover,
                         folderSort: _folderSort,
                         onFolderSort: _setFolderSort,
@@ -1544,6 +1554,11 @@ class _HierarchyPanel extends StatelessWidget {
   final ValueChanged<LocalNote> onOpenNote;
   final ValueChanged<LocalNote> onRenameNote;
   final ValueChanged<LocalNote> onDeleteNote;
+  final ValueChanged<LocalNote> onMoveNote;
+  final ValueChanged<LocalNote> onCopyNote;
+  final ValueChanged<LocalNote> onCutNote;
+  final VoidCallback onPasteNotes;
+  final bool canPasteNotes;
   final ValueChanged<LocalNote> onChangeNoteCover;
   final String folderSort;
   final ValueChanged<String> onFolderSort;
@@ -1589,6 +1604,11 @@ class _HierarchyPanel extends StatelessWidget {
     required this.onOpenNote,
     required this.onRenameNote,
     required this.onDeleteNote,
+    required this.onMoveNote,
+    required this.onCopyNote,
+    required this.onCutNote,
+    required this.onPasteNotes,
+    required this.canPasteNotes,
     required this.onChangeNoteCover,
     required this.folderSort,
     required this.onFolderSort,
@@ -1702,6 +1722,7 @@ class _HierarchyPanel extends StatelessWidget {
                   case 'cut': onClipboardSelection('cut'); break;
                   case 'delete': onDeleteSelectedFolders(); break;
                   case 'paste': onPasteFolders(); break;
+                  case 'pasteNote': onPasteNotes(); break;
                   case 'covers': onOpenCoverLibrary(); break;
                 }
               },
@@ -1716,6 +1737,7 @@ class _HierarchyPanel extends StatelessWidget {
                   const PopupMenuItem(value: 'delete', child: Text('Delete selected')),
                 ],
                 if (canPasteFolders) const PopupMenuItem(value: 'paste', child: Text('Paste folders here')),
+                if (canPasteNotes) const PopupMenuItem(value: 'pasteNote', child: Text('Paste note here')),
                 const PopupMenuItem(value: 'covers', child: Text('Cover library')),
               ],
             ),
@@ -1866,12 +1888,25 @@ class _HierarchyPanel extends StatelessWidget {
                                   onRenameNote(note);
                                 } else if (value == 'delete') {
                                   onDeleteNote(note);
+                                } else if (value == 'move') {
+                                  onMoveNote(note);
+                                } else if (value == 'copy') {
+                                  onCopyNote(note);
+                                } else if (value == 'cut') {
+                                  onCutNote(note);
+                                } else if (value == 'paste') {
+                                  onPasteNotes();
                                 }
                               },
-                              itemBuilder: (_) => const [
-                                PopupMenuItem(value: 'cover', child: Text('Change cover')),
-                                PopupMenuItem(value: 'rename', child: Text('Rename')),
-                                PopupMenuItem(value: 'delete', child: Text('Move to bin')),
+                              itemBuilder: (_) => [
+                                const PopupMenuItem(value: 'cover', child: Text('Change cover')),
+                                const PopupMenuItem(value: 'rename', child: Text('Rename')),
+                                const PopupMenuItem(value: 'move', child: Text('Move to folder')),
+                                const PopupMenuItem(value: 'copy', child: Text('Copy')),
+                                const PopupMenuItem(value: 'cut', child: Text('Cut')),
+                                if (canPasteNotes)
+                                  const PopupMenuItem(value: 'paste', child: Text('Paste note here')),
+                                const PopupMenuItem(value: 'delete', child: Text('Move to bin')),
                               ],
                             ),
                           ),
@@ -1893,6 +1928,11 @@ class _HierarchyPanel extends StatelessWidget {
               onOpen: () => onOpenNote(note),
               onRename: () => onRenameNote(note),
               onDelete: () => onDeleteNote(note),
+              onMove: () => onMoveNote(note),
+              onCopy: () => onCopyNote(note),
+              onCut: () => onCutNote(note),
+              onPaste: onPasteNotes,
+              canPasteNotes: canPasteNotes,
               onChangeCover: () => onChangeNoteCover(note),
             ),
           ),
@@ -2041,6 +2081,11 @@ class _HomeNoteTile extends StatelessWidget {
   final VoidCallback onOpen;
   final VoidCallback onRename;
   final VoidCallback onDelete;
+  final VoidCallback onMove;
+  final VoidCallback onCopy;
+  final VoidCallback onCut;
+  final VoidCallback onPaste;
+  final bool canPasteNotes;
   final VoidCallback onChangeCover;
 
   const _HomeNoteTile({
@@ -2051,6 +2096,11 @@ class _HomeNoteTile extends StatelessWidget {
     required this.onOpen,
     required this.onRename,
     required this.onDelete,
+    required this.onMove,
+    required this.onCopy,
+    required this.onCut,
+    required this.onPaste,
+    required this.canPasteNotes,
     required this.onChangeCover,
   });
 
@@ -2113,12 +2163,25 @@ class _HomeNoteTile extends StatelessWidget {
                       onRename();
                     } else if (value == 'delete') {
                       onDelete();
+                    } else if (value == 'move') {
+                      onMove();
+                    } else if (value == 'copy') {
+                      onCopy();
+                    } else if (value == 'cut') {
+                      onCut();
+                    } else if (value == 'paste') {
+                      onPaste();
                     }
                   },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'cover', child: Text('Change cover')),
-                    PopupMenuItem(value: 'rename', child: Text('Rename')),
-                    PopupMenuItem(value: 'delete', child: Text('Move to bin')),
+                  itemBuilder: (_) => [
+                    const PopupMenuItem(value: 'cover', child: Text('Change cover')),
+                    const PopupMenuItem(value: 'rename', child: Text('Rename')),
+                    const PopupMenuItem(value: 'move', child: Text('Move to folder')),
+                    const PopupMenuItem(value: 'copy', child: Text('Copy')),
+                    const PopupMenuItem(value: 'cut', child: Text('Cut')),
+                    if (canPasteNotes)
+                      const PopupMenuItem(value: 'paste', child: Text('Paste note here')),
+                    const PopupMenuItem(value: 'delete', child: Text('Move to bin')),
                   ],
                 ),
               ),
