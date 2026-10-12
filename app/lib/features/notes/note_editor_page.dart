@@ -1697,10 +1697,19 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           final wasDocked = _docked;
           final renderObject = _toolbarKey.currentContext?.findRenderObject();
           final currentSize = renderObject is RenderBox ? renderObject.size : const Size(64, 360);
-          final freeWidth = wasDocked
-              ? math.min(viewport.width - 8, _dockSide == 'left' || _dockSide == 'right' ? 420.0 : currentSize.width)
-              : currentSize.width;
-          final freeHeight = currentSize.height;
+          final movingAxis = wasDocked
+              ? (_dockSide == 'left' || _dockSide == 'right' ? Axis.vertical : Axis.horizontal)
+              : _floatingAxis;
+          final freeWidth = !wasDocked
+              ? currentSize.width
+              : movingAxis == Axis.vertical
+                  ? currentSize.width
+                  : math.min(viewport.width - 8, 420.0);
+          final freeHeight = !wasDocked
+              ? currentSize.height
+              : movingAxis == Axis.vertical
+                  ? math.min(viewport.height - 62, 420.0)
+                  : currentSize.height;
           var origin = Offset(_toolbarX, _toolbarY);
           if (_docked) {
             final toolbarObject = _toolbarKey.currentContext?.findRenderObject();
@@ -1711,9 +1720,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           }
           setState(() {
             if (wasDocked) {
-              _floatingAxis = (_dockSide == 'left' || _dockSide == 'right')
-                  ? Axis.vertical
-                  : Axis.horizontal;
+              _floatingAxis = movingAxis;
             }
             _docked = false;
             _toolbarX = (origin.dx + details.delta.dx)
