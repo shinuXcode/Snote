@@ -6,6 +6,7 @@ import 'dart:ui' as ui;
 
 import 'package:crypto/crypto.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/rendering.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:pdf/pdf.dart' as pdfcore;
@@ -1459,7 +1460,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
               ),
             ),
           if (_draw)
-            IgnorePointer(
+            Positioned.fill(
+              child: IgnorePointer(
               ignoring: _readingMode,
               child: RepaintBoundary(
                 key: _canvasRenderKey,
@@ -1512,8 +1514,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                 ),
               ),
             )
+            )
           else
-            IgnorePointer(
+            Positioned.fill(
+              child: IgnorePointer(
               ignoring: _readingMode,
               child: Padding(
                 padding: const EdgeInsets.all(24),
@@ -1527,6 +1531,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                 ),
               ),
             ),
+          ),
           Positioned.fill(
             child: IgnorePointer(
               ignoring: _readingMode,
