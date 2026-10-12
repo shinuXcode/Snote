@@ -463,7 +463,14 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     if (!const {'left', 'right', 'top', 'bottom', 'free'}.contains(_showcaseDock)) _showcaseDock = 'right';
     final x = pageData['toolbarX'];
     final y = pageData['toolbarY'];
-    final dock = (pageData['toolbarDock'] ?? _settings.getString('toolbarDock'))?.toString();
+    const dockSides = {'left', 'right', 'top', 'bottom', 'free'};
+    final savedDock = _settings.getString('toolbarDock');
+    final pageDock = pageData['toolbarDock']?.toString();
+    // Prefer the latest dock choice across notes: an older note snapshot can
+    // otherwise restore "free" after the user already re-attached the toolbox.
+    final dock = dockSides.contains(savedDock)
+        ? savedDock
+        : (dockSides.contains(pageDock) ? pageDock! : 'left');
     _docked = const {'left', 'right', 'top', 'bottom'}.contains(dock);
     if (_docked) {
       _dockSide = dock!;
@@ -1574,15 +1581,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         return Positioned(
           left: offset.dx.clamp(8, math.max(8, size.width - 160)),
           top: y.clamp(60, math.max(60, size.height - 92)),
-          child: GestureDetector(
-            onPanUpdate: (d) {
-              _toolbarX = (_toolbarX + d.delta.dx).clamp(8, math.max(8, size.width - 160));
-              _toolbarY = ((_toolbarY == 0 ? y : _toolbarY) + d.delta.dy).clamp(60, math.max(60, size.height - 92));
-              _toolbarOffset.value = Offset(_toolbarX, _toolbarY);
-            },
-            onPanEnd: (_) => _snapToolbar(size),
-            child: child,
-          ),
+          // The drag grip inside _toolbarContent owns drag + snap consistently
+          // whether the toolbox is attached or floating.
+          child: child!,
         );
       },
       child: _toolbarSurface(_toolbarContent(Axis.horizontal, docked: false), key: _toolbarKey),
@@ -1854,18 +1855,23 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       'top': actualY - (_full ? 0 : 46),
       'bottom': size.height - (actualY + toolboxSize.height),
     };
-    final side = map.entries.reduce((a, b) => a.value < b.value ? a : b).key;
+    final side = map.entries.reduce(
+      (a, b) => a.value.abs() <= b.value.abs() ? a : b,
+    ).key;
     final distance = map[side]!.abs();
-    if (distance < 44) {
+    if (distance < 72) {
       setState(() {
         _docked = true;
         _dockSide = side;
       });
     } else {
-      _toolbarX = _toolbarX.clamp(8, math.max(8, size.width - toolboxSize.width)).toDouble();
-      _toolbarY = actualY.clamp(_full ? 8 : 54, math.max(_full ? 8 : 54, size.height - toolboxSize.height - 8)).toDouble();
-      _toolbarOffset.value = Offset(_toolbarX, _toolbarY);
+      setState(() {
+        _docked = false;
+        _toolbarX = _toolbarX.clamp(8, math.max(8, size.width - toolboxSize.width)).toDouble();
+        _toolbarY = actualY.clamp(_full ? 8 : 54, math.max(_full ? 8 : 54, size.height - toolboxSize.height - 8)).toDouble();
+      });
     }
+    _toolbarOffset.value = Offset(_toolbarX, _toolbarY);
     pageData['toolbarX'] = _toolbarX;
     pageData['toolbarY'] = _toolbarY;
     pageData['toolbarDock'] = _docked ? _dockSide : 'free';
