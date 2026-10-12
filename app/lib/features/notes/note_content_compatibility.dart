@@ -26,3 +26,25 @@ Map<String, Object?>? legacyPageFromNoteContent(Map<String, Object?> content) {
   if (!pageKeys.any(content.containsKey)) return null;
   return Map<String, Object?>.from(content);
 }
+
+/// Restores the editor mode where possible. Earlier releases did not persist
+/// the handwriting/text toggle, so infer text mode only for text-only notes.
+bool? restoreNoteDrawMode({
+  required Object? savedMode,
+  required Object? textDelta,
+  required bool hasVisibleCanvasContent,
+}) {
+  if (savedMode == 'handwriting') return true;
+  if (savedMode == 'text') return false;
+  if (hasVisibleCanvasContent || textDelta is! List) return null;
+
+  for (final operation in textDelta) {
+    if (operation is! Map) continue;
+    final insert = operation['insert'];
+    if (insert is String && insert.replaceAll('\n', '').trim().isNotEmpty) {
+      return false;
+    }
+    if (insert is Map) return false;
+  }
+  return null;
+}
