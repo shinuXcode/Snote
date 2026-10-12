@@ -8,8 +8,15 @@ import '../../data/local/note_repository.dart';
 
 class ScreenshotImportPage extends StatefulWidget {
   final String? folderId;
+  final Uint8List? initialBytes;
+  final String? initialName;
 
-  const ScreenshotImportPage({super.key, this.folderId});
+  const ScreenshotImportPage({
+    super.key,
+    this.folderId,
+    this.initialBytes,
+    this.initialName,
+  });
 
   @override
   State<ScreenshotImportPage> createState() => _ScreenshotImportPageState();
@@ -23,6 +30,14 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
 
   Uint8List? _bytes;
   bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _bytes = widget.initialBytes;
+    final name = widget.initialName?.trim();
+    if (name != null && name.isNotEmpty) _nameController.text = name;
+  }
 
   Future<void> _pick(ImageSource source) async {
     if (_busy) return;
