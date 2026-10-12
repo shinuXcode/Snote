@@ -3353,19 +3353,61 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (_, setDialog) => AlertDialog(
-          title: const Text('Paper color'),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            Container(width: 70, height: 70, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(14), border: Border.all())),
-            Slider(value: color.red.toDouble(), min: 0, max: 255, onChanged: (v) => setDialog(() => color = color.withRed(v.round()))),
-            Slider(value: color.green.toDouble(), min: 0, max: 255, onChanged: (v) => setDialog(() => color = color.withGreen(v.round()))),
-            Slider(value: color.blue.toDouble(), min: 0, max: 255, onChanged: (v) => setDialog(() => color = color.withBlue(v.round()))),
-          ]),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
-            FilledButton(onPressed: () { setState(() => pageData['paperColor'] = color.toARGB32()); _scheduleSave(); Navigator.pop(dialogContext); }, child: const Text('Use')),
-          ],
-        ),
+        builder: (_, setDialog) {
+          void updatePaperColor(Color next) {
+            setDialog(() => color = next);
+            setState(() => pageData['paperColor'] = next.toARGB32());
+            _scheduleSave();
+          }
+
+          return AlertDialog(
+            title: const Text('Paper color'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 70,
+                  height: 70,
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(),
+                  ),
+                ),
+                Slider(
+                  value: color.red.toDouble(),
+                  min: 0,
+                  max: 255,
+                  label: 'Red ' + color.red.toString(),
+                  onChanged: (value) =>
+                      updatePaperColor(color.withRed(value.round())),
+                ),
+                Slider(
+                  value: color.green.toDouble(),
+                  min: 0,
+                  max: 255,
+                  label: 'Green ' + color.green.toString(),
+                  onChanged: (value) =>
+                      updatePaperColor(color.withGreen(value.round())),
+                ),
+                Slider(
+                  value: color.blue.toDouble(),
+                  min: 0,
+                  max: 255,
+                  label: 'Blue ' + color.blue.toString(),
+                  onChanged: (value) =>
+                      updatePaperColor(color.withBlue(value.round())),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Close'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
