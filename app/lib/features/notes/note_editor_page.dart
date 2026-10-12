@@ -1360,6 +1360,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     );
   }
 
+
   Future<void> _calculatorSheet() async {
     const keys = [
       'sin', 'cos', 'tan', 'sqrt',
@@ -1372,117 +1373,196 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     ];
     _calculatorInput.text = _calculatorInput.text.isEmpty ? '0' : _calculatorInput.text;
     _calculatorResult = '0';
-    var keypadScale = 1.0;
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (sheetContext) => StatefulBuilder(
-        builder: (_, setModal) => SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 780),
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(16, 8, 16, MediaQuery.viewInsetsOf(context).bottom + 16),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(children: [
-                        const Icon(Icons.calculate_rounded, size: 25),
-                        const SizedBox(width: 10),
-                        const Expanded(child: Text('Calculator', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900))),
-                        IconButton(
-                          tooltip: 'Close calculator',
-                          onPressed: () => Navigator.pop(sheetContext),
-                          icon: const Icon(Icons.close_rounded),
-                        ),
-                      ]),
-                      TextField(
-                        controller: _calculatorInput,
-                        textAlign: TextAlign.end,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                        decoration: const InputDecoration(border: OutlineInputBorder(), labelText: 'Expression'),
+        builder: (_, setModal) => Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 390, maxHeight: 600),
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                12, 2, 12, MediaQuery.viewInsetsOf(context).bottom + 10,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(children: [
+                    Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(11),
                       ),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          child: Text('= $_calculatorResult', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
-                        ),
+                      child: Icon(
+                        Icons.functions_rounded,
+                        color: Theme.of(context).colorScheme.onPrimaryContainer,
+                        size: 20,
                       ),
-                      Row(children: [
-                        const Text('Key size', style: TextStyle(fontWeight: FontWeight.w700)),
-                        Expanded(
-                          child: Slider(
-                            value: keypadScale,
-                            min: .75,
-                            max: 1.35,
-                            divisions: 12,
-                            label: keypadScale.toStringAsFixed(2) + '×',
-                            onChanged: (value) => setModal(() => keypadScale = value),
+                    ),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'Scientific calculator',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'Close calculator',
+                      onPressed: () => Navigator.pop(sheetContext),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ]),
+                  TextField(
+                    controller: _calculatorInput,
+                    textAlign: TextAlign.end,
+                    maxLines: 1,
+                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      prefixIcon: const Icon(Icons.edit_rounded, size: 18),
+                      labelText: 'Expression',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(13)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                  ),
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(top: 7, bottom: 9),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: .70),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          'RESULT',
+                          style: TextStyle(
+                            fontSize: 9,
+                            letterSpacing: 1.2,
+                            fontWeight: FontWeight.w900,
+                            color: Theme.of(context).colorScheme.onSecondaryContainer.withValues(alpha: .75),
                           ),
                         ),
-                      ]),
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          final columns = constraints.maxWidth >= 600 ? 7 : 4;
-                          return GridView.count(
-                            crossAxisCount: columns,
-                            shrinkWrap: true,
-                            mainAxisSpacing: 7,
-                            crossAxisSpacing: 7,
-                            childAspectRatio: (columns >= 7 ? 1.45 : 1.7) / keypadScale,
-                            physics: const NeverScrollableScrollPhysics(),
-                            children: keys.map((key) => FilledButton(
-                              style: FilledButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(17)),
-                                backgroundColor: key == '='
-                                    ? Theme.of(context).colorScheme.primary
-                                    : Theme.of(context).colorScheme.surfaceContainerHighest,
-                                foregroundColor: key == '='
-                                    ? Theme.of(context).colorScheme.onPrimary
-                                    : Theme.of(context).colorScheme.onSurface,
-                              ),
-                              onPressed: () {
-                                setModal(() {
-                                  final current = _calculatorInput.text;
-                                  if (key == 'AC') {
-                                    _calculatorInput.text = '0';
-                                    _calculatorResult = '0';
-                                  } else if (key == 'DEL') {
-                                    _calculatorInput.text = current.length <= 1 ? '0' : current.substring(0, current.length - 1);
-                                  } else if (key == 'Ans') {
-                                    _calculatorInput.text = _calculatorResult;
-                                  } else if (key == '=') {
-                                    try {
-                                      final value = _CalculatorParser(_calculatorInput.text).parse();
-                                      if (!value.isFinite) {
-                                        _calculatorResult = 'Undefined';
-                                      } else {
-                                        final formatted = value.toStringAsPrecision(10);
-                                        _calculatorResult = formatted.contains('.')
-                                            ? formatted.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '')
-                                            : formatted;
-                                      }
-                                    } catch (_) {
-                                      _calculatorResult = 'Error';
-                                    }
-                                  } else {
-                                    final token = key == '×' ? '*' : key == '÷' ? '/' : key == '−' ? '-' : key == 'π' ? 'pi' : key;
-                                    _calculatorInput.text = current == '0' && RegExp(r'^\d$').hasMatch(token) ? token : current + token;
-                                  }
-                                });
-                              },
-                              child: Text(key, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                            )).toList(),
-                          );
-                        },
-                      ),
-                    ],
+                        Text(
+                          _calculatorResult,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 23,
+                            fontWeight: FontWeight.w900,
+                            color: Theme.of(context).colorScheme.onSecondaryContainer,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
+                  Flexible(
+                    child: GridView.count(
+                      crossAxisCount: 4,
+                      shrinkWrap: true,
+                      mainAxisSpacing: 5,
+                      crossAxisSpacing: 5,
+                      childAspectRatio: 1.45,
+                      physics: const NeverScrollableScrollPhysics(),
+                      children: keys.map((key) {
+                        final scheme = Theme.of(context).colorScheme;
+                        final isResult = key == '=';
+                        final isClear = key == 'AC';
+                        final isDelete = key == 'DEL';
+                        final isFunction = const {
+                          'sin', 'cos', 'tan', 'sqrt', '(', ')', '%', '^', 'π', 'Ans',
+                        }.contains(key);
+                        final isOperator = const {'÷', '×', '−', '+'}.contains(key);
+                        final background = isResult
+                            ? scheme.primary
+                            : isClear
+                                ? scheme.errorContainer
+                                : isDelete
+                                    ? scheme.tertiaryContainer
+                                    : (isFunction || isOperator)
+                                        ? scheme.secondaryContainer
+                                        : scheme.surfaceContainerHighest;
+                        final foreground = isResult
+                            ? scheme.onPrimary
+                            : isClear
+                                ? scheme.onErrorContainer
+                                : isDelete
+                                    ? scheme.onTertiaryContainer
+                                    : (isFunction || isOperator)
+                                        ? scheme.onSecondaryContainer
+                                        : scheme.onSurface;
+                        return FilledButton(
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+                            backgroundColor: background,
+                            foregroundColor: foreground,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          onPressed: () {
+                            setModal(() {
+                              final current = _calculatorInput.text;
+                              if (key == 'AC') {
+                                _calculatorInput.text = '0';
+                                _calculatorResult = '0';
+                              } else if (key == 'DEL') {
+                                _calculatorInput.text = current.length <= 1
+                                    ? '0'
+                                    : current.substring(0, current.length - 1);
+                              } else if (key == 'Ans') {
+                                _calculatorInput.text = _calculatorResult;
+                              } else if (key == '=') {
+                                try {
+                                  final value = _CalculatorParser(_calculatorInput.text).parse();
+                                  if (!value.isFinite) {
+                                    _calculatorResult = 'Undefined';
+                                  } else {
+                                    final formatted = value.toStringAsPrecision(10);
+                                    _calculatorResult = formatted.contains('.')
+                                        ? formatted.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '')
+                                        : formatted;
+                                  }
+                                } catch (_) {
+                                  _calculatorResult = 'Error';
+                                }
+                              } else {
+                                final token = key == '×'
+                                    ? '*'
+                                    : key == '÷'
+                                        ? '/'
+                                        : key == '−'
+                                            ? '-'
+                                            : key == 'π'
+                                                ? 'pi'
+                                                : key;
+                                _calculatorInput.text = current == '0' &&
+                                        RegExp(r'^\d$').hasMatch(token)
+                                    ? token
+                                    : current + token;
+                              }
+                            });
+                          },
+                          child: Text(
+                            key,
+                            style: TextStyle(
+                              fontSize: key.length > 3 ? 12 : 15,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -1571,16 +1651,25 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                 icon: Icons.save_outlined,
                 onPressed: () => _save(force: true),
               ),
+              _compactAction(
+                tooltip: _settings.getBool('autoSave')
+                    ? 'Auto-save is on'
+                    : 'Auto-save is off; tap to enable',
+                icon: _settings.getBool('autoSave')
+                    ? Icons.autorenew_rounded
+                    : Icons.save_as_outlined,
+                onPressed: () async {
+                  final enable = !_settings.getBool('autoSave');
+                  await _settings.setBool('autoSave', enable);
+                  if (enable && _savePending) await _save(force: true);
+                  if (mounted) setState(() {});
+                },
+              ),
               if (!compact) ...[
                 _compactAction(
                   tooltip: 'Pages / thumbnails',
                   icon: Icons.view_sidebar_outlined,
                   onPressed: () => setState(() => _preview = !_preview),
-                ),
-                _compactAction(
-                  tooltip: 'Shapes and diagrams',
-                  icon: Icons.category_outlined,
-                  onPressed: () => setState(() => _shapePanel = !_shapePanel),
                 ),
                 _compactAction(
                   tooltip: _draw ? 'Text mode' : 'Handwriting mode',
