@@ -307,6 +307,16 @@ class _NotesHomePageState extends State<NotesHomePage> {
 
   List<LocalNote> get _filteredNotes => _noteList.where(_matchesSearch).toList();
 
+  // Large Android tablets must use the same full-screen editor navigation as
+  // phones. Embedding a second Scaffold in the split workspace caused the
+  // note editor to mount without its normal header/toolbox on some tablets.
+  // Keep split view for desktop-class platforms only and use this single
+  // decision everywhere so the layout and note-opening behavior cannot drift.
+  bool _usesSplitWorkspace(BuildContext context) => usesSplitNoteWorkspace(
+        platform: defaultTargetPlatform,
+        width: MediaQuery.sizeOf(context).width,
+      );
+
   Future<void> _createFolder() async {
     final c = TextEditingController();
     final name = await showDialog<String>(
@@ -330,7 +340,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
     final note = await _notes.create(folderId: _folderId);
     if (!mounted) return;
     setState(() => _selected = note);
-    if (MediaQuery.sizeOf(context).width < 900) {
+    if (!_usesSplitWorkspace(context)) {
       await Navigator.push(context, MaterialPageRoute(builder: (_) => NoteEditorPage(note: note)));
       await _load();
     } else {
@@ -362,7 +372,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
     }
 
     if (!mounted) return;
-    if (MediaQuery.sizeOf(context).width < 900) {
+    if (!_usesSplitWorkspace(context)) {
       await Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => _noteContentPage(note)),
@@ -1129,7 +1139,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final wide = MediaQuery.sizeOf(context).width >= 1120;
+    final wide = _usesSplitWorkspace(context);
     return Scaffold(
       body: SafeArea(child: wide ? _desktop() : _mobile()),
       floatingActionButton: FloatingActionButton(
@@ -1251,7 +1261,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
                     const VerticalDivider(width: 1),
                     Expanded(
                       child: activeNote == null
-                          ? const _WorkspaceEmpty()
+                          ? _WorkspaceEmpty(onCreateNote: () => unawaited(_createNote()))
                           : KeyedSubtree(
                               key: ValueKey(activeNote.id),
                               child: _noteContentPage(activeNote),
@@ -2236,10 +2246,31 @@ class _HomeNoteTile extends StatelessWidget {
 }
 
 class _WorkspaceEmpty extends StatelessWidget {
-  const _WorkspaceEmpty();
+  final VoidCallback onCreateNote;
+
+  const _WorkspaceEmpty({required this.onCreateNote});
 
   @override
-  Widget build(BuildContext context) => const SizedBox.shrink();
+  Widget build(BuildContext context) => Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: Padding(
+            padding: const EdgeInsets.all(28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.draw_outlined, size: 54, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(height: 16),
+                const Text('Open a note to start writing', textAlign: TextAlign.center, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 8),
+                const Text('Choose a note from the list, or create a new one. The workspace will not stay blank.', textAlign: TextAlign.center),
+                const SizedBox(height: 18),
+                FilledButton.icon(onPressed: onCreateNote, icon: const Icon(Icons.note_add_outlined), label: const Text('Create a note')),
+              ],
+            ),
+          ),
+        ),
+      );
 }
 
 class _PlusSheet extends StatelessWidget {
