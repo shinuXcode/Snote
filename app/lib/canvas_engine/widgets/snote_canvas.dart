@@ -1111,7 +1111,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       points: List<StrokePoint>.of(_real),
       pen: _activePen!,
       shape: shape,
-      fill: widget.shapeFill && shape != null,
+      fill: widget.shapeFill && shape != null && !_activeTool!.isMeasurementTool,
       customSides: widget.customShapeSides,
       stickerText: _activeSticker,
       dashed: widget.dashed || _activeTool == CanvasTool.dottedLine || _activeTool == CanvasTool.dashedLine || _activeTool == CanvasTool.dottedLine,

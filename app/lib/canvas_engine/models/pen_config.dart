@@ -239,6 +239,14 @@ extension CanvasToolX on CanvasTool {
     CanvasTool.cartesianPlane,
   }.contains(this);
 
+  /// Measurement instruments commit mathematical geometry, not drawings of the tools.
+  bool get isMeasurementTool => const {
+    CanvasTool.ruler,
+    CanvasTool.compass,
+    CanvasTool.protractor,
+    CanvasTool.divider,
+  }.contains(this);
+
   PenType get penType {
     switch (this) {
       case CanvasTool.fountain: return PenType.fountain;

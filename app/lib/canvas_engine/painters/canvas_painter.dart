@@ -155,6 +155,10 @@ class SnoteCanvasPainter extends CustomPainter {
 
   void _drawShape(Canvas canvas, Stroke stroke, Paint paint) {
     if (stroke.points.length < 2) return;
+    if (const {'ruler', 'compass', 'protractor', 'divider'}.contains(stroke.shape)) {
+      _drawMeasurementGeometry(canvas, stroke, paint);
+      return;
+    }
     final a = stroke.points.first.position;
     final b = stroke.points.last.position;
     // Auto-recognized circles/rectangles retain their original samples, so
@@ -182,6 +186,107 @@ class SnoteCanvasPainter extends CustomPainter {
       _drawDashedShape(canvas, stroke, shapePaint, rect);
     } else {
       _drawShapePath(canvas, stroke, shapePaint, rect);
+    }
+  }
+
+  void _drawMeasurementGeometry(Canvas canvas, Stroke stroke, Paint sourcePaint) {
+    final points = stroke.points;
+    final start = points.first.position;
+    final end = points.last.position;
+    final distance = (end - start).distance;
+    final paint = Paint()
+      ..color = sourcePaint.color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = math.max(1.2, sourcePaint.strokeWidth)
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..isAntiAlias = true;
+
+    if (stroke.shape == 'ruler') {
+      // The ruler constrains the gesture to a true straight line; the ruler
+      // itself is not painted onto the note.
+      canvas.drawLine(start, end, paint);
+      return;
+    }
+
+    if (stroke.shape == 'compass') {
+      // Start at the chosen center and drag to set the compass radius.
+      if (distance > 1) canvas.drawCircle(start, distance, paint);
+      return;
+    }
+
+    if (stroke.shape == 'divider') {
+      // Divider marks are two measurement tips plus a dimension baseline,
+      // rather than a pictogram of the instrument.
+      if (distance <= 1) return;
+      final direction = (end - start) / distance;
+      final normal = Offset(-direction.dy, direction.dx);
+      canvas.drawLine(start, end, paint);
+      canvas.drawLine(start - normal * 7, start + normal * 7, paint);
+      canvas.drawLine(end - normal * 7, end + normal * 7, paint);
+      canvas.drawCircle(start, 2.1, paint);
+      canvas.drawCircle(end, 2.1, paint);
+      final cm = distance / 37.7952755906;
+      final label = TextPainter(
+        text: TextSpan(
+          text: cm.toStringAsFixed(1) + ' cm',
+          style: TextStyle(
+            color: sourcePaint.color,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            backgroundColor: const Color(0x00ffffff),
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      final midpoint = Offset((start.dx + end.dx) / 2, (start.dy + end.dy) / 2);
+      label.paint(canvas, midpoint + normal * 9 - Offset(label.width / 2, label.height / 2));
+      return;
+    }
+
+    if (stroke.shape == 'protractor') {
+      // Gesture order is center -> first ray -> second ray. Draw the angle,
+      // its two rays, and a degree label without drawing a protractor body.
+      if (points.length < 3) {
+        canvas.drawLine(start, end, paint);
+        return;
+      }
+      final center = start;
+      final firstRay = points[1].position;
+      final lastRay = end;
+      final v1 = firstRay - center;
+      final v2 = lastRay - center;
+      final r1 = v1.distance;
+      final r2 = v2.distance;
+      if (r1 <= 1 || r2 <= 1) return;
+      canvas.drawLine(center, firstRay, paint);
+      canvas.drawLine(center, lastRay, paint);
+      final startAngle = math.atan2(v1.dy, v1.dx);
+      final endAngle = math.atan2(v2.dy, v2.dx);
+      var sweep = endAngle - startAngle;
+      while (sweep > math.pi) sweep -= math.pi * 2;
+      while (sweep < -math.pi) sweep += math.pi * 2;
+      final radius = math.min(r1, r2) * .42;
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        startAngle,
+        sweep,
+        false,
+        paint,
+      );
+      final degrees = (sweep.abs() * 180 / math.pi).round();
+      final labelPos = center + Offset(
+        math.cos(startAngle + sweep / 2) * (radius + 14),
+        math.sin(startAngle + sweep / 2) * (radius + 14),
+      );
+      final label = TextPainter(
+        text: TextSpan(
+          text: '$degrees°',
+          style: TextStyle(color: sourcePaint.color, fontSize: 12, fontWeight: FontWeight.w800),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      label.paint(canvas, labelPos - Offset(label.width / 2, label.height / 2));
     }
   }
 
