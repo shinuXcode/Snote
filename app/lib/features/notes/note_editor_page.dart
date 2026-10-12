@@ -421,6 +421,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     int? storedCoverColor;
     String? storedCoverIcon;
     String? storedCoverKey;
+    bool? storedDrawMode;
     if (note?.contentJson != null && note!.contentJson!.trim().isNotEmpty) {
       // Do not silently turn an unreadable saved note into a new blank page:
       // that can make the next autosave overwrite the user's recoverable data.
@@ -453,6 +454,20 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           debugPrint('Snote rich-text document could not be restored: $error');
         }
       }
+      storedDrawMode = restoreNoteDrawMode(
+        savedMode: json['editorMode'],
+        textDelta: delta,
+        hasVisibleCanvasContent: parsed.any((page) {
+          final strokes = page['strokes'];
+          final images = page['images'];
+          final textBoxes = page['textBoxes'];
+          final background = page['backgroundImage'];
+          return (strokes is List && strokes.isNotEmpty) ||
+              (images is List && images.isNotEmpty) ||
+              (textBoxes is List && textBoxes.isNotEmpty) ||
+              (background is String && background.isNotEmpty);
+        }),
+      );
       // A document with page data that exists but cannot be decoded must be
       // surfaced as an error, not silently replaced with a blank notebook.
       if (raw != null && raw is! List) {
@@ -542,6 +557,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     setState(() {
       _pages = parsed;
       _page = 0;
+      _draw = storedDrawMode ?? _draw;
       _noteCoverColor = storedCoverColor;
       _noteCoverIcon = storedCoverIcon;
       _noteCoverKey = storedCoverKey;
@@ -688,6 +704,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         'coverColor': _noteCoverColor,
         'coverIcon': _noteCoverIcon,
         'coverKey': _noteCoverKey,
+        'editorMode': _draw ? 'handwriting' : 'text',
         'pages': _pages,
         'text_delta': _quill.document.toDelta().toJson(),
       });
@@ -743,6 +760,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     if (tool == CanvasTool.highlighter) return const Color(0xffffd54f);
     if (tool == CanvasTool.marker) return const Color(0xff1565c0);
     return const Color(0xff263238);
+  }
+
+  void _toggleEditorMode() {
+    setState(() => _draw = !_draw);
+    _scheduleSave();
   }
 
   void _selectTool(CanvasTool tool) {
@@ -2297,7 +2319,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                 _compactAction(
                   tooltip: _draw ? 'Text mode' : 'Handwriting mode',
                   icon: _draw ? Icons.text_fields_rounded : Icons.draw_rounded,
-                  onPressed: () => setState(() => _draw = !_draw),
+                  onPressed: _toggleEditorMode,
                 ),
                 _compactAction(
                   tooltip: 'Lock note',
@@ -2335,7 +2357,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                         setState(() => _shapePanel = !_shapePanel);
                         break;
                       case 'mode':
-                        setState(() => _draw = !_draw);
+                        _toggleEditorMode();
                         break;
                       case 'addText':
                         _addTextBox();
