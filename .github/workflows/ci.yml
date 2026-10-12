@@ -32,7 +32,7 @@ jobs:
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libsqlite3-dev clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+          sudo apt-get install -y libsqlite3-dev clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsecret-1-dev
 
       - name: Generate Android and Web runners
         working-directory: app
@@ -67,11 +67,32 @@ jobs:
           print('Verified Android app module compileSdk=37')
 
           manifest = Path('android/app/src/main/AndroidManifest.xml')
-          if manifest.is_file():
-              text = manifest.read_text()
-              if 'android.permission.CAMERA' not in text:
-                  text = text.replace('</manifest>', '    <uses-permission android:name="android.permission.CAMERA" />\n</manifest>')
-                  manifest.write_text(text)
+          if not manifest.is_file():
+              raise SystemExit('Generated AndroidManifest.xml is missing')
+          text = manifest.read_text()
+          if 'android.permission.CAMERA' not in text:
+              text = text.replace('</manifest>', '    <uses-permission android:name="android.permission.CAMERA" />\n</manifest>')
+          if 'android:launchMode="singleTop"' in text:
+              text = text.replace('android:launchMode="singleTop"', 'android:launchMode="singleTask"')
+          if 'android.intent.action.SEND' not in text:
+              share_filters = '''
+                  <intent-filter>
+                      <action android:name="android.intent.action.SEND" />
+                      <category android:name="android.intent.category.DEFAULT" />
+                      <data android:mimeType="image/*" />
+                  </intent-filter>
+                  <intent-filter>
+                      <action android:name="android.intent.action.SEND_MULTIPLE" />
+                      <category android:name="android.intent.category.DEFAULT" />
+                      <data android:mimeType="image/*" />
+                  </intent-filter>
+              '''
+              if '</activity>' not in text:
+                  raise SystemExit('Could not find activity closing tag for Android image share filters')
+              text = text.replace('</activity>', share_filters + '\n        </activity>', 1)
+          manifest.write_text(text)
+          if 'android.intent.action.SEND' not in manifest.read_text():
+              raise SystemExit('Android image share filters were not configured')
           PY
 
       - name: Install dependencies
