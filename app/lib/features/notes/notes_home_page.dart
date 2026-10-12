@@ -159,7 +159,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
     _homeFolderRenderLimit = 60;
     setState(() {});
     _searchDebounce?.cancel();
-    _sharingSubscription?.cancel();
+
     _searchDebounce = Timer(
       const Duration(milliseconds: 180),
       () => unawaited(_load()),
@@ -1172,6 +1172,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
     _searchDebounce?.cancel();
     _search.removeListener(_onSearchChanged);
     _search.dispose();
+    _sharingSubscription?.cancel();
     unawaited(_sync.dispose());
     super.dispose();
   }
