@@ -468,18 +468,33 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     // reconstruct notebook pages from that attachment when reopening the note.
     Uint8List? pdfBytes = widget.initialPdfBytes;
     String? pdfName = widget.initialPdfName;
+    var hasPdfAttachment = false;
     if ((pdfBytes == null || pdfBytes.isEmpty) && parsed.isEmpty) {
       final assets = await FileDocumentRepository().listForNote(widget.note.id);
       DocumentAsset? sourcePdf;
       for (final asset in assets.reversed) {
-        if (asset.type.toLowerCase() == 'pdf') {
+        final type = asset.type.toLowerCase();
+        final name = asset.name.toLowerCase();
+        if (type == 'pdf' || type == 'application/pdf' || name.endsWith('.pdf')) {
           sourcePdf = asset;
           break;
         }
       }
+      hasPdfAttachment = sourcePdf != null;
       if (sourcePdf != null) {
-        pdfBytes = await FileDocumentRepository().readBytes(sourcePdf);
-        pdfName = sourcePdf.name;
+        try {
+          pdfBytes = await FileDocumentRepository().readBytes(sourcePdf);
+          pdfName = sourcePdf.name;
+        } catch (error) {
+          throw StateError(
+            'The original PDF attachment is present but could not be read: $error',
+          );
+        }
+        if (pdfBytes.isEmpty) {
+          throw StateError(
+            'The original PDF attachment is empty. It was preserved; no blank page was substituted.',
+          );
+        }
       }
     }
 
@@ -489,18 +504,26 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           pdfBytes,
           pdfName ?? (widget.note.title + '.pdf'),
         );
+        if (result.totalPages < 1 || result.pages.isEmpty) {
+          throw StateError('The PDF renderer returned no pages.');
+        }
         parsed.addAll(result.pages);
         originalPdfPageCount = result.totalPages;
-        importedOnFirstOpen = parsed.isNotEmpty;
+        importedOnFirstOpen = true;
       } catch (error) {
-        // Do not silently continue into an empty note when a PDF import fails.
-        // _prepare displays a recoverable error state and leaves source bytes
-        // and persisted note content untouched.
+        // A document import must never degrade into a seemingly successful
+        // blank notebook. Keep the source attachment and report the failure.
         throw StateError('PDF could not be rendered into notebook pages: $error');
       }
     }
-    // An empty note is valid only when it has no saved content and is not a
-    // failed document import. Never let pageData index an empty collection.
+    if (parsed.isEmpty && hasPdfAttachment) {
+      throw StateError(
+        'This note has a PDF attachment, but no pages could be restored. '
+        'The original file remains saved; retry the import instead of overwriting it.',
+      );
+    }
+    // Only genuinely empty ordinary notes get a new page. Imported PDFs must
+    // either restore their pages or show a recoverable error.
     if (parsed.isEmpty) parsed.add(_newPage());
     for (var i = 0; i < parsed.length; i++) {
       parsed[i] = _normalize(parsed[i]);
