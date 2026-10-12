@@ -369,7 +369,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
         if (key != null && key.startsWith('cover:')) return key;
       }
     } catch (_) {}
-    return 'cover:' + (note.id.hashCode.abs() % 100).toString();
+    return 'cover:' + (note.id.hashCode.abs() % 200).toString();
   }
 
   Future<void> _changeNoteCover(LocalNote note) async {
@@ -1435,17 +1435,18 @@ class _SideRail extends StatelessWidget {
           entry(icon: Icons.person_outline_rounded, label: localOnly ? 'Sign in & sync' : 'Account', onTap: onAccount),
           entry(icon: Icons.settings_outlined, label: 'Settings', onTap: onSettings),
           const Spacer(),
-          if (expanded)
-            ListTile(
-              leading: Icon(localOnly ? Icons.offline_bolt_rounded : Icons.cloud_done_rounded),
-              title: Text(localOnly ? 'Offline first' : syncing ? 'Syncing…' : 'Sync ready'),
-              dense: true,
-            )
-          else
-            Tooltip(
-              message: localOnly ? 'Offline first' : syncing ? 'Syncing' : 'Sync ready',
-              child: Icon(localOnly ? Icons.offline_bolt_rounded : Icons.cloud_done_rounded),
-            ),
+          if (!localOnly)
+            if (expanded)
+              ListTile(
+                leading: Icon(Icons.cloud_done_rounded),
+                title: Text(syncing ? 'Syncing…' : 'Sync ready'),
+                dense: true,
+              )
+            else
+              Tooltip(
+                message: syncing ? 'Syncing' : 'Sync ready',
+                child: const Icon(Icons.cloud_done_rounded),
+              ),
         ],
       ),
     );
@@ -1988,7 +1989,7 @@ class _FolderCoverCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final coverKey = folder.iconKey.startsWith('cover:')
         ? folder.iconKey
-        : 'cover:' + (folder.sortOrder.abs() % 100).toString();
+        : 'cover:' + (folder.sortOrder.abs() % 200).toString();
     return Card(
       clipBehavior: Clip.antiAlias,
       elevation: selected ? 5 : 2,
