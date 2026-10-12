@@ -63,6 +63,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   final _focus = FocusNode();
   final _scroll = ScrollController();
   final _title = TextEditingController();
+  final Map<String, TextEditingController> _textBoxControllers = <String, TextEditingController>{};
   final _lock = const NoteLockService();
   final _settings = SnoteSettings.instance;
   final GlobalKey _pageCaptureKey = GlobalKey();
@@ -470,6 +471,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     p['orientation'] ??= 'vertical';
     p['strokes'] ??= <Object?>[];
     p['images'] ??= <Object?>[];
+    p['textBoxes'] ??= <Object?>[];
     return p;
   }
 
@@ -793,6 +795,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     _canvas.dispose();
     _toolbarOffset.dispose();
     _viewportTransform.dispose();
+    for (final controller in _textBoxControllers.values) {
+      controller.dispose();
+    }
     unawaited(WakelockPlus.disable());
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
@@ -1108,6 +1113,20 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
               ),
             ),
           ),
+          Positioned.fill(
+            child: LayoutBuilder(
+              builder: (_, constraints) => Stack(
+                clipBehavior: Clip.none,
+                children: _pageTextBoxes
+                    .map((box) => _pageTextBoxItem(
+                          box,
+                          constraints.maxWidth,
+                          constraints.maxHeight,
+                        ))
+                    .toList(),
+              ),
+            ),
+          ),
           if (_settings.getBool('showPageNumbers'))
             Positioned(
               right: 10,
@@ -1169,6 +1188,156 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     final raw = pageData['images'];
     if (raw is! List) return <Map<String, Object?>>[];
     return raw.whereType<Map>().map((item) => item.cast<String, Object?>()).toList();
+  }
+
+
+  List<Map<String, Object?>> get _pageTextBoxes {
+    final raw = pageData['textBoxes'];
+    if (raw is! List) return <Map<String, Object?>>[];
+    return raw
+        .whereType<Map>()
+        .map((item) => item.cast<String, Object?>())
+        .toList();
+  }
+
+  void _addTextBox() {
+    final id = DateTime.now().microsecondsSinceEpoch.toString();
+    final box = <String, Object?>{
+      'id': id,
+      'x': .16,
+      'y': .14,
+      'width': .66,
+      'height': .18,
+      'text': '',
+      'fontSize': 18.0,
+      'color': _penColor.toARGB32(),
+    };
+    setState(() {
+      final boxes = pageData['textBoxes'];
+      if (boxes is List) {
+        boxes.add(box);
+      } else {
+        pageData['textBoxes'] = <Object?>[box];
+      }
+      _textBoxControllers[id] = TextEditingController();
+    });
+    _scheduleSave();
+  }
+
+  void _updateTextBox(String id, String key, Object? value) {
+    for (final box in _pageTextBoxes) {
+      if (box['id']?.toString() != id) continue;
+      box[key] = value;
+      _scheduleSave();
+      return;
+    }
+  }
+
+  void _removeTextBox(String id) {
+    setState(() {
+      final boxes = pageData['textBoxes'];
+      if (boxes is List) {
+        boxes.removeWhere((value) =>
+            value is Map && value['id']?.toString() == id);
+      }
+      final controller = _textBoxControllers.remove(id);
+      controller?.dispose();
+    });
+    _scheduleSave();
+  }
+
+  Widget _pageTextBoxItem(
+    Map<String, Object?> box,
+    double pageWidth,
+    double pageHeight,
+  ) {
+    final id = box['id']?.toString() ?? '';
+    final x = (box['x'] as num?)?.toDouble() ?? .16;
+    final y = (box['y'] as num?)?.toDouble() ?? .14;
+    final width = (box['width'] as num?)?.toDouble() ?? .66;
+    final height = (box['height'] as num?)?.toDouble() ?? .18;
+    final fontSize = (box['fontSize'] as num?)?.toDouble() ?? 18;
+    final color = Color((box['color'] as num?)?.toInt() ?? 0xff263238);
+    final initialText = box['text']?.toString() ?? '';
+    final controller = _textBoxControllers.putIfAbsent(
+      id,
+      () => TextEditingController(text: initialText),
+    );
+    if (controller.text != initialText && !controller.selection.isValid) {
+      controller.text = initialText;
+    }
+
+    return Positioned(
+      left: (x * pageWidth).clamp(0.0, math.max(0.0, pageWidth - 48)).toDouble(),
+      top: (y * pageHeight).clamp(0.0, math.max(0.0, pageHeight - 48)).toDouble(),
+      width: (width * pageWidth).clamp(80.0, math.max(80.0, pageWidth)).toDouble(),
+      height: (height * pageHeight).clamp(54.0, math.max(54.0, pageHeight)).toDouble(),
+      child: Material(
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: .93),
+        elevation: 3,
+        borderRadius: BorderRadius.circular(8),
+        clipBehavior: Clip.antiAlias,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: Theme.of(context).colorScheme.primary.withValues(alpha: .65),
+              width: 1,
+            ),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            children: [
+              Container(
+                height: 22,
+                color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: .85),
+                child: Row(children: [
+                  const SizedBox(width: 5),
+                  Icon(Icons.drag_indicator_rounded,
+                      size: 15, color: Theme.of(context).colorScheme.onPrimaryContainer),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      'Text box',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: Theme.of(context).colorScheme.onPrimaryContainer,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints.tightFor(width: 24, height: 22),
+                    padding: EdgeInsets.zero,
+                    tooltip: 'Remove text box',
+                    onPressed: () => _removeTextBox(id),
+                    icon: const Icon(Icons.close_rounded, size: 14),
+                  ),
+                ]),
+              ),
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  expands: true,
+                  minLines: null,
+                  maxLines: null,
+                  textAlignVertical: TextAlignVertical.top,
+                  style: TextStyle(fontSize: fontSize, color: color, height: 1.15),
+                  onChanged: (value) => _updateTextBox(id, 'text', value),
+                  decoration: const InputDecoration(
+                    hintText: 'Type while keeping your handwritten notes',
+                    hintStyle: TextStyle(fontSize: 11),
+                    isDense: true,
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.fromLTRB(7, 5, 7, 5),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _pageImageItem(Map<String, Object?> image, double pageWidth, double pageHeight) {
@@ -1860,6 +2029,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                       case 'mode':
                         setState(() => _draw = !_draw);
                         break;
+                      case 'addText':
+                        _addTextBox();
+                        break;
                       case 'lock':
                         _lockNote();
                         break;
@@ -1887,6 +2059,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     PopupMenuItem(value: 'pages', child: Text('Pages / thumbnails')),
                     PopupMenuItem(value: 'shapes', child: Text('Shapes and diagrams')),
                     PopupMenuItem(value: 'mode', child: Text('Toggle text / handwriting')),
+                    PopupMenuItem(value: 'addText', child: Text('Add text box to page')),
                     PopupMenuItem(value: 'lock', child: Text('Lock note')),
                     PopupMenuItem(value: 'fullscreen', child: Text('Fullscreen')),
                     PopupMenuItem(value: 'settings', child: Text('Note settings')),
