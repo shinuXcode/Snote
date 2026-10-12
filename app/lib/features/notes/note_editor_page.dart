@@ -1290,7 +1290,22 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
               Container(
                 height: 22,
                 color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: .85),
-                child: Row(children: [
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onPanUpdate: (details) {
+                    final currentBox = _pageTextBoxes.firstWhere(
+                      (item) => item['id']?.toString() == id,
+                      orElse: () => box,
+                    );
+                    setState(() {
+                      currentBox['x'] = (x + details.delta.dx / math.max(1.0, pageWidth))
+                          .clamp(0.0, math.max(0.0, 1.0 - width)).toDouble();
+                      currentBox['y'] = (y + details.delta.dy / math.max(1.0, pageHeight))
+                          .clamp(0.0, math.max(0.0, 1.0 - height)).toDouble();
+                    });
+                    _scheduleSave();
+                  },
+                  child: Row(children: [
                   const SizedBox(width: 5),
                   Icon(Icons.drag_indicator_rounded,
                       size: 15, color: Theme.of(context).colorScheme.onPrimaryContainer),
@@ -1313,7 +1328,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     onPressed: () => _removeTextBox(id),
                     icon: const Icon(Icons.close_rounded, size: 14),
                   ),
-                ]),
+                  ]),
+                ),
               ),
               Expanded(
                 child: TextField(
