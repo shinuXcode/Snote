@@ -157,8 +157,19 @@ class _NotesHomePageState extends State<NotesHomePage> {
     }
   }
   Future<void> _startSync() async {
-    await _sync.start();
-    await _load();
+    try {
+      await _sync.start();
+      await _load();
+    } catch (error, stackTrace) {
+      debugPrint('Snote background sync initialization failed: $error\\n$stackTrace');
+      if (!mounted) return;
+      setState(() => _syncing = false);
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(
+          content: Text('Sync could not start. Your local notebook remains available.'),
+        ),
+      );
+    }
   }
 
   void _onSearchChanged() {
@@ -224,38 +235,59 @@ class _NotesHomePageState extends State<NotesHomePage> {
     final generation = ++_loadGeneration;
     final query = _search.text.trim();
     final searching = query.isNotEmpty;
-    final allFolders = await _folders.listAllVisible();
-    final notes = searching
-        ? await _notes.searchVisible(query, limit: _databasePageSize)
-        : await _notes.list(folderId: _folderId, limit: _databasePageSize);
-    if (!mounted || generation != _loadGeneration) return;
 
-    final selectedId = _selected?.id;
-    final visible = notes.where(_matchesSearch).toList();
-    LocalNote? selected = visible.isEmpty ? null : visible.first;
-    if (selectedId != null) {
-      for (final note in visible) {
-        if (note.id == selectedId) {
-          selected = note;
-          break;
+    try {
+      final allFolders = await _folders.listAllVisible();
+      final notes = searching
+          ? await _notes.searchVisible(query, limit: _databasePageSize)
+          : await _notes.list(folderId: _folderId, limit: _databasePageSize);
+      if (!mounted || generation != _loadGeneration) return;
+
+      final selectedId = _selected?.id;
+      final visible = notes.where(_matchesSearch).toList();
+      LocalNote? selected = visible.isEmpty ? null : visible.first;
+      if (selectedId != null) {
+        for (final note in visible) {
+          if (note.id == selectedId) {
+            selected = note;
+            break;
+          }
         }
       }
-    }
 
-    setState(() {
-      _allFolders = allFolders;
-      _noteList = notes;
-      _databaseOffset = notes.length;
-      _hasMoreDatabaseNotes = notes.length == _databasePageSize;
-      _loadingMoreDatabaseNotes = false;
-      _selected = selected;
-      _loading = false;
-    });
-    if (!_welcomeCheckScheduled) {
-      _welcomeCheckScheduled = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) unawaited(_showWelcomeGuideIfNeeded());
+      setState(() {
+        _allFolders = allFolders;
+        _noteList = notes;
+        _databaseOffset = notes.length;
+        _hasMoreDatabaseNotes = notes.length == _databasePageSize;
+        _loadingMoreDatabaseNotes = false;
+        _selected = selected;
+        _loading = false;
       });
+      if (!_welcomeCheckScheduled) {
+        _welcomeCheckScheduled = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) unawaited(_showWelcomeGuideIfNeeded());
+        });
+      }
+    } catch (error, stackTrace) {
+      debugPrint('Snote notebook load failed: $error\\n$stackTrace');
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() {
+        _loading = false;
+        _loadingMoreDatabaseNotes = false;
+      });
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Could not load the notebook. Your saved data was not changed.',
+          ),
+          action: SnackBarAction(
+            label: 'Retry',
+            onPressed: () => unawaited(_load()),
+          ),
+        ),
+      );
     }
   }
 

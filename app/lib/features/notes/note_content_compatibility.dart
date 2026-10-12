@@ -172,3 +172,12 @@ List<Map<String, Object?>> mergeSavedAnnotationsWithPdfPages({
   return merged;
 }
 
+/// Keeps page navigation inside the available document range.
+///
+/// A stale index may survive page deletion, session restoration, or an older
+/// document state. Clamp it before painting instead of rendering a spinner
+/// forever while the index remains invalid.
+int clampNotePageIndex(int index, int pageCount) {
+  if (pageCount <= 0) return 0;
+  return index.clamp(0, pageCount - 1).toInt();
+}

@@ -144,7 +144,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   Map<String, Object?> get pageData {
     if (_pages.isEmpty) return const <String, Object?>{};
     if (_page < 0 || _page >= _pages.length) {
-      _page = _page.clamp(0, _pages.length - 1).toInt();
+      _page = clampNotePageIndex(_page, _pages.length);
     }
     return _pages[_page];
   }
@@ -584,7 +584,12 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     // after the page list has been installed. Keep the loading screen visible
     // until initialization work is complete.
     _restoreToolbar();
-    await _keepAwake();
+    // Keep-awake is optional; plugin failure must not hide a loaded note.
+    try {
+      await _keepAwake();
+    } catch (error, stackTrace) {
+      debugPrint('Snote keep-awake setup failed (non-fatal): $error\\n$stackTrace');
+    }
     if (!mounted) return;
     setState(() {
       _loading = false;
@@ -961,8 +966,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
 
   @override
   Widget build(BuildContext context) {
+    // Locked notes finish their first load without page data. Handle that
+    // state before the empty-page guard so the password UI actually appears.
+    if (_locked && !_unlocked) return _lockedView();
+
     if (_loading) {
-      if (_locked) return _lockedView();
       return Scaffold(
         appBar: AppBar(title: Text(widget.note.title)),
         body: const Center(
@@ -1012,7 +1020,28 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     if (_pages.isEmpty) {
       return Scaffold(
         appBar: AppBar(title: Text(widget.note.title)),
-        body: const Center(child: CircularProgressIndicator()),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.description_outlined, size: 44),
+                const SizedBox(height: 12),
+                const Text(
+                  'No page is available to display. Your saved data has not been changed.',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: _retryNoteLoad,
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Retry loading note'),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
     }
 
@@ -1169,8 +1198,13 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   final ok = await _lock.unlock(widget.note.id, password);
                   if (!mounted) return;
                   if (ok) {
-                    setState(() { _locked = false; _unlocked = true; });
-                    await _load();
+                    setState(() {
+                      _locked = false;
+                      _unlocked = true;
+                      _loading = true;
+                      _loadError = null;
+                    });
+                    await _prepare();
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Wrong password.')));
                   }
@@ -1183,6 +1217,19 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         ),
       ),
     );
+  }
+
+  void _retryNoteLoad() {
+    _backgroundImageCache.clear();
+    _backgroundImageEncodedByPageId.clear();
+    setState(() {
+      _pages = <Map<String, Object?>>[];
+      _page = 0;
+      _loading = true;
+      _loadError = null;
+      _pageRenderError = null;
+    });
+    unawaited(_prepare());
   }
 
   Widget _pageView() {
@@ -1204,18 +1251,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
               ),
               const SizedBox(height: 12),
               FilledButton.icon(
-                onPressed: () {
-                  _backgroundImageCache.clear();
-                  _backgroundImageEncodedByPageId.clear();
-                  setState(() {
-                    _pages = <Map<String, Object?>>[];
-                    _page = 0;
-                    _loading = true;
-                    _loadError = null;
-                    _pageRenderError = null;
-                  });
-                  unawaited(_prepare());
-                },
+                onPressed: _retryNoteLoad,
                 icon: const Icon(Icons.refresh_rounded),
                 label: const Text('Retry loading note'),
               ),
@@ -1264,9 +1300,13 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   Widget _buildPageViewContent() {
     // Defensive guard: asynchronous loads, route restoration, or a future
     // malformed import must never crash the shared note/PDF editor.
-    if (_pages.isEmpty || _page < 0 || _page >= _pages.length) {
-      return const Center(child: CircularProgressIndicator());
+    if (_pages.isEmpty) {
+      // Defensive race fallback; the parent provides an actionable retry UI.
+      return const Center(
+        child: Text('No page is available to display. Retry loading this note.'),
+      );
     }
+    _page = clampNotePageIndex(_page, _pages.length);
     final backgroundImageBytes = _backgroundImageBytesForCurrentPage();
     final sizeKey = pageData['pageSize']?.toString() ?? 'A4';
     final horizontal = pageData['orientation']?.toString() == 'horizontal';
@@ -1315,7 +1355,25 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   backgroundImageBytes,
                   fit: BoxFit.fill,
                   gaplessPlayback: true,
-                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                  errorBuilder: (_, error, __) {
+                    debugPrint('Snote page image decode failed: $error');
+                    return ColoredBox(
+                      color: Theme.of(context).colorScheme.errorContainer,
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Text(
+                            'This page image could not be decoded. '
+                            'Your saved annotations are preserved; retry loading the note.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onErrorContainer,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
             ),

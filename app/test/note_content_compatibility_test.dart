@@ -277,6 +277,14 @@ void main() {
     expect(merged.last['strokes'], <Object?>['user-annotation']);
   });
 
+  test('clamps stale page indices before rendering', () {
+    expect(clampNotePageIndex(-4, 3), 0);
+    expect(clampNotePageIndex(0, 3), 0);
+    expect(clampNotePageIndex(2, 3), 2);
+    expect(clampNotePageIndex(99, 3), 2);
+    expect(clampNotePageIndex(-1, 0), 0);
+  });
+
   test('does not treat envelope-only note metadata as a page', () {
     expect(
       legacyPageFromNoteContent(<String, Object?>{
