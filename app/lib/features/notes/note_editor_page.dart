@@ -134,7 +134,15 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   String? _noteCoverKey;
   StateSetter? _templateSheetRefresh;
 
-  Map<String, Object?> get pageData => _pages[_page];
+  // Defensive access: a persisted note can contain malformed/legacy page
+  // metadata. Never let an out-of-range page index crash the entire editor.
+  Map<String, Object?> get pageData {
+    if (_pages.isEmpty) return const <String, Object?>{};
+    if (_page < 0 || _page >= _pages.length) {
+      _page = _page.clamp(0, _pages.length - 1).toInt();
+    }
+    return _pages[_page];
+  }
   PenConfig get pen {
     final curve = PressureCurve.values.firstWhere(
       (value) => value.name == _settings.getString('pressureCurve'),
@@ -448,7 +456,12 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         }
       }
     }
+    // Always publish at least one normalized page before allowing build()
+    // to construct the canvas. Do not clear or overwrite the stored note here.
     if (parsed.isEmpty) parsed.add(_newPage());
+    for (var i = 0; i < parsed.length; i++) {
+      parsed[i] = _normalize(parsed[i]);
+    }
     if (!mounted) return;
     setState(() {
       _pages = parsed;
@@ -456,11 +469,18 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       _noteCoverColor = storedCoverColor;
       _noteCoverIcon = storedCoverIcon;
       _noteCoverKey = storedCoverKey;
-      _loading = false;
     });
 
+    // Toolbar/settings restoration can read pageData, so it must happen only
+    // after the page list has been installed. Keep the loading screen visible
+    // until initialization work is complete.
     _restoreToolbar();
     await _keepAwake();
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _loadError = null;
+    });
     if (importedOnFirstOpen && mounted) {
       _savePending = true;
       await _save(force: true);
@@ -827,6 +847,14 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   @override
   Widget build(BuildContext context) {
     if (_loading) return _lockedView();
+    // The editor must never try to render a page before its document exists.
+    // This also protects against legacy records whose page list is empty.
+    if (_pages.isEmpty && _loadError == null) {
+      return Scaffold(
+        appBar: AppBar(title: Text(widget.note.title)),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
     if (_loadError != null) {
       return Scaffold(
         appBar: AppBar(title: Text(widget.note.title)),
