@@ -25,7 +25,7 @@ class FolderCoverArt extends StatelessWidget {
   int get _seed {
     if (!coverKey.startsWith('cover:')) return 0;
     final value = int.tryParse(coverKey.substring('cover:'.length));
-    return (value ?? coverKey.hashCode).abs() % 100;
+    return (value ?? coverKey.hashCode).abs() % 200;
   }
 
   Widget _generated(BuildContext context) {
@@ -33,14 +33,33 @@ class FolderCoverArt extends StatelessWidget {
     final hue = (seed * 47.0) % 360;
     final top = HSVColor.fromAHSV(1, hue, .43 + (seed % 3) * .12, .97).toColor();
     final bottom = HSVColor.fromAHSV(1, (hue + 35) % 360, .78, .46 + (seed % 4) * .1).toColor();
-    const symbols = <IconData>[
-      Icons.menu_book_rounded, Icons.science_rounded, Icons.functions_rounded,
-      Icons.auto_stories_rounded, Icons.workspace_premium_rounded, Icons.eco_rounded,
-      Icons.public_rounded, Icons.bubble_chart_rounded, Icons.nights_stay_rounded,
-      Icons.waves_rounded, Icons.star_rounded, Icons.architecture_rounded,
-      Icons.music_note_rounded, Icons.calculate_rounded, Icons.biotech_rounded,
-      Icons.palette_rounded, Icons.lightbulb_rounded, Icons.terrain_rounded,
-    ];
+    // The cover library is organized into five visible collections of forty.
+    // Each collection deliberately uses related symbols so users can browse by
+    // subject rather than relying on color alone.
+    final symbols = switch (seed ~/ 40) {
+      0 => const <IconData>[
+        Icons.menu_book_rounded, Icons.auto_stories_rounded,
+        Icons.functions_rounded, Icons.calculate_rounded,
+      ],
+      1 => const <IconData>[
+        Icons.science_rounded, Icons.biotech_rounded,
+        Icons.bubble_chart_rounded, Icons.architecture_rounded,
+      ],
+      2 => const <IconData>[
+        Icons.eco_rounded, Icons.public_rounded,
+        Icons.terrain_rounded, Icons.waves_rounded,
+        Icons.nights_stay_rounded,
+      ],
+      3 => const <IconData>[
+        Icons.palette_rounded, Icons.music_note_rounded,
+        Icons.star_rounded, Icons.lightbulb_rounded,
+      ],
+      _ => const <IconData>[
+        Icons.workspace_premium_rounded, Icons.bubble_chart_rounded,
+        Icons.architecture_rounded, Icons.waves_rounded,
+        Icons.auto_awesome_rounded,
+      ],
+    };
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -72,7 +91,7 @@ class FolderCoverArt extends StatelessWidget {
                 borderRadius: BorderRadius.circular(7),
               ),
               child: Text(
-                'SNOTE  •  ' + (seed + 1).toString().padLeft(2, '0'),
+                'SNOTE  •  ' + (seed + 1).toString().padLeft(3, '0'),
                 style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1),
               ),
             )),
@@ -129,7 +148,7 @@ class FolderCoverArt extends StatelessWidget {
                     ),
                   ),
                   child: Text(
-                    title ?? ('Cover ' + (_seed + 1).toString()),
+                    title ?? ('Cover ' + (_seed + 1).toString().padLeft(3, '0')),
                     maxLines: 2, overflow: TextOverflow.ellipsis,
                     style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w800, height: 1.15),
                   ),
