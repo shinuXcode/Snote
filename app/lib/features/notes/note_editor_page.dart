@@ -1492,7 +1492,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
               _compactAction(tooltip: _draw ? 'Text mode' : 'Handwriting mode', icon: _draw ? Icons.text_fields_rounded : Icons.draw_rounded, onPressed: () => setState(() => _draw = !_draw)),
               _compactAction(tooltip: 'Lock note', icon: _locked ? Icons.lock_rounded : Icons.lock_outline_rounded, onPressed: _lockNote),
               _compactAction(tooltip: 'Fullscreen', icon: _full ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded, onPressed: _toggleFullscreen),
-              _compactAction(tooltip: 'Settings', icon: Icons.settings_outlined, onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage())).then((_) => _keepAwake())),
+              _compactAction(tooltip: 'Settings', icon: Icons.settings_outlined, onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage(noteOnly: true))).then((_) => _keepAwake())),
             ]),
           ),
         ),

@@ -11,7 +11,8 @@ import '../tools/screenshot_import_page.dart';
 import '../trash/trash_page.dart';
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key});
+  final bool noteOnly;
+  const SettingsPage({super.key, this.noteOnly = false});
   @override State<SettingsPage> createState() => _SettingsPageState();
 }
 
@@ -28,6 +29,7 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void initState() {
     super.initState();
+    _noteOnly = widget.noteOnly;
     _settingsSearch.addListener(_refresh);
     _settings.addListener(_refresh);
     _theme.addListener(_refresh);
@@ -115,7 +117,18 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget _settingsList(BuildContext context) => ListView(
     padding: const EdgeInsets.fromLTRB(18, 8, 18, 40),
     children: [
-      _group('Writing Operation', [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(0, 4, 0, 12),
+        child: SegmentedButton<bool>(
+          segments: const [
+            ButtonSegment(value: false, label: Text('App settings'), icon: Icon(Icons.tune_rounded)),
+            ButtonSegment(value: true, label: Text('Note settings'), icon: Icon(Icons.draw_rounded)),
+          ],
+          selected: {_noteOnly},
+          onSelectionChanged: (values) => setState(() => _noteOnly = values.first),
+        ),
+      ),
+      if (_noteOnly) _group('Writing Operation', [
         _toggle('autoRecognition', 'Auto Recognition', 'Recognize a drawn shape after a short hold.'),
         _toggle('palmRejection', 'Palm rejection', 'Ignore accidental finger touches while writing with a stylus. Turn this off to allow finger drawing.'),
         _toggle('independentGraphColor', 'Independent graph color / stroke', 'Keep graph and stroke styling separate.'),
@@ -132,7 +145,7 @@ class _SettingsPageState extends State<SettingsPage> {
         _toggle('autoSave', 'Auto-save notes', 'Save automatically after changes. Turn this off to save manually from the editor toolbar.'),
         _toggle('volumeKeyTurnPage', 'Volume key turn page', 'Turn pages with volume keys where the platform exposes the event.'),
       ]),
-      if (_query.isEmpty || 'trigger pressure value'.contains(_query))
+      if (_noteOnly && (_query.isEmpty || 'trigger pressure value'.contains(_query)))
       Card(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 5, 16, 8),
@@ -146,7 +159,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ]),
         ),
       ),
-      _group('Display', [
+      if (!_noteOnly) _group('Display', [
         _themeModeSelector(),
         _themeStyleSelector(),
         _colorThemeSelector(),
@@ -169,7 +182,7 @@ class _SettingsPageState extends State<SettingsPage> {
           onChanged: _theme.setReduceMotion,
         ),
       ]),
-      _group('Other Settings', [
+      if (_noteOnly) _group('Other Settings', [
         _toggle('keepScreenOn', 'Keep screen on', 'Stay awake while writing.'),
         _toggle('bookshelfStartPage', 'Bookshelf as start page', 'Open the notebook library first.'),
         _toggle('showPageNavigation', 'Show page navigation', 'Display previous/next/add controls.'),
@@ -193,7 +206,7 @@ class _SettingsPageState extends State<SettingsPage> {
         _toggle('autoAddPage', 'Auto add page', 'Create the next numbered page when swiping past the end.'),
         _toggle('securePagePreviews', 'Preview lock / privacy', 'Hide handwritten content in the page preview rail.'),
       ]),
-      if (_query.isEmpty || 'privacy security custom note password'.contains(_query)) _group('Privacy & Security', [
+      if (!_noteOnly && (_query.isEmpty || 'privacy security custom note password'.contains(_query))) _group('Privacy & Security', [
         Card(
           child: ListTile(
             leading: const Icon(Icons.lock_outline_rounded),
@@ -202,7 +215,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ),
       ]),
-      if (_query.isEmpty || 'private transfer qr screenshot bin trash import export notes'.contains(_query)) _group('Notebook & File Management', [
+      if (!_noteOnly && (_query.isEmpty || 'private transfer qr screenshot bin trash import export notes'.contains(_query))) _group('Notebook & File Management', [
         Card(child: ListTile(
           leading: const Icon(Icons.qr_code_2_rounded),
           title: const Text('Private transfer'),
@@ -228,7 +241,7 @@ class _SettingsPageState extends State<SettingsPage> {
           onTap: _transfer,
         )),
       ]),
-      if (_query.isEmpty || 'updates about release app notices'.contains(_query)) _group('Updates & About', [
+      if (!_noteOnly && (_query.isEmpty || 'updates about release app notices'.contains(_query))) _group('Updates & About', [
         Card(child: ListTile(
           leading: const Icon(Icons.menu_book_outlined),
           title: const Text('Welcome & user guide'),
