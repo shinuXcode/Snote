@@ -847,14 +847,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   @override
   Widget build(BuildContext context) {
     if (_loading) return _lockedView();
-    // The editor must never try to render a page before its document exists.
-    // This also protects against legacy records whose page list is empty.
-    if (_pages.isEmpty && _loadError == null) {
-      return Scaffold(
-        appBar: AppBar(title: Text(widget.note.title)),
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
     if (_loadError != null) {
       return Scaffold(
         appBar: AppBar(title: Text(widget.note.title)),
@@ -883,6 +875,14 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
             ),
           ),
         ),
+      );
+    }
+    // The editor must never try to render a page before its document exists.
+    // This also protects against legacy records whose page list is empty.
+    if (_pages.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(title: Text(widget.note.title)),
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
 
