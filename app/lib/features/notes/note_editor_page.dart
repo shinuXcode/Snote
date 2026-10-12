@@ -70,6 +70,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   double _pageChangerY = 130;
   double _selectionToolbarX = -1;
   double _selectionToolbarY = -1;
+  Offset? _toolOptionsAnchorPosition;
   bool _pdfExporting = false;
   final TextEditingController _calculatorInput = TextEditingController(text: '0');
   String _calculatorResult = '0';
@@ -1828,7 +1829,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         tooltip: 'Current pen color',
       ),
       IconButton(
-        onPressed: _styleSheet,
+        onPressed: () {
+          _toolOptionsAnchorPosition = _toolbarOptionsAnchor();
+          unawaited(_styleSheet());
+        },
         icon: const Icon(Icons.tune_rounded),
         tooltip: 'Tool style',
       ),
@@ -2076,6 +2080,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   }
 
   Future<void> _showInlineToolOptions(CanvasTool target, Offset globalPosition) async {
+    _toolOptionsAnchorPosition = globalPosition;
     var size = _toolSizeOverrides[target.name] ?? _defaultToolSize(target);
     var opacity = target == _tool ? _opacity : 1.0;
     var color = _toolColorOverrides[target.name] ?? _defaultToolColor(target);
@@ -3589,6 +3594,15 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     });
   }
 
+  Offset _toolbarOptionsAnchor() {
+    final object = _toolbarKey.currentContext?.findRenderObject();
+    if (object is RenderBox) {
+      final origin = object.localToGlobal(Offset.zero);
+      return origin + Offset(object.size.width / 2, object.size.height / 2);
+    }
+    return const Offset(72, 120);
+  }
+
   Future<void> _styleSheet([CanvasTool? requestedTool]) async {
     final target = requestedTool ?? _tool;
     var size = _toolSizeOverrides[target.name] ?? _defaultToolSize(target);
@@ -3604,12 +3618,40 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     var pressureErase = _settings.getBool('pressureErase');
     var pressureEraseArea = _settings.getBool('pressureEraseArea');
 
-    await showModalBottomSheet<void>(
+    final anchor = _toolOptionsAnchorPosition ?? _toolbarOptionsAnchor();
+    await showGeneralDialog<void>(
       context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (_, setModal) => SafeArea(
+      barrierDismissible: true,
+      barrierLabel: '${target.label} options',
+      barrierColor: Colors.black12,
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        final screen = MediaQuery.sizeOf(dialogContext);
+        final popupWidth = math.min(360.0, screen.width - 16);
+        final popupHeight = math.min(680.0, screen.height * .82);
+        final placeRight = anchor.dx < screen.width / 2;
+        final left = (placeRight ? anchor.dx + 28 : anchor.dx - popupWidth - 12)
+            .clamp(8.0, math.max(8.0, screen.width - popupWidth - 8))
+            .toDouble();
+        final requestedTop = anchor.dy > screen.height * .62
+            ? anchor.dy - popupHeight
+            : anchor.dy + 8;
+        final top = requestedTop
+            .clamp(52.0, math.max(52.0, screen.height - popupHeight - 8))
+            .toDouble();
+        return Stack(
+          children: [
+            Positioned(
+              left: left,
+              top: top,
+              width: popupWidth,
+              height: popupHeight,
+              child: Material(
+                elevation: 18,
+                color: Theme.of(dialogContext).colorScheme.surface,
+                borderRadius: BorderRadius.circular(18),
+                clipBehavior: Clip.antiAlias,
+                child: StatefulBuilder(
+                  builder: (_, setModal) => SafeArea(
           child: Padding(
             padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.viewInsetsOf(context).bottom + 20),
             child: SingleChildScrollView(
@@ -3774,6 +3816,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           ),
         ),
       ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
