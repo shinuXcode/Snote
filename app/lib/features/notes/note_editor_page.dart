@@ -1301,6 +1301,13 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     }
   }
 
+  Future<void> _studyTimerSheet() async {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => const _StudyTimerDialog(),
+    );
+  }
+
   Future<void> _calculatorSheet() async {
     const keys = [
       'sin', 'cos', 'tan', 'sqrt',
@@ -1311,96 +1318,125 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       '0', '.', 'π', '+',
       '%', '^', 'Ans', '=',
     ];
-    _calculatorInput.text = '0';
+    _calculatorInput.text = _calculatorInput.text.isEmpty ? '0' : _calculatorInput.text;
     _calculatorResult = '0';
+    var keypadScale = 1.0;
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
       builder: (sheetContext) => StatefulBuilder(
         builder: (_, setModal) => SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 22),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Align(alignment: Alignment.centerLeft, child: Text('Calculator', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900))),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _calculatorInput,
-                  textAlign: TextAlign.end,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                  decoration: const InputDecoration(border: OutlineInputBorder(), labelText: 'Expression'),
-                ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Text('= $_calculatorResult', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 780),
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(16, 8, 16, MediaQuery.viewInsetsOf(context).bottom + 16),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(children: [
+                        const Icon(Icons.calculate_rounded, size: 25),
+                        const SizedBox(width: 10),
+                        const Expanded(child: Text('Calculator', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900))),
+                        IconButton(
+                          tooltip: 'Close calculator',
+                          onPressed: () => Navigator.pop(sheetContext),
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                      ]),
+                      TextField(
+                        controller: _calculatorInput,
+                        textAlign: TextAlign.end,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                        decoration: const InputDecoration(border: OutlineInputBorder(), labelText: 'Expression'),
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Text('= $_calculatorResult', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+                        ),
+                      ),
+                      Row(children: [
+                        const Text('Key size', style: TextStyle(fontWeight: FontWeight.w700)),
+                        Expanded(
+                          child: Slider(
+                            value: keypadScale,
+                            min: .75,
+                            max: 1.35,
+                            divisions: 12,
+                            label: keypadScale.toStringAsFixed(2) + '×',
+                            onChanged: (value) => setModal(() => keypadScale = value),
+                          ),
+                        ),
+                      ]),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final columns = constraints.maxWidth >= 600 ? 7 : 4;
+                          return GridView.count(
+                            crossAxisCount: columns,
+                            shrinkWrap: true,
+                            mainAxisSpacing: 7,
+                            crossAxisSpacing: 7,
+                            childAspectRatio: (columns >= 7 ? 1.45 : 1.7) / keypadScale,
+                            physics: const NeverScrollableScrollPhysics(),
+                            children: keys.map((key) => FilledButton(
+                              style: FilledButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(17)),
+                                backgroundColor: key == '='
+                                    ? Theme.of(context).colorScheme.primary
+                                    : const Color(0xffe7eaf0),
+                                foregroundColor: key == '='
+                                    ? Theme.of(context).colorScheme.onPrimary
+                                    : const Color(0xff17191d),
+                              ),
+                              onPressed: () {
+                                setModal(() {
+                                  final current = _calculatorInput.text;
+                                  if (key == 'AC') {
+                                    _calculatorInput.text = '0';
+                                    _calculatorResult = '0';
+                                  } else if (key == 'DEL') {
+                                    _calculatorInput.text = current.length <= 1 ? '0' : current.substring(0, current.length - 1);
+                                  } else if (key == 'Ans') {
+                                    _calculatorInput.text = _calculatorResult;
+                                  } else if (key == '=') {
+                                    try {
+                                      final value = _CalculatorParser(_calculatorInput.text).parse();
+                                      if (!value.isFinite) {
+                                        _calculatorResult = 'Undefined';
+                                      } else {
+                                        final formatted = value.toStringAsPrecision(10);
+                                        _calculatorResult = formatted.contains('.')
+                                            ? formatted.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '')
+                                            : formatted;
+                                      }
+                                    } catch (_) {
+                                      _calculatorResult = 'Error';
+                                    }
+                                  } else {
+                                    final token = key == '×' ? '*' : key == '÷' ? '/' : key == '−' ? '-' : key == 'π' ? 'pi' : key;
+                                    _calculatorInput.text = current == '0' && RegExp(r'^\d$').hasMatch(token) ? token : current + token;
+                                  }
+                                });
+                              },
+                              child: Text(key, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                            )).toList(),
+                          );
+                        },
+                      ),
+                    ],
                   ),
                 ),
-                GridView.count(
-                  crossAxisCount: 4,
-                  shrinkWrap: true,
-                  mainAxisSpacing: 6,
-                  crossAxisSpacing: 6,
-                  childAspectRatio: 1.7,
-                  physics: const NeverScrollableScrollPhysics(),
-                  children: keys.map((key) => FilledButton.tonal(
-                    onPressed: () {
-                      setModal(() {
-                        final current = _calculatorInput.text;
-                        if (key == 'AC') {
-                          _calculatorInput.text = '0';
-                          _calculatorResult = '0';
-                        } else if (key == 'DEL') {
-                          _calculatorInput.text = current.length <= 1 ? '0' : current.substring(0, current.length - 1);
-                        } else if (key == 'Ans') {
-                          _calculatorInput.text = _calculatorResult;
-                        } else if (key == '=') {
-                          try {
-                            final value = _CalculatorParser(_calculatorInput.text).parse();
-                            if (!value.isFinite) {
-                              _calculatorResult = 'Undefined';
-                            } else {
-                              final formatted = value.toStringAsPrecision(10);
-                              _calculatorResult = formatted.contains('.')
-                                  ? formatted.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '')
-                                  : formatted;
-                            }
-                          } catch (_) {
-                            _calculatorResult = 'Error';
-                          }
-                        } else {
-                          final token = key == '×' ? '*' : key == '÷' ? '/' : key == '−' ? '-' : key == 'π' ? 'pi' : key;
-                          _calculatorInput.text = current == '0' && RegExp(r'^\d$').hasMatch(token) ? token : current + token;
-                        }
-                      });
-                    },
-                    child: Text(key, style: const TextStyle(fontWeight: FontWeight.w800)),
-                  )).toList(),
-                ),
-              ],
+              ),
             ),
           ),
         ),
       ),
     );
-  }
-
-  PageTemplate _template() {
-    final name = pageData['template']?.toString();
-    return PageTemplate.values.firstWhere((v) => v.name == name, orElse: () => PageTemplate.dotted);
-  }
-
-  Color _pageColor([String key = 'paperColor', Color fallback = Colors.white]) {
-    final v = pageData[key];
-    return v is num ? Color(v.toInt()) : fallback;
-  }
-
-  double _pageDouble(String key, double fallback) {
-    final v = pageData[key];
-    return v is num ? v.toDouble() : fallback;
   }
 
   Widget _header() => Positioned(
@@ -1443,31 +1479,15 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                 ),
               ),
               _compactAction(tooltip: 'Save note', icon: Icons.save_outlined, onPressed: () => _save(force: true)),
-              _compactAction(tooltip: 'Note cover', icon: Icons.photo_album_outlined, onPressed: _chooseNoteCover),
-              _compactAction(
-                tooltip: _showcaseOpen ? 'Hide tool showcase' : 'Open tool showcase',
-                icon: Icons.inventory_2_outlined,
-                onPressed: () => setState(() => _showcaseOpen = !_showcaseOpen),
-              ),
-              _compactAction(tooltip: 'Add screenshot / gallery image', icon: Icons.photo_library_outlined, onPressed: _insertScreenshot),
-              _compactAction(tooltip: 'Insert PDF pages', icon: Icons.picture_as_pdf_outlined, onPressed: _importPdfIntoNote),
-              _compactAction(tooltip: 'Calculator', icon: Icons.calculate_outlined, onPressed: _calculatorSheet),
-              _compactAction(
-                tooltip: _settings.getBool('palmRejection') ? 'Palm rejection on' : 'Palm rejection off — finger ink',
-                icon: _settings.getBool('palmRejection') ? Icons.back_hand_rounded : Icons.front_hand_rounded,
-                onPressed: () async {
-                  final next = !_settings.getBool('palmRejection');
-                  await _settings.setBool('palmRejection', next);
-                  if (mounted) setState(() {});
-                },
-              ),
-              _compactAction(
-                tooltip: _readingMode ? 'Exit reading mode' : 'Reading mode',
-                icon: _readingMode ? Icons.edit_note_rounded : Icons.chrome_reader_mode_rounded,
-                onPressed: () => setState(() => _readingMode = !_readingMode),
-              ),
+
+
+
+
+
+
+
               _compactAction(tooltip: 'Pages / thumbnails', icon: Icons.view_sidebar_outlined, onPressed: () => setState(() => _preview = !_preview)),
-              _compactAction(tooltip: 'Page templates', icon: Icons.grid_4x4_rounded, onPressed: _paperSheet),
+
               _compactAction(tooltip: 'Shapes and diagrams', icon: Icons.category_outlined, onPressed: () => setState(() => _shapePanel = !_shapePanel)),
               _compactAction(tooltip: _draw ? 'Text mode' : 'Handwriting mode', icon: _draw ? Icons.text_fields_rounded : Icons.draw_rounded, onPressed: () => setState(() => _draw = !_draw)),
               _compactAction(tooltip: 'Lock note', icon: _locked ? Icons.lock_rounded : Icons.lock_outline_rounded, onPressed: _lockNote),
@@ -1667,6 +1687,49 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         onPressed: _stickers,
         icon: const Icon(Icons.emoji_emotions_outlined),
         tooltip: 'Stickers',
+      ),
+      PopupMenuButton<String>(
+        tooltip: 'More tools',
+        icon: const Icon(Icons.more_horiz_rounded),
+        onSelected: (action) async {
+          switch (action) {
+            case 'calculator':
+              await _calculatorSheet();
+              break;
+            case 'templates':
+              await _paperSheet();
+              break;
+            case 'reading':
+              setState(() => _readingMode = !_readingMode);
+              break;
+            case 'timer':
+              await _studyTimerSheet();
+              break;
+            case 'palm':
+              await _settings.setBool('palmRejection', !_settings.getBool('palmRejection'));
+              if (mounted) setState(() {});
+              break;
+            case 'pdf':
+              await _importPdfIntoNote();
+              break;
+            case 'showcase':
+              setState(() => _showcaseOpen = !_showcaseOpen);
+              break;
+            case 'cover':
+              await _chooseNoteCover();
+              break;
+          }
+        },
+        itemBuilder: (_) => const [
+          PopupMenuItem(value: 'calculator', child: Row(children: [Icon(Icons.calculate_outlined, size: 19), SizedBox(width: 10), Text('Calculator')])),
+          PopupMenuItem(value: 'templates', child: Row(children: [Icon(Icons.grid_4x4_rounded, size: 19), SizedBox(width: 10), Text('Page templates')])),
+          PopupMenuItem(value: 'reading', child: Row(children: [Icon(Icons.chrome_reader_mode_outlined, size: 19), SizedBox(width: 10), Text('Reading mode')])),
+          PopupMenuItem(value: 'timer', child: Row(children: [Icon(Icons.timer_outlined, size: 19), SizedBox(width: 10), Text('Study timer')])),
+          PopupMenuItem(value: 'palm', child: Row(children: [Icon(Icons.back_hand_outlined, size: 19), SizedBox(width: 10), Text('Toggle palm rejection')])),
+          PopupMenuItem(value: 'pdf', child: Row(children: [Icon(Icons.picture_as_pdf_outlined, size: 19), SizedBox(width: 10), Text('Insert PDF pages')])),
+          PopupMenuItem(value: 'showcase', child: Row(children: [Icon(Icons.inventory_2_outlined, size: 19), SizedBox(width: 10), Text('Tool showcase')])),
+          PopupMenuItem(value: 'cover', child: Row(children: [Icon(Icons.photo_album_outlined, size: 19), SizedBox(width: 10), Text('Note cover page')])),
+        ],
       ),
       IconButton(
         onPressed: _colorSheet,
@@ -1879,6 +1942,39 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     _scheduleSave();
   }
 
+  Future<void> _commitToolOptions({
+    required CanvasTool target,
+    required double size,
+    required Color color,
+    required double opacity,
+    required bool fill,
+    bool? dashed,
+    int? sides,
+  }) async {
+    _toolSizeOverrides[target.name] = size;
+    _toolColorOverrides[target.name] = color;
+    if (dashed != null) _toolDashedOverrides[target.name] = dashed;
+    if (target == _tool) {
+      setState(() {
+        _penSize = size;
+        _penColor = color;
+        _opacity = opacity;
+        _fill = fill;
+        _fillColor = fill ? color : null;
+        if (dashed != null) _dashed = dashed;
+        if (sides != null) _sides = sides;
+      });
+      await _settings.setDouble('penOpacity', opacity);
+    } else {
+      setState(() {});
+    }
+    await _settings.setString('toolSizes', jsonEncode(_toolSizeOverrides));
+    await _settings.setString('toolColors', jsonEncode({
+      for (final entry in _toolColorOverrides.entries) entry.key: entry.value.toARGB32(),
+    }));
+    await _settings.setString('toolDashed', jsonEncode(_toolDashedOverrides));
+  }
+
   Future<void> _showInlineToolOptions(CanvasTool target, Offset globalPosition) async {
     var size = _toolSizeOverrides[target.name] ?? _defaultToolSize(target);
     var opacity = target == _tool ? _opacity : 1.0;
@@ -1930,14 +2026,20 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                               value: size.clamp(.5, 60).toDouble(),
                               min: .5,
                               max: 60,
-                              onChanged: (value) => setPopup(() => size = value),
+                              onChanged: (value) {
+                                setPopup(() => size = value);
+                                unawaited(_commitToolOptions(target: target, size: value, color: color, opacity: opacity, fill: fill));
+                              },
                             ),
                             Text('Opacity: ${(opacity * 100).round()}%'),
                             Slider(
                               value: opacity.clamp(.05, 1).toDouble(),
                               min: .05,
                               max: 1,
-                              onChanged: (value) => setPopup(() => opacity = value),
+                              onChanged: (value) {
+                                setPopup(() => opacity = value);
+                                unawaited(_commitToolOptions(target: target, size: size, color: color, opacity: value, fill: fill));
+                              },
                             ),
                             const Text('Color', style: TextStyle(fontWeight: FontWeight.w800)),
                             const SizedBox(height: 7),
@@ -1945,7 +2047,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                               spacing: 8,
                               runSpacing: 8,
                               children: _penPalette.take(18).map((choice) => InkWell(
-                                onTap: () => setPopup(() => color = choice),
+                                onTap: () {
+                                  setPopup(() => color = choice);
+                                  unawaited(_commitToolOptions(target: target, size: size, color: choice, opacity: opacity, fill: fill));
+                                },
                                 borderRadius: BorderRadius.circular(20),
                                 child: Container(
                                   width: 27,
@@ -1968,47 +2073,24 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                                 contentPadding: EdgeInsets.zero,
                                 dense: true,
                                 value: fill,
-                                onChanged: (value) => setPopup(() => fill = value),
+                                onChanged: (value) {
+                                  setPopup(() => fill = value);
+                                  unawaited(_commitToolOptions(target: target, size: size, color: color, opacity: opacity, fill: value));
+                                },
                                 title: const Text('Fill shape'),
                               ),
                             const SizedBox(height: 8),
-                            Row(children: [
-                              Expanded(
-                                child: OutlinedButton(
-                                  onPressed: () {
-                                    Navigator.pop(dialogContext);
-                                    showAdvanced = true;
-                                  },
-                                  child: const Text('More settings'),
-                                ),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton.icon(
+                                onPressed: () {
+                                  Navigator.pop(dialogContext);
+                                  showAdvanced = true;
+                                },
+                                icon: const Icon(Icons.tune_rounded, size: 18),
+                                label: const Text('More settings'),
                               ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: FilledButton(
-                                  onPressed: () async {
-                                    setState(() {
-                                      _toolSizeOverrides[target.name] = size;
-                                      _toolColorOverrides[target.name] = color;
-                                      if (target == _tool) {
-                                        _penSize = size;
-                                        _penColor = color;
-                                        _opacity = opacity;
-                                        _fill = fill;
-                                      }
-                                    });
-                                    await _settings.setString('toolSizes', jsonEncode(_toolSizeOverrides));
-                                    await _settings.setString('toolColors', jsonEncode({
-                                      for (final entry in _toolColorOverrides.entries) entry.key: entry.value.toARGB32(),
-                                    }));
-                                    if (target == _tool) {
-                                      await _settings.setDouble('penOpacity', _opacity);
-                                    }
-                                    Navigator.pop(dialogContext);
-                                  },
-                                  child: const Text('Apply'),
-                                ),
-                              ),
-                            ]),
+                            ),
                             const SizedBox(height: 8),
                             SizedBox(
                               width: double.infinity,
@@ -2163,8 +2245,20 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           padding: const EdgeInsets.fromLTRB(22, 10, 22, 28),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             Text('Selected stroke ' + size.toStringAsFixed(1)),
-            Slider(value: size.clamp(.5, 24), min: .5, max: 24, divisions: 47, onChanged: (v) => setModal(() => size = v)),
-            FilledButton(onPressed: () { _canvas.changeSize(size); Navigator.pop(sheetContext); }, child: const Text('Apply')),
+            Slider(
+              value: size.clamp(.5, 24),
+              min: .5,
+              max: 24,
+              divisions: 47,
+              onChanged: (v) {
+                setModal(() => size = v);
+                _canvas.changeSize(v);
+              },
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(onPressed: () => Navigator.pop(sheetContext), child: const Text('Done')),
+            ),
           ]),
         ),
       ),
@@ -3214,6 +3308,21 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (_, setDialog) {
+          void commitPalette(Color nextColor, double nextOpacity, bool useForFill) {
+            setState(() {
+              color = nextColor;
+              _penColor = nextColor;
+              _toolColorOverrides[_tool.name] = nextColor;
+              _opacity = nextOpacity;
+              _fill = useForFill;
+              _fillColor = useForFill ? nextColor : null;
+            });
+            unawaited(_settings.setDouble('penOpacity', nextOpacity));
+            unawaited(_settings.setString('toolColors', jsonEncode({
+              for (final entry in _toolColorOverrides.entries) entry.key: entry.value.toARGB32(),
+            })));
+          }
+
           void updateColor(Color next) {
             setDialog(() {
               color = next;
@@ -3223,6 +3332,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                 selection: TextSelection.collapsed(offset: hexText.length),
               );
             });
+            commitPalette(next, paletteOpacity, applyColorToFill);
           }
 
           final palette = _spectrumColorGrid();
@@ -3324,7 +3434,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       value: applyColorToFill,
-                      onChanged: (value) => setDialog(() => applyColorToFill = value),
+                      onChanged: (value) {
+                        setDialog(() => applyColorToFill = value);
+                        commitPalette(color, paletteOpacity, value);
+                      },
                       title: const Text('Use this color for shape fill'),
                     ),
                     Text('Opacity: ' + (paletteOpacity * 100).round().toString() + '%', style: const TextStyle(fontWeight: FontWeight.w800)),
@@ -3333,7 +3446,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                       min: .05,
                       max: 1,
                       divisions: 19,
-                      onChanged: (value) => setDialog(() => paletteOpacity = value),
+                      onChanged: (value) {
+                        setDialog(() => paletteOpacity = value);
+                        commitPalette(color, value, applyColorToFill);
+                      },
                     ),
                     const Text('Recent colors', style: TextStyle(fontWeight: FontWeight.w800)),
                     const SizedBox(height: 7),
@@ -3364,29 +3480,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
-              FilledButton(
-                onPressed: () {
-                  setState(() {
-                    _penColor = color;
-                    _toolColorOverrides[_tool.name] = color;
-                    _opacity = paletteOpacity;
-                    if (applyColorToFill) {
-                      _fillColor = color;
-                      _fill = true;
-                    } else {
-                      _fillColor = null;
-                      _fill = false;
-                    }
-                  });
-                  unawaited(_settings.setDouble('penOpacity', _opacity));
-                  unawaited(_settings.setString('toolColors', jsonEncode({
-                    for (final entry in _toolColorOverrides.entries) entry.key: entry.value.toARGB32(),
-                  })));
-                  Navigator.pop(dialogContext);
-                },
-                child: const Text('Use color'),
-              ),
+              TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Done')),
             ],
           );
         },
@@ -3430,9 +3524,15 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   Text('${target.label} options', style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
                   const SizedBox(height: 8),
                   Text('Stroke size: ${size.toStringAsFixed(1)}', style: const TextStyle(fontWeight: FontWeight.w700)),
-                  Slider(value: size.clamp(.5, 60), min: .5, max: 60, divisions: 119, onChanged: (v) => setModal(() => size = v)),
+                  Slider(value: size.clamp(.5, 60), min: .5, max: 60, divisions: 119, onChanged: (v) {
+                    setModal(() => size = v);
+                    unawaited(_commitToolOptions(target: target, size: v, color: color, opacity: opacity, fill: fill, dashed: dashed, sides: sides));
+                  }),
                   Text('Opacity: ${(opacity * 100).round()}%'),
-                  Slider(value: opacity.clamp(.05, 1), min: .05, max: 1, onChanged: (v) => setModal(() => opacity = v)),
+                  Slider(value: opacity.clamp(.05, 1), min: .05, max: 1, onChanged: (v) {
+                    setModal(() => opacity = v);
+                    unawaited(_commitToolOptions(target: target, size: size, color: color, opacity: v, fill: fill, dashed: dashed, sides: sides));
+                  }),
                   const SizedBox(height: 4),
                   const Text('Color', style: TextStyle(fontWeight: FontWeight.w800)),
                   const SizedBox(height: 8),
@@ -3440,7 +3540,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     spacing: 8,
                     runSpacing: 8,
                     children: _penPalette.map((choice) => InkWell(
-                      onTap: () => setModal(() => color = choice),
+                      onTap: () {
+                        setModal(() => color = choice);
+                        unawaited(_commitToolOptions(target: target, size: size, color: choice, opacity: opacity, fill: fill, dashed: dashed, sides: sides));
+                      },
                       borderRadius: BorderRadius.circular(30),
                       child: Container(
                         width: 30,
@@ -3463,7 +3566,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                         ButtonSegment(value: 'pixel', label: Text('Pixel eraser'), icon: Icon(Icons.auto_fix_high_rounded)),
                       ],
                       selected: {eraserMode},
-                      onSelectionChanged: (values) => setModal(() => eraserMode = values.first),
+                      onSelectionChanged: (values) {
+                        setModal(() => eraserMode = values.first);
+                        unawaited(_settings.setString('eraserMode', values.first));
+                      },
                     ),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
@@ -3493,7 +3599,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                         ButtonSegment(value: 'dashed', label: Text('Dashed'), icon: Icon(Icons.more_horiz_rounded)),
                       ],
                       selected: {lassoStyle},
-                      onSelectionChanged: (values) => setModal(() => lassoStyle = values.first),
+                      onSelectionChanged: (values) {
+                        setModal(() => lassoStyle = values.first);
+                        unawaited(_settings.setString('lassoStyle', values.first));
+                      },
                     ),
                     const SizedBox(height: 6),
                     const Text('Draw around content with the lasso, then drag the selection toolbar to place its options wherever you need them.'),
@@ -3501,7 +3610,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       value: dashed,
-                      onChanged: (value) => setModal(() => dashed = value),
+                      onChanged: (value) {
+                        setModal(() => dashed = value);
+                        unawaited(_commitToolOptions(target: target, size: size, color: color, opacity: opacity, fill: fill, dashed: value, sides: sides));
+                      },
                       title: const Text('Dashed outline'),
                     ),
                   ],
@@ -3509,13 +3621,19 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       value: fill,
-                      onChanged: (value) => setModal(() => fill = value),
+                      onChanged: (value) {
+                        setModal(() => fill = value);
+                        unawaited(_commitToolOptions(target: target, size: size, color: color, opacity: opacity, fill: value, dashed: dashed, sides: sides));
+                      },
                       title: const Text('Fill shape'),
                     ),
                   if (target == CanvasTool.customPolygon)
                     ListTile(
                       title: Text('Polygon sides: $sides'),
-                      subtitle: Slider(value: sides.toDouble(), min: 3, max: 24, divisions: 21, onChanged: (v) => setModal(() => sides = v.round())),
+                      subtitle: Slider(value: sides.toDouble(), min: 3, max: 24, divisions: 21, onChanged: (v) {
+                          setModal(() => sides = v.round());
+                          unawaited(_commitToolOptions(target: target, size: size, color: color, opacity: opacity, fill: fill, dashed: dashed, sides: v.round()));
+                        }),
                     ),
                   if (target.isPen) ...[
                     const SizedBox(height: 6),
@@ -3528,45 +3646,30 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                         DropdownMenuItem(value: 'firm', child: Text('Firm')),
                         DropdownMenuItem(value: 'custom', child: Text('Custom')),
                       ],
-                      onChanged: (value) { if (value != null) setModal(() => curve = value); },
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setModal(() => curve = value);
+                        unawaited(_settings.setString('pressureCurve', value));
+                        setState(() {});
+                      },
                     ),
                     if (curve == 'custom')
                       ListTile(
                         title: Text('Custom pressure curve: ${exponent.toStringAsFixed(2)}'),
-                        subtitle: Slider(value: exponent.clamp(.35, 2.5), min: .35, max: 2.5, onChanged: (v) => setModal(() => exponent = v)),
+                        subtitle: Slider(value: exponent.clamp(.35, 2.5), min: .35, max: 2.5, onChanged: (v) {
+                          setModal(() => exponent = v);
+                          unawaited(_settings.setDouble('pressureExponent', v));
+                          setState(() {});
+                        }),
                       ),
                   ],
                   const SizedBox(height: 14),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: () async {
-                        setState(() {
-                          _toolSizeOverrides[target.name] = size;
-                          _toolColorOverrides[target.name] = color;
-                          _toolDashedOverrides[target.name] = dashed;
-                          if (target == _tool) {
-                            _penSize = size;
-                            _penColor = color;
-                            _opacity = opacity;
-                            _fill = fill;
-                            _dashed = dashed;
-                            _sides = sides;
-                          }
-                        });
-                        await _settings.setString('toolSizes', jsonEncode(_toolSizeOverrides));
-                        await _settings.setString('toolColors', jsonEncode({for (final entry in _toolColorOverrides.entries) entry.key: entry.value.toARGB32()}));
-                        await _settings.setString('toolDashed', jsonEncode(_toolDashedOverrides));
-                        await _settings.setString('pressureCurve', curve);
-                        await _settings.setDouble('pressureExponent', exponent);
-                        if (target == CanvasTool.lasso) await _settings.setString('lassoStyle', lassoStyle);
-                        if (target == CanvasTool.eraser || target == CanvasTool.pixelEraser) {
-                          await _settings.setString('eraserMode', eraserMode);
-                        }
-                        if (mounted) Navigator.pop(sheetContext);
-                      },
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () => Navigator.pop(sheetContext),
                       icon: const Icon(Icons.check_rounded),
-                      label: const Text('Save tool options'),
+                      label: const Text('Done'),
                     ),
                   ),
                 ],
@@ -3641,6 +3744,87 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           ),
         ),
       ),
+    );
+  }
+}
+
+class _StudyTimerDialog extends StatefulWidget {
+  const _StudyTimerDialog();
+
+  @override
+  State<_StudyTimerDialog> createState() => _StudyTimerDialogState();
+}
+
+class _StudyTimerDialogState extends State<_StudyTimerDialog> {
+  final Stopwatch _watch = Stopwatch();
+  Timer? _ticker;
+
+  String get _clock {
+    final elapsed = _watch.elapsed;
+    final hours = elapsed.inHours.toString().padLeft(2, '0');
+    final minutes = (elapsed.inMinutes % 60).toString().padLeft(2, '0');
+    final seconds = (elapsed.inSeconds % 60).toString().padLeft(2, '0');
+    return hours + ':' + minutes + ':' + seconds;
+  }
+
+  void _startPause() {
+    setState(() {
+      if (_watch.isRunning) {
+        _watch.stop();
+        _ticker?.cancel();
+        _ticker = null;
+      } else {
+        _watch.start();
+        _ticker ??= Timer.periodic(const Duration(seconds: 1), (_) {
+          if (mounted) setState(() {});
+        });
+      }
+    });
+  }
+
+  void _reset() {
+    setState(() {
+      _watch
+        ..stop()
+        ..reset();
+      _ticker?.cancel();
+      _ticker = null;
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    _watch.stop();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final running = _watch.isRunning;
+    return AlertDialog(
+      title: const Text('Study timer'),
+      content: SizedBox(
+        width: 320,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(running ? Icons.timer_rounded : Icons.hourglass_empty_rounded, size: 42, color: Theme.of(context).colorScheme.primary),
+            const SizedBox(height: 12),
+            Text(_clock, style: Theme.of(context).textTheme.displaySmall?.copyWith(fontFeatures: const [ui.FontFeature.tabularFigures()], fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            Text(running ? 'Study session in progress' : 'Session paused', style: Theme.of(context).textTheme.bodyMedium),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton.icon(onPressed: _reset, icon: const Icon(Icons.restart_alt_rounded), label: const Text('Reset')),
+        FilledButton.icon(
+          onPressed: _startPause,
+          icon: Icon(running ? Icons.pause_rounded : Icons.play_arrow_rounded),
+          label: Text(running ? 'Pause' : 'Start'),
+        ),
+      ],
     );
   }
 }
