@@ -36,7 +36,6 @@ void main() {
     expect(find.text('Cover 100'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
-}
 
   testWidgets('home folder covers omit the cover-title and brand labels', (tester) async {
     await tester.pumpWidget(
@@ -60,3 +59,4 @@ void main() {
     expect(find.textContaining('SNOTE'), findsNothing);
     expect(tester.takeException(), isNull);
   });
+}
