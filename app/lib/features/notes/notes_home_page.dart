@@ -21,6 +21,7 @@ import '../tools/flashcard_page.dart';
 import '../tools/mind_map_page.dart';
 import '../tools/screenshot_import_page.dart';
 import '../updates/update_center_page.dart';
+import '../onboarding/welcome_guide_page.dart';
 import 'note_editor_page.dart';
 
 class NotesHomePage extends StatefulWidget {
@@ -50,6 +51,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
   bool _searchVisible = false;
   Timer? _searchDebounce;
   int _loadGeneration = 0;
+  bool _welcomeCheckScheduled = false;
   String _folderSort = 'nameAsc';
   bool _folderSelectionMode = false;
   final Set<String> _selectedFolderIds = <String>{};
@@ -82,10 +84,11 @@ class _NotesHomePageState extends State<NotesHomePage> {
 
   Future<void> _load() async {
     final generation = ++_loadGeneration;
-    final searching = _search.text.trim().isNotEmpty;
+    final query = _search.text.trim();
+    final searching = query.isNotEmpty;
     final allFolders = await _folders.listAllVisible();
     final notes = searching
-        ? await _notes.listAllVisible()
+        ? await _notes.searchVisible(query)
         : await _notes.list(folderId: _folderId);
     if (!mounted || generation != _loadGeneration) return;
 
@@ -107,6 +110,21 @@ class _NotesHomePageState extends State<NotesHomePage> {
       _selected = selected;
       _loading = false;
     });
+    if (!_welcomeCheckScheduled) {
+      _welcomeCheckScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_showWelcomeGuideIfNeeded());
+      });
+    }
+  }
+
+  Future<void> _showWelcomeGuideIfNeeded() async {
+    final settings = SnoteSettings.instance;
+    if (settings.getBool('welcomeGuideSeen') || !mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => const WelcomeGuidePage()),
+    );
+    await settings.setBool('welcomeGuideSeen', true);
   }
 
   bool _matchesSearch(LocalNote note) {

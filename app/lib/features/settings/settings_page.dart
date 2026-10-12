@@ -4,6 +4,7 @@ import '../../core/settings/app_settings.dart';
 import '../../data/local/notebook_transfer_service.dart';
 import '../../data/local/note_repository.dart';
 import '../updates/update_center_page.dart';
+import '../onboarding/welcome_guide_page.dart';
 import '../share/qr_import_page.dart';
 import '../share/qr_transfer_page.dart';
 import '../tools/screenshot_import_page.dart';
@@ -228,6 +229,12 @@ class _SettingsPageState extends State<SettingsPage> {
         )),
       ]),
       if (_query.isEmpty || 'updates about release app notices'.contains(_query)) _group('Updates & About', [
+        Card(child: ListTile(
+          leading: const Icon(Icons.menu_book_outlined),
+          title: const Text('Welcome & user guide'),
+          subtitle: const Text('Reopen the guide to folders, handwriting, PDFs, flashcards, mind maps and privacy.'),
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WelcomeGuidePage())),
+        )),
         Card(
           child: ListTile(
             leading: const Icon(Icons.system_update_alt_rounded),

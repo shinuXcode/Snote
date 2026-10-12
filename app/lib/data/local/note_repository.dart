@@ -155,9 +155,25 @@ class NoteRepository {
       where: 'owner_id = ? AND deleted_at IS NULL',
       whereArgs: [SnoteAccountScope.ownerId],
       orderBy: 'updated_at DESC',
-      limit: limit == null ? null : limit.clamp(1, 500).toInt(),
+      limit: limit == null ? null : limit.clamp(1, 10000).toInt(),
     );
     return rows.map(LocalNote.fromMap).toList();
+  }
+
+  /// Searches titles inside SQLite to avoid scanning and filtering every note
+  /// in the UI isolate on each keystroke.
+  Future<List<LocalNote>> searchVisible(String query, {int limit = 10000}) async {
+    final normalized = query.trim();
+    if (normalized.isEmpty) return listAllVisible(limit: limit);
+    final db = await _db;
+    final rows = await db.query(
+      'notes',
+      where: 'owner_id = ? AND deleted_at IS NULL AND title LIKE ?',
+      whereArgs: [SnoteAccountScope.ownerId, '%$normalized%'],
+      orderBy: 'updated_at DESC',
+      limit: limit.clamp(1, 10000).toInt(),
+    );
+    return rows.map(LocalNote.fromMap).toList(growable: false);
   }
 
   Future<void> saveContent(
