@@ -411,30 +411,46 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     int? storedCoverColor;
     String? storedCoverIcon;
     String? storedCoverKey;
-    if (note?.contentJson != null) {
+    if (note?.contentJson != null && note!.contentJson!.trim().isNotEmpty) {
+      // Do not silently turn an unreadable saved note into a new blank page:
+      // that can make the next autosave overwrite the user's recoverable data.
+      final Object? decoded;
       try {
-        final json = jsonDecode(note!.contentJson!);
-        if (json is Map<String, dynamic>) {
-          storedCoverColor = (json['coverColor'] as num?)?.toInt();
-          storedCoverIcon = json['coverIcon']?.toString();
-          storedCoverKey = json['coverKey']?.toString();
-          final raw = json['pages'];
-          if (raw is List) {
-            for (final item in raw) {
-              if (item is Map) {
-                final page = _normalize(item.cast<String, Object?>());
-                storedCoverColor ??= (page['coverColor'] as num?)?.toInt();
-                storedCoverIcon ??= page['coverIcon']?.toString();
-                parsed.add(page);
-              }
-            }
-          }
-          final delta = json['text_delta'];
-          if (delta is List) {
-            try { _quill.document = Document.fromJson(delta); } catch (_) {}
+        decoded = jsonDecode(note.contentJson!);
+      } catch (error) {
+        throw FormatException('Saved note content is not valid JSON: $error');
+      }
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException('Saved note content has an unsupported format.');
+      }
+      final json = decoded;
+      storedCoverColor = (json['coverColor'] as num?)?.toInt();
+      storedCoverIcon = json['coverIcon']?.toString();
+      storedCoverKey = json['coverKey']?.toString();
+      final raw = json['pages'];
+      if (raw is List) {
+        for (final item in raw) {
+          if (item is Map) {
+            parsed.add(_normalize(item.map((key, value) => MapEntry(key.toString(), value))));
           }
         }
-      } catch (_) {}
+      }
+      final delta = json['text_delta'];
+      if (delta is List) {
+        try {
+          _quill.document = Document.fromJson(delta);
+        } catch (error) {
+          debugPrint('Snote rich-text document could not be restored: $error');
+        }
+      }
+      // A document with page data that exists but cannot be decoded must be
+      // surfaced as an error, not silently replaced with a blank notebook.
+      if (raw != null && raw is! List) {
+        throw const FormatException('Saved note pages have an unsupported format.');
+      }
+      if (raw is List && raw.isNotEmpty && parsed.isEmpty) {
+        throw const FormatException('Saved note pages could not be restored.');
+      }
     }
 
     var importedOnFirstOpen = false;
@@ -449,15 +465,14 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         originalPdfPageCount = result.totalPages;
         importedOnFirstOpen = parsed.isNotEmpty;
       } catch (error) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('PDF opened but could not be converted to note pages: ' + error.toString())),
-          );
-        }
+        // Do not silently continue into an empty note when a PDF import fails.
+        // _prepare displays a recoverable error state and leaves source bytes
+        // and persisted note content untouched.
+        throw StateError('PDF could not be rendered into notebook pages: $error');
       }
     }
-    // Always publish at least one normalized page before allowing build()
-    // to construct the canvas. Do not clear or overwrite the stored note here.
+    // An empty note is valid only when it has no saved content and is not a
+    // failed document import. Never let pageData index an empty collection.
     if (parsed.isEmpty) parsed.add(_newPage());
     for (var i = 0; i < parsed.length; i++) {
       parsed[i] = _normalize(parsed[i]);
@@ -1056,6 +1071,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   }
 
   Widget _pageView() {
+    // Defensive guard: asynchronous loads, route restoration, or a future
+    // malformed import must never crash the shared note/PDF editor.
+    if (_pages.isEmpty || _page < 0 || _page >= _pages.length) {
+      return const Center(child: CircularProgressIndicator());
+    }
     final sizeKey = pageData['pageSize']?.toString() ?? 'A4';
     final horizontal = pageData['orientation']?.toString() == 'horizontal';
     final storedAspectRatio = pageData['pageAspectRatio'];
