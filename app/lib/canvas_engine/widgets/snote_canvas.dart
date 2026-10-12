@@ -263,6 +263,8 @@ class SnoteCanvas extends StatefulWidget {
   final bool eraseMark;
   final bool dashed;
   final bool stylusHoldActions;
+  final bool showAuxiliaryLine;
+  final bool autoAuxiliaryPoint;
   final String eraserMode;
   final Color? fillColor;
   final double fillOpacity;
@@ -294,6 +296,8 @@ class SnoteCanvas extends StatefulWidget {
     this.eraseMark = true,
     this.dashed = false,
     this.stylusHoldActions = true,
+    this.showAuxiliaryLine = false,
+    this.autoAuxiliaryPoint = false,
     this.eraserMode = 'stroke',
     this.fillColor,
     this.fillOpacity = 1.0,
@@ -772,6 +776,36 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     return event.kind == PointerDeviceKind.mouse;
   }
 
+
+  List<StrokePoint> _snapAuxiliaryEndpoints(List<StrokePoint> points) {
+    if (!widget.showAuxiliaryLine ||
+        !widget.autoAuxiliaryPoint ||
+        _activeTool?.isShape != true ||
+        points.isEmpty) {
+      return points;
+    }
+    final canvasSize = context.size;
+    if (canvasSize == null || canvasSize.isEmpty) return points;
+    final center = Offset(canvasSize.width / 2, canvasSize.height / 2);
+    const threshold = 12.0;
+    Offset snap(Offset point) {
+      final dx = (point.dx - center.dx).abs();
+      final dy = (point.dy - center.dy).abs();
+      if (dx <= threshold && dy <= threshold) return center;
+      if (dx <= threshold) return Offset(center.dx, point.dy);
+      if (dy <= threshold) return Offset(point.dx, center.dy);
+      return point;
+    }
+
+    final result = List<StrokePoint>.of(points);
+    result[0] = result[0].copyWith(position: snap(result[0].position));
+    if (result.length > 1) {
+      final last = result.length - 1;
+      result[last] = result[last].copyWith(position: snap(result[last].position));
+    }
+    return result;
+  }
+
   void _pointerDown(PointerDownEvent event) {
     // A completed lasso selection can be moved/resized directly with a
     // finger or stylus. Only a down inside the selection or its handles is
@@ -861,8 +895,8 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
         widget.tool == CanvasTool.sticker ? widget.stickerText : null;
 
     final frame = _input!.begin(event);
-    _real = frame.realPoints;
-    _live = frame.livePoints;
+    _real = _snapAuxiliaryEndpoints(frame.realPoints);
+    _live = _snapAuxiliaryEndpoints(frame.livePoints);
     _syncLivePainter();
     if (isStylus && widget.stylusHoldActions && widget.tool.isPen) {
       _stylusHoldTimer?.cancel();
@@ -984,8 +1018,8 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
 
     if (_activePen == null || _activeTool == null) return;
     final frame = _input!.update(event);
-    _real = frame.realPoints;
-    _live = frame.livePoints;
+    _real = _snapAuxiliaryEndpoints(frame.realPoints);
+    _live = _snapAuxiliaryEndpoints(frame.livePoints);
     if (_perfEnabled) {
       _perf.rendered(_live.length);
       _perf.setPredictionHorizon(frame.predictionHorizonMs);
@@ -1044,7 +1078,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       _eraseSnapshotTaken = false;
       _clearActiveState();
     } else if (_activeTool != CanvasTool.sticker) {
-      _real = _input!.finish(event);
+      _real = _snapAuxiliaryEndpoints(_input!.finish(event));
       _live = _real;
       _syncLivePainter();
       if (_real.isNotEmpty) _commitActive();
