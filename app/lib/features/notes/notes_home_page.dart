@@ -1168,7 +1168,6 @@ class _NotesHomePageState extends State<NotesHomePage> {
     _searchDebounce?.cancel();
     _search.removeListener(_onSearchChanged);
     _search.dispose();
-    _sharingSubscription?.cancel();
     unawaited(_sync.dispose());
     super.dispose();
   }
@@ -3038,6 +3037,7 @@ class _ActionChip extends StatelessWidget {
     _searchDebounce?.cancel();
     _search.removeListener(_onSearchChanged);
     _search.dispose();
+    _sharingSubscription?.cancel();
     unawaited(_sync.dispose());
     super.dispose();
   }
