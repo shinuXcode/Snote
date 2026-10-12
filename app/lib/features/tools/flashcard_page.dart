@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import '../../data/local/note_repository.dart';
@@ -18,7 +19,12 @@ class _FlashcardPageState extends State<FlashcardPage> {
   final List<Map<String, String>> _cards = [];
   int _index = 0;
   bool _showBack = false;
+  bool _showEditor = true;
   int _editingIndex = -1;
+
+  int get _knownCount => _cards.where((card) => card['known'] == 'true').length;
+
+  String _newCardId() => DateTime.now().microsecondsSinceEpoch.toString();
 
   @override
   void initState() {
@@ -26,16 +32,22 @@ class _FlashcardPageState extends State<FlashcardPage> {
     try {
       final decoded = jsonDecode(widget.note?.contentJson ?? '{}');
       if (decoded is Map && decoded['flashcards'] is List) {
+        var index = 0;
+        final stamp = DateTime.now().microsecondsSinceEpoch.toString();
         for (final item in decoded['flashcards'] as List) {
           if (item is Map) {
             _cards.add({
+              'id': item['id']?.toString() ?? 'legacy-' + stamp + '-' + index.toString(),
               'front': item['front']?.toString() ?? '',
               'back': item['back']?.toString() ?? '',
+              'known': item['known']?.toString() ?? 'false',
             });
+            index++;
           }
         }
       }
     } catch (_) {}
+    if (widget.note != null && _cards.isNotEmpty) _showEditor = false;
   }
 
   void _editCurrentCard() {
@@ -45,6 +57,57 @@ class _FlashcardPageState extends State<FlashcardPage> {
       _front.text = _cards[_index]['front'] ?? '';
       _back.text = _cards[_index]['back'] ?? '';
       _showBack = false;
+      _showEditor = true;
+    });
+  }
+
+  void _shuffleCards() {
+    if (_cards.length < 2) return;
+    final currentId = _cards[_index]['id'];
+    setState(() {
+      _cards.shuffle(math.Random());
+      final nextIndex = _cards.indexWhere((card) => card['id'] == currentId);
+      _index = nextIndex < 0 ? 0 : nextIndex;
+      _showBack = false;
+    });
+  }
+
+  void _markCurrentKnown(bool value) {
+    if (_cards.isEmpty) return;
+    setState(() {
+      _cards[_index] = <String, String>{
+        ..._cards[_index],
+        'known': value ? 'true' : 'false',
+      };
+    });
+  }
+
+  Future<void> _deleteCurrentCard() async {
+    if (_cards.isEmpty) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Delete flashcard?'),
+        content: const Text('This card will be removed from the deck when you save it.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialog, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(dialog, true), child: const Text('Delete card')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() {
+      _cards.removeAt(_index);
+      if (_cards.isEmpty) {
+        _index = 0;
+      } else if (_index >= _cards.length) {
+        _index = _cards.length - 1;
+      }
+      _editingIndex = -1;
+      _showBack = false;
+      _front.clear();
+      _back.clear();
+      _showEditor = _cards.isEmpty;
     });
   }
 
@@ -54,12 +117,22 @@ class _FlashcardPageState extends State<FlashcardPage> {
       return;
     }
     setState(() {
-      final item = {'front': _front.text.trim(), 'back': _back.text.trim()};
       if (_editingIndex >= 0 && _editingIndex < _cards.length) {
-        _cards[_editingIndex] = item;
+        final existing = _cards[_editingIndex];
+        _cards[_editingIndex] = <String, String>{
+          ...existing,
+          'front': _front.text.trim(),
+          'back': _back.text.trim(),
+          'known': existing['known'] ?? 'false',
+        };
         _index = _editingIndex;
       } else {
-        _cards.add(item);
+        _cards.add(<String, String>{
+          'id': _newCardId(),
+          'front': _front.text.trim(),
+          'back': _back.text.trim(),
+          'known': 'false',
+        });
         _index = _cards.length - 1;
       }
       _editingIndex = -1;
@@ -71,11 +144,21 @@ class _FlashcardPageState extends State<FlashcardPage> {
 
   Future<void> _save() async {
     if (_front.text.trim().isNotEmpty && _back.text.trim().isNotEmpty) {
-      final item = {'front': _front.text.trim(), 'back': _back.text.trim()};
       if (_editingIndex >= 0 && _editingIndex < _cards.length) {
-        _cards[_editingIndex] = item;
+        final existing = _cards[_editingIndex];
+        _cards[_editingIndex] = <String, String>{
+          ...existing,
+          'front': _front.text.trim(),
+          'back': _back.text.trim(),
+          'known': existing['known'] ?? 'false',
+        };
       } else {
-        _cards.add(item);
+        _cards.add(<String, String>{
+          'id': _newCardId(),
+          'front': _front.text.trim(),
+          'back': _back.text.trim(),
+          'known': 'false',
+        });
       }
       _editingIndex = -1;
     }
@@ -118,8 +201,18 @@ class _FlashcardPageState extends State<FlashcardPage> {
       appBar: AppBar(
         title: Text(widget.note == null ? 'Flashcard deck' : 'Edit flashcards'),
         actions: [
-          IconButton(onPressed: _addCard, tooltip: 'Add card to deck', icon: const Icon(Icons.add_card_rounded)),
-          if (_cards.isNotEmpty) IconButton(onPressed: _editCurrentCard, tooltip: 'Edit current card', icon: const Icon(Icons.edit_outlined)),
+          if (_cards.length > 1)
+            IconButton(onPressed: _shuffleCards, tooltip: 'Shuffle deck', icon: const Icon(Icons.shuffle_rounded)),
+          if (_cards.isNotEmpty)
+            IconButton(onPressed: _deleteCurrentCard, tooltip: 'Delete current card', icon: const Icon(Icons.delete_outline_rounded)),
+          if (_cards.isNotEmpty)
+            IconButton(
+              onPressed: () => setState(() => _showEditor = !_showEditor),
+              tooltip: _showEditor ? 'Hide card editor' : 'Edit cards',
+              icon: Icon(_showEditor ? Icons.visibility_off_outlined : Icons.edit_note_rounded),
+            ),
+          if (_showEditor)
+            IconButton(onPressed: _addCard, tooltip: 'Add card to deck', icon: const Icon(Icons.add_card_rounded)),
           IconButton(onPressed: _save, tooltip: 'Save deck', icon: const Icon(Icons.save_outlined)),
         ],
       ),
@@ -130,7 +223,26 @@ class _FlashcardPageState extends State<FlashcardPage> {
             padding: const EdgeInsets.all(20),
             child: Column(
               children: [
-                if (_cards.isNotEmpty) Text('Card ' + (_index + 1).toString() + ' of ' + _cards.length.toString()),
+                if (_cards.isNotEmpty) ...[
+                  Row(
+                    children: [
+                      Text('Card ' + (_index + 1).toString() + ' of ' + _cards.length.toString()),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(99),
+                          child: LinearProgressIndicator(
+                            value: _knownCount / _cards.length,
+                            minHeight: 7,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text('$_knownCount known'),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 Expanded(
                   child: InkWell(
                     borderRadius: BorderRadius.circular(28),
@@ -165,16 +277,46 @@ class _FlashcardPageState extends State<FlashcardPage> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                if (_cards.isNotEmpty) Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    OutlinedButton.icon(onPressed: _index == 0 ? null : () => setState(() { _index--; _showBack = false; }), icon: const Icon(Icons.chevron_left), label: const Text('Previous')),
-                    OutlinedButton.icon(onPressed: _index >= _cards.length - 1 ? null : () => setState(() { _index++; _showBack = false; }), icon: const Icon(Icons.chevron_right), label: const Text('Next')),
-                  ],
-                ),
-                TextField(controller: _front, decoration: const InputDecoration(labelText: 'Question / front')),
-                const SizedBox(height: 8),
-                TextField(controller: _back, decoration: const InputDecoration(labelText: 'Answer / back')),
+                if (_cards.isNotEmpty) ...[
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _index == 0 ? null : () => setState(() { _index--; _showBack = false; }),
+                        icon: const Icon(Icons.chevron_left),
+                        label: const Text('Previous'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _index >= _cards.length - 1 ? null : () => setState(() { _index++; _showBack = false; }),
+                        icon: const Icon(Icons.chevron_right),
+                        label: const Text('Next'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () => _markCurrentKnown(false),
+                        icon: Icon(active?['known'] == 'true' ? Icons.refresh_rounded : Icons.replay_rounded),
+                        label: const Text('Review again'),
+                      ),
+                      const SizedBox(width: 10),
+                      FilledButton.icon(
+                        onPressed: () => _markCurrentKnown(true),
+                        icon: Icon(active?['known'] == 'true' ? Icons.check_circle : Icons.check_circle_outline),
+                        label: Text(active?['known'] == 'true' ? 'Known' : 'Mark known'),
+                      ),
+                    ],
+                  ),
+                ],
+                if (_showEditor) ...[
+                  const SizedBox(height: 10),
+                  TextField(controller: _front, decoration: const InputDecoration(labelText: 'Question / front')),
+                  const SizedBox(height: 8),
+                  TextField(controller: _back, decoration: const InputDecoration(labelText: 'Answer / back')),
+                ],
               ],
             ),
           ),
