@@ -1,3 +1,7 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
+
 /// Restores notebook pages written by early Snote builds that stored a
 /// single page directly in content_json instead of wrapping it in `pages`.
 ///
@@ -52,7 +56,17 @@ bool? restoreNoteDrawMode({
 /// True when a PDF-import note needs its original PDF pages rendered again.
 /// Older beta builds could save placeholder pages before the PDF snapshots
 /// were persisted, leaving a non-empty `pages` list that bypassed recovery.
-bool shouldRestorePdfPageBackgrounds(List<Map<String, Object?>> pages) {
+/// True when an imported PDF needs its page backgrounds restored.
+///
+/// Older beta builds could persist a non-empty placeholder raster. Checking
+/// only whether `backgroundImage` is a non-empty string makes those pages
+/// look restored forever. New pages therefore carry both a PDF source hash
+/// and a hash of the raster bytes. A stale/missing fingerprint triggers a
+/// render from the original attachment; saved annotations remain preserved.
+bool shouldRestorePdfPageBackgrounds(
+  List<Map<String, Object?>> pages, {
+  String? sourceHash,
+}) {
   if (pages.isEmpty) return true;
 
   bool hasPdfMetadata(Map<String, Object?> page) {
@@ -66,18 +80,50 @@ bool shouldRestorePdfPageBackgrounds(List<Map<String, Object?>> pages) {
     return image is String && image.isNotEmpty;
   }
 
-  // Restore partial imports too. Earlier code returned false as soon as it
-  // found ONE valid background, even when other PDF pages were still blank.
-  final pdfPages = pages.where(hasPdfMetadata).toList(growable: false);
-  if (pdfPages.isNotEmpty) {
-    return pdfPages.any((page) => !hasBackground(page));
+  bool hasVerifiedBackground(Map<String, Object?> page) {
+    if (!hasBackground(page)) return false;
+    if (sourceHash == null) return true;
+    if (page['pdfSourceHash'] != sourceHash) return false;
+
+    final expectedRasterHash = page['pdfBackgroundHash'];
+    if (expectedRasterHash is! String || expectedRasterHash.isEmpty) {
+      return false;
+    }
+
+    try {
+      final bytes = base64Decode(page['backgroundImage']! as String);
+      return bytes.isNotEmpty &&
+          sha256.convert(bytes).toString() == expectedRasterHash;
+    } catch (_) {
+      return false;
+    }
   }
 
-  // Some early imports did not persist per-page PDF metadata. In that legacy
-  // shape, only recover when the saved pages are all visually empty.
-  if (pages.any(hasBackground)) return false;
+  final pdfPages = pages.where(hasPdfMetadata).toList(growable: false);
+  if (pdfPages.isNotEmpty) {
+    // Preserve behavior for callers without the source bytes. The editor
+    // supplies sourceHash whenever the original PDF attachment is available.
+    if (sourceHash == null) {
+      return pdfPages.any((page) => !hasBackground(page));
+    }
+    return pdfPages.any((page) => !hasVerifiedBackground(page));
+  }
 
   bool emptyList(Object? value) => value is! List || value.isEmpty;
+  final hasUserContent = pages.any((page) =>
+      !emptyList(page['strokes']) ||
+      !emptyList(page['images']) ||
+      !emptyList(page['textBoxes']));
+
+  // Old PDF page records did not always have per-page source metadata. If the
+  // linked PDF is available and pages are otherwise empty, do not trust a
+  // legacy raster of unknown origin.
+  if (sourceHash != null && !hasUserContent) {
+    return pages.any((page) => !hasVerifiedBackground(page));
+  }
+
+  // For non-PDF notes, retain legitimate image backgrounds and user content.
+  if (pages.any(hasBackground)) return false;
   return pages.every((page) =>
       emptyList(page['strokes']) &&
       emptyList(page['images']) &&
@@ -101,6 +147,8 @@ List<Map<String, Object?>> mergeSavedAnnotationsWithPdfPages({
       rendered['backgroundImage'] = renderedPages[index]['backgroundImage'];
       rendered['pdfSourceName'] = renderedPages[index]['pdfSourceName'];
       rendered['pdfSourcePage'] = renderedPages[index]['pdfSourcePage'];
+      rendered['pdfSourceHash'] = renderedPages[index]['pdfSourceHash'];
+      rendered['pdfBackgroundHash'] = renderedPages[index]['pdfBackgroundHash'];
       rendered['pageAspectRatio'] = renderedPages[index]['pageAspectRatio'];
       rendered['id'] = saved['id'] ?? renderedPages[index]['id'];
       rendered['strokes'] = saved['strokes'] ?? renderedPages[index]['strokes'];

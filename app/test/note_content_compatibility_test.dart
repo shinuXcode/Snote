@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snote/features/notes/note_content_compatibility.dart';
 
@@ -125,6 +128,60 @@ void main() {
     );
   });
 
+  test('rebuilds non-empty legacy PDF placeholders using source fingerprints', () {
+    final rasterBytes = <int>[1, 2, 3, 4];
+    final raster = base64Encode(rasterBytes);
+    final rasterHash = sha256.convert(rasterBytes).toString();
+
+    final legacyPage = <String, Object?>{
+      'pdfSourceName': 'worksheet.pdf',
+      'pdfSourcePage': 1,
+      'backgroundImage': raster,
+    };
+    expect(
+      shouldRestorePdfPageBackgrounds(
+        <Map<String, Object?>>[legacyPage],
+        sourceHash: 'current-source-hash',
+      ),
+      isTrue,
+      reason: 'A non-empty background without a source fingerprint may be a stale blank raster.',
+    );
+
+    final verifiedPage = <String, Object?>{
+      ...legacyPage,
+      'pdfSourceHash': 'current-source-hash',
+      'pdfBackgroundHash': rasterHash,
+    };
+    expect(
+      shouldRestorePdfPageBackgrounds(
+        <Map<String, Object?>>[verifiedPage],
+        sourceHash: 'current-source-hash',
+      ),
+      isFalse,
+    );
+    expect(
+      shouldRestorePdfPageBackgrounds(
+        <Map<String, Object?>>[verifiedPage],
+        sourceHash: 'different-source-hash',
+      ),
+      isTrue,
+      reason: 'A changed original PDF must be rendered again.',
+    );
+
+    final corruptRaster = <String, Object?>{
+      ...verifiedPage,
+      'backgroundImage': base64Encode(<int>[8, 8, 8]),
+    };
+    expect(
+      shouldRestorePdfPageBackgrounds(
+        <Map<String, Object?>>[corruptRaster],
+        sourceHash: 'current-source-hash',
+      ),
+      isTrue,
+      reason: 'Raster bytes that no longer match their hash must be recovered.',
+    );
+  });
+
   test('restores PDF backgrounds when only some pages have images', () {
     expect(
       shouldRestorePdfPageBackgrounds(<Map<String, Object?>>[
@@ -166,6 +223,8 @@ void main() {
           'pdfSourceName': 'worksheet.pdf',
           'pdfSourcePage': 1,
           'pageAspectRatio': .7,
+          'pdfSourceHash': 'fresh-source-hash',
+          'pdfBackgroundHash': 'fresh-background-hash',
         },
         <String, Object?>{
           'id': 'second-page',
@@ -180,6 +239,8 @@ void main() {
     expect(merged.first['id'], 'saved-page');
     expect(merged.first['backgroundImage'], 'fresh-pdf-raster');
     expect(merged.first['pdfSourceName'], 'worksheet.pdf');
+    expect(merged.first['pdfSourceHash'], 'fresh-source-hash');
+    expect(merged.first['pdfBackgroundHash'], 'fresh-background-hash');
     expect(merged.first['strokes'], <Object?>['annotation']);
     expect(merged.last['backgroundImage'], 'second-raster');
   });

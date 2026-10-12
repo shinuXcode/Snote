@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' as ui;
 
+import 'package:crypto/crypto.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/rendering.dart';
 import 'package:image_picker/image_picker.dart';
@@ -404,7 +405,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       // error instead of letting the editor build with an empty page list.
       setState(() {
         _loading = false;
-        _loadError = 'Could not load this note. Your saved data has not been deleted.';
+        _loadError = 'Could not load this note: $error. Your saved data has not been deleted.';
       });
     }
   }
@@ -528,7 +529,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
 
     if (pdfBytes != null &&
         pdfBytes.isNotEmpty &&
-        shouldRestorePdfPageBackgrounds(parsed)) {
+        shouldRestorePdfPageBackgrounds(
+          parsed,
+          sourceHash: sha256.convert(pdfBytes).toString(),
+        )) {
       try {
         final result = await _renderPdfPages(
           pdfBytes,
@@ -1819,6 +1823,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     String sourceName,
   ) async {
     if (sourceBytes.isEmpty) throw StateError('The selected PDF is empty.');
+    final sourceHash = sha256.convert(sourceBytes).toString();
     final document = await PdfDocument.openData(sourceBytes);
     final totalPages = document.pagesCount;
     final importCount = math.min(totalPages, 40);
@@ -1856,6 +1861,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
             'orientation': pdfPage.width > pdfPage.height ? 'horizontal' : 'vertical',
             'backgroundImage': base64Encode(rendered.bytes),
             'pdfSourceName': sourceName,
+            'pdfSourceHash': sourceHash,
+            'pdfBackgroundHash': sha256.convert(rendered.bytes).toString(),
             'pdfSourcePage': index,
             'strokes': <Object?>[],
             'images': <Object?>[],
