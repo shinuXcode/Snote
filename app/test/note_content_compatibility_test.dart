@@ -79,6 +79,88 @@ void main() {
     );
   });
 
+  test('recovers PDF pages when a stale blank page envelope exists', () {
+    expect(shouldRestorePdfPageBackgrounds(<Map<String, Object?>>[]), isTrue);
+    expect(
+      shouldRestorePdfPageBackgrounds(<Map<String, Object?>>[
+        <String, Object?>{
+          'template': 'blank',
+          'strokes': <Object?>[],
+          'images': <Object?>[],
+        },
+      ]),
+      isTrue,
+    );
+    expect(
+      shouldRestorePdfPageBackgrounds(<Map<String, Object?>>[
+        <String, Object?>{
+          'pdfSourceName': 'worksheet.pdf',
+          'pdfSourcePage': 1,
+          'strokes': <Object?>[
+            <String, Object?>{'id': 'stroke-1'},
+          ],
+        },
+      ]),
+      isTrue,
+    );
+    expect(
+      shouldRestorePdfPageBackgrounds(<Map<String, Object?>>[
+        <String, Object?>{
+          'backgroundImage': 'existing-pdf-image',
+          'pdfSourceName': 'worksheet.pdf',
+          'pdfSourcePage': 1,
+        },
+      ]),
+      isFalse,
+    );
+    expect(
+      shouldRestorePdfPageBackgrounds(<Map<String, Object?>>[
+        <String, Object?>{
+          'strokes': <Object?>[
+            <String, Object?>{'id': 'handwriting'},
+          ],
+        },
+      ]),
+      isFalse,
+    );
+  });
+
+  test('merges saved annotations over a freshly rendered PDF page', () {
+    final merged = mergeSavedAnnotationsWithPdfPages(
+      savedPages: <Map<String, Object?>>[
+        <String, Object?>{
+          'id': 'saved-page',
+          'strokes': <Object?>['annotation'],
+          'backgroundImage': 'stale-or-empty',
+          'pdfSourceName': 'old.pdf',
+        },
+      ],
+      renderedPages: <Map<String, Object?>>[
+        <String, Object?>{
+          'id': 'rendered-page',
+          'strokes': <Object?>[],
+          'backgroundImage': 'fresh-pdf-raster',
+          'pdfSourceName': 'worksheet.pdf',
+          'pdfSourcePage': 1,
+          'pageAspectRatio': .7,
+        },
+        <String, Object?>{
+          'id': 'second-page',
+          'backgroundImage': 'second-raster',
+          'pdfSourceName': 'worksheet.pdf',
+          'pdfSourcePage': 2,
+        },
+      ],
+    );
+
+    expect(merged, hasLength(2));
+    expect(merged.first['id'], 'saved-page');
+    expect(merged.first['backgroundImage'], 'fresh-pdf-raster');
+    expect(merged.first['pdfSourceName'], 'worksheet.pdf');
+    expect(merged.first['strokes'], <Object?>['annotation']);
+    expect(merged.last['backgroundImage'], 'second-raster');
+  });
+
   test('does not treat envelope-only note metadata as a page', () {
     expect(
       legacyPageFromNoteContent(<String, Object?>{
