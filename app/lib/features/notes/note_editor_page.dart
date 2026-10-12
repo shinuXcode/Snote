@@ -565,8 +565,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       );
     }
     // Only genuinely empty ordinary notes get a new page. Imported PDFs must
-    // either restore their pages or show a recoverable error.
-    if (parsed.isEmpty) parsed.add(_newPage());
+    // either restore their pages or show a recoverable error. Persist the
+    // first page immediately: new notes must not depend on a later pen stroke
+    // or a delayed autosave before they have a valid document envelope.
+    final createdInitialPage = parsed.isEmpty;
+    if (createdInitialPage) parsed.add(_newPage());
     for (var i = 0; i < parsed.length; i++) {
       parsed[i] = _normalize(parsed[i]);
     }
@@ -584,18 +587,19 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     // after the page list has been installed. Keep the loading screen visible
     // until initialization work is complete.
     _restoreToolbar();
-    // Keep-awake is optional; plugin failure must not hide a loaded note.
-    try {
-      await _keepAwake();
-    } catch (error, stackTrace) {
+    // Keep-awake is optional and must never gate editor initialization. Some
+    // Android vendor power-management implementations can stall the plugin
+    // channel; run it independently so notes and PDF annotations become
+    // usable as soon as their page data is ready.
+    unawaited(_keepAwake().catchError((Object error, StackTrace stackTrace) {
       debugPrint('Snote keep-awake setup failed (non-fatal): $error\\n$stackTrace');
-    }
+    }));
     if (!mounted) return;
     setState(() {
       _loading = false;
       _loadError = null;
     });
-    if (importedOnFirstOpen && mounted) {
+    if ((importedOnFirstOpen || createdInitialPage) && mounted) {
       _savePending = true;
       await _save(force: true);
       if (mounted && originalPdfPageCount > parsed.length) {
