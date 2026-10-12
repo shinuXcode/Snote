@@ -77,16 +77,23 @@ class InkRenderer {
       if (pen.type == PenType.fountain) {
         width = fountainWidth(
           baseWidth: width,
-          velocity: velocity * (.55 + pen.velocitySensitivity * 1.45),
-          pressure: .45 + pressure * (.55 + pen.pressureSensitivity * .45),
+          // Timestamps are milliseconds; convert to a 16 ms frame so ordinary
+          // stylus movement has a visible effect on the ink width.
+          velocity: velocity * 16 * (.55 + pen.velocitySensitivity * 1.45),
+          pressure: .20 + pressure * (.85 + pen.pressureSensitivity * .8),
         );
         final tangentAngle = math.atan2(
           point.position.dy - previous.position.dy,
           point.position.dx - previous.position.dx,
         );
-        final nibAngle = point.orientation.isFinite ? point.orientation : 0.0;
+        final reportedOrientation = point.orientation;
+        // Some digitizers report zero when orientation is unavailable. A
+        // slanted default nib gives those devices recognizable calligraphic ink.
+        final nibAngle = reportedOrientation.abs() < .02 && point.tilt.abs() < .02
+            ? -math.pi / 4
+            : reportedOrientation;
         final nibAcrossStroke = math.sin(tangentAngle - nibAngle).abs();
-        width *= .32 + nibAcrossStroke * 1.18;
+        width *= .14 + nibAcrossStroke * 1.75;
       } else {
         final velocityFactor = 1 -
             (velocity / 3.2).clamp(0, 1).toDouble() *
