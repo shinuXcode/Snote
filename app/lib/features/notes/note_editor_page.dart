@@ -3192,24 +3192,36 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           _range('Line Opacity', _pageDouble('lineOpacity', .85), 0, 1, (v) { setState(() => pageData['lineOpacity'] = v); _scheduleSave(); }),
           _range('Line Width', _pageDouble('lineWidth', .7), .25, 4, (v) { setState(() => pageData['lineWidth'] = v); _scheduleSave(); }),
           _range('Line Spacing', _pageDouble('spacing', 28), 12, 64, (v) { setState(() => pageData['spacing'] = v); _scheduleSave(); }),
-          FilledButton(onPressed: () {
-            for (final page in _pages) {
-              page['template'] = pageData['template'];
-              page['paperColor'] = pageData['paperColor'];
-              page['lineColor'] = pageData['lineColor'];
-              page['lineOpacity'] = pageData['lineOpacity'];
-              page['lineWidth'] = pageData['lineWidth'];
-              page['spacing'] = pageData['spacing'];
-              page['pageSize'] = pageData['pageSize'];
-              page['orientation'] = pageData['orientation'];
-              page['cornellAssist'] = pageData['cornellAssist'];
-            }
-            setState(() {});
-            _scheduleSave();
-            Navigator.pop(context);
-          }, child: const Text('Apply All Pages')),
+          ListTile(
+            leading: const Icon(Icons.copy_all_rounded),
+            title: const Text('Copy current paper settings to all pages'),
+            subtitle: const Text('Immediately copy the selected template, color, orientation and rule spacing.'),
+            onTap: _copyCurrentPaperSettingsToAllPages,
+          ),
         ],
       );
+  }
+
+  void _copyCurrentPaperSettingsToAllPages() {
+    const keys = [
+      'template',
+      'paperColor',
+      'lineColor',
+      'lineOpacity',
+      'lineWidth',
+      'spacing',
+      'pageSize',
+      'orientation',
+      'cornellAssist',
+    ];
+    for (final page in _pages) {
+      for (final key in keys) {
+        page[key] = pageData[key];
+      }
+    }
+    setState(() {});
+    _scheduleSave();
+    Navigator.pop(context);
   }
 
   Widget _customPaper() => ListView(
@@ -3223,21 +3235,12 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           _range('Line width', _pageDouble('lineWidth', .7), .25, 4, (v) { setState(() => pageData['lineWidth'] = v); _scheduleSave(); }),
           _range('Line opacity', _pageDouble('lineOpacity', .85), 0, 1, (v) { setState(() => pageData['lineOpacity'] = v); _scheduleSave(); }),
           SwitchListTile(contentPadding: EdgeInsets.zero, value: pageData['cornellAssist'] == true, onChanged: (v) { setState(() => pageData['cornellAssist'] = v); _scheduleSave(); }, title: const Text('Cornell assist line')),
-          FilledButton(onPressed: () {
-            for (final page in _pages) {
-              page['template'] = pageData['template'];
-              page['paperColor'] = pageData['paperColor'];
-              page['lineColor'] = pageData['lineColor'];
-              page['lineOpacity'] = pageData['lineOpacity'];
-              page['lineWidth'] = pageData['lineWidth'];
-              page['spacing'] = pageData['spacing'];
-              page['pageSize'] = pageData['pageSize'];
-              page['orientation'] = pageData['orientation'];
-              page['cornellAssist'] = pageData['cornellAssist'];
-            }
-            Navigator.pop(context);
-            _scheduleSave();
-          }, child: const Text('Apply to all pages')),
+          ListTile(
+            leading: const Icon(Icons.copy_all_rounded),
+            title: const Text('Copy current paper settings to all pages'),
+            subtitle: const Text('Immediately copy the selected template, color, orientation and rule spacing.'),
+            onTap: _copyCurrentPaperSettingsToAllPages,
+          ),
         ],
       );
 
