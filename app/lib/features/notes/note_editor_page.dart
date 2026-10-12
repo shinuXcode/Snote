@@ -1703,7 +1703,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     ),
                     _compactAction(
                       tooltip: _tabsVisible ? 'Hide note tabs' : 'Show note tabs',
-                      icon: Icons.tab_outlined,
+                      icon: Icons.view_carousel_rounded,
                       onPressed: () => setState(() => _tabsVisible = !_tabsVisible),
                     ),
                   ],
@@ -1712,11 +1712,12 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
               Expanded(
                 child: TextField(
                   controller: _title,
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                   decoration: const InputDecoration(
                     isDense: true,
                     contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
                     border: InputBorder.none,
-                    hintText: 'Untitled note',
+                    hintText: 'Name this note',
                   ),
                   onChanged: (_) => _refreshCurrentOpenTab(),
                   onSubmitted: (_) => _save(force: true),
@@ -3221,9 +3222,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       top: _selectionToolbarY < 0
           ? (landscape ? null : 84.0)
           : _selectionToolbarY,
-      bottom: _selectionToolbarY < 0
-          ? (landscape ? 82.0 : null)
-          : null,
+      bottom: landscape
+          ? (_selectionToolbarY < 0 ? 82.0 : null)
+          : 82.0,
       child: GestureDetector(
         onPanUpdate: (details) {
           final bounds = MediaQuery.sizeOf(context);
