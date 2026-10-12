@@ -8,6 +8,7 @@ import '../../data/local/note_repository.dart';
 
 class ScreenshotImportPage extends StatefulWidget {
   final String? folderId;
+
   const ScreenshotImportPage({super.key, this.folderId});
 
   @override
@@ -18,21 +19,29 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
   final _picker = ImagePicker();
   final _notes = NoteRepository();
   final _docs = FileDocumentRepository();
+  final _nameController = TextEditingController(text: 'Screenshot note');
+
   Uint8List? _bytes;
   bool _busy = false;
-  final TextEditingController _nameController = TextEditingController(text: 'Screenshot note');
 
   Future<void> _pick(ImageSource source) async {
-    final image = await _picker.pickImage(source: source, imageQuality: 96);
-    if (image == null) return;
-    setState(() => _busy = true);
+    if (_busy) return;
     try {
+      final image = await _picker.pickImage(source: source, imageQuality: 96);
+      if (image == null || !mounted) return;
+      setState(() => _busy = true);
       final bytes = await image.readAsBytes();
       if (!mounted) return;
       setState(() {
         _bytes = bytes;
-        _nameController.text = image.name.replaceFirst(RegExp(r'\.[^.]+
+        _nameController.text = image.name.replaceFirst(RegExp(r'\.[^.]+$'), '');
       });
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open image source: ' + error.toString())),
+        );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -40,10 +49,12 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
 
   Future<void> _save() async {
     final bytes = _bytes;
-    if (bytes == null) return;
+    if (bytes == null || _busy) return;
+    final title = _nameController.text.trim().isEmpty
+        ? 'Screenshot note'
+        : _nameController.text.trim();
     setState(() => _busy = true);
     try {
-      final title = _nameController.text.trim().isEmpty ? 'Screenshot note' : _nameController.text.trim();
       final note = await _notes.create(title: title, folderId: widget.folderId);
       await _docs.saveBytes(
         noteId: note.id,
@@ -61,7 +72,9 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       if (mounted) Navigator.pop(context, note);
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not save image: $error')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not save image: ' + error.toString())),
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -75,110 +88,76 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Screenshot / image note')),
-        body: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 760),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  Expanded(
-                    child: _bytes == null
-                        ? const Center(child: Text('Choose a screenshot or image to keep it inside the current folder.'))
-                        : InteractiveViewer(child: Image.memory(_bytes!, fit: BoxFit.contain)),
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Screenshot / image note')),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              children: [
+                Expanded(
+                  child: _bytes == null
+                      ? const Center(
+                          child: Text(
+                            'Capture with camera or choose a screenshot from Gallery.',
+                            textAlign: TextAlign.center,
+                          ),
+                        )
+                      : InteractiveViewer(
+                          minScale: .5,
+                          maxScale: 5,
+                          child: Image.memory(
+                            _bytes!,
+                            fit: BoxFit.contain,
+                            gaplessPlayback: true,
+                            errorBuilder: (_, __, ___) =>
+                                const Center(child: Text('Could not preview this image.')),
+                          ),
+                        ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Note title',
+                    prefixIcon: Icon(Icons.edit_note_rounded),
                   ),
-                  TextField(
-                    controller: _nameController,
-                    onChanged: (v) => _name = v,
-                    decoration: const InputDecoration(labelText: 'Note title'),
-                  ),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _busy ? null : () => _pick(ImageSource.gallery),
+                      icon: const Icon(Icons.photo_library_outlined),
+                      label: const Text('Gallery'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: _busy ? null : () => _pick(ImageSource.camera),
+                      icon: const Icon(Icons.camera_alt_outlined),
+                      label: const Text('Camera'),
+                    ),
+                    FilledButton.icon(
+                      onPressed: _busy || _bytes == null ? null : _save,
+                      icon: const Icon(Icons.save_rounded),
+                      label: Text(_busy ? 'Saving…' : 'Save here'),
+                    ),
+                  ],
+                ),
+                if (_busy) ...[
                   const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(child: OutlinedButton.icon(onPressed: _busy ? null : () => _pick(ImageSource.gallery), icon: const Icon(Icons.photo_library_outlined), label: const Text('Gallery'))),
-                      const SizedBox(width: 12),
-                      Expanded(child: OutlinedButton.icon(onPressed: _busy ? null : () => _pick(ImageSource.camera), icon: const Icon(Icons.camera_alt_outlined), label: const Text('Camera'))),
-                      const SizedBox(width: 12),
-                      Expanded(child: FilledButton.icon(onPressed: _busy || _bytes == null ? null : _save, icon: const Icon(Icons.save_rounded), label: Text(_busy ? 'Saving…' : 'Save here'))),
-                    ],
-                  ),
+                  const LinearProgressIndicator(),
                 ],
-              ),
+              ],
             ),
           ),
         ),
-      );
-}
-), '');
-      });
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+      ),
+    );
   }
-
-  Future<void> _save() async {
-    final bytes = _bytes;
-    if (bytes == null) return;
-    setState(() => _busy = true);
-    try {
-      final note = await _notes.create(title: _name, folderId: widget.folderId);
-      await _docs.saveBytes(
-        noteId: note.id,
-        name: _name + '.png',
-        type: 'image',
-        bytes: bytes,
-        metadata: {'source': 'screenshot-import'},
-      );
-      await _notes.saveContent(note.id, {
-        'version': 5,
-        'pages': <Map<String, Object?>>[],
-        'mediaNote': true,
-        'attachmentName': _name + '.png',
-      });
-      if (mounted) Navigator.pop(context, note);
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not save image: $error')));
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Screenshot / image note')),
-        body: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 760),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  Expanded(
-                    child: _bytes == null
-                        ? const Center(child: Text('Choose a screenshot or image to keep it inside the current folder.'))
-                        : InteractiveViewer(child: Image.memory(_bytes!, fit: BoxFit.contain)),
-                  ),
-                  TextField(
-                    controller: TextEditingController(text: _name),
-                    onChanged: (v) => _name = v,
-                    decoration: const InputDecoration(labelText: 'Note title'),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(child: OutlinedButton.icon(onPressed: _busy ? null : _pick, icon: const Icon(Icons.photo_library_outlined), label: const Text('Choose image'))),
-                      const SizedBox(width: 12),
-                      Expanded(child: FilledButton.icon(onPressed: _busy || _bytes == null ? null : _save, icon: const Icon(Icons.save_rounded), label: Text(_busy ? 'Saving…' : 'Save here'))),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
 }
