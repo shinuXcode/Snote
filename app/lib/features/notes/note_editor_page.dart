@@ -407,6 +407,12 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
 
   Future<void> _load() async {
     final note = await _repo.get(widget.note.id);
+    if (note == null) {
+      throw StateError(
+        'This note is no longer available in the current local account. '
+        'No new blank note was created and no saved data was changed.',
+      );
+    }
     final parsed = <Map<String, Object?>>[];
     int? storedCoverColor;
     String? storedCoverIcon;
@@ -455,11 +461,33 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
 
     var importedOnFirstOpen = false;
     var originalPdfPageCount = 0;
-    if (parsed.isEmpty && widget.initialPdfBytes != null && widget.initialPdfBytes!.isNotEmpty) {
+
+    // Recovery path for imported PDFs: the original PDF is persisted as a
+    // local attachment before rendering. If the app was interrupted before
+    // page snapshots were saved (or an older build saved only the attachment),
+    // reconstruct notebook pages from that attachment when reopening the note.
+    Uint8List? pdfBytes = widget.initialPdfBytes;
+    String? pdfName = widget.initialPdfName;
+    if ((pdfBytes == null || pdfBytes.isEmpty) && parsed.isEmpty) {
+      final assets = await FileDocumentRepository().listForNote(widget.note.id);
+      DocumentAsset? sourcePdf;
+      for (final asset in assets.reversed) {
+        if (asset.type.toLowerCase() == 'pdf') {
+          sourcePdf = asset;
+          break;
+        }
+      }
+      if (sourcePdf != null) {
+        pdfBytes = await FileDocumentRepository().readBytes(sourcePdf);
+        pdfName = sourcePdf.name;
+      }
+    }
+
+    if (parsed.isEmpty && pdfBytes != null && pdfBytes.isNotEmpty) {
       try {
         final result = await _renderPdfPages(
-          widget.initialPdfBytes!,
-          widget.initialPdfName ?? (widget.note.title + '.pdf'),
+          pdfBytes,
+          pdfName ?? (widget.note.title + '.pdf'),
         );
         parsed.addAll(result.pages);
         originalPdfPageCount = result.totalPages;
