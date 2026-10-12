@@ -20,6 +20,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../app/theme_controller.dart';
 import '../../canvas_engine/models/pen_config.dart';
 import '../../canvas_engine/widgets/page_background.dart';
+import '../../canvas_engine/input/viewport_transform.dart';
 import '../../canvas_engine/widgets/notebook_viewport.dart';
 import '../../canvas_engine/widgets/snote_canvas.dart';
 import '../../canvas_engine/widgets/snote_canvas_controller.dart';
@@ -113,6 +114,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   bool _shapePanel = false;
   bool _showcaseOpen = false;
   bool _studyTimerVisible = false;
+  bool _viewportZoomLocked = false;
+  int _viewportResetToken = 0;
+  final ValueNotifier<ViewportTransform> _viewportTransform = ValueNotifier(
+    ViewportTransform(scale: SnoteSettings.instance.getDouble('noteZoom')),
+  );
   String _showcaseDock = 'right';
   double _showcaseX = 12;
   double _showcaseY = 140;
@@ -786,6 +792,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     _scroll.dispose();
     _canvas.dispose();
     _toolbarOffset.dispose();
+    _viewportTransform.dispose();
     unawaited(WakelockPlus.disable());
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
@@ -832,6 +839,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
               if (_toolbar && _draw && !_readingMode) _toolbarWidget(),
               if (_shapePanel && !_full && !_readingMode) _shapePanelWidget(),
               if (_showcaseOpen && !_full && !_readingMode) _showcaseWidget(),
+              if (!_full) _viewportZoomControls(),
               _StudyTimerFloating(
                 visible: _studyTimerVisible && !_full,
                 onVisibilityChanged: (visible) => setState(() => _studyTimerVisible = visible),
@@ -867,6 +875,63 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           ),
         ),
       ),
+    );
+  }
+
+
+  Widget _viewportZoomControls() {
+    final theme = Theme.of(context);
+    final initialScale = _settings.getDouble('noteZoom').clamp(.5, 4).toDouble();
+    return ValueListenableBuilder<ViewportTransform>(
+      valueListenable: _viewportTransform,
+      builder: (context, transform, _) {
+        final scaleChanged = (transform.scale - initialScale).abs() > .025;
+        final positionChanged = transform.pan.distance > 3;
+        if (!scaleChanged && !positionChanged) return const SizedBox.shrink();
+        return Positioned(
+          right: 12,
+          bottom: 18,
+          child: Material(
+            elevation: 8,
+            color: theme.colorScheme.surface.withValues(alpha: .96),
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    (transform.scale * 100).round().toString() + '%',
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
+                  ),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints.tightFor(width: 34, height: 34),
+                    padding: EdgeInsets.zero,
+                    tooltip: _viewportZoomLocked ? 'Unlock zoom and pan' : 'Lock zoom and pan',
+                    onPressed: () => setState(() => _viewportZoomLocked = !_viewportZoomLocked),
+                    icon: Icon(
+                      _viewportZoomLocked ? Icons.lock_rounded : Icons.lock_open_rounded,
+                      size: 18,
+                    ),
+                  ),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints.tightFor(width: 34, height: 34),
+                    padding: EdgeInsets.zero,
+                    tooltip: 'Reset zoom and page position',
+                    onPressed: () => setState(() {
+                      _viewportZoomLocked = false;
+                      _viewportResetToken++;
+                    }),
+                    icon: const Icon(Icons.center_focus_strong_rounded, size: 18),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -1084,6 +1149,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         minScale: .5,
         maxScale: 4,
         initialScale: _settings.getDouble('noteZoom'),
+        zoomLocked: _viewportZoomLocked,
+        resetToken: _viewportResetToken,
+        onTransformChanged: (transform) => _viewportTransform.value = transform,
         child: Padding(
           padding: EdgeInsets.only(
             left: 8,
