@@ -177,18 +177,24 @@ jobs:
 
       - name: Publish beta prerelease
         if: success() && github.event_name == 'push'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.beta_version.outputs.tag }}
-          name: Snote ${{ steps.beta_version.outputs.version }}
-          prerelease: true
-          make_latest: false
-          target_commitish: ${{ github.sha }}
-          files: |
-            Snote-Android-Beta.apk
-            Snote-Android-Beta.sha256
-          body: |
-            Snote ${{ steps.beta_version.outputs.version }} build for testing only.
-            Build commit: ${{ github.sha }}
-            This APK uses the separate Android application ID com.snote.snote.beta, so it can be installed alongside the stable Snote app without replacing it or touching stable app data.
-            This release is published only after dependency resolution, formatting, analysis, automated tests, Android APK build, APK identity/version validation, and SHA-256 generation pass.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.beta_version.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.beta_version.outputs.release_version }}
+          PACKAGE_VERSION: ${{ steps.beta_version.outputs.version }}
+        run: |
+          set -euo pipefail
+          NOTES="$(cat <<EOF
+          Snote $PACKAGE_VERSION build for testing only.
+          Build commit: $GITHUB_SHA
+          This APK uses the separate Android application ID com.snote.snote.beta, so it can be installed alongside the stable Snote app without replacing it or touching stable app data.
+          Published only after dependency resolution, formatting, analysis, automated tests, Android APK build, APK identity/version validation, and SHA-256 generation pass.
+          EOF
+          )"
+
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" Snote-Android-Beta.apk Snote-Android-Beta.sha256 --clobber --repo "$GITHUB_REPOSITORY"
+            gh release edit "$RELEASE_TAG" --title "Snote $PACKAGE_VERSION" --notes "$NOTES" --prerelease --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$RELEASE_TAG" Snote-Android-Beta.apk Snote-Android-Beta.sha256 --repo "$GITHUB_REPOSITORY" --title "Snote $PACKAGE_VERSION" --notes "$NOTES" --target "$GITHUB_SHA" --prerelease
+          fi
