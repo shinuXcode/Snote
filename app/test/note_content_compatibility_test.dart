@@ -38,6 +38,47 @@ void main() {
     expect(restored?['pdfSourceName'], 'worksheet.pdf');
   });
 
+  test('restores persisted editor mode and detects older text-only notes', () {
+    expect(
+      restoreNoteDrawMode(
+        savedMode: 'text',
+        textDelta: <Object?>[],
+        hasVisibleCanvasContent: true,
+      ),
+      isFalse,
+    );
+    expect(
+      restoreNoteDrawMode(
+        savedMode: null,
+        textDelta: <Object?>[
+          <String, Object?>{'insert': 'My saved text\n'},
+        ],
+        hasVisibleCanvasContent: false,
+      ),
+      isFalse,
+    );
+    expect(
+      restoreNoteDrawMode(
+        savedMode: null,
+        textDelta: <Object?>[
+          <String, Object?>{'insert': '\n'},
+        ],
+        hasVisibleCanvasContent: true,
+      ),
+      isNull,
+    );
+    expect(
+      restoreNoteDrawMode(
+        savedMode: null,
+        textDelta: <Object?>[
+          <String, Object?>{'insert': 'PDF text extraction'},
+        ],
+        hasVisibleCanvasContent: true,
+      ),
+      isNull,
+    );
+  });
+
   test('does not treat envelope-only note metadata as a page', () {
     expect(
       legacyPageFromNoteContent(<String, Object?>{
