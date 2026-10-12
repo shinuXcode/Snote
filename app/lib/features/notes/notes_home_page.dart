@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/settings/app_settings.dart';
 import '../../data/local/folder_repository.dart';
+import '../../data/local/file_document_repository.dart';
 import '../../data/local/note_repository.dart';
 import '../../data/local/notebook_transfer_service.dart';
 import '../../data/local/shared_media_path_reader.dart';
@@ -68,6 +69,8 @@ class _NotesHomePageState extends State<NotesHomePage> {
   final Set<String> _selectedFolderIds = <String>{};
   List<String> _folderClipboardIds = <String>[];
   String? _folderClipboardMode;
+  LocalNote? _noteClipboard;
+  String? _noteClipboardMode;
   StreamSubscription<List<SharedMediaFile>>? _sharingSubscription;
   bool _handlingIncomingShare = false;
   String? _lastIncomingSharePath;
@@ -906,6 +909,123 @@ class _NotesHomePageState extends State<NotesHomePage> {
     if (ok != true) return;
     await _notes.delete(note.id);
     await _load();
+  }
+
+
+  void _setNoteClipboard(LocalNote note, String mode) {
+    setState(() {
+      _noteClipboard = note;
+      _noteClipboardMode = mode;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          mode == 'cut'
+              ? 'Note cut. Open the destination folder and choose Paste note.'
+              : 'Note copied. Open the destination folder and choose Paste note.',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _moveNotePrompt(LocalNote note) async {
+    final destination = await showDialog<String>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Move note to folder'),
+        content: SizedBox(
+          width: 380,
+          height: 380,
+          child: ListView(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.home_outlined),
+                title: const Text('Notebook root'),
+                trailing: note.folderId == null ? const Icon(Icons.check_rounded) : null,
+                onTap: () => Navigator.pop(dialog, ''),
+              ),
+              for (final folder in _allFolders)
+                ListTile(
+                  leading: const Icon(Icons.folder_outlined),
+                  title: Text(folder.name),
+                  subtitle: Text(folder.parentId == null
+                      ? 'Root folder'
+                      : 'Nested folder'),
+                  trailing: note.folderId == folder.id ? const Icon(Icons.check_rounded) : null,
+                  onTap: () => Navigator.pop(dialog, folder.id),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialog), child: const Text('Cancel')),
+        ],
+      ),
+    );
+    if (destination == null) return;
+    try {
+      await _notes.moveToFolder(note.id, destination.isEmpty ? null : destination);
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Note moved.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not move note: ' + error.toString())),
+        );
+      }
+    }
+  }
+
+  Future<void> _pasteNoteClipboard() async {
+    final clipboardNote = _noteClipboard;
+    final mode = _noteClipboardMode;
+    if (clipboardNote == null || mode == null) return;
+    try {
+      final source = await _notes.get(clipboardNote.id);
+      if (source == null) throw StateError('The copied note is no longer available.');
+      if (mode == 'cut') {
+        await _notes.moveToFolder(source.id, _folderId);
+        if (mounted) {
+          setState(() {
+            _noteClipboard = null;
+            _noteClipboardMode = null;
+          });
+        }
+      } else {
+        final copy = await _notes.create(
+          title: source.title + ' (copy)',
+          folderId: _folderId,
+        );
+        final raw = source.contentJson;
+        if (raw != null && raw.isNotEmpty) {
+          final decoded = jsonDecode(raw);
+          if (decoded is Map) {
+            await _notes.saveContent(copy.id, decoded.cast<String, Object?>());
+          }
+        }
+        final documents = FileDocumentRepository();
+        final assets = await documents.listForNote(source.id);
+        for (final asset in assets) {
+          await documents.duplicate(asset, copy.id);
+        }
+      }
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(mode == 'cut' ? 'Note moved here.' : 'Note copied here.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not paste note: ' + error.toString())),
+        );
+      }
+    }
   }
 
   Future<void> _openPlus() async {
