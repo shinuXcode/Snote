@@ -35,6 +35,9 @@ class _SnoteAppState extends State<SnoteApp> {
       SnoteThemeStyle.apple => const Color(0xff007aff),
       SnoteThemeStyle.windows => const Color(0xff0078d4),
       SnoteThemeStyle.mac => const Color(0xff8e8e93),
+      SnoteThemeStyle.linux => const Color(0xffe95420),
+      SnoteThemeStyle.mobile => const Color(0xff009688),
+      SnoteThemeStyle.tablet => const Color(0xff3949ab),
       SnoteThemeStyle.standard => SnoteTheme.violet,
     };
     final seedColor = _theme.colorTheme.followsInterfaceProfile
@@ -62,14 +65,20 @@ class _SnoteAppState extends State<SnoteApp> {
             )
           : light.copyWith(
               colorScheme: ColorScheme.fromSeed(seedColor: seedColor, brightness: Brightness.light),
+              visualDensity: _theme.style == SnoteThemeStyle.windows || _theme.style == SnoteThemeStyle.linux
+                  ? VisualDensity.compact
+                  : VisualDensity.standard,
             ),
       darkTheme: dark.copyWith(
         colorScheme: ColorScheme.fromSeed(
           seedColor: seedColor,
           brightness: Brightness.dark,
         ),
+        visualDensity: _theme.style == SnoteThemeStyle.windows || _theme.style == SnoteThemeStyle.linux
+            ? VisualDensity.compact
+            : VisualDensity.standard,
       ),
-      themeMode: ThemeMode.system,
+      themeMode: _theme.themeMode,
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,

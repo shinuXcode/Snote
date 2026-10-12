@@ -146,6 +146,7 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       ),
       _group('Display', [
+        _themeModeSelector(),
         _themeStyleSelector(),
         _colorThemeSelector(),
         _customToggle(
@@ -247,6 +248,31 @@ class _SettingsPageState extends State<SettingsPage> {
     ],
   );
 
+  Widget _themeModeSelector() => Card(
+    margin: const EdgeInsets.only(bottom: 8),
+    child: Padding(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Appearance mode', style: TextStyle(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          const Text('Choose light, dark, or follow the device.'),
+          const SizedBox(height: 10),
+          SegmentedButton<ThemeMode>(
+            segments: const [
+              ButtonSegment(value: ThemeMode.system, label: Text('System'), icon: Icon(Icons.settings_suggest_outlined)),
+              ButtonSegment(value: ThemeMode.light, label: Text('Light'), icon: Icon(Icons.light_mode_outlined)),
+              ButtonSegment(value: ThemeMode.dark, label: Text('Dark'), icon: Icon(Icons.dark_mode_outlined)),
+            ],
+            selected: {_theme.themeMode},
+            onSelectionChanged: (values) => _theme.setThemeMode(values.first),
+          ),
+        ],
+      ),
+    ),
+  );
+
   Widget _colorThemeSelector() => Card(
     margin: const EdgeInsets.only(bottom: 8),
     child: ListTile(
@@ -279,7 +305,15 @@ class _SettingsPageState extends State<SettingsPage> {
           value: _theme.style,
           items: SnoteThemeStyle.values.map((style) => DropdownMenuItem(
             value: style,
-            child: Text(style.name[0].toUpperCase() + style.name.substring(1)),
+            child: Text(switch (style) {
+              SnoteThemeStyle.standard => 'Standard',
+              SnoteThemeStyle.apple => 'Apple',
+              SnoteThemeStyle.windows => 'Windows',
+              SnoteThemeStyle.mac => 'macOS',
+              SnoteThemeStyle.linux => 'Linux',
+              SnoteThemeStyle.mobile => 'Mobile',
+              SnoteThemeStyle.tablet => 'Tablet',
+            }),
           )).toList(),
           onChanged: (style) {
             if (style != null) _theme.setStyle(style);

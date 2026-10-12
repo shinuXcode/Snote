@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-enum SnoteThemeStyle { standard, apple, windows, mac }
+enum SnoteThemeStyle { standard, apple, windows, mac, linux, mobile, tablet }
 
 /// Ten persistent accent palettes; "profile" keeps the selected platform profile.
 enum SnoteColorTheme {
@@ -35,6 +35,7 @@ class SnoteThemeController extends ChangeNotifier {
   bool reduceMotion = false;
   SnoteThemeStyle style = SnoteThemeStyle.standard;
   SnoteColorTheme colorTheme = SnoteColorTheme.profile;
+  ThemeMode themeMode = ThemeMode.system;
 
   Future<void> load() async {
     eInk = (await _storage.read(key: 'snote.eink')) == 'true';
@@ -50,7 +51,18 @@ class SnoteThemeController extends ChangeNotifier {
       (item) => item.name == rawColorTheme,
       orElse: () => SnoteColorTheme.profile,
     );
+    final rawMode = await _storage.read(key: 'snote.theme.mode');
+    themeMode = ThemeMode.values.firstWhere(
+      (item) => item.name == rawMode,
+      orElse: () => ThemeMode.system,
+    );
     notifyListeners();
+  }
+
+  Future<void> setThemeMode(ThemeMode value) async {
+    themeMode = value;
+    notifyListeners();
+    await _storage.write(key: 'snote.theme.mode', value: value.name);
   }
 
   Future<void> setEInk(bool value) async {
