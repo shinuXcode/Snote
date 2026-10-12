@@ -42,7 +42,7 @@ class SnoteSettings extends ChangeNotifier {
     'pencasePresets': '[]',
     'coverLibrary': '[]',
     'folderSort': 'nameAsc',
-    'welcomeGuideSeen': false,
+    'welcomeGuideSeen': 'false',
     'pressureCurve': 'linear',
     'toolSizes': '{}',
     'toolColors': '{}',
