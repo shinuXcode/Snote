@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../lib/data/local/note_repository.dart';
 import '../lib/features/tools/flashcard_page.dart';
 
 void main() {
@@ -59,7 +60,6 @@ void main() {
 
     const note = LocalNote(
       id: 'deck-1',
-      ownerId: 'local',
       title: 'Biology cards',
       folderId: null,
       noteType: 'flashcard',
@@ -68,7 +68,6 @@ void main() {
       updatedAt: 1,
       deletedAt: null,
       version: 1,
-      syncState: 'local',
     );
     await tester.pumpWidget(MaterialApp(home: FlashcardPage(note: note)));
     await tester.pumpAndSettle();
