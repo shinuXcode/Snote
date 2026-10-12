@@ -1072,10 +1072,28 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       _stylusHoldHandled = false;
       return;
     }
+    // Platform-level cancellation can occur when focus, palm rejection, or a
+    // stylus stream is interrupted. Throwing away a valid in-progress pen path
+    // made fountain-pen ink appear to delete itself. Keep the captured samples
+    // for ordinary pen tools; still discard selection, eraser and hold gestures.
+    final preservePartialInk = !_ignorePointer &&
+        !_stylusHoldHandled &&
+        !_temporaryEraser &&
+        _activeTool != null &&
+        _activeTool!.isPen &&
+        _activePen != null &&
+        _real.isNotEmpty;
+
     _eraseSnapshotTaken = false;
+    if (preservePartialInk) {
+      _live = _real;
+      _commitActive();
+    } else {
+      _clearActiveState();
+      _input?.reset();
+    }
     _temporaryEraser = false;
-    _clearActiveState();
-    _input?.reset();
+    _ignorePointer = false;
     _lock.end(event);
     _activePointer = -1;
     _stylusDownPosition = null;
