@@ -54,7 +54,7 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
 
   Future<void> _openPdf() async {
     if (_busy) return;
-    debugPrint('[Snote][PDF] picker requested folder=\${widget.folderId ?? 'root'}');
+    debugPrint('[Snote][PDF] picker requested folder=${widget.folderId ?? 'root'}');
     LocalNote? createdNote;
     DocumentAsset? savedAsset;
     setState(() => _busy = true);
@@ -66,7 +66,7 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
       if (file == null) return;
 
       final bytes = await file.readAsBytes();
-      debugPrint('[Snote][PDF] picked file name=\${file.name} bytes=\${bytes.length}');
+      debugPrint('[Snote][PDF] picked file name=${file.name} bytes=${bytes.length}');
       if (bytes.isEmpty) {
         throw StateError('The selected PDF file is empty or could not be read.');
       }
@@ -99,12 +99,12 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
       }
 
       debugPrint(
-        '[Snote][PDF] open editor noteId=\${note.id} '
-        'assetId=\${asset.id} bytes=\${bytes.length}',
+        '[Snote][PDF] open editor noteId=${note.id} '
+        'assetId=${asset.id} bytes=${bytes.length}',
       );
       await Navigator.of(context).pushReplacement<void, void>(
         MaterialPageRoute<void>(
-          settings: RouteSettings(name: '/pdf-annotation/editor/\${note.id}'),
+          settings: RouteSettings(name: '/pdf-annotation/editor/${note.id}'),
           builder: (_) => NoteEditorPage(
             note: note,
             initialPdfBytes: bytes,
