@@ -28,6 +28,7 @@ import '../tools/screenshot_import_page.dart';
 import '../updates/update_center_page.dart';
 import '../onboarding/welcome_guide_page.dart';
 import 'note_editor_page.dart';
+import 'workspace_layout.dart';
 
 class NotesHomePage extends StatefulWidget {
   final bool localOnly;
