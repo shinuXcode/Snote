@@ -1654,7 +1654,7 @@ class _HierarchyPanel extends StatelessWidget {
         if (key != null && key.startsWith('cover:')) return key;
       }
     } catch (_) {}
-    return 'cover:' + (note.id.hashCode.abs() % 100).toString();
+    return 'cover:' + (note.id.hashCode.abs() % 200).toString();
   }
 
   @override
