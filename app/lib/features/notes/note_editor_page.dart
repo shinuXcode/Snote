@@ -3012,58 +3012,85 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     });
   }
 
-  Widget _selectionTools() => Positioned(
-        left: _selectionToolbarX < 0 ? 8 : _selectionToolbarX,
-        right: _selectionToolbarX < 0 ? 8 : null,
-        top: _selectionToolbarY < 0 ? null : _selectionToolbarY,
-        bottom: _selectionToolbarY < 0 ? 82 : null,
-        child: GestureDetector(
-          onPanUpdate: (details) {
-            final bounds = MediaQuery.sizeOf(context);
-            setState(() {
-              final baseX = _selectionToolbarX < 0 ? 8.0 : _selectionToolbarX;
-              final baseY = _selectionToolbarY < 0 ? math.max(56.0, bounds.height - 150) : _selectionToolbarY;
-              _selectionToolbarX = (baseX + details.delta.dx).clamp(4.0, math.max(4.0, bounds.width - 100));
-              _selectionToolbarY = (baseY + details.delta.dy).clamp(52.0, math.max(52.0, bounds.height - 70));
-            });
-          },
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(22),
-            child: BackdropFilter(
-              filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-              child: Material(
-                color: Theme.of(context).colorScheme.surface.withValues(alpha: .84),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: const Tooltip(message: 'Drag to move selection tools', child: Icon(Icons.drag_indicator_rounded, size: 18)),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: Text('$_selected selected', style: const TextStyle(fontWeight: FontWeight.w800)),
-                    ),
-                    IconButton(onPressed: _selectionColorSheet, icon: const Icon(Icons.palette_outlined), tooltip: 'Color'),
-                    IconButton(onPressed: _selectionSizeSheet, icon: const Icon(Icons.line_weight_rounded), tooltip: 'Stroke'),
-                    IconButton(onPressed: _canvas.toggleFill, icon: const Icon(Icons.format_color_fill_outlined), tooltip: 'Fill'),
-                    IconButton(onPressed: _canvas.bringToFront, icon: const Icon(Icons.vertical_align_top_rounded), tooltip: 'Bring to front'),
-                    IconButton(onPressed: _canvas.sendToBack, icon: const Icon(Icons.vertical_align_bottom_rounded), tooltip: 'Send to back'),
-                    IconButton(onPressed: () => _canvas.moveSelection(-8, 0), icon: const Icon(Icons.arrow_back_rounded), tooltip: 'Move left'),
-                    IconButton(onPressed: () => _canvas.moveSelection(8, 0), icon: const Icon(Icons.arrow_forward_rounded), tooltip: 'Move right'),
-                    IconButton(onPressed: () => _canvas.scaleSelection(.9), icon: const Icon(Icons.remove_circle_outline_rounded), tooltip: 'Scale down'),
-                    IconButton(onPressed: () => _canvas.scaleSelection(1.1), icon: const Icon(Icons.add_circle_outline_rounded), tooltip: 'Scale up'),
-                    IconButton(onPressed: _canvas.duplicateSelection, icon: const Icon(Icons.copy_rounded), tooltip: 'Duplicate'),
-                    IconButton(onPressed: _canvas.deleteSelection, icon: const Icon(Icons.delete_outline_rounded), tooltip: 'Delete'),
-                    IconButton(onPressed: _canvas.selectAll, icon: const Icon(Icons.select_all_rounded), tooltip: 'Select all'),
-                    IconButton(onPressed: _canvas.clearSelection, icon: const Icon(Icons.close_rounded), tooltip: 'Close'),
-                  ]),
-                ),
+  Widget _selectionTools() {
+    final size = MediaQuery.sizeOf(context);
+    final landscape = size.width > size.height;
+    final axis = landscape ? Axis.horizontal : Axis.vertical;
+    final controls = <Widget>[
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Tooltip(
+          message: 'Drag to move selection tools',
+          child: Icon(Icons.drag_indicator_rounded, size: 18),
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Tooltip(
+          message: '$_selected selected',
+          child: Text(
+            landscape ? '$_selected selected' : '$_selected',
+            maxLines: 1,
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+        ),
+      ),
+      IconButton(onPressed: _selectionColorSheet, icon: const Icon(Icons.palette_outlined), tooltip: 'Color'),
+      IconButton(onPressed: _selectionSizeSheet, icon: const Icon(Icons.line_weight_rounded), tooltip: 'Stroke'),
+      IconButton(onPressed: _canvas.toggleFill, icon: const Icon(Icons.format_color_fill_outlined), tooltip: 'Fill'),
+      IconButton(onPressed: _canvas.bringToFront, icon: const Icon(Icons.vertical_align_top_rounded), tooltip: 'Bring to front'),
+      IconButton(onPressed: _canvas.sendToBack, icon: const Icon(Icons.vertical_align_bottom_rounded), tooltip: 'Send to back'),
+      IconButton(onPressed: () => _canvas.moveSelection(-8, 0), icon: const Icon(Icons.arrow_back_rounded), tooltip: 'Move left'),
+      IconButton(onPressed: () => _canvas.moveSelection(8, 0), icon: const Icon(Icons.arrow_forward_rounded), tooltip: 'Move right'),
+      IconButton(onPressed: () => _canvas.scaleSelection(.9), icon: const Icon(Icons.remove_circle_outline_rounded), tooltip: 'Scale down'),
+      IconButton(onPressed: () => _canvas.scaleSelection(1.1), icon: const Icon(Icons.add_circle_outline_rounded), tooltip: 'Scale up'),
+      IconButton(onPressed: _canvas.duplicateSelection, icon: const Icon(Icons.copy_rounded), tooltip: 'Duplicate'),
+      IconButton(onPressed: _canvas.deleteSelection, icon: const Icon(Icons.delete_outline_rounded), tooltip: 'Delete'),
+      IconButton(onPressed: _canvas.selectAll, icon: const Icon(Icons.select_all_rounded), tooltip: 'Select all'),
+      IconButton(onPressed: _canvas.clearSelection, icon: const Icon(Icons.close_rounded), tooltip: 'Close'),
+    ];
+
+    return Positioned(
+      left: _selectionToolbarX < 0 ? 8 : _selectionToolbarX,
+      right: landscape && _selectionToolbarX < 0 ? 8 : null,
+      top: _selectionToolbarY < 0
+          ? (landscape ? null : 84.0)
+          : _selectionToolbarY,
+      bottom: _selectionToolbarY < 0
+          ? (landscape ? 82.0 : null)
+          : null,
+      child: GestureDetector(
+        onPanUpdate: (details) {
+          final bounds = MediaQuery.sizeOf(context);
+          final baseX = _selectionToolbarX < 0 ? 8.0 : _selectionToolbarX;
+          final baseY = _selectionToolbarY < 0
+              ? (landscape ? math.max(56.0, bounds.height - 150) : 84.0)
+              : _selectionToolbarY;
+          setState(() {
+            _selectionToolbarX = (baseX + details.delta.dx)
+                .clamp(4.0, math.max(4.0, bounds.width - (landscape ? 100 : 60)));
+            _selectionToolbarY = (baseY + details.delta.dy)
+                .clamp(52.0, math.max(52.0, bounds.height - (landscape ? 70 : 100)));
+          });
+        },
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: BackdropFilter(
+            filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: Material(
+              color: Theme.of(context).colorScheme.surface.withValues(alpha: .90),
+              child: SingleChildScrollView(
+                scrollDirection: axis,
+                child: axis == Axis.horizontal
+                    ? Row(mainAxisSize: MainAxisSize.min, children: controls)
+                    : Column(mainAxisSize: MainAxisSize.min, children: controls),
               ),
             ),
           ),
         ),
-      );
+      ),
+    );
+  }
 
   Map<String, Object?> _clonePage(Map<String, Object?> source) =>
       Map<String, Object?>.from(jsonDecode(jsonEncode(source)) as Map);
