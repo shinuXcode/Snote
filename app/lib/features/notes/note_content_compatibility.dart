@@ -55,29 +55,34 @@ bool? restoreNoteDrawMode({
 bool shouldRestorePdfPageBackgrounds(List<Map<String, Object?>> pages) {
   if (pages.isEmpty) return true;
 
-  final hasAnyBackground = pages.any((page) {
-    final image = page['backgroundImage'];
-    return image is String && image.isNotEmpty;
-  });
-  if (hasAnyBackground) return false;
-
-  final hasPdfPageMetadata = pages.any((page) {
+  bool hasPdfMetadata(Map<String, Object?> page) {
     final source = page['pdfSourceName'];
     final index = page['pdfSourcePage'];
     return (source is String && source.isNotEmpty) || index is num;
-  });
-  if (hasPdfPageMetadata) return true;
+  }
 
-  // A stale single blank page must not prevent recovery from a saved PDF
-  // attachment. Do not treat a page with handwriting/images/text as empty.
-  return pages.every((page) {
-    bool emptyList(Object? value) => value is! List || value.isEmpty;
-    final background = page['backgroundImage'];
-    return emptyList(page['strokes']) &&
-        emptyList(page['images']) &&
-        emptyList(page['textBoxes']) &&
-        (background is! String || background.isEmpty);
-  });
+  bool hasBackground(Map<String, Object?> page) {
+    final image = page['backgroundImage'];
+    return image is String && image.isNotEmpty;
+  }
+
+  // Restore partial imports too. Earlier code returned false as soon as it
+  // found ONE valid background, even when other PDF pages were still blank.
+  final pdfPages = pages.where(hasPdfMetadata).toList(growable: false);
+  if (pdfPages.isNotEmpty) {
+    return pdfPages.any((page) => !hasBackground(page));
+  }
+
+  // Some early imports did not persist per-page PDF metadata. In that legacy
+  // shape, only recover when the saved pages are all visually empty.
+  if (pages.any(hasBackground)) return false;
+
+  bool emptyList(Object? value) => value is! List || value.isEmpty;
+  return pages.every((page) =>
+      emptyList(page['strokes']) &&
+      emptyList(page['images']) &&
+      emptyList(page['textBoxes']) &&
+      !hasBackground(page));
 }
 
 /// Reattaches saved annotations to freshly rendered PDF page backgrounds.
@@ -104,6 +109,17 @@ List<Map<String, Object?>> mergeSavedAnnotationsWithPdfPages({
           saved['textBoxes'] ?? renderedPages[index]['textBoxes'];
     }
     merged.add(rendered);
+  }
+
+  // The renderer intentionally caps PDF snapshots for performance. Preserve
+  // any user-created pages and annotations after the rendered range rather
+  // than dropping them during a recovery pass.
+  if (savedPages.length > renderedPages.length) {
+    merged.addAll(
+      savedPages
+          .skip(renderedPages.length)
+          .map((page) => Map<String, Object?>.from(page)),
+    );
   }
   return merged;
 }
