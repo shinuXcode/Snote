@@ -1141,6 +1141,15 @@ class _NotesHomePageState extends State<NotesHomePage> {
   }
 
   Widget _desktop() {
+    // The split workspace must never remain visually blank while the note
+    // list contains visible notes. Restore a deterministic active note even
+    // if selection was cleared by a folder/search refresh or route restoration.
+    final visibleNotes = _filteredNotes;
+    final activeNote = _selected != null &&
+            visibleNotes.any((note) => note.id == _selected!.id)
+        ? _selected
+        : (visibleNotes.isNotEmpty ? visibleNotes.first : null);
+
     return Row(
       children: [
         _SideRail(
@@ -1241,11 +1250,11 @@ class _NotesHomePageState extends State<NotesHomePage> {
                     ),
                     const VerticalDivider(width: 1),
                     Expanded(
-                      child: _selected == null
+                      child: activeNote == null
                           ? const _WorkspaceEmpty()
                           : KeyedSubtree(
-                              key: ValueKey(_selected!.id),
-                              child: _noteContentPage(_selected!),
+                              key: ValueKey(activeNote.id),
+                              child: _noteContentPage(activeNote),
                             ),
                     ),
                   ],
