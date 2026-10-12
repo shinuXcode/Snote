@@ -120,6 +120,115 @@ void main() {
     expect(strokes.single.points.length, greaterThanOrEqualTo(2));
   });
 
+
+  testWidgets('stationary stylus hold selects the existing stroke', (tester) async {
+    var selectedCount = 0;
+    const pen = PenConfig(
+      type: PenType.ballpoint,
+      color: Color(0xff263238),
+      size: 4,
+    );
+    const existingStroke = Stroke(
+      id: 'hold-target',
+      points: <StrokePoint>[
+        StrokePoint(position: Offset(24, 30)),
+        StrokePoint(position: Offset(74, 30)),
+      ],
+      pen: pen,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 220,
+            height: 220,
+            child: SnoteCanvas(
+              pen: pen,
+              initialDocument: StrokeCodec.strokesToDocument(
+                const <Stroke>[existingStroke],
+              ),
+              onSelectionChanged: (count) => selectedCount = count,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final rect = tester.getRect(find.byType(SnoteCanvas));
+    final gesture = await tester.startGesture(
+      rect.topLeft + const Offset(48, 30),
+      kind: PointerDeviceKind.stylus,
+    );
+    await tester.pump(const Duration(milliseconds: 540));
+    expect(selectedCount, 1);
+    await gesture.up();
+    await tester.pump();
+  });
+
+  testWidgets('stylus hold eraser can erase and undo then redo', (tester) async {
+    final controller = SnoteCanvasController();
+    Map<String, Object?>? latestDocument;
+    const pen = PenConfig(
+      type: PenType.ballpoint,
+      color: Color(0xff263238),
+      size: 4,
+    );
+    const existingStroke = Stroke(
+      id: 'erase-target',
+      points: <StrokePoint>[
+        StrokePoint(position: Offset(24, 32)),
+        StrokePoint(position: Offset(74, 32)),
+      ],
+      pen: pen,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 220,
+            height: 220,
+            child: SnoteCanvas(
+              pen: pen,
+              controller: controller,
+              initialDocument: StrokeCodec.strokesToDocument(
+                const <Stroke>[existingStroke],
+              ),
+              onChanged: (document) => latestDocument = document,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final rect = tester.getRect(find.byType(SnoteCanvas));
+    final gesture = await tester.startGesture(
+      rect.topLeft + const Offset(120, 120),
+      kind: PointerDeviceKind.stylus,
+    );
+    await tester.pump(const Duration(milliseconds: 540));
+    await gesture.moveTo(rect.topLeft + const Offset(48, 32));
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(
+      StrokeCodec.documentToStrokes(latestDocument),
+      isEmpty,
+      reason: 'A stationary hold on blank paper should activate the temporary eraser.',
+    );
+
+    controller.undo();
+    await tester.pumpAndSettle();
+    expect(StrokeCodec.documentToStrokes(latestDocument), hasLength(1));
+
+    controller.redo();
+    await tester.pumpAndSettle();
+    expect(StrokeCodec.documentToStrokes(latestDocument), isEmpty);
+    controller.dispose();
+  });
+
   testWidgets('lasso selection can be moved and resized directly by touch',
       (tester) async {
     final controller = SnoteCanvasController();
