@@ -80,79 +80,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   bool _pdfExporting = false;
   final TextEditingController _calculatorInput = TextEditingController(text: '0');
   String _calculatorResult = '0';
-  Timer? _studyTimerTicker;
-  int _studyTimerDurationSeconds = 25 * 60;
-  int _studyTimerRemainingSeconds = 25 * 60;
-  bool _studyTimerVisible = false;
-  bool _studyTimerRunning = false;
-  double _studyTimerX = 12;
-  double _studyTimerY = 96;
-
-  String get _studyTimerClock {
-    final minutes = (_studyTimerRemainingSeconds ~/ 60).toString().padLeft(2, '0');
-    final seconds = (_studyTimerRemainingSeconds % 60).toString().padLeft(2, '0');
-    return minutes + ':' + seconds;
-  }
-
-  void _adjustStudyTimer(int deltaSeconds) {
-    if (_studyTimerRunning) return;
-    setState(() {
-      _studyTimerDurationSeconds = (_studyTimerDurationSeconds + deltaSeconds)
-          .clamp(60, 3 * 60 * 60).toInt();
-      _studyTimerRemainingSeconds = _studyTimerDurationSeconds;
-    });
-  }
-
-  void _setStudyTimerPreset(int minutes) {
-    _studyTimerTicker?.cancel();
-    _studyTimerTicker = null;
-    setState(() {
-      _studyTimerRunning = false;
-      _studyTimerDurationSeconds = minutes * 60;
-      _studyTimerRemainingSeconds = _studyTimerDurationSeconds;
-    });
-  }
-
-  void _toggleStudyTimerRunning() {
-    if (_studyTimerRunning) {
-      _studyTimerTicker?.cancel();
-      _studyTimerTicker = null;
-      setState(() => _studyTimerRunning = false);
-      return;
-    }
-    if (_studyTimerRemainingSeconds <= 0) {
-      setState(() => _studyTimerRemainingSeconds = _studyTimerDurationSeconds);
-    }
-    setState(() => _studyTimerRunning = true);
-    _studyTimerTicker?.cancel();
-    _studyTimerTicker = Timer.periodic(const Duration(seconds: 1), (ticker) {
-      if (!mounted) {
-        ticker.cancel();
-        return;
-      }
-      if (_studyTimerRemainingSeconds <= 1) {
-        ticker.cancel();
-        _studyTimerTicker = null;
-        setState(() {
-          _studyTimerRemainingSeconds = 0;
-          _studyTimerRunning = false;
-        });
-        return;
-      }
-      setState(() => _studyTimerRemainingSeconds -= 1);
-    });
-  }
-
-  void _resetStudyTimer() {
-    _studyTimerTicker?.cancel();
-    _studyTimerTicker = null;
-    setState(() {
-      _studyTimerRunning = false;
-      _studyTimerRemainingSeconds = _studyTimerDurationSeconds;
-    });
-  }
-
-
   List<Map<String, Object?>> _pages = [];
   int _page = 0;
   bool _loading = true;
@@ -850,7 +777,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     WidgetsBinding.instance.removeObserver(this);
     _snoteOpenNoteTabs.removeListener(_onOpenTabsChanged);
     _saveTimer?.cancel();
-    _studyTimerTicker?.cancel();
     _quill.removeListener(_scheduleSave);
     _quill.dispose();
     _title.dispose();
@@ -905,7 +831,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
               if (_toolbar && _draw && !_readingMode) _toolbarWidget(),
               if (_shapePanel && !_full && !_readingMode) _shapePanelWidget(),
               if (_showcaseOpen && !_full && !_readingMode) _showcaseWidget(),
-              if (_studyTimerVisible && !_full) _studyTimerWidget(),
+              _StudyTimerFloating(
+                visible: _studyTimerVisible && !_full,
+                onVisibilityChanged: (visible) => setState(() => _studyTimerVisible = visible),
+              ),
               if (!_toolbar && !_full && !_readingMode) _toolbarOpen(),
               if (_full) _fullExit(),
               if (_selected > 0 && !_readingMode) _selectionTools(),
@@ -1506,140 +1435,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   Future<void> _studyTimerSheet() async {
     if (!mounted) return;
     setState(() => _studyTimerVisible = !_studyTimerVisible);
-  }
-
-  Widget _studyTimerWidget() {
-    final scheme = Theme.of(context).colorScheme;
-    final screen = MediaQuery.sizeOf(context);
-    final maxLeft = math.max(4.0, screen.width - 274);
-    final maxTop = math.max(48.0, screen.height - 230);
-    return Positioned(
-      left: _studyTimerX.clamp(4.0, maxLeft).toDouble(),
-      top: _studyTimerY.clamp(48.0, maxTop).toDouble(),
-      child: Material(
-        elevation: 18,
-        color: scheme.surface.withValues(alpha: .97),
-        borderRadius: BorderRadius.circular(18),
-        clipBehavior: Clip.antiAlias,
-        child: SizedBox(
-          width: 262,
-          child: Padding(
-            padding: const EdgeInsets.all(10),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                GestureDetector(
-                  onPanUpdate: (details) {
-                    setState(() {
-                      _studyTimerX = (_studyTimerX + details.delta.dx)
-                          .clamp(4.0, maxLeft).toDouble();
-                      _studyTimerY = (_studyTimerY + details.delta.dy)
-                          .clamp(48.0, maxTop).toDouble();
-                    });
-                  },
-                  child: Row(children: [
-                    Icon(Icons.drag_indicator_rounded, size: 18, color: scheme.onSurfaceVariant),
-                    const SizedBox(width: 5),
-                    const Expanded(
-                      child: Text('Focus timer', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900)),
-                    ),
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      constraints: const BoxConstraints.tightFor(width: 26, height: 26),
-                      padding: EdgeInsets.zero,
-                      tooltip: 'Close timer',
-                      onPressed: () => setState(() => _studyTimerVisible = false),
-                      icon: const Icon(Icons.close_rounded, size: 17),
-                    ),
-                  ]),
-                ),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [scheme.primaryContainer, scheme.tertiaryContainer],
-                    ),
-                    borderRadius: BorderRadius.circular(13),
-                  ),
-                  child: Column(children: [
-                    Text(
-                      _studyTimerClock,
-                      style: TextStyle(
-                        fontSize: 29,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1.1,
-                        color: scheme.onPrimaryContainer,
-                        fontFeatures: const [ui.FontFeature.tabularFigures()],
-                      ),
-                    ),
-                    Text(
-                      _studyTimerRunning
-                          ? 'Timer running — keep writing'
-                          : _studyTimerRemainingSeconds == 0
-                              ? 'Session complete'
-                              : 'Adjust time, then start',
-                      style: TextStyle(fontSize: 10, color: scheme.onPrimaryContainer),
-                    ),
-                  ]),
-                ),
-                const SizedBox(height: 7),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    for (final minutes in const [15, 25, 45])
-                      ChoiceChip(
-                        label: Text(minutes.toString() + 'm'),
-                        selected: _studyTimerDurationSeconds == minutes * 60,
-                        visualDensity: VisualDensity.compact,
-                        padding: EdgeInsets.zero,
-                        onSelected: _studyTimerRunning ? null : (_) => _setStudyTimerPreset(minutes),
-                      ),
-                  ],
-                ),
-                Row(children: [
-                  IconButton(
-                    tooltip: 'Subtract one minute',
-                    visualDensity: VisualDensity.compact,
-                    onPressed: _studyTimerRunning ? null : () => _adjustStudyTimer(-60),
-                    icon: const Icon(Icons.remove_circle_outline_rounded),
-                  ),
-                  const Expanded(
-                    child: Center(child: Text('Minutes', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700))),
-                  ),
-                  IconButton(
-                    tooltip: 'Add one minute',
-                    visualDensity: VisualDensity.compact,
-                    onPressed: _studyTimerRunning ? null : () => _adjustStudyTimer(60),
-                    icon: const Icon(Icons.add_circle_outline_rounded),
-                  ),
-                ]),
-                Row(children: [
-                  Expanded(
-                    child: FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(vertical: 7),
-                      ),
-                      onPressed: _toggleStudyTimerRunning,
-                      icon: Icon(_studyTimerRunning ? Icons.pause_rounded : Icons.play_arrow_rounded, size: 18),
-                      label: Text(_studyTimerRunning ? 'Pause' : 'Start'),
-                    ),
-                  ),
-                  const SizedBox(width: 7),
-                  IconButton.filledTonal(
-                    visualDensity: VisualDensity.compact,
-                    tooltip: 'Reset timer',
-                    onPressed: _resetStudyTimer,
-                    icon: const Icon(Icons.restart_alt_rounded),
-                  ),
-                ]),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
   }
 
   Future<void> _calculatorSheet() async {
@@ -4451,6 +4246,230 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     ],
                   ),
                 ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+class _StudyTimerFloating extends StatefulWidget {
+  final bool visible;
+  final ValueChanged<bool> onVisibilityChanged;
+
+  const _StudyTimerFloating({
+    required this.visible,
+    required this.onVisibilityChanged,
+  });
+
+  @override
+  State<_StudyTimerFloating> createState() => _StudyTimerFloatingState();
+}
+
+class _StudyTimerFloatingState extends State<_StudyTimerFloating> {
+  Timer? _ticker;
+  int _durationSeconds = 25 * 60;
+  int _remainingSeconds = 25 * 60;
+  bool _running = false;
+  double _x = 12;
+  double _y = 96;
+
+  String get _clock {
+    final minutes = (_remainingSeconds ~/ 60).toString().padLeft(2, '0');
+    final seconds = (_remainingSeconds % 60).toString().padLeft(2, '0');
+    return minutes + ':' + seconds;
+  }
+
+  void _adjust(int delta) {
+    if (_running) return;
+    setState(() {
+      _durationSeconds = (_durationSeconds + delta).clamp(60, 3 * 60 * 60).toInt();
+      _remainingSeconds = _durationSeconds;
+    });
+  }
+
+  void _preset(int minutes) {
+    _ticker?.cancel();
+    _ticker = null;
+    setState(() {
+      _running = false;
+      _durationSeconds = minutes * 60;
+      _remainingSeconds = _durationSeconds;
+    });
+  }
+
+  void _toggleRunning() {
+    if (_running) {
+      _ticker?.cancel();
+      _ticker = null;
+      setState(() => _running = false);
+      return;
+    }
+    if (_remainingSeconds <= 0) setState(() => _remainingSeconds = _durationSeconds);
+    setState(() => _running = true);
+    _ticker?.cancel();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (ticker) {
+      if (!mounted) {
+        ticker.cancel();
+        return;
+      }
+      if (_remainingSeconds <= 1) {
+        ticker.cancel();
+        _ticker = null;
+        setState(() {
+          _remainingSeconds = 0;
+          _running = false;
+        });
+      } else {
+        setState(() => _remainingSeconds -= 1);
+      }
+    });
+  }
+
+  void _reset() {
+    _ticker?.cancel();
+    _ticker = null;
+    setState(() {
+      _running = false;
+      _remainingSeconds = _durationSeconds;
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.visible) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    final screen = MediaQuery.sizeOf(context);
+    final maxLeft = math.max(4.0, screen.width - 274);
+    final maxTop = math.max(48.0, screen.height - 230);
+    return Positioned(
+      left: _x.clamp(4.0, maxLeft).toDouble(),
+      top: _y.clamp(48.0, maxTop).toDouble(),
+      child: Material(
+        elevation: 18,
+        color: scheme.surface.withValues(alpha: .97),
+        borderRadius: BorderRadius.circular(18),
+        clipBehavior: Clip.antiAlias,
+        child: SizedBox(
+          width: 262,
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                GestureDetector(
+                  onPanUpdate: (details) {
+                    setState(() {
+                      _x = (_x + details.delta.dx).clamp(4.0, maxLeft).toDouble();
+                      _y = (_y + details.delta.dy).clamp(48.0, maxTop).toDouble();
+                    });
+                  },
+                  child: Row(children: [
+                    Icon(Icons.drag_indicator_rounded, size: 18, color: scheme.onSurfaceVariant),
+                    const SizedBox(width: 5),
+                    const Expanded(
+                      child: Text('Focus timer', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900)),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints.tightFor(width: 26, height: 26),
+                      padding: EdgeInsets.zero,
+                      tooltip: 'Hide timer',
+                      onPressed: () => widget.onVisibilityChanged(false),
+                      icon: const Icon(Icons.close_rounded, size: 17),
+                    ),
+                  ]),
+                ),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [scheme.primaryContainer, scheme.tertiaryContainer],
+                    ),
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  child: Column(children: [
+                    Text(
+                      _clock,
+                      style: TextStyle(
+                        fontSize: 29,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.1,
+                        color: scheme.onPrimaryContainer,
+                        fontFeatures: const [ui.FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    Text(
+                      _running
+                          ? 'Timer running — keep writing'
+                          : _remainingSeconds == 0
+                              ? 'Session complete'
+                              : 'Adjust time, then start',
+                      style: TextStyle(fontSize: 10, color: scheme.onPrimaryContainer),
+                    ),
+                  ]),
+                ),
+                const SizedBox(height: 7),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    for (final minutes in const [15, 25, 45])
+                      ChoiceChip(
+                        label: Text(minutes.toString() + 'm'),
+                        selected: _durationSeconds == minutes * 60,
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        onSelected: _running ? null : (_) => _preset(minutes),
+                      ),
+                  ],
+                ),
+                Row(children: [
+                  IconButton(
+                    tooltip: 'Subtract one minute',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: _running ? null : () => _adjust(-60),
+                    icon: const Icon(Icons.remove_circle_outline_rounded),
+                  ),
+                  const Expanded(
+                    child: Center(child: Text('Minutes', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700))),
+                  ),
+                  IconButton(
+                    tooltip: 'Add one minute',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: _running ? null : () => _adjust(60),
+                    icon: const Icon(Icons.add_circle_outline_rounded),
+                  ),
+                ]),
+                Row(children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(vertical: 7),
+                      ),
+                      onPressed: _toggleRunning,
+                      icon: Icon(_running ? Icons.pause_rounded : Icons.play_arrow_rounded, size: 18),
+                      label: Text(_running ? 'Pause' : 'Start'),
+                    ),
+                  ),
+                  const SizedBox(width: 7),
+                  IconButton.filledTonal(
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'Reset timer',
+                    onPressed: _reset,
+                    icon: const Icon(Icons.restart_alt_rounded),
+                  ),
+                ]),
               ],
             ),
           ),
