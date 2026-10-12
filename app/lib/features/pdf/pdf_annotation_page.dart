@@ -44,15 +44,17 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
 
   Future<void> _openPdf() async {
     if (_busy) return;
-    final file = await FilePicker.pickFile(
-      type: FileType.custom,
-      allowedExtensions: ['pdf'],
-    );
-    if (file == null) return;
-
     setState(() => _busy = true);
     try {
+      final file = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+      if (file == null) return;
       final bytes = await file.readAsBytes();
+      if (bytes.isEmpty) {
+        throw StateError('The selected PDF file is empty or could not be read.');
+      }
       final note = await _notes.create(
         title: file.name.replaceFirst(
           RegExp(r'\.pdf$', caseSensitive: false),
@@ -529,13 +531,42 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
     final controller = _controller;
     if (controller == null) {
       return Center(
-        child: _busy
-            ? const CircularProgressIndicator()
-            : FilledButton.icon(
-                onPressed: _openPdf,
-                icon: const Icon(Icons.upload_file_rounded),
-                label: const Text('Choose PDF'),
-              ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 380),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.picture_as_pdf_rounded,
+                  size: 58,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Annotate a PDF',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Choose a PDF to open it as a notebook. Your PDF pages will become writing pages, so you can use Snote pens and tools directly on them.',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 20),
+                if (_busy)
+                  const CircularProgressIndicator()
+                else
+                  FilledButton.icon(
+                    onPressed: _openPdf,
+                    icon: const Icon(Icons.upload_file_rounded),
+                    label: const Text('Choose PDF'),
+                  ),
+              ],
+            ),
+          ),
+        ),
       );
     }
 
