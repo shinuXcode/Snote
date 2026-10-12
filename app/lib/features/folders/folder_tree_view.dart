@@ -62,13 +62,20 @@ class FolderTreeView extends StatefulWidget {
 }
 
 class _FolderTreeViewState extends State<FolderTreeView> {
+  static const int _folderBatchSize = 60;
+  static const String _rootPageKey = '__snote_root__';
+
   final Set<String> _expanded = <String>{};
+  final Map<String, int> _visibleChildrenLimit = <String, int>{};
 
   @override
   void didUpdateWidget(covariant FolderTreeView oldWidget) {
     super.didUpdateWidget(oldWidget);
     final validIds = widget.folders.map((folder) => folder.id).toSet();
     _expanded.removeWhere((id) => !validIds.contains(id));
+    _visibleChildrenLimit.removeWhere(
+      (id, _) => id != _rootPageKey && !validIds.contains(id),
+    );
   }
 
   Map<String, LocalFolder> get _byId => {
@@ -125,6 +132,7 @@ class _FolderTreeViewState extends State<FolderTreeView> {
         final order = a.sortOrder.compareTo(b.sortOrder);
         return order != 0 ? order : a.name.toLowerCase().compareTo(b.name.toLowerCase());
       });
+    final rootLimit = _visibleChildrenLimit[_rootPageKey] ?? _folderBatchSize;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -138,8 +146,26 @@ class _FolderTreeViewState extends State<FolderTreeView> {
               style: Theme.of(context).textTheme.bodySmall,
             ),
           )
-        else
-          ...rootFolders.map((folder) => _folderRow(folder, 0)),
+        else ...[
+          ...rootFolders.take(rootLimit).map((folder) => _folderRow(folder, 0)),
+          if (rootFolders.length > rootLimit)
+            Padding(
+              padding: const EdgeInsets.only(left: 28, top: 4, bottom: 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () => setState(
+                    () => _visibleChildrenLimit[_rootPageKey] =
+                        rootLimit + _folderBatchSize,
+                  ),
+                  icon: const Icon(Icons.expand_more_rounded),
+                  label: Text(
+                    'Load more folders (${rootFolders.length - rootLimit} remaining)',
+                  ),
+                ),
+              ),
+            ),
+        ],
       ],
     );
   }
@@ -154,6 +180,7 @@ class _FolderTreeViewState extends State<FolderTreeView> {
         return order != 0 ? order : a.name.toLowerCase().compareTo(b.name.toLowerCase());
       });
     final hasChildren = children.isNotEmpty;
+    final childLimit = _visibleChildrenLimit[folder.id] ?? _folderBatchSize;
     final expanded = _expanded.contains(folder.id);
     final selected = widget.selectedFolderId == folder.id;
     final theme = Theme.of(context);
@@ -271,7 +298,26 @@ class _FolderTreeViewState extends State<FolderTreeView> {
             children: [
               tile,
               if (expanded && hasChildren)
-                ...children.map((child) => _folderRow(child, depth + 1, branch)),
+                ...children.take(childLimit).map(
+                      (child) => _folderRow(child, depth + 1, branch),
+                    ),
+              if (expanded && children.length > childLimit)
+                Padding(
+                  padding: EdgeInsets.only(left: depth * 14.0 + 42, bottom: 4),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () => setState(
+                        () => _visibleChildrenLimit[folder.id] =
+                            childLimit + _folderBatchSize,
+                      ),
+                      icon: const Icon(Icons.expand_more_rounded, size: 18),
+                      label: Text(
+                        'Load more subfolders (${children.length - childLimit} remaining)',
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         );
