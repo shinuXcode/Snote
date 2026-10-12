@@ -3805,7 +3805,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton.icon(
-                      onPressed: () => Navigator.pop(sheetContext),
+                      onPressed: () => Navigator.pop(dialogContext),
                       icon: const Icon(Icons.check_rounded),
                       label: const Text('Done'),
                     ),
