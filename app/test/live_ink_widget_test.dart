@@ -78,6 +78,48 @@ void main() {
     expect(commitCount, 1);
   });
 
+  testWidgets('cancelled fountain stroke preserves captured ink', (tester) async {
+    Map<String, Object?>? latestDocument;
+    const pen = PenConfig(
+      type: PenType.fountain,
+      color: Color(0xff283593),
+      size: 4,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 220,
+            height: 220,
+            child: SnoteCanvas(
+              pen: pen,
+              initialDocument: const <String, Object?>{'strokes': <Object?>[]},
+              onChanged: (document) => latestDocument = document,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final rect = tester.getRect(find.byType(SnoteCanvas));
+    final gesture = await tester.startGesture(
+      rect.topLeft + const Offset(24, 30),
+      kind: PointerDeviceKind.stylus,
+    );
+    await gesture.moveTo(rect.topLeft + const Offset(112, 96));
+    await tester.pump();
+    await gesture.cancel();
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(latestDocument, isNotNull);
+    final strokes = StrokeCodec.documentToStrokes(latestDocument!);
+    expect(strokes, hasLength(1));
+    expect(strokes.single.pen.type, PenType.fountain);
+    expect(strokes.single.points.length, greaterThanOrEqualTo(2));
+  });
+
   testWidgets('lasso selection can be moved and resized directly by touch',
       (tester) async {
     final controller = SnoteCanvasController();
