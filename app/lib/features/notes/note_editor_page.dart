@@ -85,6 +85,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   List<Map<String, Object?>> _pages = [];
   int _page = 0;
   bool _loading = true;
+  String? _loadError;
   bool _locked = false;
   bool _unlocked = true;
   bool _draw = true;
@@ -366,14 +367,34 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       );
 
   Future<void> _prepare() async {
-    final locked = await _lock.isLocked(widget.note.id);
-    if (!mounted) return;
-    setState(() {
-      _locked = locked;
-      _unlocked = !locked;
-      _loading = locked;
-    });
-    if (!locked) await _load();
+    // Never expose _pageView until _load has populated _pages. The previous
+    // sequence set _loading=false before awaiting _load(), so pageData could
+    // index an empty list and leave note and PDF routes on a blank screen.
+    try {
+      final locked = await _lock.isLocked(widget.note.id);
+      if (!mounted) return;
+      setState(() {
+        _locked = locked;
+        _unlocked = !locked;
+        _loading = true;
+      });
+
+      if (locked) {
+        if (mounted) setState(() => _loading = false);
+        return;
+      }
+
+      await _load();
+    } catch (error, stackTrace) {
+      debugPrint('Snote editor initialization failed: $error\n$stackTrace');
+      if (!mounted) return;
+      // Keep existing persisted note data untouched. Present a recoverable
+      // error instead of letting the editor build with an empty page list.
+      setState(() {
+        _loading = false;
+        _loadError = 'Could not load this note. Your saved data has not been deleted.';
+      });
+    }
   }
 
   Future<void> _load() async {
@@ -806,6 +827,36 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   @override
   Widget build(BuildContext context) {
     if (_loading) return _lockedView();
+    if (_loadError != null) {
+      return Scaffold(
+        appBar: AppBar(title: Text(widget.note.title)),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.error_outline_rounded, size: 44),
+                const SizedBox(height: 12),
+                Text(_loadError!, textAlign: TextAlign.center),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _loadError = null;
+                      _loading = true;
+                    });
+                    unawaited(_prepare());
+                  },
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Retry'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     return PopScope(
       canPop: !_settings.getBool('disableBackGesture'),
