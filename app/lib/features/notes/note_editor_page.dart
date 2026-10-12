@@ -89,6 +89,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   bool _loading = true;
   String? _loadError;
   String? _pageRenderError;
+  String? _lastLoggedBuildState;
+  bool _pageLayoutLogged = false;
   final Map<String, Uint8List> _backgroundImageCache = <String, Uint8List>{};
   final Map<String, String> _backgroundImageEncodedByPageId = <String, String>{};
   bool _locked = false;
@@ -170,6 +172,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   @override
   void initState() {
     super.initState();
+    debugPrint(
+      '[Snote][Editor] initState noteId=${widget.note.id} '
+      'platform=${defaultTargetPlatform.name} '
+      'initialPdfBytes=${widget.initialPdfBytes?.length ?? 0}',
+    );
     WidgetsBinding.instance.addObserver(this);
     _title.text = widget.note.title;
     _registerCurrentOpenTab();
@@ -380,11 +387,16 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       );
 
   Future<void> _prepare() async {
+    debugPrint(
+      '[Snote][Editor] prepare start noteId=${widget.note.id} '
+      'pdfBytes=${widget.initialPdfBytes?.length ?? 0}',
+    );
     // Never expose _pageView until _load has populated _pages. The previous
     // sequence set _loading=false before awaiting _load(), so pageData could
     // index an empty list and leave note and PDF routes on a blank screen.
     try {
       final locked = await _lock.isLocked(widget.note.id);
+      debugPrint('[Snote][Editor] lock check complete noteId=${widget.note.id} locked=$locked');
       if (!mounted) return;
       setState(() {
         _locked = locked;
@@ -398,8 +410,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       }
 
       await _load();
+      debugPrint('[Snote][Editor] prepare complete noteId=${widget.note.id} pages=${_pages.length}');
     } catch (error, stackTrace) {
-      debugPrint('Snote editor initialization failed: $error\n$stackTrace');
+      debugPrint('[Snote][Editor] initialization failed noteId=${widget.note.id}: $error\n$stackTrace');
       if (!mounted) return;
       // Keep existing persisted note data untouched. Present a recoverable
       // error instead of letting the editor build with an empty page list.
@@ -411,7 +424,12 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   }
 
   Future<void> _load() async {
+    debugPrint('[Snote][Editor] load start noteId=${widget.note.id}');
     final note = await _repo.get(widget.note.id);
+    debugPrint(
+      '[Snote][Editor] database read noteId=${widget.note.id} '
+      'found=${note != null} contentBytes=${note?.contentJson?.length ?? 0}',
+    );
     if (note == null) {
       throw StateError(
         'This note is no longer available in the current local account. '
@@ -527,6 +545,13 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       }
     }
 
+    if (pdfBytes != null && pdfBytes.isNotEmpty) {
+      debugPrint(
+        '[Snote][PDF] restore requested noteId=${widget.note.id} '
+        'name=${pdfName ?? widget.note.title} bytes=${pdfBytes.length} '
+        'savedPages=${parsed.length}',
+      );
+    }
     if (pdfBytes != null &&
         pdfBytes.isNotEmpty &&
         shouldRestorePdfPageBackgrounds(
@@ -552,6 +577,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           ..addAll(recoveredPages);
         originalPdfPageCount = result.totalPages;
         importedOnFirstOpen = true;
+        debugPrint(
+          '[Snote][PDF] rendered noteId=${widget.note.id} '
+          'pages=${result.pages.length}/${result.totalPages}',
+        );
       } catch (error) {
         // A document import must never degrade into a seemingly successful
         // blank notebook. Keep the source attachment and report the failure.
@@ -582,6 +611,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       _noteCoverIcon = storedCoverIcon;
       _noteCoverKey = storedCoverKey;
     });
+    debugPrint(
+      '[Snote][Editor] page data ready noteId=${widget.note.id} '
+      'pages=${parsed.length} drawMode=${_draw ? 'handwriting' : 'text'} '
+      'initialPageCreated=$createdInitialPage pdfPages=$originalPdfPageCount',
+    );
 
     // Toolbar/settings restoration can read pageData, so it must happen only
     // after the page list has been installed. Keep the loading screen visible
@@ -970,6 +1004,14 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
 
   @override
   Widget build(BuildContext context) {
+    final viewportSize = MediaQuery.sizeOf(context);
+    final buildState = 'locked=$_locked unlocked=$_unlocked loading=$_loading '
+        'pages=${_pages.length} hasError=${_loadError != null} draw=$_draw '
+        'viewport=${viewportSize.width}x${viewportSize.height}';
+    if (_lastLoggedBuildState != buildState) {
+      _lastLoggedBuildState = buildState;
+      debugPrint('[Snote][Editor] build noteId=${widget.note.id} $buildState');
+    }
     // Locked notes finish their first load without page data. Handle that
     // state before the empty-page guard so the password UI actually appears.
     if (_locked && !_unlocked) return _lockedView();
@@ -1339,16 +1381,22 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       child: Stack(
         fit: StackFit.expand,
         children: [
-          RepaintBoundary(
-            child: CustomPaint(
-              painter: PageBackground(
-                template: _template(),
-                paperColor: _pageColor(),
-                lineColor: _pageColor('lineColor', const Color(0xffd8dee8)),
-                spacing: _pageDouble('spacing', 28),
-                lineOpacity: _pageDouble('lineOpacity', .85),
-                lineWidth: _pageDouble('lineWidth', .7),
-                cornellAssist: pageData['cornellAssist'] == true,
+          // Explicitly fill the page surface. A CustomPaint without a child
+          // may otherwise choose a zero size if a future viewport/layout change
+          // loosens its constraints on a mobile/tablet route.
+          Positioned.fill(
+            child: RepaintBoundary(
+              child: CustomPaint(
+                painter: PageBackground(
+                  template: _template(),
+                  paperColor: _pageColor(),
+                  lineColor: _pageColor('lineColor', const Color(0xffd8dee8)),
+                  spacing: _pageDouble('spacing', 28),
+                  lineOpacity: _pageDouble('lineOpacity', .85),
+                  lineWidth: _pageDouble('lineWidth', .7),
+                  cornellAssist: pageData['cornellAssist'] == true,
+                ),
+                child: const SizedBox.expand(),
               ),
             ),
           ),
@@ -1534,12 +1582,25 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     // sheet visible in both embedded desktop/tablet and full-screen routes.
     final Widget child = LayoutBuilder(
       builder: (context, constraints) {
-        final maxWidth = constraints.maxWidth.isFinite
-            ? math.max(0.0, constraints.maxWidth)
-            : MediaQuery.sizeOf(context).width;
-        final maxHeight = constraints.maxHeight.isFinite
-            ? math.max(0.0, constraints.maxHeight)
-            : MediaQuery.sizeOf(context).height;
+        final viewportSize = MediaQuery.sizeOf(context);
+        // Some nested routes briefly provide zero/loose constraints while
+        // transitioning (particularly after tablet rotation). Fall back to
+        // the real view size rather than drawing a one-pixel sheet.
+        final maxWidth = constraints.maxWidth.isFinite && constraints.maxWidth > 0
+            ? constraints.maxWidth
+            : viewportSize.width;
+        final maxHeight = constraints.maxHeight.isFinite && constraints.maxHeight > 0
+            ? constraints.maxHeight
+            : viewportSize.height;
+        if (!_pageLayoutLogged) {
+          _pageLayoutLogged = true;
+          debugPrint(
+            '[Snote][Canvas] first page layout noteId=${widget.note.id} '
+            'constraints=$constraints resolved=${Size(maxWidth, maxHeight)} '
+            'paper=$sizeKey orientation=${horizontal ? 'landscape' : 'portrait'} '
+            'infinite=$infiniteCanvas',
+          );
+        }
         if (infiniteCanvas) {
           final side = math.max(1.0, math.min(2400.0, math.min(maxWidth, maxHeight)));
           return Center(

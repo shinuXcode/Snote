@@ -42,8 +42,20 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
   int _page = 1;
   final Set<int> _selectedPages = <int>{};
 
+  @override
+  void initState() {
+    super.initState();
+    debugPrint(
+      '[Snote][PDF] annotation workspace opened '
+      'platform=${defaultTargetPlatform.name} folder=${widget.folderId ?? 'root'}',
+    );
+  }
+
   Future<void> _openPdf() async {
     if (_busy) return;
+    debugPrint('[Snote][PDF] picker requested folder=${widget.folderId ?? 'root'}');
+    LocalNote? createdNote;
+    DocumentAsset? savedAsset;
     setState(() => _busy = true);
     try {
       final file = await FilePicker.pickFile(
@@ -52,17 +64,18 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
       );
       if (file == null) return;
       final bytes = await file.readAsBytes();
+      debugPrint('[Snote][PDF] picked file name=${file.name} bytes=${bytes.length}');
       if (bytes.isEmpty) {
         throw StateError('The selected PDF file is empty or could not be read.');
       }
-      final note = await _notes.create(
+      final note = createdNote = await _notes.create(
         title: file.name.replaceFirst(
           RegExp(r'\.pdf$', caseSensitive: false),
           '',
         ),
         folderId: widget.folderId,
       );
-      final asset = await _documents.saveBytes(
+      final asset = savedAsset = await _documents.saveBytes(
         noteId: note.id,
         name: file.name,
         type: 'pdf',
@@ -77,11 +90,16 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
         return;
       }
 
+      debugPrint(
+        '[Snote][PDF] open editor noteId=${note.id} assetId=${asset.id} '
+        'bytes=${bytes.length}',
+      );
       // PDF import creates a real Snote notebook. Each rendered PDF page is
       // stored as a page background, so the normal pen, lasso, eraser, undo,
       // autosave, and note-reopen workflow can be used immediately.
       await Navigator.of(context).pushReplacement<void, void>(
         MaterialPageRoute<void>(
+          settings: RouteSettings(name: '/pdf-annotation/editor/${note.id}'),
           builder: (_) => NoteEditorPage(
             note: note,
             initialPdfBytes: bytes,
@@ -89,7 +107,18 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
           ),
         ),
       );
-    } catch (error) {
+    } catch (error, stackTrace) {
+      debugPrint('[Snote][PDF] import/open failed: $error\n$stackTrace');
+      // If the note record was created but attachment persistence failed,
+      // remove only that orphan placeholder. Never delete a note once its
+      // source PDF asset has been saved.
+      if (createdNote != null && savedAsset == null) {
+        try {
+          await _notes.delete(createdNote.id);
+        } catch (cleanupError, cleanupStack) {
+          debugPrint('[Snote][PDF] orphan-note cleanup failed: $cleanupError\n$cleanupStack');
+        }
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Could not open PDF: $error')),
@@ -622,22 +651,27 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
   Widget _annotationPane() => Stack(
         fit: StackFit.expand,
         children: <Widget>[
-          CustomPaint(
-            painter: PageBackground(
-              template: _template,
-              paperColor: Colors.white,
-              lineColor: Colors.blueGrey,
-              spacing: 28,
-              lineOpacity: .6,
+          Positioned.fill(
+            child: CustomPaint(
+              painter: PageBackground(
+                template: _template,
+                paperColor: Colors.white,
+                lineColor: Colors.blueGrey,
+                spacing: 28,
+                lineOpacity: .6,
+              ),
+              child: const SizedBox.expand(),
             ),
           ),
-          SnoteCanvas(
-            pen: const PenConfig(
-              type: PenType.ballpoint,
-              color: Colors.indigo,
-              size: 3,
+          Positioned.fill(
+            child: SnoteCanvas(
+              pen: const PenConfig(
+                type: PenType.ballpoint,
+                color: Colors.indigo,
+                size: 3,
+              ),
+              backgroundColor: Colors.transparent,
             ),
-            backgroundColor: Colors.transparent,
           ),
         ],
       );

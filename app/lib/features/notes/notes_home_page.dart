@@ -338,14 +338,48 @@ class _NotesHomePageState extends State<NotesHomePage> {
   }
 
   Future<void> _createNote() async {
-    final note = await _notes.create(folderId: _folderId);
-    if (!mounted) return;
-    setState(() => _selected = note);
-    if (!_usesSplitWorkspace(context)) {
-      await Navigator.push(context, MaterialPageRoute(builder: (_) => NoteEditorPage(note: note)));
-      await _load();
-    } else {
-      await _load();
+    final folderId = _folderId;
+    debugPrint(
+      '[Snote][Navigation] New Note requested '
+      'platform=${defaultTargetPlatform.name} folder=${folderId ?? 'root'}',
+    );
+    try {
+      final created = await _notes.create(folderId: folderId);
+      if (created.id.trim().isEmpty) {
+        throw StateError('The local note repository returned an empty note ID.');
+      }
+
+      // Verify that the exact record being passed to the route exists in the
+      // local database. This catches route/state mismatches before mounting
+      // an editor that cannot reload its document.
+      final note = await _notes.get(created.id);
+      if (note == null) {
+        throw StateError('The new note was created but could not be read back from local storage.');
+      }
+      if (!mounted) return;
+
+      debugPrint('[Snote][Navigation] persisted new note id=${note.id}');
+      setState(() => _selected = note);
+      if (!_usesSplitWorkspace(context)) {
+        debugPrint('[Snote][Navigation] push editor route noteId=${note.id}');
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute<void>(
+            settings: RouteSettings(name: '/note-editor/${note.id}'),
+            builder: (_) => NoteEditorPage(note: note),
+          ),
+        );
+        debugPrint('[Snote][Navigation] editor route returned noteId=${note.id}');
+        await _load();
+      } else {
+        await _load();
+      }
+    } catch (error, stackTrace) {
+      debugPrint('[Snote][Navigation] New Note failed: $error\n$stackTrace');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open a new note: $error')),
+        );
+      }
     }
   }
 

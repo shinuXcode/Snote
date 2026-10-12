@@ -10,8 +10,31 @@ import 'core/settings/app_settings.dart';
 import 'data/remote/supabase_service.dart';
 import 'ui/snote_theme.dart';
 
+void _installSnoteErrorLogging() {
+  final previousFlutterError = FlutterError.onError;
+  FlutterError.onError = (details) {
+    debugPrint('[Snote][FlutterError] ${details.exceptionAsString()}');
+    if (details.stack != null) {
+      debugPrintStack(stackTrace: details.stack);
+    }
+    if (previousFlutterError != null) {
+      previousFlutterError(details);
+    } else {
+      FlutterError.presentError(details);
+    }
+  };
+
+  final dispatcher = WidgetsBinding.instance.platformDispatcher;
+  final previousPlatformError = dispatcher.onError;
+  dispatcher.onError = (error, stackTrace) {
+    debugPrint('[Snote][PlatformError] $error\n$stackTrace');
+    return previousPlatformError?.call(error, stackTrace) ?? false;
+  };
+}
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  _installSnoteErrorLogging();
   // Mount Flutter immediately so startup failures can show an error/retry
   // screen instead of leaving the user on a blank launch surface.
   runApp(const SnoteApp());
