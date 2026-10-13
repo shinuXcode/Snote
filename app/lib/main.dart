@@ -32,8 +32,41 @@ void _installSnoteErrorLogging() {
   };
 }
 
+Widget _snoteErrorWidget(FlutterErrorDetails details) {
+  debugPrint('[Snote][ErrorWidget] ${details.exceptionAsString()}');
+  if (details.stack != null) debugPrintStack(stackTrace: details.stack);
+  return Material(
+    color: const Color(0xfff7f8fa),
+    child: SafeArea(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline_rounded, size: 42, color: Colors.redAccent),
+              const SizedBox(height: 12),
+              const Text('This screen could not be rendered.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              const Text('Your saved notes have not been deleted. Return and reopen the note.',
+                  textAlign: TextAlign.center),
+              const SizedBox(height: 12),
+              SelectableText(details.exceptionAsString(),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 11, color: Colors.black54)),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  ErrorWidget.builder = _snoteErrorWidget;
   _installSnoteErrorLogging();
   // Mount Flutter immediately so startup failures can show an error/retry
   // screen instead of leaving the user on a blank launch surface.
