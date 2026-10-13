@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feat/touchnotes-editor-overhaul
+      - feat/snote-editor-engine-rebuild
     paths:
       - "app/**"
       - ".github/workflows/beta.yml"

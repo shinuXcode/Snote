@@ -27,9 +27,8 @@ import '../tools/mind_map_page.dart';
 import '../tools/screenshot_import_page.dart';
 import '../updates/update_center_page.dart';
 import '../onboarding/welcome_guide_page.dart';
-import 'note_editor_page.dart';
+import 'editor_v2/editor_v2_page.dart';
 import 'new_note_route.dart';
-import 'workspace_layout.dart';
 
 class NotesHomePage extends StatefulWidget {
   final bool localOnly;
@@ -314,10 +313,8 @@ class _NotesHomePageState extends State<NotesHomePage> {
   // note editor to mount without its normal header/toolbox on some tablets.
   // Keep split view for desktop-class platforms only and use this single
   // decision everywhere so the layout and note-opening behavior cannot drift.
-  bool _usesSplitWorkspace(BuildContext context) => usesSplitNoteWorkspace(
-        platform: defaultTargetPlatform,
-        width: MediaQuery.sizeOf(context).width,
-      );
+  // The rebuilt editor always owns a dedicated full-screen route.
+  bool _usesSplitWorkspace(BuildContext context) => false;
 
   Future<void> _createFolder() async {
     final c = TextEditingController();
@@ -434,7 +431,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
       case 'mindmap':
         return MindMapPage(folderId: note.folderId, note: note);
       default:
-        return NoteEditorPage(note: note);
+        return EditorV2Page(note: note);
     }
   }
 
