@@ -24,7 +24,7 @@ class NewNoteRoute extends StatelessWidget {
     return KeyedSubtree(
       key: ValueKey<String>('new-note-route-${note.id}'),
       child: NoteEditorPage(
-        key: ValueKey<String>('new-note-editor-${note.id}'), note:
+        key: ValueKey<String>('new-note-editor-${note.id}'),
         note: note,
       ),
     );
