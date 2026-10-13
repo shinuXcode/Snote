@@ -27,7 +27,7 @@ import '../tools/mind_map_page.dart';
 import '../tools/screenshot_import_page.dart';
 import '../updates/update_center_page.dart';
 import '../onboarding/welcome_guide_page.dart';
-import 'editor_v2/editor_v2_page.dart';
+import 'note_editor_page.dart';
 import 'new_note_route.dart';
 
 class NotesHomePage extends StatefulWidget {
@@ -431,7 +431,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
       case 'mindmap':
         return MindMapPage(folderId: note.folderId, note: note);
       default:
-        return EditorV2Page(note: note);
+        return NoteEditorPage(note: note);
     }
   }
 
