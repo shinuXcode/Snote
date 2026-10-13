@@ -28,6 +28,7 @@ import '../tools/screenshot_import_page.dart';
 import '../updates/update_center_page.dart';
 import '../onboarding/welcome_guide_page.dart';
 import 'note_editor_page.dart';
+import 'new_note_route.dart';
 import 'workspace_layout.dart';
 
 class NotesHomePage extends StatefulWidget {
@@ -360,19 +361,18 @@ class _NotesHomePageState extends State<NotesHomePage> {
 
       debugPrint('[Snote][Navigation] persisted new note id=${note.id}');
       setState(() => _selected = note);
-      if (!_usesSplitWorkspace(context)) {
-        debugPrint('[Snote][Navigation] push editor route noteId=${note.id}');
-        await Navigator.of(context).push<void>(
-          MaterialPageRoute<void>(
-            settings: RouteSettings(name: '/note-editor/${note.id}'),
-            builder: (_) => NoteEditorPage(note: note),
-          ),
-        );
-        debugPrint('[Snote][Navigation] editor route returned noteId=${note.id}');
-        await _load();
-      } else {
-        await _load();
-      }
+      // Always open New Note in its own full-screen route. In particular,
+      // do not mount a just-created note inside the split-workspace editor:
+      // this isolates its lifecycle and constraints from the home layout.
+      debugPrint('[Snote][Navigation] push dedicated new-note route noteId=${note.id}');
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          settings: RouteSettings(name: '/new-note/${note.id}'),
+          builder: (_) => NewNoteRoute(note: note),
+        ),
+      );
+      debugPrint('[Snote][Navigation] dedicated new-note route returned noteId=${note.id}');
+      await _load();
     } catch (error, stackTrace) {
       debugPrint('[Snote][Navigation] New Note failed: $error\n$stackTrace');
       if (mounted) {
