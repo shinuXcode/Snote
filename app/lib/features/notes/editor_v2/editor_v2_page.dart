@@ -3205,7 +3205,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     );
 
     if (_fullScreenMode) {
-      return Column(children: [canvasWithFooter]);
+      return canvasWithFooter;
     }
 
     switch (_toolbarDock) {
