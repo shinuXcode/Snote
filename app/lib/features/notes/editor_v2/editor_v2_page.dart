@@ -155,6 +155,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   bool _showPageNavigation = true;
   bool _floatingPageNavigation = false;
   bool _fullScreenMode = false;
+  bool _pdfBackgroundVisible = true;
   bool _pressureEraseActive = false;
   bool _pressureEraseUsed = false;
   CanvasTool? _toolBeforePressureErase;
@@ -162,6 +163,16 @@ class _EditorV2PageState extends State<EditorV2Page>
   Offset _pageNavOffset = const Offset(8, 280);
   double _calculatorWidth = 330;
   double _calculatorHeight = 470;
+
+  bool get _hasPdfBackgroundPages => _pages.any((page) {
+        final source = page['backgroundImage'];
+        return source is String && source.isNotEmpty;
+      });
+
+  void _setPdfBackgroundVisible(bool visible) {
+    if (visible && !_hasPdfBackgroundPages) return;
+    setState(() => _pdfBackgroundVisible = visible);
+  }
 
   Map<String, Object?> get _pageData {
     if (_pages.isEmpty) return <String, Object?>{};
@@ -2194,6 +2205,10 @@ class _EditorV2PageState extends State<EditorV2Page>
         unawaited(_showPageAndEditorSettings());
       case 'togglePageLock':
         unawaited(_togglePageLock());
+      case 'notesLayer':
+        _setPdfBackgroundVisible(false);
+      case 'pdfLayer':
+        _setPdfBackgroundVisible(true);
       case 'pan':
         setState(() => _panMode = !_panMode);
       case 'zoomIn':
@@ -2436,9 +2451,9 @@ class _EditorV2PageState extends State<EditorV2Page>
     );
   }
 
-  Widget _buildPageBackground(Map<String, Object?> page) {
+  Widget _buildPageBackground(Map<String, Object?> page, {bool showPdf = true}) {
     final source = page['backgroundImage'];
-    if (source is String && source.isNotEmpty) {
+    if (showPdf && source is String && source.isNotEmpty) {
       try {
         final id = page['id']?.toString() ?? source.hashCode.toString();
         final bytes = _backgroundBytesCache.putIfAbsent(id, () => base64Decode(source));
@@ -2598,7 +2613,7 @@ class _EditorV2PageState extends State<EditorV2Page>
         child: Stack(
           fit: StackFit.expand,
           children: [
-            Positioned.fill(child: _buildPageBackground(page)),
+            Positioned.fill(child: _buildPageBackground(page, showPdf: _pdfBackgroundVisible)),
             if (_textMode)
               Positioned.fill(
                 child: Padding(
@@ -3038,17 +3053,41 @@ class _EditorV2PageState extends State<EditorV2Page>
           },
         ),
         titleSpacing: 0,
-        title: TextField(
-          controller: _title,
-          maxLines: 1,
-          onChanged: (_) => _scheduleSave(),
-          onSubmitted: (_) => _save(force: true),
-          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
-          decoration: const InputDecoration(
-            hintText: 'Untitled note',
-            border: InputBorder.none,
-            contentPadding: EdgeInsets.symmetric(horizontal: 6),
-          ),
+        title: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _title,
+                maxLines: 1,
+                onChanged: (_) => _scheduleSave(),
+                onSubmitted: (_) => _save(force: true),
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                decoration: const InputDecoration(
+                  hintText: 'Untitled note',
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 6),
+                ),
+              ),
+            ),
+            if (MediaQuery.sizeOf(context).width >= 640 && _hasPdfBackgroundPages)
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: SegmentedButton<bool>(
+                  showSelectedIcon: false,
+                  style: SegmentedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: const Size(42, 32),
+                  ),
+                  segments: const [
+                    ButtonSegment<bool>(value: false, label: Text('Notes')),
+                    ButtonSegment<bool>(value: true, label: Text('PDF')),
+                  ],
+                  selected: <bool>{_pdfBackgroundVisible},
+                  onSelectionChanged: (selection) => _setPdfBackgroundVisible(selection.first),
+                ),
+              ),
+          ],
         ),
         actions: [
           IconButton(
@@ -3069,12 +3108,13 @@ class _EditorV2PageState extends State<EditorV2Page>
             onPressed: _showPagePicker,
             icon: const Icon(Icons.view_carousel_outlined),
           ),
-          IconButton(
-            visualDensity: VisualDensity.compact,
-            tooltip: 'Scientific calculator',
-            onPressed: _openCalculator,
-            icon: const Icon(Icons.calculate_outlined),
-          ),
+          if (MediaQuery.sizeOf(context).width >= 520)
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Scientific calculator',
+              onPressed: _openCalculator,
+              icon: const Icon(Icons.calculate_outlined),
+            ),
           PopupMenuButton<String>(
             tooltip: 'Note and application controls',
             onSelected: _onMenuSelected,
@@ -3084,6 +3124,10 @@ class _EditorV2PageState extends State<EditorV2Page>
               const PopupMenuItem(value: 'text', child: Text('Toggle rich text / handwriting')),
               const PopupMenuItem(value: 'image', child: Text('Insert screenshot or image')),
               const PopupMenuItem(value: 'pageSettings', child: Text('Note page settings')),
+              if (_hasPdfBackgroundPages) ...[
+                PopupMenuItem(value: 'notesLayer', child: Text(_pdfBackgroundVisible ? 'Switch to notes layer' : 'Notes layer active')),
+                PopupMenuItem(value: 'pdfLayer', child: Text(_pdfBackgroundVisible ? 'PDF layer active' : 'Switch to PDF layer')),
+              ]
               PopupMenuItem(
                 value: 'togglePageLock',
                 child: Text(_pageData['locked'] == true ? 'Unlock current page' : 'Lock current page'),
