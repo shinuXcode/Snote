@@ -1591,7 +1591,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
 
     _selected.clear();
     for (final stroke in _strokes) {
-      if (LassoGeometry.strokeIntersectsPolygon(stroke.points, _lasso)) {
+      if (LassoGeometry.strokeMostlyInsidePolygon(stroke.points, _lasso)) {
         _selected.add(stroke.id);
       }
     }
