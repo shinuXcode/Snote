@@ -31,6 +31,7 @@ import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Handler
+import android.os.HandlerThread
 import android.os.IBinder
 import android.os.Looper
 import android.util.DisplayMetrics
@@ -137,6 +138,7 @@ class MainActivity : FlutterActivity() {
 
 class SnoteScreenCaptureService : Service() {
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var captureThread: HandlerThread? = null
     private var projection: MediaProjection? = null
     private var projectionCallback: MediaProjection.Callback? = null
     private var virtualDisplay: VirtualDisplay? = null
@@ -184,6 +186,7 @@ class SnoteScreenCaptureService : Service() {
             }
             projection?.registerCallback(projectionCallback!!, mainHandler)
 
+            captureThread = HandlerThread("SnoteScreenCaptureWorker").also { it.start() }
             reader.setOnImageAvailableListener({ source ->
                 if (finished) return@setOnImageAvailableListener
                 val image = source.acquireLatestImage() ?: return@setOnImageAvailableListener
@@ -194,7 +197,7 @@ class SnoteScreenCaptureService : Service() {
                 } finally {
                     image.close()
                 }
-            }, mainHandler)
+            }, Handler(captureThread!!.looper))
 
             virtualDisplay = projection?.createVirtualDisplay(
                 "SnoteInMemoryCapture",
@@ -281,6 +284,8 @@ class SnoteScreenCaptureService : Service() {
         try { projectionCallback?.let { projection?.unregisterCallback(it) } } catch (_: Exception) {}
         try { projection?.stop() } catch (_: Exception) {}
         try { imageReader?.close() } catch (_: Exception) {}
+        try { captureThread?.quitSafely() } catch (_: Exception) {}
+        captureThread = null
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
         else @Suppress("DEPRECATION") stopForeground(true)
         stopSelf()
