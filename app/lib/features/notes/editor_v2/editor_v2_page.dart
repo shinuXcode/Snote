@@ -2784,7 +2784,8 @@ class _EditorV2PageState extends State<EditorV2Page>
                       focusNode: _quillFocus,
                       scrollController: _quillScroll,
                       controller: _quill,
-                      config: const QuillEditorConfig(
+                      config: QuillEditorConfig(
+                        readOnly: page['locked'] == true,
                         placeholder: 'Start writing rich text…',
                       ),
                     ),
@@ -3390,6 +3391,13 @@ class _EditorV2PageState extends State<EditorV2Page>
             onPressed: _showPagePicker,
             icon: const Icon(Icons.view_carousel_outlined),
           ),
+          if (_hasPdfBackgroundPages && MediaQuery.sizeOf(context).width < 640)
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              tooltip: _pdfBackgroundVisible ? 'Switch to Notes layer' : 'Switch to PDF layer',
+              onPressed: () => _setPdfBackgroundVisible(!_pdfBackgroundVisible),
+              icon: Icon(_pdfBackgroundVisible ? Icons.edit_note_rounded : Icons.picture_as_pdf_rounded),
+            ),
           if (MediaQuery.sizeOf(context).width >= 520)
             IconButton(
               visualDensity: VisualDensity.compact,
