@@ -133,6 +133,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   double _toolPencaseX = SnoteSettings.instance.getDouble('toolPencaseX');
   double _toolPencaseY = SnoteSettings.instance.getDouble('toolPencaseY');
   String _toolPencaseDock = SnoteSettings.instance.getString('toolPencaseDockSide');
+  Timer? _auxToolTapTimer;
   bool _studyTimerVisible = false;
   bool _viewportZoomLocked = false;
   int _viewportResetToken = 0;
@@ -752,6 +753,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     if (_loading || (_locked && !_unlocked)) return;
     _savePending = true;
     _saveTimer?.cancel();
+    _auxToolTapTimer?.cancel();
     if (!_settings.getBool('autoSave')) return;
     _saveTimer = Timer(const Duration(milliseconds: 700), () {
       unawaited(_save());
@@ -2239,6 +2241,17 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     ),
                     IconButton(
                       visualDensity: VisualDensity.compact,
+                      tooltip: 'Calculator tool settings',
+                      onPressed: () {
+                        Navigator.pop(sheetContext);
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted) unawaited(_toolPlacementSheet('calculator'));
+                        });
+                      },
+                      icon: const Icon(Icons.tune_rounded),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
                       tooltip: 'Close calculator',
                       onPressed: () => Navigator.pop(sheetContext),
                       icon: const Icon(Icons.close_rounded),
@@ -3608,17 +3621,27 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     final active = tool != null && _tool == tool;
     final inner = tool != null
         ? _toolButton(tool, icon)
-        : GestureDetector(
-            onDoubleTap: () => unawaited(_toolPlacementSheet(key)),
-            child: IconButton(
-              onPressed: () => _activatePlacedTool(key),
-              constraints: const BoxConstraints.tightFor(width: 29, height: 30),
-              padding: EdgeInsets.zero,
-              visualDensity: VisualDensity.compact,
-              icon: Icon(icon, size: 18),
-              tooltip: key == 'calculator'
-                  ? 'Calculator · double-tap for settings'
-                  : 'Screenshot / image · double-tap for settings',
+        : Tooltip(
+            message: key == 'calculator'
+                ? 'Calculator · double-tap for settings'
+                : 'Screenshot / image · double-tap for settings',
+            child: GestureDetector(
+              onTap: () {
+                _auxToolTapTimer?.cancel();
+                _auxToolTapTimer = Timer(const Duration(milliseconds: 260), () {
+                  if (mounted) _activatePlacedTool(key);
+                });
+              },
+              onDoubleTap: () {
+                _auxToolTapTimer?.cancel();
+                _auxToolTapTimer = null;
+                unawaited(_toolPlacementSheet(key));
+              },
+              child: SizedBox(
+                width: 29,
+                height: 30,
+                child: Center(child: Icon(icon, size: 18)),
+              ),
             ),
           );
 
