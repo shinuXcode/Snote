@@ -6,6 +6,7 @@ on:
       - feat/touchnotes-editor-overhaul
       - feat/snote-editor-engine-rebuild
       - feat/snote-beta79-nextgen
+      - feat/snote-beta80-workspace-tools
     paths:
       - "app/**"
       - ".github/workflows/beta.yml"
