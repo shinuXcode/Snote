@@ -4558,8 +4558,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       3.0,
       2048.0 / math.max(logicalWidth, logicalHeight),
     ).clamp(.75, 3.0).toDouble();
-    final pixelWidth = math.max(1, (logicalWidth * scale).ceil());
-    final pixelHeight = math.max(1, (logicalHeight * scale).ceil());
+    final pixelWidth = math.max(1, (logicalWidth * scale).ceil()).toInt();
+    final pixelHeight = math.max(1, (logicalHeight * scale).ceil()).toInt();
     final recorder = ui.PictureRecorder();
     final bitmapCanvas = ui.Canvas(recorder);
     bitmapCanvas.drawRect(
