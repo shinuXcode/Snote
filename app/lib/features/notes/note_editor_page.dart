@@ -5293,9 +5293,16 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                                     fit: BoxFit.fill,
                                     filterQuality: FilterQuality.low,
                                     gaplessPlayback: true,
-                                    loadingBuilder: (_, child, progress) => progress == null
-                                        ? child
-                                        : const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))),
+                                    frameBuilder: (_, child, frame, wasSynchronouslyLoaded) =>
+                                        wasSynchronouslyLoaded || frame != null
+                                            ? child
+                                            : const Center(
+                                                child: SizedBox(
+                                                  width: 18,
+                                                  height: 18,
+                                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                                ),
+                                              ),
                                     errorBuilder: (_, __, ___) => const SizedBox.shrink(),
                                   ),
                                 ),
