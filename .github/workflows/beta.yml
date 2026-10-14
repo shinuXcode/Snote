@@ -209,7 +209,7 @@ jobs:
           CURRENT_TAG: ${{ steps.beta_version.outputs.tag }}
         run: |
           set -euo pipefail
-          OLD_TAG="v1.1.0-beta.78"
+          OLD_TAG="v1.1.0-beta.79"
           if [ "$CURRENT_TAG" = "$OLD_TAG" ]; then
             echo "Skipping cleanup because the current release is the old beta."
             exit 0
