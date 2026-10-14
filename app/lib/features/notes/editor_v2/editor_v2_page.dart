@@ -150,6 +150,8 @@ class _EditorV2PageState extends State<EditorV2Page>
   final Set<int> _ignoredPointers = <int>{};
   final Set<int> _stylusPointers = <int>{};
   final Set<int> _navigationOnlyPointers = <int>{};
+  Duration? _lastEraseTimestamp;
+  Offset? _lastErasePosition;
   Timer? _holdTimer;
   Offset? _holdStartPosition;
   Offset? _pageSwipeStart;
@@ -163,6 +165,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   Map<String, Object?> _rootContent = <String, Object?>{};
   List<Map<String, Object?>> _pages = <Map<String, Object?>>[];
   List<Map<String, Object?>> _favoritePens = <Map<String, Object?>>[];
+  List<String> _favoriteStickers = <String>[];
   List<int> _bookmarkedPages = <int>[];
   int _page = 0;
   CanvasTool _tool = CanvasTool.ballpoint;
@@ -479,6 +482,10 @@ class _EditorV2PageState extends State<EditorV2Page>
     final bookmarks = rawBookmarks is List
         ? rawBookmarks.whereType<num>().map((value) => value.toInt()).where((value) => value > 0).toSet().toList()
         : <int>[];
+    final rawFavoriteStickers = root['favoriteStickers'];
+    final favoriteStickers = rawFavoriteStickers is List
+        ? rawFavoriteStickers.whereType<String>().where((value) => value.isNotEmpty).toSet().toList()
+        : <String>[];
     _title.text = saved.title;
 
     if (!mounted) return;
@@ -491,6 +498,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       );
       _textMode = root['editorMode'] == 'text';
       _bookmarkedPages = bookmarks;
+      _favoriteStickers = favoriteStickers;
       _loading = false;
       _locked = false;
       _unlocked = true;
@@ -1236,6 +1244,7 @@ class _EditorV2PageState extends State<EditorV2Page>
         textDelta: _quill.document.toDelta().toJson(),
         currentPageIndex: _page,
       );
+      payload['favoriteStickers'] = List<String>.from(_favoriteStickers);
       await _repo.saveContent(widget.note.id, payload);
       final title = _title.text.trim();
       if (title.isNotEmpty) await _repo.rename(widget.note.id, title);
@@ -1556,6 +1565,8 @@ class _EditorV2PageState extends State<EditorV2Page>
   }
 
   void _onPointerDown(PointerDownEvent event) {
+    _lastEraseTimestamp = null;
+    _lastErasePosition = event.localPosition;
     _activePointers.add(event.pointer);
     if (event.kind == PointerDeviceKind.stylus ||
         event.kind == PointerDeviceKind.invertedStylus) {
@@ -1664,6 +1675,22 @@ class _EditorV2PageState extends State<EditorV2Page>
     setState(() {});
   }
 
+  bool _shouldProcessErase(PointerEvent event, double radius) {
+    final previousTime = _lastEraseTimestamp;
+    final previousPosition = _lastErasePosition;
+    if (previousTime != null &&
+        event.timeStamp - previousTime < const Duration(milliseconds: 16)) {
+      return false;
+    }
+    if (previousPosition != null &&
+        (event.localPosition - previousPosition).distance < math.max(1.5, radius * .12)) {
+      return false;
+    }
+    _lastEraseTimestamp = event.timeStamp;
+    _lastErasePosition = event.localPosition;
+    return true;
+  }
+
   void _onPointerMove(PointerMoveEvent event) {
     if (_ignoredPointers.contains(event.pointer)) return;
     if (_activePointer == event.pointer &&
@@ -1700,8 +1727,22 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
     if (_activePointer == event.pointer && _pressureEraseActive) {
       _eraserCursor = event.localPosition;
-      if (_pressureEraseAllowed(event)) {
-        _eraseAt(event.localPosition, _pressureEraseRadius(event));
+      final radius = _pressureEraseRadius(event);
+      if (_pressureEraseAllowed(event) && _shouldProcessErase(event, radius)) {
+        _eraseAt(event.localPosition, radius);
+      }
+      setState(() {});
+      return;
+    }
+    if (_activePointer == event.pointer &&
+        (_tool == CanvasTool.eraser || _tool == CanvasTool.pixelEraser)) {
+      _eraserCursor = event.localPosition;
+      final precisionRadius = _tool == CanvasTool.pixelEraser ||
+          _settings.getString('eraserMode') == 'pixel';
+      final baseRadius = precisionRadius ? 7.0 : math.max(18, _size * 2).toDouble();
+      final radius = _pressureEraseRadius(event, baseRadius: baseRadius);
+      if (_pressureEraseAllowed(event) && _shouldProcessErase(event, radius)) {
+        _eraseAt(event.localPosition, radius);
       }
       setState(() {});
       return;
@@ -3633,7 +3674,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     };
     var category = 'All';
     var query = '';
-    final allCategories = <String>['All', ...stickerCategories.keys];
+    final allCategories = <String>['All', 'Favorites', ...stickerCategories.keys];
     final chosen = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
@@ -3641,18 +3682,22 @@ class _EditorV2PageState extends State<EditorV2Page>
       builder: (sheetContext) => StatefulBuilder(
         builder: (context, setSheetState) {
           final groups = stickerCategories.entries
-              .where((entry) => category == 'All' || entry.key == category)
+              .where((entry) => category == 'All' ||
+                  (category != 'Favorites' && entry.key == category))
               .toList();
-          final stickers = groups
-              .where((entry) =>
-                  query.isEmpty || entry.key.toLowerCase().contains(query))
-              .expand((entry) => entry.value.where(
-                    (symbol) =>
-                        query.isEmpty ||
-                        entry.key.toLowerCase().contains(query) ||
-                        symbol.contains(query),
-                  ))
-              .toList();
+          final stickers = category == 'Favorites'
+              ? _favoriteStickers.where((symbol) =>
+                  query.isEmpty || symbol.contains(query)).toList()
+              : groups
+                  .where((entry) =>
+                      query.isEmpty || entry.key.toLowerCase().contains(query))
+                  .expand((entry) => entry.value.where(
+                        (symbol) =>
+                            query.isEmpty ||
+                            entry.key.toLowerCase().contains(query) ||
+                            symbol.contains(query),
+                      ))
+                  .toList();
           return SafeArea(
             child: Padding(
               padding: EdgeInsets.fromLTRB(14, 2, 14, 14 + MediaQuery.viewInsetsOf(context).bottom),
@@ -3661,7 +3706,10 @@ class _EditorV2PageState extends State<EditorV2Page>
                 child: Column(
                   children: [
                     Row(children: [
-                      Expanded(child: Text('Sticker library • 200+ stickers', style: Theme.of(context).textTheme.titleLarge)),
+                      Expanded(child: Text(
+                        'Sticker library • 200+ stickers • ${_favoriteStickers.length} favorites',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      )),
                       IconButton(tooltip: 'Close stickers', onPressed: () => Navigator.pop(sheetContext), icon: const Icon(Icons.close_rounded)),
                     ]),
                     TextField(
@@ -3697,18 +3745,60 @@ class _EditorV2PageState extends State<EditorV2Page>
                           crossAxisSpacing: 5,
                           mainAxisSpacing: 5,
                         ),
-                        itemBuilder: (_, index) => InkWell(
-                          borderRadius: BorderRadius.circular(9),
-                          onTap: () => Navigator.pop(sheetContext, stickers[index]),
-                          child: Ink(
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.surfaceContainerHigh,
-                              borderRadius: BorderRadius.circular(9),
-                              border: Border.all(color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: .5)),
+                        itemBuilder: (_, index) {
+                          final sticker = stickers[index];
+                          final isFavorite = _favoriteStickers.contains(sticker);
+                          return InkWell(
+                            borderRadius: BorderRadius.circular(9),
+                            onTap: () => Navigator.pop(sheetContext, sticker),
+                            child: Ink(
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                                borderRadius: BorderRadius.circular(9),
+                                border: Border.all(
+                                  color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: .5),
+                                ),
+                              ),
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  Center(child: Text(sticker, style: const TextStyle(fontSize: 21))),
+                                  Positioned(
+                                    top: 0,
+                                    right: 0,
+                                    child: SizedBox(
+                                      width: 22,
+                                      height: 22,
+                                      child: IconButton(
+                                        padding: EdgeInsets.zero,
+                                        visualDensity: VisualDensity.compact,
+                                        tooltip: isFavorite ? 'Remove from favorites' : 'Add to favorites',
+                                        onPressed: () {
+                                          setSheetState(() {
+                                            if (isFavorite) {
+                                              _favoriteStickers.remove(sticker);
+                                            } else if (!_favoriteStickers.contains(sticker)) {
+                                              _favoriteStickers.add(sticker);
+                                            }
+                                          });
+                                          _rootContent['favoriteStickers'] = List<String>.from(_favoriteStickers);
+                                          _scheduleSave();
+                                        },
+                                        icon: Icon(
+                                          isFavorite ? Icons.star_rounded : Icons.star_border_rounded,
+                                          size: 13,
+                                          color: isFavorite
+                                              ? Theme.of(context).colorScheme.primary
+                                              : Theme.of(context).colorScheme.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                            child: Center(child: Text(stickers[index], style: const TextStyle(fontSize: 25))),
-                          ),
-                        ),
+                          );
+                        },
                       ),
                     ),
                   ],
