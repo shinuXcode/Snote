@@ -2023,18 +2023,6 @@ class _HierarchyPanel extends StatelessWidget {
             padding: EdgeInsets.fromLTRB(4, 18, 4, 8),
             child: Text('No notes match your search.'),
           ),
-        if (notes.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 18, 4, 8),
-            child: Text(
-              isSearching
-                  ? 'Search results'
-                  : currentFolderId == null
-                      ? 'Notes in this folder'
-                      : 'Notes in this folder',
-              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
-            ),
-          ),
         if (gridView)
           Wrap(
             spacing: 10,
