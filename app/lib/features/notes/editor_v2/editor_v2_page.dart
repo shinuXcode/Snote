@@ -4034,7 +4034,7 @@ class _EditorV2PageState extends State<EditorV2Page>
         ),
       );
     }).toList();
-    final favoriteChips = _favoritePens.map((favorite) {
+    final favoriteChips = (_showFavoritesShowcase ? _favoritePens : const <Map<String, Object?>>[]).map((favorite) {
       final favoriteTool = CanvasTool.values.where((tool) => tool.name == favorite['tool']?.toString()).firstOrNull ?? CanvasTool.ballpoint;
       final color = Color((favorite['color'] as num?)?.toInt() ?? 0xff17202a);
       final active = _tool == favoriteTool && _color.toARGB32() == color.toARGB32() && (_size - ((favorite['size'] as num?)?.toDouble() ?? 3)).abs() < .1;
@@ -5139,7 +5139,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                 ),
               ),
             ),
-          if (_showFavoritesShowcase) _buildFavoriteShowcase(),
+          if (_showFavoritesShowcase || _pencaseTools.isNotEmpty) _buildFavoriteShowcase(),
           if (_showPageNavigation && _floatingPageNavigation) _buildFloatingPageNavigation(),
           if (_calculatorVisible) _buildFloatingCalculator(),
           if (_fullScreenMode)
