@@ -160,6 +160,45 @@ jobs:
               raise SystemExit('Clipboard provider paths file is missing')
           PY
 
+      - name: Configure optional ML Kit classes for release shrinking
+        working-directory: app
+        run: |
+          set -euo pipefail
+          cat > android/app/proguard-rules.pro <<'EOF'
+          -dontwarn com.google.mlkit.vision.text.chinese.**
+          -dontwarn com.google.mlkit.vision.text.devanagari.**
+          -dontwarn com.google.mlkit.vision.text.japanese.**
+          -dontwarn com.google.mlkit.vision.text.korean.**
+          EOF
+          python3 - <<'PY'
+          from pathlib import Path
+          build = Path('android/app/build.gradle.kts')
+          lines = build.read_text().splitlines()
+          in_build_types = False
+          in_release = False
+          out = []
+          configured = False
+          for line in lines:
+              stripped = line.strip()
+              if stripped == 'buildTypes {':
+                  in_build_types = True
+              elif in_build_types and stripped == 'release {':
+                  in_release = True
+                  out.append(line)
+                  indent = line[:len(line) - len(line.lstrip())] + '    '
+                  if not any('proguard-rules.pro' in candidate for candidate in lines):
+                      out.append(indent + 'isMinifyEnabled = true')
+                      out.append(indent + 'proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")')
+                  configured = True
+                  continue
+              elif in_release and stripped == '}':
+                  in_release = False
+              out.append(line)
+          if not configured:
+              raise SystemExit('Could not locate release build type in generated Gradle script')
+          build.write_text(chr(10).join(out) + chr(10))
+          print('Configured release R8 rules for optional ML Kit language recognizers.')
+          PY
       - name: Install dependencies
         working-directory: app
         run: flutter pub get
