@@ -194,7 +194,7 @@ class EditorV2InkPainter extends CustomPainter {
         final distance = (b.position - a.position).distance;
         final elapsedMs = (b.timestamp - a.timestamp).abs().clamp(1.0, 250.0);
         final speed = distance / elapsedMs;
-        final speedResponse = (speed / 1.8).clamp(0.0, 1.0).toDouble();
+        final speedResponse = (speed / 24.0).clamp(0.0, 1.0).toDouble();
         final pressure = ((a.pressure + b.pressure) / 2).clamp(.05, 1.0);
         final pressureFactor = .48 + pressure * (.70 + pressureSensitivity * .50);
         final velocityFactor = 1.24 - speedResponse * (.52 * velocitySensitivity);
