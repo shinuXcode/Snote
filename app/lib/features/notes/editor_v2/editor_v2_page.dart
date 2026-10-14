@@ -1295,22 +1295,57 @@ class _EditorV2PageState extends State<EditorV2Page>
     return result.inflate(3);
   }
 
+  Rect _transformObjectRect(Map<String, Object?> object, Offset center, double factor, Offset offset, {double defaultWidth = .4, double defaultHeight = .2}) {
+    final x = (object['x'] as num?)?.toDouble() ?? .1;
+    final y = (object['y'] as num?)?.toDouble() ?? .1;
+    final width = (object['width'] as num?)?.toDouble() ?? defaultWidth;
+    final height = (object['height'] as num?)?.toDouble() ?? defaultHeight;
+    final original = Rect.fromLTWH(x * _pageWidth, y * _pageHeight, width * _pageWidth, height * _pageHeight);
+    return Rect.fromLTWH(
+      center.dx + (original.left - center.dx) * factor + offset.dx,
+      center.dy + (original.top - center.dy) * factor + offset.dy,
+      math.max(8, original.width * factor),
+      math.max(8, original.height * factor),
+    );
+  }
+
+  void _writeObjectRect(Map<String, Object?> object, Rect rect) {
+    final width = (rect.width / _pageWidth).clamp(.01, 1.0).toDouble();
+    final height = (rect.height / _pageHeight).clamp(.01, 1.0).toDouble();
+    object['width'] = width;
+    object['height'] = height;
+    object['x'] = (rect.left / _pageWidth).clamp(0.0, math.max(0.0, 1 - width)).toDouble();
+    object['y'] = (rect.top / _pageHeight).clamp(0.0, math.max(0.0, 1 - height)).toDouble();
+  }
+
   void _startSelectionTransform({required bool resize}) {
     final bounds = _selectionBounds();
-    if (bounds == null || _selectedStrokeIds.isEmpty) return;
+    if (bounds == null || _selectionCount == 0) return;
     _pushUndo();
     _selectionTransformSnapshot = _strokesFor(_pageData)
         .where((stroke) => _selectedStrokeIds.contains(stroke.id))
         .toList();
+    List<Map<String, Object?>> captureObjects(String key, Set<String> ids) {
+      final raw = _pageData[key];
+      if (raw is! List) return <Map<String, Object?>>[];
+      return raw.whereType<Map>()
+          .where((item) => ids.contains(item['id']?.toString()))
+          .map((item) => item.map<String, Object?>((k, v) => MapEntry(k.toString(), v)))
+          .toList();
+    }
+    _selectionTransformImageSnapshot = captureObjects('images', _selectedImageIds);
+    _selectionTransformTextSnapshot = captureObjects('textBoxes', _selectedTextBoxIds);
     _selectionTransformBounds = bounds;
     _selectionTransformDelta = Offset.zero;
     _selectionTransformIsResize = resize;
   }
 
   void _updateSelectionTransform(Offset delta) {
-    final snapshot = _selectionTransformSnapshot;
+    final strokeSnapshot = _selectionTransformSnapshot;
+    final imageSnapshot = _selectionTransformImageSnapshot ?? <Map<String, Object?>>[];
+    final textSnapshot = _selectionTransformTextSnapshot ?? <Map<String, Object?>>[];
     final bounds = _selectionTransformBounds;
-    if (snapshot == null || bounds == null || snapshot.isEmpty) return;
+    if (bounds == null || (strokeSnapshot == null && imageSnapshot.isEmpty && textSnapshot.isEmpty)) return;
     final scale = _transform.value.getMaxScaleOnAxis().clamp(.25, 4).toDouble();
     _selectionTransformDelta += delta / scale;
     final factor = _selectionTransformIsResize
@@ -1318,38 +1353,87 @@ class _EditorV2PageState extends State<EditorV2Page>
         : 1.0;
     final offset = _selectionTransformIsResize ? Offset.zero : _selectionTransformDelta;
     final center = bounds.center;
-    final byId = <String, Stroke>{for (final stroke in snapshot) stroke.id: stroke};
-    final current = _strokesFor(_pageData);
-    _pageData['strokes'] = current.map((stroke) {
-      final original = byId[stroke.id];
-      if (original == null) return StrokeCodec.strokeToJson(stroke);
-      return StrokeCodec.strokeToJson(original.copyWith(
-        points: original.points.map((point) => point.copyWith(
-          position: center + (point.position - center) * factor + offset,
-        )).toList(),
-      ));
-    }).toList();
+
+    if (strokeSnapshot != null) {
+      final byId = <String, Stroke>{for (final stroke in strokeSnapshot) stroke.id: stroke};
+      final current = _strokesFor(_pageData);
+      _pageData['strokes'] = current.map((stroke) {
+        final original = byId[stroke.id];
+        if (original == null) return StrokeCodec.strokeToJson(stroke);
+        return StrokeCodec.strokeToJson(original.copyWith(
+          points: original.points.map((point) => point.copyWith(
+            position: center + (point.position - center) * factor + offset,
+          )).toList(),
+        ));
+      }).toList();
+    }
+
+    void applyObjects(String key, List<Map<String, Object?>> snapshot, Set<String> ids, {double defaultWidth = .4, double defaultHeight = .2}) {
+      if (snapshot.isEmpty) return;
+      final source = <String, Map<String, Object?>>{for (final item in snapshot) item['id']?.toString() ?? '': item};
+      final raw = _pageData[key];
+      if (raw is! List) return;
+      _pageData[key] = raw.whereType<Map>().map((item) {
+        final object = item.map<String, Object?>((k, v) => MapEntry(k.toString(), v));
+        final id = object['id']?.toString() ?? '';
+        final original = source[id];
+        if (!ids.contains(id) || original == null) return object;
+        final originalRect = _transformObjectRect(original, center, factor, offset, defaultWidth: defaultWidth, defaultHeight: defaultHeight);
+        _writeObjectRect(object, originalRect);
+        if (_selectionTransformIsResize && key == 'textBoxes') {
+          final fontSize = (original['fontSize'] as num?)?.toDouble() ?? 18;
+          object['fontSize'] = (fontSize * factor).clamp(6.0, 240.0).toDouble();
+        }
+        return object;
+      }).toList();
+    }
+
+    applyObjects('images', imageSnapshot, _selectedImageIds, defaultWidth: .4, defaultHeight: .3);
+    applyObjects('textBoxes', textSnapshot, _selectedTextBoxIds, defaultWidth: .68, defaultHeight: .16);
     setState(() => _lassoRect = _selectionBounds());
     _scheduleSave();
   }
 
   void _finishSelectionTransform() {
     _selectionTransformSnapshot = null;
+    _selectionTransformImageSnapshot = null;
+    _selectionTransformTextSnapshot = null;
     _selectionTransformBounds = null;
     _selectionTransformDelta = Offset.zero;
     _selectionTransformIsResize = false;
   }
 
-  void _copySelection() {
-    if (_selectedStrokeIds.isEmpty) return;
-    _strokeClipboard = _strokesFor(_pageData)
+  Map<String, Object?> _currentSelectionPayload() {
+    final strokeItems = _strokesFor(_pageData)
         .where((stroke) => _selectedStrokeIds.contains(stroke.id))
         .map((stroke) => StrokeCodec.strokeToJson(stroke).map<String, Object?>(
               (key, value) => MapEntry(key.toString(), value),
             ))
         .toList();
+    List<Map<String, Object?>> objects(String key, Set<String> ids) {
+      final raw = _pageData[key];
+      if (raw is! List) return <Map<String, Object?>>[];
+      return raw.whereType<Map>()
+          .where((item) => ids.contains(item['id']?.toString()))
+          .map((item) => item.map<String, Object?>((k, v) => MapEntry(k.toString(), v)))
+          .toList();
+    }
+    return <String, Object?>{
+      'strokes': strokeItems,
+      'images': objects('images', _selectedImageIds),
+      'textBoxes': objects('textBoxes', _selectedTextBoxIds),
+    };
+  }
+
+  void _copySelection() {
+    if (_selectionCount == 0) return;
+    _selectionClipboard = _currentSelectionPayload();
+    _strokeClipboard = ((_selectionClipboard!['strokes'] as List?) ?? const [])
+        .whereType<Map<String, Object?>>()
+        .map((item) => Map<String, Object?>.from(item))
+        .toList();
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Copied ${_strokeClipboard.length} stroke(s)')),
+      SnackBar(content: Text('Copied selection ($_selectionCount item(s))')),
     );
   }
 
@@ -1360,49 +1444,110 @@ class _EditorV2PageState extends State<EditorV2Page>
 
   void _pasteStrokes({bool duplicate = false}) {
     if (_pageData['locked'] == true) return;
-    final source = duplicate
-        ? _strokesFor(_pageData).where((stroke) => _selectedStrokeIds.contains(stroke.id)).toList()
-        : StrokeCodec.documentToStrokes(<String, Object?>{'strokes': _strokeClipboard});
-    if (source.isEmpty) return;
+    final payload = duplicate ? _currentSelectionPayload() : _selectionClipboard;
+    if (payload == null) return;
+    final sourceStrokes = StrokeCodec.documentToStrokes(
+      <String, Object?>{'strokes': payload['strokes'] is List ? payload['strokes'] : <Object?>[]},
+    );
+    final sourceImages = (payload['images'] is List ? payload['images'] as List : const <Object?>[])
+        .whereType<Map>()
+        .map((item) => item.map<String, Object?>((k, v) => MapEntry(k.toString(), v)))
+        .toList();
+    final sourceTextBoxes = (payload['textBoxes'] is List ? payload['textBoxes'] as List : const <Object?>[])
+        .whereType<Map>()
+        .map((item) => item.map<String, Object?>((k, v) => MapEntry(k.toString(), v)))
+        .toList();
+    if (sourceStrokes.isEmpty && sourceImages.isEmpty && sourceTextBoxes.isEmpty) return;
     _pushUndo();
-    final raw = _pageData['strokes'] as List<Object?>;
     final offset = duplicate ? const Offset(22, 22) : const Offset(18, 18);
-    final added = source.map((stroke) => StrokeCodec.strokeToJson(stroke.copyWith(
+    final addedStrokes = sourceStrokes.map((stroke) => StrokeCodec.strokeToJson(stroke.copyWith(
       id: DateTime.now().microsecondsSinceEpoch.toString() + '-${math.Random().nextInt(100000)}',
       points: stroke.points.map((point) => point.copyWith(position: point.position + offset)).toList(),
     ))).toList();
-    raw.addAll(added);
-    final ids = added.map((item) => item['id']?.toString() ?? '').where((value) => value.isNotEmpty).toSet();
+    final rawStrokes = _pageData['strokes'];
+    if (rawStrokes is List) rawStrokes.addAll(addedStrokes);
+
+    final addedImageIds = <String>{};
+    final rawImages = _pageData['images'];
+    final addedImages = sourceImages.map((source) {
+      final image = Map<String, Object?>.from(source);
+      final id = DateTime.now().microsecondsSinceEpoch.toString() + '-image-${math.Random().nextInt(100000)}';
+      image['id'] = id;
+      final width = (image['width'] as num?)?.toDouble() ?? .4;
+      final height = (image['height'] as num?)?.toDouble() ?? .3;
+      image['x'] = (((image['x'] as num?)?.toDouble() ?? .1) + offset.dx / _pageWidth).clamp(0.0, math.max(0.0, 1 - width)).toDouble();
+      image['y'] = (((image['y'] as num?)?.toDouble() ?? .1) + offset.dy / _pageHeight).clamp(0.0, math.max(0.0, 1 - height)).toDouble();
+      addedImageIds.add(id);
+      return image;
+    }).toList();
+    if (rawImages is List) rawImages.addAll(addedImages);
+
+    final addedTextIds = <String>{};
+    final rawText = _pageData['textBoxes'];
+    final addedTextBoxes = sourceTextBoxes.map((source) {
+      final box = Map<String, Object?>.from(source);
+      final id = DateTime.now().microsecondsSinceEpoch.toString() + '-text-${math.Random().nextInt(100000)}';
+      box['id'] = id;
+      final width = (box['width'] as num?)?.toDouble() ?? .68;
+      final height = (box['height'] as num?)?.toDouble() ?? .16;
+      box['x'] = (((box['x'] as num?)?.toDouble() ?? .12) + offset.dx / _pageWidth).clamp(0.0, math.max(0.0, 1 - width)).toDouble();
+      box['y'] = (((box['y'] as num?)?.toDouble() ?? .12) + offset.dy / _pageHeight).clamp(0.0, math.max(0.0, 1 - height)).toDouble();
+      _textControllers[id] = TextEditingController(text: box['text']?.toString() ?? '');
+      addedTextIds.add(id);
+      return box;
+    }).toList();
+    if (rawText is List) rawText.addAll(addedTextBoxes);
+
+    final addedStrokeIds = addedStrokes.map((item) => item['id']?.toString() ?? '').where((value) => value.isNotEmpty).toSet();
     setState(() {
       _selectedStrokeIds
         ..clear()
-        ..addAll(ids);
+        ..addAll(addedStrokeIds);
+      _selectedImageIds
+        ..clear()
+        ..addAll(addedImageIds);
+      _selectedTextBoxIds
+        ..clear()
+        ..addAll(addedTextIds);
       _lassoRect = _selectionBounds();
     });
     _scheduleSave();
   }
 
   void _scaleSelection(double factor) {
-    if (_pageData['locked'] == true) return;
-    if (_selectedStrokeIds.isEmpty) return;
+    if (_pageData['locked'] == true || _selectionCount == 0) return;
     final bounds = _selectionBounds();
     if (bounds == null) return;
     _pushUndo();
     final center = bounds.center;
-    final raw = _pageData['strokes'] as List<Object?>;
-    final strokes = StrokeCodec.documentToStrokes(<String, Object?>{'strokes': raw});
-    _pageData['strokes'] = strokes.map((stroke) {
-      if (!_selectedStrokeIds.contains(stroke.id)) return StrokeCodec.strokeToJson(stroke);
-      return StrokeCodec.strokeToJson(stroke.copyWith(
-        points: stroke.points.map((point) => point.copyWith(
-          position: center + (point.position - center) * factor,
-        )).toList(),
-      ));
-    }).toList();
-    setState(() {
-      final updated = _selectionBounds();
-      if (updated != null) _lassoRect = updated;
-    });
+    final rawStrokes = _pageData['strokes'];
+    if (rawStrokes is List) {
+      final strokes = StrokeCodec.documentToStrokes(<String, Object?>{'strokes': rawStrokes});
+      _pageData['strokes'] = strokes.map((stroke) {
+        if (!_selectedStrokeIds.contains(stroke.id)) return StrokeCodec.strokeToJson(stroke);
+        return StrokeCodec.strokeToJson(stroke.copyWith(
+          points: stroke.points.map((point) => point.copyWith(
+            position: center + (point.position - center) * factor,
+          )).toList(),
+        ));
+      }).toList();
+    }
+    for (final key in const ['images', 'textBoxes']) {
+      final raw = _pageData[key];
+      if (raw is! List) continue;
+      final ids = key == 'images' ? _selectedImageIds : _selectedTextBoxIds;
+      _pageData[key] = raw.whereType<Map>().map((item) {
+        final object = item.map<String, Object?>((k, v) => MapEntry(k.toString(), v));
+        if (!ids.contains(object['id']?.toString())) return object;
+        final rect = _transformObjectRect(object, center, factor, Offset.zero, defaultWidth: key == 'images' ? .4 : .68, defaultHeight: key == 'images' ? .3 : .16);
+        _writeObjectRect(object, rect);
+        if (key == 'textBoxes') {
+          object['fontSize'] = (((object['fontSize'] as num?)?.toDouble() ?? 18) * factor).clamp(6.0, 240.0).toDouble();
+        }
+        return object;
+      }).toList();
+    }
+    setState(() => _lassoRect = _selectionBounds());
     _scheduleSave();
   }
 
