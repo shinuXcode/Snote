@@ -1552,24 +1552,72 @@ class _EditorV2PageState extends State<EditorV2Page>
   }
 
   void _changeSelectionLayer({required bool bringToFront}) {
-    if (_pageData['locked'] == true || _selectedStrokeIds.isEmpty) return;
-    final raw = _pageData['strokes'];
-    if (raw is! List) return;
-    final strokes = StrokeCodec.documentToStrokes(<String, Object?>{'strokes': raw});
-    final selected = strokes.where((stroke) => _selectedStrokeIds.contains(stroke.id)).toList();
-    if (selected.isEmpty) return;
-    final unselected = strokes.where((stroke) => !_selectedStrokeIds.contains(stroke.id)).toList();
+    if (_pageData['locked'] == true || _selectionCount == 0) return;
     _pushUndo();
-    final reordered = bringToFront
-        ? <Stroke>[...unselected, ...selected]
-        : <Stroke>[...selected, ...unselected];
-    _pageData['strokes'] = reordered.map(StrokeCodec.strokeToJson).toList();
+    if (_selectedStrokeIds.isNotEmpty) {
+      final raw = _pageData['strokes'];
+      if (raw is List) {
+        final strokes = StrokeCodec.documentToStrokes(<String, Object?>{'strokes': raw});
+        final selected = strokes.where((stroke) => _selectedStrokeIds.contains(stroke.id)).toList();
+        final unselected = strokes.where((stroke) => !_selectedStrokeIds.contains(stroke.id)).toList();
+        final reordered = bringToFront
+            ? <Stroke>[...unselected, ...selected]
+            : <Stroke>[...selected, ...unselected];
+        _pageData['strokes'] = reordered.map(StrokeCodec.strokeToJson).toList();
+      }
+    }
+    void reorderObjects(String key, Set<String> ids) {
+      if (ids.isEmpty) return;
+      final raw = _pageData[key];
+      if (raw is! List) return;
+      final selected = raw.whereType<Map>()
+          .where((item) => ids.contains(item['id']?.toString()))
+          .map((item) => item.map<String, Object?>((k, v) => MapEntry(k.toString(), v)))
+          .toList();
+      final unselected = raw.whereType<Map>()
+          .where((item) => !ids.contains(item['id']?.toString()))
+          .map((item) => item.map<String, Object?>((k, v) => MapEntry(k.toString(), v)))
+          .toList();
+      _pageData[key] = bringToFront
+          ? <Map<String, Object?>>[...unselected, ...selected]
+          : <Map<String, Object?>>[...selected, ...unselected];
+    }
+    reorderObjects('images', _selectedImageIds);
+    reorderObjects('textBoxes', _selectedTextBoxIds);
     setState(() {});
     _scheduleSave();
   }
 
   bool _selectStrokeAt(Offset position, {double radius = 12}) {
+    bool selectObjects(String key, Set<String> destination, {double defaultWidth = .4, double defaultHeight = .2}) {
+      final raw = _pageData[key];
+      if (raw is! List) return false;
+      for (final item in raw.whereType<Map>().toList().reversed) {
+        final object = item.map<String, Object?>((k, v) => MapEntry(k.toString(), v));
+        final id = object['id']?.toString() ?? '';
+        if (id.isEmpty) continue;
+        final x = (object['x'] as num?)?.toDouble() ?? .1;
+        final y = (object['y'] as num?)?.toDouble() ?? .1;
+        final width = (object['width'] as num?)?.toDouble() ?? defaultWidth;
+        final height = (object['height'] as num?)?.toDouble() ?? defaultHeight;
+        final bounds = Rect.fromLTWH(x * _pageWidth, y * _pageHeight, width * _pageWidth, height * _pageHeight).inflate(radius);
+        if (!bounds.contains(position)) continue;
+        setState(() {
+          _tool = CanvasTool.lasso;
+          _clearSelectionIds();
+          destination.add(id);
+          _lassoRect = bounds;
+        });
+        return true;
+      }
+      return false;
+    }
+
+    if (selectObjects('textBoxes', _selectedTextBoxIds, defaultWidth: .68, defaultHeight: .16)) return true;
+    if (selectObjects('images', _selectedImageIds, defaultWidth: .4, defaultHeight: .3)) return true;
+
     for (final stroke in _strokesFor(_pageData).reversed) {
+      if (stroke.points.isEmpty) continue;
       for (var i = 0; i < stroke.points.length; i++) {
         if ((stroke.points[i].position - position).distance <= radius ||
             (i > 0 && _distanceToSegment(position, stroke.points[i - 1].position, stroke.points[i].position) <= radius)) {
@@ -1583,9 +1631,8 @@ class _EditorV2PageState extends State<EditorV2Page>
           }
           setState(() {
             _tool = CanvasTool.lasso;
-            _selectedStrokeIds
-              ..clear()
-              ..add(stroke.id);
+            _clearSelectionIds();
+            _selectedStrokeIds.add(stroke.id);
             _lassoRect = Rect.fromLTRB(left, top, right, bottom).inflate(5);
           });
           return true;
