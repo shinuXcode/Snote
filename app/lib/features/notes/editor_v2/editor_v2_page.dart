@@ -2955,53 +2955,100 @@ class _EditorV2PageState extends State<EditorV2Page>
   }
 
   Widget _buildEditorLayout() {
-    final canvasWithFooter = Column(
-      children: [
-        Expanded(
-          child: Stack(
-            children: [
-              Positioned.fill(child: _buildCanvas()),
-              if (_floatingToolbar)
-                Positioned(
-                  left: _floatingOffset.dx.clamp(0, math.max(0, MediaQuery.sizeOf(context).width - 160)).toDouble(),
-                  top: _floatingOffset.dy.clamp(0, math.max(0, MediaQuery.sizeOf(context).height - 210)).toDouble(),
-                  child: GestureDetector(
-                    onPanUpdate: (details) => setState(() => _floatingOffset += details.delta),
-                    child: Material(
-                      elevation: 8,
-                      borderRadius: BorderRadius.circular(14),
-                      clipBehavior: Clip.antiAlias,
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 360, maxHeight: 190),
-                        child: _buildToolbar(vertical: false),
-                      ),
+    final viewport = Expanded(
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(child: _buildCanvas()),
+          if (_floatingToolbar || _fullScreenMode)
+            Positioned(
+              left: _floatingOffset.dx.clamp(0, math.max(0, MediaQuery.sizeOf(context).width - 160)).toDouble(),
+              top: _floatingOffset.dy.clamp(0, math.max(0, MediaQuery.sizeOf(context).height - 210)).toDouble(),
+              child: GestureDetector(
+                onPanUpdate: (details) => setState(() => _floatingOffset += details.delta),
+                child: Material(
+                  elevation: 8,
+                  borderRadius: BorderRadius.circular(12),
+                  clipBehavior: Clip.antiAlias,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: math.min(360, MediaQuery.sizeOf(context).width - 16),
+                      maxHeight: math.min(190, MediaQuery.sizeOf(context).height * .5),
                     ),
+                    child: _buildToolbar(vertical: false),
                   ),
                 ),
-            ],
-          ),
-        ),
-        _buildPageFooter(),
+              ),
+            ),
+          if (_showFavoritesShowcase) _buildFavoriteShowcase(),
+          if (_showPageNavigation && _floatingPageNavigation) _buildFloatingPageNavigation(),
+          if (_fullScreenMode)
+            Positioned(
+              right: 8,
+              top: 8,
+              child: Material(
+                color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                shape: const CircleBorder(),
+                elevation: 5,
+                child: IconButton(
+                  tooltip: 'Exit full screen',
+                  onPressed: () => setState(() => _fullScreenMode = false),
+                  icon: const Icon(Icons.fullscreen_exit_rounded),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    final canvasWithFooter = Column(
+      children: [
+        viewport,
+        if (!_fullScreenMode && _showPageNavigation && !_floatingPageNavigation) _buildPageFooter(),
       ],
     );
+
+    if (_fullScreenMode) {
+      return Column(children: [canvasWithFooter]);
+    }
+
     switch (_toolbarDock) {
       case 'bottom':
-        return Column(children: [Expanded(child: canvasWithFooter), if (!_floatingToolbar) _buildToolbar(vertical: false)]);
+        return Column(
+          children: [
+            Expanded(child: canvasWithFooter),
+            if (!_floatingToolbar) _buildToolbar(vertical: false),
+          ],
+        );
       case 'left':
-        return Row(children: [
-          if (!_floatingToolbar) SizedBox(width: 80, child: _buildToolbar(vertical: true)),
-          Expanded(child: canvasWithFooter),
-        ]);
+        return Row(
+          children: [
+            if (!_floatingToolbar)
+              SizedBox(
+                width: 40,
+                child: _buildToolbar(vertical: true),
+              ),
+            Expanded(child: canvasWithFooter),
+          ],
+        );
       case 'right':
-        return Row(children: [
-          Expanded(child: canvasWithFooter),
-          if (!_floatingToolbar) SizedBox(width: 80, child: _buildToolbar(vertical: true)),
-        ]);
+        return Row(
+          children: [
+            Expanded(child: canvasWithFooter),
+            if (!_floatingToolbar)
+              SizedBox(
+                width: 40,
+                child: _buildToolbar(vertical: true),
+              ),
+          ],
+        );
       default:
-        return Column(children: [
-          if (!_floatingToolbar) _buildToolbar(vertical: false),
-          Expanded(child: canvasWithFooter),
-        ]);
+        return Column(
+          children: [
+            if (!_floatingToolbar) _buildToolbar(vertical: false),
+            Expanded(child: canvasWithFooter),
+          ],
+        );
     }
   }
 
