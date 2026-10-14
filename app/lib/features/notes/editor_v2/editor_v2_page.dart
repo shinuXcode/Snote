@@ -4250,14 +4250,11 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
     'flowerIcon', 'treeIcon', 'atomNucleus', 'electronOrbit',
   };
   static const Set<String> _geometryTools = <String>{
-    'octagon','nonagon','decagon','heptagon','hexagram','pentagram','arrowUp','arrowDown',
-    'arrowLeft','arrowRight','doubleArrow','curvedArrow','zigzag','lightningBolt',
-    'crescentMoon','sunSymbol','doubleChevron','chevron','bracketLeft','bracketRight',
-    'braceLeft','braceRight','equalsSign','notEqualSign','approximateEqual','greaterThanSign',
-    'lessThanSign','plusMinus','infinitySymbol','integralSymbol','sigmaSymbol','deltaSymbol',
-    'thetaSymbol','omegaSymbol','squareRootSymbol','fractionBar','matrixGrid','summationSymbol',
-    'derivativeSymbol','coordinatePoint','linearGraph','circleGraph','scatterPlot','lineChart',
-    'areaChart','donutChart','stackedBarChart','networkGraph','vennDiagram',
+    'octagon', 'nonagon', 'decagon', 'heptagon', 'hexagram', 'pentagram',
+    'arrowUp', 'arrowDown', 'arrowLeft', 'arrowRight', 'doubleArrow',
+    'curvedArrow', 'zigzag', 'lightningBolt', 'crescentMoon', 'sunSymbol',
+    'doubleChevron', 'chevron', 'bracketLeft', 'bracketRight', 'braceLeft',
+    'braceRight',
   };
   static const Set<String> _instrumentTools = <String>{
     'ruler', 'compass', 'protractor', 'divider', 'dashedLine', 'dottedLine',
