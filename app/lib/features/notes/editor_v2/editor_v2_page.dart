@@ -1100,6 +1100,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   }
 
   void _pasteStrokes({bool duplicate = false}) {
+    if (_pageData['locked'] == true) return;
     final source = duplicate
         ? _strokesFor(_pageData).where((stroke) => _selectedStrokeIds.contains(stroke.id)).toList()
         : StrokeCodec.documentToStrokes(<String, Object?>{'strokes': _strokeClipboard});
@@ -3037,6 +3038,29 @@ class _EditorV2PageState extends State<EditorV2Page>
                     decoration: BoxDecoration(
                       border: Border.all(color: const Color(0xff3979e8), width: 1.2),
                       color: const Color(0x183979e8),
+                    ),
+                  ),
+                ),
+              ),
+            if (page['locked'] == true)
+              Positioned(
+                top: 8,
+                right: 8,
+                child: IgnorePointer(
+                  child: Material(
+                    color: Theme.of(context).colorScheme.errorContainer.withValues(alpha: .94),
+                    borderRadius: BorderRadius.circular(8),
+                    elevation: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.lock_rounded, size: 15, color: Theme.of(context).colorScheme.onErrorContainer),
+                          const SizedBox(width: 5),
+                          Text('PAGE LOCKED', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Theme.of(context).colorScheme.onErrorContainer)),
+                        ],
+                      ),
                     ),
                   ),
                 ),
