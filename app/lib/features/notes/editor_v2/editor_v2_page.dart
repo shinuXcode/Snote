@@ -1079,6 +1079,36 @@ class _EditorV2PageState extends State<EditorV2Page>
     return (point - projection).distance;
   }
 
+  bool _segmentIntersectsRect(Offset start, Offset end, Rect rect) {
+    if (rect.contains(start) || rect.contains(end)) return true;
+    final dx = end.dx - start.dx;
+    final dy = end.dy - start.dy;
+    var tMin = 0.0;
+    var tMax = 1.0;
+    final p = <double>[-dx, dx, -dy, dy];
+    final q = <double>[
+      start.dx - rect.left,
+      rect.right - start.dx,
+      start.dy - rect.top,
+      rect.bottom - start.dy,
+    ];
+    for (var i = 0; i < 4; i++) {
+      if (p[i].abs() < 1e-9) {
+        if (q[i] < 0) return false;
+        continue;
+      }
+      final ratio = q[i] / p[i];
+      if (p[i] < 0) {
+        if (ratio > tMax) return false;
+        if (ratio > tMin) tMin = ratio;
+      } else {
+        if (ratio < tMin) return false;
+        if (ratio < tMax) tMax = ratio;
+      }
+    }
+    return tMin <= tMax;
+  }
+
   void _selectInRect(Rect rect) {
     final normalized = Rect.fromLTRB(
       math.min(rect.left, rect.right),
@@ -1086,10 +1116,15 @@ class _EditorV2PageState extends State<EditorV2Page>
       math.max(rect.left, rect.right),
       math.max(rect.top, rect.bottom),
     );
+    final hitRect = normalized.inflate(2);
     final selected = <String>{};
     for (final stroke in _strokesFor(_pageData)) {
-      final points = stroke.points.map((point) => point.position);
-      if (points.any(normalized.inflate(2).contains)) selected.add(stroke.id);
+      final points = stroke.points.map((point) => point.position).toList();
+      var intersects = points.any(hitRect.contains);
+      for (var i = 1; !intersects && i < points.length; i++) {
+        intersects = _segmentIntersectsRect(points[i - 1], points[i], hitRect);
+      }
+      if (intersects) selected.add(stroke.id);
     }
     setState(() {
       _lassoRect = normalized;
