@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'writing_gesture_layer.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../app/theme_controller.dart';
@@ -24,6 +25,13 @@ import '../../core/settings/app_settings.dart';
 import '../../data/local/note_repository.dart';
 import '../../data/local/file_document_repository.dart';
 import '../settings/settings_page.dart';
+
+class _ToolDragData {
+  const _ToolDragData(this.key, this.sourceLocation);
+
+  final String key;
+  final String sourceLocation;
+}
 
 class NoteEditorPage extends StatefulWidget {
   final LocalNote note;
@@ -55,6 +63,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   bool _pan = false;
   bool _full = false;
   bool _preview = false;
+  double _pencaseX = -1;
+  double _pencaseY = 150;
+  String _pencaseSide = 'right';
+  bool _pencaseDragging = false;
   bool _toolbar = true;
   bool _docked = false;
   String _dockSide = 'bottom';
@@ -107,7 +119,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _title.text = widget.note.title;
-    _quill.addListener(_scheduleSave);
+    _preview = _settings.getBool('showPagePreview');    _quill.addListener(_scheduleSave);
     _prepare();
   }
 
@@ -492,8 +504,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
             children: [
               Positioned.fill(
                 child: WritingGestureLayer(
-                  onTwoFingerTap: () => _canvas.undo(),
-                  onTwoFingerSwipeUp: () => _confirmPageClear(),
+                  onTwoFingerTap: _settings.getBool('twoFingerUndo') ? () => _canvas.undo() : null,
+                  onTwoFingerSwipeUp: _settings.getBool('swipeClear') ? () => _confirmPageClear() : null,
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     supportedDevices: const {
@@ -501,6 +513,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                       PointerDeviceKind.trackpad,
                     },
                     onHorizontalDragEnd: _pan ? null : _pageSwipe,
+                    onVerticalDragEnd: _pan ? null : _pageSwipe,
                     onDoubleTap: () => setState(() => _toolbar = !_toolbar),
                     onLongPress: _settings.getBool('fingerLongPressSelection')
                         ? () => _selectTool(CanvasTool.lasso)
@@ -513,6 +526,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
               if (!_full && _settings.getBool('showPageNavigation')) _pageControls(),
               if (_preview && !_full) _previewRail(),
               if (_toolbar && _draw) _toolbarWidget(),
+              if (!_full && _draw) _pencaseWidget(),
               if (_shapePanel && !_full) _shapePanelWidget(),
               if (!_toolbar && !_full) _toolbarOpen(),
               if (_full) _fullExit(),
@@ -795,44 +809,131 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     _scheduleSave();
   }
 
-  Widget _header() => Positioned(
-        left: 0,
-        right: 0,
-        top: 0,
+  Widget _header() {
+    final titleTools = _toolKeysForLocation('titleBar');
+    final toolWidth = math.min(118.0, titleTools.length * 42.0).toDouble();
+    final actions = <Widget>[
+      IconButton(tooltip: 'Tags', onPressed: _tagSheet, icon: const Icon(Icons.local_offer_outlined), visualDensity: VisualDensity.compact),
+      IconButton(
+        tooltip: 'Pages',
+        onPressed: () {
+          final next = !_preview;
+          setState(() => _preview = next);
+          unawaited(_settings.setBool('showPagePreview', next));
+        },
+        icon: const Icon(Icons.view_sidebar_outlined),
+        visualDensity: VisualDensity.compact,
+      ),
+      IconButton(tooltip: 'Paper', onPressed: _paperSheet, icon: const Icon(Icons.grid_4x4_rounded), visualDensity: VisualDensity.compact),
+      IconButton(tooltip: _locked ? 'Unlock' : 'Lock', onPressed: _lockNote, icon: Icon(_locked ? Icons.lock_rounded : Icons.lock_outline_rounded), visualDensity: VisualDensity.compact),
+      AnimatedBuilder(
+        animation: _canvas,
+        builder: (_, __) => Row(mainAxisSize: MainAxisSize.min, children: [
+          IconButton(tooltip: 'Undo', visualDensity: VisualDensity.compact, onPressed: _canvas.canUndo ? _canvas.undo : null, icon: const Icon(Icons.undo_rounded)),
+          IconButton(tooltip: 'Redo', visualDensity: VisualDensity.compact, onPressed: _canvas.canRedo ? _canvas.redo : null, icon: const Icon(Icons.redo_rounded)),
+        ]),
+      ),
+      IconButton(tooltip: 'Fullscreen', onPressed: _toggleFullscreen, icon: Icon(_full ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded), visualDensity: VisualDensity.compact),
+      IconButton(
+        tooltip: 'Settings',
+        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage())).then((_) => _keepAwake()),
+        icon: const Icon(Icons.settings_outlined),
+        visualDensity: VisualDensity.compact,
+      ),
+    ];
+    return Positioned(
+      left: 0,
+      right: 0,
+      top: 0,
+      child: Material(
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: .96),
+        child: SizedBox(
+          height: 54,
+          child: Row(children: [
+            IconButton(
+              tooltip: 'Back',
+              visualDensity: VisualDensity.compact,
+              onPressed: () async {
+                await _flushSave();
+                if (mounted) Navigator.maybePop(context);
+              },
+              icon: const Icon(Icons.arrow_back_rounded),
+            ),
+            Expanded(
+              flex: 2,
+              child: TextField(
+                controller: _title,
+                decoration: const InputDecoration(
+                  border: InputBorder.none,
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(vertical: 8),
+                  hintText: 'Untitled note',
+                ),
+                onSubmitted: (_) => _save(),
+              ),
+            ),
+            if (titleTools.isNotEmpty)
+              SizedBox(
+                width: toolWidth,
+                child: _toolDropArea(
+                  'titleBar',
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: titleTools.map((key) => _placedToolButton(key, 'titleBar')).toList(),
+                    ),
+                  ),
+                ),
+              ),
+            Flexible(
+              flex: 3,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(mainAxisSize: MainAxisSize.min, children: actions),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+  Widget _pageControls() => Positioned(
+        right: 8,
+        top: 66,
         child: Material(
-          color: Theme.of(context).colorScheme.surface.withValues(alpha: .96),
-          child: SizedBox(
-            height: 58,
-            child: Row(children: [
-              IconButton(onPressed: () async { await _flushSave(); if (mounted) Navigator.maybePop(context); }, icon: const Icon(Icons.arrow_back_rounded)),
-              Expanded(child: TextField(controller: _title, decoration: const InputDecoration(border: InputBorder.none, hintText: 'Untitled note'), onSubmitted: (_) => _save())),
-              IconButton(tooltip: 'Tags', onPressed: _tagSheet, icon: const Icon(Icons.local_offer_outlined)),
-              IconButton(tooltip: 'Pages', onPressed: () => setState(() => _preview = !_preview), icon: const Icon(Icons.view_sidebar_outlined)),
-              IconButton(tooltip: 'Paper', onPressed: _paperSheet, icon: const Icon(Icons.grid_4x4_rounded)),
-              IconButton(tooltip: _locked ? 'Unlock' : 'Lock', onPressed: _lockNote, icon: Icon(_locked ? Icons.lock_rounded : Icons.lock_outline_rounded)),
-              AnimatedBuilder(animation: _canvas, builder: (_, __) => Row(children: [
-                IconButton(onPressed: _canvas.canUndo ? _canvas.undo : null, icon: const Icon(Icons.undo_rounded)),
-                IconButton(onPressed: _canvas.canRedo ? _canvas.redo : null, icon: const Icon(Icons.redo_rounded)),
-              ])),
-              IconButton(tooltip: 'Fullscreen', onPressed: _toggleFullscreen, icon: Icon(_full ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded)),
-              IconButton(tooltip: 'Settings', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage())).then((_) => _keepAwake()), icon: const Icon(Icons.settings_outlined)),
+          elevation: 3,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints.tightFor(width: 32, height: 28),
+                padding: EdgeInsets.zero,
+                onPressed: _page > 0 ? _previousPage : null,
+                icon: const Icon(Icons.keyboard_arrow_up_rounded, size: 19),
+              ),
+              Text(
+                '${_page + 1}/${_pages.length}',
+                style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800),
+              ),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints.tightFor(width: 32, height: 28),
+                padding: EdgeInsets.zero,
+                onPressed: _nextPage,
+                icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 19),
+              ),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints.tightFor(width: 32, height: 28),
+                padding: EdgeInsets.zero,
+                onPressed: _addPage,
+                icon: const Icon(Icons.add_rounded, size: 18),
+              ),
             ]),
           ),
-        ),
-      );
-
-  Widget _pageControls() => Positioned(
-        right: 12,
-        top: 72,
-        child: Material(
-          elevation: 8,
-          borderRadius: BorderRadius.circular(18),
-          child: Column(children: [
-            IconButton(onPressed: _page > 0 ? _previousPage : null, icon: const Icon(Icons.keyboard_arrow_up_rounded)),
-            Padding(padding: const EdgeInsets.symmetric(horizontal: 7), child: Text((_page + 1).toString() + '/' + _pages.length.toString(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800))),
-            IconButton(onPressed: _nextPage, icon: const Icon(Icons.keyboard_arrow_down_rounded)),
-            IconButton(onPressed: _addPage, icon: const Icon(Icons.add_rounded)),
-          ]),
         ),
       );
 
@@ -855,9 +956,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       return Positioned(
         left: _dockSide == 'left' ? 0 : null,
         right: _dockSide == 'right' ? 0 : null,
-        top: _dockSide == 'top' ? 58 : null,
+        top: _dockSide == 'top' ? 54 : null,
         bottom: _dockSide == 'bottom' ? 0 : null,
-        child: SafeArea(child: _toolbarSurface(_toolbarContent(vertical ? Axis.vertical : Axis.horizontal, docked: true))),
+        child: SafeArea(child: _toolbarSurface(_toolbarContent(vertical ? Axis.vertical : Axis.horizontal, docked: true), dropLocation: 'toolbar')),
       );
     }
 
@@ -879,41 +980,28 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           ),
         );
       },
-      child: _toolbarSurface(_toolbarContent(Axis.horizontal, docked: false)),
+      child: _toolbarSurface(_toolbarContent(Axis.horizontal, docked: false), dropLocation: 'toolbar'),
     );
   }
 
-  Widget _toolbarSurface(Widget child) {
+  Widget _toolbarSurface(Widget child, {String? dropLocation}) {
     final blur = SnoteThemeController.instance.eInk ? 0.0 : 12.0;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
+    final surface = ClipRRect(
+      borderRadius: BorderRadius.circular(16),
       child: BackdropFilter(
         filter: ui.ImageFilter.blur(sigmaX: blur, sigmaY: blur),
         child: Material(
-          elevation: SnoteThemeController.instance.eInk ? 0 : 8,
-          color: Theme.of(context).colorScheme.surface.withValues(alpha: .70),
+          elevation: SnoteThemeController.instance.eInk ? 0 : 5,
+          color: Theme.of(context).colorScheme.surface.withValues(alpha: .78),
           child: child,
         ),
       ),
     );
+    return dropLocation == null ? surface : _toolDropArea(dropLocation, surface);
   }
 
   Widget _toolbarContent(Axis axis, {required bool docked}) {
-    final configured = _settings.getString('pencaseTools').split(',').where((v) => v.isNotEmpty).toSet();
-    final defaultTools = <CanvasTool>[
-      CanvasTool.ballpoint,
-      CanvasTool.fountain,
-      CanvasTool.calligraphy,
-      CanvasTool.pencil,
-      CanvasTool.highlighter,
-      CanvasTool.marker,
-      CanvasTool.brush,
-      CanvasTool.eraser,
-      CanvasTool.pixelEraser,
-      CanvasTool.lasso,
-    ];
-    final pencaseTools = defaultTools.where((tool) => configured.contains(tool.name)).toList();
-
+    final toolKeys = _toolKeysForLocation('toolbar');
     final items = <Widget>[
       GestureDetector(
         onPanUpdate: docked
@@ -928,57 +1016,27 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
               }
             : null,
         child: Padding(
-          padding: const EdgeInsets.all(7),
-          child: Icon(Icons.drag_indicator_rounded, size: 19, color: Theme.of(context).colorScheme.onSurfaceVariant),
+          padding: const EdgeInsets.all(4),
+          child: Icon(Icons.drag_indicator_rounded, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
       ),
-      ...pencaseTools.map((tool) => _toolButton(tool, _toolIcon(tool))),
-      IconButton.filledTonal(
-        onPressed: () => setState(() => _shapePanel = !_shapePanel),
-        icon: const Icon(Icons.category_outlined),
-        tooltip: 'Shapes',
-      ),
-      IconButton.filledTonal(
-        onPressed: _stickers,
-        icon: const Icon(Icons.emoji_emotions_outlined),
-        tooltip: 'Stickers',
-      ),
+      ...toolKeys.map((key) => _placedToolButton(key, 'toolbar')),
+      IconButton(onPressed: () => setState(() => _shapePanel = !_shapePanel), icon: const Icon(Icons.category_outlined), tooltip: 'Shapes', visualDensity: VisualDensity.compact),
+      IconButton(onPressed: _stickers, icon: const Icon(Icons.emoji_emotions_outlined), tooltip: 'Stickers', visualDensity: VisualDensity.compact),
       ..._penPalette.map(_colorDot),
-      IconButton(
-        onPressed: _colorSheet,
-        icon: Icon(Icons.color_lens_outlined, color: _penColor),
-        tooltip: 'Colors',
-      ),
-      IconButton(
-        onPressed: _styleSheet,
-        icon: const Icon(Icons.tune_rounded),
-        tooltip: 'Tool style',
-      ),
-      IconButton(
-        onPressed: _pencaseSheet,
-        icon: const Icon(Icons.inventory_2_outlined),
-        tooltip: 'Pencase',
-      ),
-      IconButton(
-        onPressed: () => setState(() => _pan = !_pan),
-        icon: Icon(_pan ? Icons.pan_tool_rounded : Icons.pan_tool_outlined),
-        tooltip: 'Pan and zoom',
-      ),
-      IconButton(
-        onPressed: () => setState(() => _draw = !_draw),
-        icon: Icon(_draw ? Icons.text_fields_rounded : Icons.draw_rounded),
-        tooltip: 'Text / draw',
-      ),
-      IconButton(
-        onPressed: () => setState(() => _toolbar = false),
-        icon: const Icon(Icons.close_rounded),
-        tooltip: 'Close tools',
-      ),
+      IconButton(onPressed: _colorSheet, icon: Icon(Icons.color_lens_outlined, color: _penColor), tooltip: 'Colors', visualDensity: VisualDensity.compact),
+      IconButton(onPressed: _styleSheet, icon: const Icon(Icons.tune_rounded), tooltip: 'Tool style', visualDensity: VisualDensity.compact),
+      IconButton(onPressed: _pencaseSheet, icon: const Icon(Icons.widgets_outlined), tooltip: 'Manage tools', visualDensity: VisualDensity.compact),
+      IconButton(onPressed: () => setState(() => _pan = !_pan), icon: Icon(_pan ? Icons.pan_tool_rounded : Icons.pan_tool_outlined), tooltip: 'Pan and zoom', visualDensity: VisualDensity.compact),
+      IconButton(onPressed: () => setState(() => _draw = !_draw), icon: Icon(_draw ? Icons.text_fields_rounded : Icons.draw_rounded), tooltip: 'Text / draw', visualDensity: VisualDensity.compact),
+      IconButton(onPressed: () => setState(() => _toolbar = false), icon: const Icon(Icons.close_rounded), tooltip: 'Close tools', visualDensity: VisualDensity.compact),
     ];
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
-      child: Flex(direction: axis, mainAxisSize: MainAxisSize.min, children: items),
+    return SingleChildScrollView(
+      scrollDirection: axis,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+        child: Flex(direction: axis, mainAxisSize: MainAxisSize.min, children: items),
+      ),
     );
   }
 
@@ -994,6 +1052,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       case CanvasTool.eraser: return Icons.auto_fix_normal_rounded;
       case CanvasTool.pixelEraser: return Icons.auto_fix_high_rounded;
       case CanvasTool.lasso: return Icons.gesture_rounded;
+      case CanvasTool.fill: return Icons.format_color_fill_rounded;
       case CanvasTool.line: return Icons.horizontal_rule_rounded;
       case CanvasTool.arrow: return Icons.arrow_forward_rounded;
       case CanvasTool.rectangle: return Icons.crop_square_rounded;
@@ -1031,12 +1090,518 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     _scheduleSave();
   }
 
-  Widget _toolButton(CanvasTool tool, IconData icon) => IconButton(
-        onPressed: () => _selectTool(tool),
-        style: IconButton.styleFrom(backgroundColor: _tool == tool ? Theme.of(context).colorScheme.primaryContainer : null),
-        icon: Icon(icon),
-        tooltip: tool.label,
+  List<String> get _allToolKeys => <String>[
+        ...CanvasTool.values.map((tool) => tool.name),
+        'calculator',
+        'screenshot',
+      ];
+
+  Map<String, List<String>> _resolvedToolPlacements() {
+    const validLocations = <String>{'titleBar', 'toolbar', 'pencase', 'hidden'};
+    final saved = <String, List<String>>{};
+    try {
+      final decoded = jsonDecode(_settings.getString('toolPlacements'));
+      if (decoded is Map) {
+        for (final entry in decoded.entries) {
+          if (entry.value is! List) continue;
+          var locations = (entry.value as List)
+              .map((item) => item.toString())
+              .where(validLocations.contains)
+              .toList();
+          if (locations.contains('hidden') || locations.isEmpty) {
+            locations = <String>['hidden'];
+          } else {
+            locations = locations.toSet().toList();
+          }
+          saved[entry.key.toString()] = locations;
+        }
+      }
+    } catch (_) {}
+    final legacy = _settings.getString('pencaseTools').split(',').where((v) => v.isNotEmpty).toSet();
+    final resolved = <String, List<String>>{};
+    for (final key in _allToolKeys) {
+      if (saved.containsKey(key)) {
+        resolved[key] = saved[key]!;
+      } else if (key == 'calculator' || key == 'screenshot' || legacy.contains(key)) {
+        resolved[key] = <String>['toolbar'];
+      } else {
+        resolved[key] = <String>['hidden'];
+      }
+    }
+    return resolved;
+  }
+
+  List<String> get _toolOrder {
+    final all = _allToolKeys;
+    final legacy = _settings.getString('pencaseTools').split(',').where((key) => all.contains(key)).toList();
+    final seedOrder = <String>[...legacy, 'calculator', 'screenshot', ...all];
+    final result = <String>[];
+    final seen = <String>{};
+    try {
+      final decoded = jsonDecode(_settings.getString('toolOrder'));
+      if (decoded is List) {
+        for (final value in decoded) {
+          final key = value.toString();
+          if (all.contains(key) && seen.add(key)) result.add(key);
+        }
+      }
+    } catch (_) {}
+    for (final key in seedOrder) {
+      if (seen.add(key)) result.add(key);
+    }
+    return result;
+  }
+
+  List<String> _toolKeysForLocation(String location) {
+    final placements = _resolvedToolPlacements();
+    return _toolOrder.where((key) => (placements[key] ?? const <String>[]).contains(location)).toList();
+  }
+
+  String _toolTitle(String key) {
+    for (final tool in CanvasTool.values) {
+      if (tool.name == key) return tool.label;
+    }
+    switch (key) {
+      case 'calculator': return 'Calculator';
+      case 'screenshot': return 'Screenshot / image';
+      default: return key;
+    }
+  }
+
+  IconData _toolIconForKey(String key) {
+    if (key == 'calculator') return Icons.calculate_outlined;
+    if (key == 'screenshot') return Icons.screenshot_rounded;
+    for (final tool in CanvasTool.values) {
+      if (tool.name == key) return _toolIcon(tool);
+    }
+    return Icons.widgets_outlined;
+  }
+
+  Future<void> _saveToolLayout(
+    Map<String, List<String>> placements,
+    List<String> order,
+  ) async {
+    final normalized = <String, List<String>>{};
+    for (final key in _allToolKeys) {
+      var locations = List<String>.from(placements[key] ?? const <String>[]);
+      if (locations.contains('hidden') || locations.isEmpty) {
+        locations = <String>['hidden'];
+      } else {
+        locations = locations.where((location) =>
+            const <String>{'titleBar', 'toolbar', 'pencase'}.contains(location)).toSet().toList();
+        if (locations.isEmpty) locations = <String>['hidden'];
+      }
+      normalized[key] = locations;
+    }
+    final seen = <String>{};
+    final normalizedOrder = <String>[];
+    for (final key in order) {
+      if (_allToolKeys.contains(key) && seen.add(key)) normalizedOrder.add(key);
+    }
+    for (final key in _allToolKeys) {
+      if (seen.add(key)) normalizedOrder.add(key);
+    }
+    await _settings.setString('toolPlacements', jsonEncode(normalized));
+    await _settings.setString('toolOrder', jsonEncode(normalizedOrder));
+    final legacyToolbar = normalizedOrder.where((key) =>
+        CanvasTool.values.any((tool) => tool.name == key) &&
+        (normalized[key] ?? const <String>[]).contains('toolbar')).join(',');
+    await _settings.setString('pencaseTools', legacyToolbar);
+    if (mounted) setState(() {});
+  }
+
+  Widget _toolDropArea(String location, Widget child) => DragTarget<_ToolDragData>(
+        onAcceptWithDetails: (details) => unawaited(_moveTool(details.data, null, location)),
+        builder: (context, candidates, rejected) => child,
       );
+
+  Future<void> _moveTool(_ToolDragData data, String? targetKey, String targetLocation) async {
+    if (data.key == targetKey && data.sourceLocation == targetLocation) return;
+    final placements = _resolvedToolPlacements()
+        .map((key, value) => MapEntry(key, List<String>.from(value)));
+    final order = _toolOrder..remove(data.key);
+    final targetIndex = targetKey == null ? -1 : order.indexOf(targetKey);
+    order.insert(targetIndex < 0 ? order.length : targetIndex, data.key);
+    if (data.sourceLocation != targetLocation) {
+      final locations = placements[data.key] ?? <String>['hidden'];
+      locations.remove(data.sourceLocation);
+      locations.remove('hidden');
+      if (!locations.contains(targetLocation)) locations.add(targetLocation);
+      placements[data.key] = locations.isEmpty ? <String>['hidden'] : locations;
+    }
+    await _saveToolLayout(placements, order);
+  }
+
+  Widget _placedToolButton(String key, String location) {
+    final active = CanvasTool.values.any((tool) => tool.name == key) && _tool.name == key;
+    final icon = _toolIconForKey(key);
+    return DragTarget<_ToolDragData>(
+      onAcceptWithDetails: (details) => unawaited(_moveTool(details.data, key, location)),
+      builder: (context, candidates, rejected) => LongPressDraggable<_ToolDragData>(
+        data: _ToolDragData(key, location),
+        maxSimultaneousDrags: 1,
+        feedback: Material(
+          color: Theme.of(context).colorScheme.surface,
+          elevation: 8,
+          borderRadius: BorderRadius.circular(12),
+          child: SizedBox(width: 44, height: 44, child: Icon(icon, color: Theme.of(context).colorScheme.primary)),
+        ),
+        childWhenDragging: Opacity(opacity: .25, child: _toolTile(key, active: active)),
+        child: _toolTile(key, active: active, dropHighlight: candidates.isNotEmpty),
+      ),
+    );
+  }
+
+  Widget _toolTile(
+    String key, {
+    required bool active,
+    bool dropHighlight = false,
+  }) => Tooltip(
+        message: '${_toolTitle(key)} · double-tap for settings',
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: () => _activateToolKey(key),
+            onDoubleTap: () => _toolSettingsSheet(key),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 100),
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                color: active
+                    ? Theme.of(context).colorScheme.primaryContainer
+                    : dropHighlight
+                        ? Theme.of(context).colorScheme.secondaryContainer
+                        : null,
+              ),
+              child: Icon(_toolIconForKey(key)),
+            ),
+          ),
+        ),
+      );
+
+  void _activateToolKey(String key) {
+    if (key == 'calculator') {
+      unawaited(_calculatorSheet());
+      return;
+    }
+    if (key == 'screenshot') {
+      unawaited(_insertScreenshot());
+      return;
+    }
+    for (final tool in CanvasTool.values) {
+      if (tool.name == key) {
+        _selectTool(tool);
+        return;
+      }
+    }
+  }
+
+  Future<void> _toolSettingsSheet(String key) async {
+    final selected = <String>{...(_resolvedToolPlacements()[key] ?? const <String>['hidden'])};
+    const locations = <({String key, String label, IconData icon})>[
+      (key: 'titleBar', label: 'Title Bar', icon: Icons.title_rounded),
+      (key: 'toolbar', label: 'Toolbar', icon: Icons.widgets_outlined),
+      (key: 'pencase', label: 'Pencase', icon: Icons.inventory_2_outlined),
+    ];
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 22),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    Icon(_toolIconForKey(key), size: 26),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text('${_toolTitle(key)} settings', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900))),
+                  ]),
+                  const SizedBox(height: 6),
+                  const Text('Choose where this tool appears. Long-press a tool to drag it between locations or reorder it.'),
+                  const SizedBox(height: 10),
+                  ...locations.map((location) => CheckboxListTile(
+                    secondary: Icon(location.icon),
+                    title: Text(location.label),
+                    value: selected.contains(location.key),
+                    onChanged: (value) => setSheetState(() {
+                      if (value == true) {
+                        selected.remove('hidden');
+                        selected.add(location.key);
+                      } else {
+                        selected.remove(location.key);
+                      }
+                    }),
+                  )),
+                  CheckboxListTile(
+                    secondary: const Icon(Icons.visibility_off_outlined),
+                    title: const Text('Hidden'),
+                    value: selected.contains('hidden') || selected.isEmpty,
+                    onChanged: (value) => setSheetState(() {
+                      if (value == true) {
+                        selected..clear()..add('hidden');
+                      } else {
+                        selected.remove('hidden');
+                      }
+                    }),
+                  ),
+                  const Divider(),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          selected..remove('hidden')..add('pencase');
+                          final next = _resolvedToolPlacements();
+                          next[key] = selected.isEmpty ? <String>['hidden'] : selected.toList();
+                          await _saveToolLayout(next, _toolOrder);
+                          if (sheetContext.mounted) Navigator.pop(sheetContext);
+                        },
+                        icon: const Icon(Icons.inventory_2_outlined),
+                        label: const Text('Collect to Pencase'),
+                      ),
+                      FilledButton.icon(
+                        onPressed: () async {
+                          final next = _resolvedToolPlacements();
+                          next[key] = selected.isEmpty ? <String>['hidden'] : selected.toList();
+                          await _saveToolLayout(next, _toolOrder);
+                          if (sheetContext.mounted) Navigator.pop(sheetContext);
+                        },
+                        icon: const Icon(Icons.save_outlined),
+                        label: const Text('Save location'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _calculatorSheet() async {
+    String display = '0';
+    double? stored;
+    String? operator;
+    bool replaceDisplay = true;
+    void press(String key, void Function(void Function()) setSheetState) {
+      setSheetState(() {
+        if (key == 'C') {
+          display = '0';
+          stored = null;
+          operator = null;
+          replaceDisplay = true;
+          return;
+        }
+        if (key == '⌫') {
+          display = display.length <= 1 ? '0' : display.substring(0, display.length - 1);
+          return;
+        }
+        if (key == '%') {
+          final number = double.tryParse(display);
+          if (number != null) display = _formatCalculation(number / 100);
+          replaceDisplay = true;
+          return;
+        }
+        if (const <String>['+', '−', '×', '÷'].contains(key)) {
+          stored = double.tryParse(display);
+          operator = key;
+          replaceDisplay = true;
+          return;
+        }
+        if (key == '=') {
+          final right = double.tryParse(display);
+          if (stored == null || operator == null || right == null) return;
+          final left = stored!;
+          final result = switch (operator) {
+            '+' => left + right,
+            '−' => left - right,
+            '×' => left * right,
+            '÷' => right == 0 ? double.nan : left / right,
+            _ => right,
+          };
+          display = result.isFinite ? _formatCalculation(result) : 'Error';
+          stored = null;
+          operator = null;
+          replaceDisplay = true;
+          return;
+        }
+        if (key == '.') {
+          if (replaceDisplay) {
+            display = '0.';
+            replaceDisplay = false;
+          } else if (!display.contains('.')) {
+            display += '.';
+          }
+          return;
+        }
+        if (RegExp(r'^\d$').hasMatch(key)) {
+          display = replaceDisplay || display == '0' || display == 'Error' ? key : display + key;
+          replaceDisplay = false;
+        }
+      });
+    }
+    const keys = <String>[
+      'C', '⌫', '%', '÷',
+      '7', '8', '9', '×',
+      '4', '5', '6', '−',
+      '1', '2', '3', '+',
+      '0', '.', '=',
+    ];
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setSheetState) => AlertDialog(
+          title: const Row(children: [Icon(Icons.calculate_outlined), SizedBox(width: 10), Text('Calculator')]),
+          content: SizedBox(
+            width: 300,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 18),
+                alignment: Alignment.centerRight,
+                decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(12)),
+                child: Text(display, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
+              ),
+              const SizedBox(height: 12),
+              GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: 4,
+                mainAxisSpacing: 6,
+                crossAxisSpacing: 6,
+                childAspectRatio: 1.25,
+                children: keys.map((key) => FilledButton.tonal(
+                  onPressed: () => press(key, setSheetState),
+                  child: Text(key, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                )).toList(),
+              ),
+            ]),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) unawaited(_toolSettingsSheet('calculator'));
+                });
+              },
+              child: const Text('Tool settings'),
+            ),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Close')),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatCalculation(double value) {
+    if (!value.isFinite) return 'Error';
+    if (value == value.roundToDouble()) return value.toInt().toString();
+    return value.toStringAsPrecision(10).replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
+  }
+
+  Future<void> _insertScreenshot() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(leading: const Icon(Icons.photo_library_outlined), title: const Text('Choose screenshot or image'), onTap: () => Navigator.pop(sheetContext, ImageSource.gallery)),
+          ListTile(leading: const Icon(Icons.camera_alt_outlined), title: const Text('Take a photo'), onTap: () => Navigator.pop(sheetContext, ImageSource.camera)),
+        ]),
+      ),
+    );
+    if (source == null || !mounted) return;
+    try {
+      final picked = await ImagePicker().pickImage(source: source, imageQuality: 100);
+      if (picked == null) return;
+      final bytes = await picked.readAsBytes();
+      final asset = await _files.saveBytes(
+        noteId: widget.note.id,
+        name: picked.name,
+        type: 'image',
+        bytes: bytes,
+        metadata: <String, dynamic>{'source': 'screenshot-tool', 'insertedIntoPage': _page + 1},
+      );
+      if (!mounted) return;
+      setState(() {
+        pageData['backgroundAssetId'] = asset.id;
+        pageData['backgroundImageName'] = picked.name;
+      });
+      await _loadPageBackground();
+      _scheduleSave();
+      if (_settings.getBool('screenshotNotification') && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Image inserted into the current note page.')));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not insert image: $error')));
+      }
+    }
+  }
+
+  Widget _pencaseWidget() {
+    final keys = _toolKeysForLocation('pencase');
+    if (keys.isEmpty) return const SizedBox.shrink();
+    final size = MediaQuery.sizeOf(context);
+    final left = _pencaseX < 0 ? math.max(0.0, size.width - 54) : _pencaseX;
+    final top = _pencaseY.clamp(56.0, math.max(56.0, size.height - 100)).toDouble();
+    final vertical = _pencaseSide == 'left' || _pencaseSide == 'right';
+    final tools = <Widget>[
+      GestureDetector(
+        onPanUpdate: (details) => setState(() {
+          _pencaseDragging = true;
+          _pencaseX = (left + details.delta.dx).clamp(0.0, math.max(0.0, size.width - 54)).toDouble();
+          _pencaseY = (top + details.delta.dy).clamp(56.0, math.max(56.0, size.height - 100)).toDouble();
+        }),
+        onPanEnd: (_) {
+          final xDistance = math.min(left, size.width - left - 54);
+          final yDistance = math.min(top - 54, size.height - top - 100);
+          setState(() {
+            _pencaseDragging = false;
+            if (xDistance <= yDistance) {
+              _pencaseSide = left < size.width / 2 ? 'left' : 'right';
+              _pencaseX = _pencaseSide == 'left' ? 0 : math.max(0.0, size.width - 54);
+            } else {
+              _pencaseSide = top < size.height / 2 ? 'top' : 'bottom';
+              _pencaseY = _pencaseSide == 'top' ? 54 : math.max(56.0, size.height - 150);
+            }
+          });
+        },
+        child: const SizedBox(width: 34, height: 30, child: Icon(Icons.drag_indicator_rounded, size: 18)),
+      ),
+      ...keys.map((key) => _placedToolButton(key, 'pencase')),
+    ];
+    final axis = vertical ? Axis.vertical : Axis.horizontal;
+    final surface = Material(
+      elevation: SnoteThemeController.instance.eInk ? 0 : 5,
+      color: Theme.of(context).colorScheme.surface.withValues(alpha: .9),
+      borderRadius: BorderRadius.circular(14),
+      child: _toolDropArea(
+        'pencase',
+        SingleChildScrollView(
+          scrollDirection: axis,
+          child: Padding(padding: const EdgeInsets.all(2), child: Flex(direction: axis, mainAxisSize: MainAxisSize.min, children: tools)),
+        ),
+      ),
+    );
+    if (_pencaseDragging) return Positioned(left: left, top: top, child: surface);
+    if (_pencaseSide == 'left') return Positioned(left: 0, top: top, child: surface);
+    if (_pencaseSide == 'right') return Positioned(right: 0, top: top, child: surface);
+    if (_pencaseSide == 'top') return Positioned(left: left, top: 54, child: surface);
+    return Positioned(left: left, bottom: 0, child: surface);
+  }
 
   Widget _colorDot(Color color) => InkWell(
         onTap: () => setState(() => _penColor = color),
@@ -1087,55 +1652,43 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   }
 
   Future<void> _pencaseSheet() async {
-    const tools = <CanvasTool>[
-      CanvasTool.ballpoint, CanvasTool.fountain, CanvasTool.pencil,
-      CanvasTool.highlighter, CanvasTool.marker, CanvasTool.brush,
-      CanvasTool.eraser, CanvasTool.pixelEraser, CanvasTool.lasso,
-      CanvasTool.line, CanvasTool.arrow, CanvasTool.rectangle,
-    ];
-    final selected = _settings.getString('pencaseTools').split(',').where((v) => v.isNotEmpty).toSet();
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (_, setModal) => SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const Align(alignment: Alignment.centerLeft, child: Text('Pencase', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900))),
-              const SizedBox(height: 8),
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Keep your most-used tools in the floating toolbar.'),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: tools.map((tool) => FilterChip(
-                  avatar: Icon(_toolIcon(tool), size: 18),
-                  label: Text(tool.label),
-                  selected: selected.contains(tool.name),
-                  onSelected: (value) => setModal(() {
-                    if (value) {
-                      selected.add(tool.name);
-                    } else {
-                      selected.remove(tool.name);
-                    }
-                  }),
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(context).height * .72,
+          child: Column(children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(18, 4, 18, 10),
+              child: Align(alignment: Alignment.centerLeft, child: Text('Manage tools', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900))),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(18, 0, 18, 10),
+              child: Align(alignment: Alignment.centerLeft, child: Text('Double-tap any tool for placement options. Long-press to reorder or move it.')),
+            ),
+            Expanded(
+              child: ListView(
+                children: _toolOrder.map((key) => ListTile(
+                  leading: Icon(_toolIconForKey(key)),
+                  title: Text(_toolTitle(key)),
+                  subtitle: Text(
+                    (_resolvedToolPlacements()[key] ?? const <String>['hidden'])
+                        .map((location) => location == 'hidden' ? 'Hidden' : location == 'titleBar' ? 'Title Bar' : location == 'pencase' ? 'Pencase' : 'Toolbar')
+                        .join(' · '),
+                  ),
+                  trailing: const Icon(Icons.tune_rounded),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) unawaited(_toolSettingsSheet(key));
+                    });
+                  },
                 )).toList(),
               ),
-              const SizedBox(height: 14),
-              FilledButton(
-                onPressed: () async {
-                  await _settings.setString('pencaseTools', selected.join(','));
-                  if (mounted) Navigator.pop(sheetContext);
-                },
-                child: const Text('Save pencase'),
-              ),
-            ]),
-          ),
+            ),
+          ]),
         ),
       ),
     );
