@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:archive/archive.dart' as zip;
 import 'package:crypto/crypto.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
@@ -13,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart';
+import 'package:flutter_svg/flutter_svg.dart' as vg;
 import 'package:pdf/pdf.dart' as pdfcore;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdfx/pdfx.dart';
@@ -4278,6 +4280,288 @@ class _EditorV2PageState extends State<EditorV2Page>
     _scheduleSave();
   }
 
+  Future<Uint8List> _rasterizeSvg(Uint8List sourceBytes) async {
+    final source = utf8.decode(sourceBytes, allowMalformed: false);
+    final pictureInfo = await vg.loadPicture(vg.SvgStringLoader(source), null);
+    try {
+      final logicalSize = pictureInfo.size;
+      if (!logicalSize.width.isFinite ||
+          !logicalSize.height.isFinite ||
+          logicalSize.width <= 0 ||
+          logicalSize.height <= 0) {
+        throw const FormatException('The SVG has no valid intrinsic dimensions.');
+      }
+      const maxDimension = 2400.0;
+      final scale = math.min(
+        maxDimension / logicalSize.width,
+        maxDimension / logicalSize.height,
+      ).clamp(.1, 3.0).toDouble();
+      final width = (logicalSize.width * scale).ceil().clamp(1, 2400).toInt();
+      final height = (logicalSize.height * scale).ceil().clamp(1, 2400).toInt();
+      final image = await pictureInfo.picture.toImage(width, height);
+      try {
+        final data = await image.toByteData(format: ui.ImageByteFormat.png);
+        if (data == null) throw StateError('SVG rasterization returned no image data.');
+        return data.buffer.asUint8List();
+      } finally {
+        image.dispose();
+      }
+    } finally {
+      pictureInfo.picture.dispose();
+    }
+  }
+
+  String _decodeXmlText(String value) {
+    return value
+        .replaceAll('&amp;', '&')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&apos;', "'")
+        .replaceAllMapped(
+          RegExp(r'&#(x[0-9a-fA-F]+|[0-9]+);'),
+          (match) {
+            final token = match.group(1)!;
+            final codePoint = token.startsWith('x')
+                ? int.tryParse(token.substring(1), radix: 16)
+                : int.tryParse(token);
+            return codePoint == null ? '' : String.fromCharCode(codePoint);
+          },
+        );
+  }
+
+  String _xmlTextNodes(String xml) => RegExp(
+        r'<(?:[A-Za-z0-9_]+:)?t\b[^>]*>(.*?)</(?:[A-Za-z0-9_]+:)?t>',
+        dotAll: true,
+      ).allMatches(xml).map((match) => _decodeXmlText(match.group(1) ?? '')).join('');
+
+  int _xmlFileIndex(String path) {
+    final match = RegExp(r'(\d+)\.xml$').firstMatch(path);
+    return int.tryParse(match?.group(1) ?? '') ?? 0;
+  }
+
+  Map<String, String> _unzipTextXmlFiles(Uint8List bytes) {
+    final archive = zip.ZipDecoder().decodeBytes(bytes);
+    final result = <String, String>{};
+    for (final entry in archive.files) {
+      if (!entry.isFile || !entry.name.toLowerCase().endsWith('.xml')) continue;
+      final content = entry.content;
+      if (content is List<int>) {
+        result[entry.name] = utf8.decode(content, allowMalformed: true);
+      }
+    }
+    return result;
+  }
+
+  List<String> _powerPointSlideTexts(Uint8List bytes) {
+    final files = _unzipTextXmlFiles(bytes);
+    final paths = files.keys
+        .where((path) => RegExp(r'^ppt/slides/slide\d+\.xml$').hasMatch(path))
+        .toList()
+      ..sort((a, b) => _xmlFileIndex(a).compareTo(_xmlFileIndex(b)));
+    return paths.map((path) {
+      final xml = files[path] ?? '';
+      return RegExp(
+        r'<(?:[A-Za-z0-9_]+:)?t\b[^>]*>(.*?)</(?:[A-Za-z0-9_]+:)?t>',
+        dotAll: true,
+      ).allMatches(xml)
+          .map((match) => _decodeXmlText(match.group(1) ?? ''))
+          .where((value) => value.trim().isNotEmpty)
+          .join('\n');
+    }).where((text) => text.trim().isNotEmpty).toList();
+  }
+
+  List<String> _excelSheetTexts(Uint8List bytes) {
+    final files = _unzipTextXmlFiles(bytes);
+    final sharedStrings = <String>[];
+    final sharedXml = files['xl/sharedStrings.xml'];
+    if (sharedXml != null) {
+      for (final item in RegExp(r'<si\b[^>]*>(.*?)</si>', dotAll: true).allMatches(sharedXml)) {
+        sharedStrings.add(_xmlTextNodes(item.group(1) ?? ''));
+      }
+    }
+
+    final sheets = files.keys
+        .where((path) => RegExp(r'^xl/worksheets/sheet\d+\.xml$').hasMatch(path))
+        .toList()
+      ..sort((a, b) => _xmlFileIndex(a).compareTo(_xmlFileIndex(b)));
+    final output = <String>[];
+    for (final path in sheets) {
+      final xml = files[path] ?? '';
+      final rows = <String>[];
+      for (final rowMatch in RegExp(r'<row\b[^>]*>(.*?)</row>', dotAll: true).allMatches(xml)) {
+        final rowXml = rowMatch.group(1) ?? '';
+        final values = <int, String>{};
+        for (final cellMatch in RegExp(r'<c\b([^>]*)>(.*?)</c>', dotAll: true).allMatches(rowXml)) {
+          final attributes = cellMatch.group(1) ?? '';
+          final body = cellMatch.group(2) ?? '';
+          final ref = RegExp(r'\br="([A-Z]+)\d+"').firstMatch(attributes)?.group(1);
+          if (ref == null) continue;
+          var column = 0;
+          for (final code in ref.codeUnits) {
+            column = column * 26 + code - 64;
+          }
+          column--;
+          final type = RegExp(r'\bt="([^"]+)"').firstMatch(attributes)?.group(1);
+          String value;
+          if (type == 's') {
+            final index = int.tryParse(RegExp(r'<v>(.*?)</v>', dotAll: true).firstMatch(body)?.group(1) ?? '');
+            value = index != null && index >= 0 && index < sharedStrings.length
+                ? sharedStrings[index]
+                : '';
+          } else if (type == 'inlineStr') {
+            value = _xmlTextNodes(body);
+          } else {
+            value = _decodeXmlText(
+              RegExp(r'<v>(.*?)</v>', dotAll: true).firstMatch(body)?.group(1) ?? '',
+            );
+          }
+          values[column] = value;
+        }
+        if (values.isEmpty) continue;
+        final maxColumn = values.keys.reduce((left, right) => left > right ? left : right);
+        rows.add(List<String>.generate(
+          maxColumn + 1,
+          (index) => values[index] ?? '',
+        ).join('\t'));
+      }
+      if (rows.isNotEmpty) output.addAll(_chunkLines(rows, 32));
+    }
+    return output;
+  }
+
+  List<String> _chunkLines(List<String> lines, int linesPerPage) {
+    final chunks = <String>[];
+    for (var offset = 0; offset < lines.length; offset += linesPerPage) {
+      chunks.add(lines.skip(offset).take(linesPerPage).join('\n'));
+    }
+    return chunks;
+  }
+
+  Future<void> _insertImportedTextPages(
+    List<String> pageTexts, {
+    required String sourceName,
+  }) async {
+    final nonEmpty = pageTexts.where((text) => text.trim().isNotEmpty).toList();
+    if (nonEmpty.isEmpty) {
+      throw StateError('No readable text was found in "$sourceName".');
+    }
+    if (nonEmpty.length > 500) {
+      throw StateError('This import contains more than 500 text pages; split the file and import smaller sections.');
+    }
+    _pushUndo();
+    final previous = _pageData;
+    final baseId = DateTime.now().microsecondsSinceEpoch.toString();
+    final inserted = <Map<String, Object?>>[];
+    for (var index = 0; index < nonEmpty.length; index++) {
+      final boxId = '$baseId-import-text-$index';
+      inserted.add(EditorV2DocumentCodec.normalizePage(<String, Object?>{
+        'id': '$baseId-import-page-$index',
+        'template': PageTemplate.blank.name,
+        'paperColor': previous['paperColor'] ?? 0xffffffff,
+        'lineColor': previous['lineColor'] ?? 0xffd8dee8,
+        'lineOpacity': previous['lineOpacity'] ?? .85,
+        'spacing': previous['spacing'] ?? 28.0,
+        'lineWidth': previous['lineWidth'] ?? .7,
+        'pageSize': previous['pageSize'] ?? 'A4',
+        'pageWidth': _pageWidth,
+        'pageHeight': _pageHeight,
+        'pageAspectRatio': _pageAspectRatioFor(previous),
+        'orientation': previous['orientation'] ?? 'vertical',
+        'strokes': <Object?>[],
+        'images': <Object?>[],
+        'textBoxes': <Object?>[
+          <String, Object?>{
+            'id': boxId,
+            'x': .045,
+            'y': .045,
+            'width': .91,
+            'height': .91,
+            'text': nonEmpty[index],
+            'fontSize': 15.0,
+            'color': 0xff17202a,
+            'sticker': false,
+          },
+        ],
+        'importedSource': sourceName,
+        'importedPageNumber': index + 1,
+      }));
+    }
+    setState(() {
+      final insertAt = (_page + 1).clamp(0, _pages.length).toInt();
+      _pages.insertAll(insertAt, inserted);
+      _page = insertAt;
+      _clearSelectionIds();
+      _lassoRect = null;
+    });
+    _initializeTextControllers();
+    _scheduleSave();
+  }
+
+  Future<void> _importOtherFormats() async {
+    if (_pageData['locked'] == true) return;
+    try {
+      final file = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: const <String>[
+          'svg', 'png', 'jpg', 'jpeg', 'webp', 'csv', 'ppt', 'pptx',
+          'xls', 'xlsx', 'excel', 'nebo',
+        ],
+      );
+      if (file == null) return;
+      final sourceBytes = await file.readAsBytes();
+      if (sourceBytes.isEmpty) throw StateError('The selected file is empty.');
+      if (sourceBytes.length > 80 * 1024 * 1024) {
+        throw StateError('Files over 80 MB cannot be imported into the canvas.');
+      }
+      final extension = file.name.split('.').last.toLowerCase();
+      await _documents.saveBytes(
+        noteId: widget.note.id,
+        name: file.name,
+        type: extension,
+        bytes: sourceBytes,
+        metadata: <String, dynamic>{
+          'source': 'editor-v2-format-import',
+          'importedAt': DateTime.now().toIso8601String(),
+        },
+      );
+
+      if (const <String>{'png', 'jpg', 'jpeg', 'webp'}.contains(extension)) {
+        await _insertImageBytes(sourceBytes, name: file.name);
+      } else if (extension == 'svg') {
+        await _insertImageBytes(await _rasterizeSvg(sourceBytes), name: file.name);
+      } else if (extension == 'csv') {
+        final csvText = utf8.decode(sourceBytes, allowMalformed: true);
+        final lines = csvText.replaceAll('\r\n', '\n').replaceAll('\r', '\n').split('\n');
+        await _insertImportedTextPages(_chunkLines(lines, 32), sourceName: file.name);
+      } else if (extension == 'pptx') {
+        await _insertImportedTextPages(_powerPointSlideTexts(sourceBytes), sourceName: file.name);
+      } else if (extension == 'xlsx' || extension == 'excel') {
+        await _insertImportedTextPages(_excelSheetTexts(sourceBytes), sourceName: file.name);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Saved file to note attachments. This file variant is preserved, but editable canvas conversion is not available yet: ' + file.name),
+            duration: const Duration(seconds: 5),
+          ));
+        }
+        return;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Imported file to the canvas. Original file preserved in note attachments: ' + file.name),
+        ));
+      }
+    } catch (error, stackTrace) {
+      debugPrint('[Snote][EditorV2] format import failed: $error\n$stackTrace');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not import this file: $error')),
+        );
+      }
+    }
+  }
+
   Future<void> _importPdf() async {
     try {
       final file = await FilePicker.pickFile(
@@ -5163,6 +5447,8 @@ class _EditorV2PageState extends State<EditorV2Page>
         unawaited(_addSticker());
       case 'pdf':
         unawaited(_importPdf());
+      case 'importOtherFormats':
+        unawaited(_importOtherFormats());
       case 'export':
         unawaited(_exportPdf());
       case 'template':
@@ -5356,6 +5642,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           PopupMenuItem(value: 'sticker', child: Text('Sticker library')),
 
           PopupMenuItem(value: 'pdf', child: Text('Import / annotate PDF')),
+          PopupMenuItem(value: 'importOtherFormats', child: Text('Import SVG, CSV, PNG, PPTX, Excel or Nebo file')),
           PopupMenuItem(value: 'export', child: Text('Export pages to PDF')),
           PopupMenuItem(value: 'bookmarks', child: Text('Bookmarks')),
           PopupMenuItem(value: 'timer', child: Text('Study timer')),
