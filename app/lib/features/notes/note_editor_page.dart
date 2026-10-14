@@ -918,6 +918,28 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                 '${_page + 1}/${_pages.length}',
                 style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800),
               ),
+              if (_settings.getBool('showUndoOnRight'))
+                AnimatedBuilder(
+                  animation: _canvas,
+                  builder: (_, __) => Row(mainAxisSize: MainAxisSize.min, children: [
+                    IconButton(
+                      tooltip: 'Undo',
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints.tightFor(width: 32, height: 26),
+                      padding: EdgeInsets.zero,
+                      onPressed: _canvas.canUndo ? _canvas.undo : null,
+                      icon: const Icon(Icons.undo_rounded, size: 16),
+                    ),
+                    IconButton(
+                      tooltip: 'Redo',
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints.tightFor(width: 32, height: 26),
+                      padding: EdgeInsets.zero,
+                      onPressed: _canvas.canRedo ? _canvas.redo : null,
+                      icon: const Icon(Icons.redo_rounded, size: 16),
+                    ),
+                  ]),
+                ),
               IconButton(
                 visualDensity: VisualDensity.compact,
                 constraints: const BoxConstraints.tightFor(width: 32, height: 28),
@@ -1276,7 +1298,15 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                         ? Theme.of(context).colorScheme.secondaryContainer
                         : null,
               ),
-              child: Icon(_toolIconForKey(key)),
+              child: _settings.getBool('showPenCaseStrokeSize') && active
+                  ? Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(_toolIconForKey(key), size: 19),
+                        Text(_penSize.toStringAsFixed(1), style: const TextStyle(fontSize: 7, height: 1)),
+                      ],
+                    )
+                  : Icon(_toolIconForKey(key)),
             ),
           ),
         ),
