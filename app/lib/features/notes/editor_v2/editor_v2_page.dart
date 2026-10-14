@@ -2900,7 +2900,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+      appBar: _fullScreenMode ? null : AppBar(
         leading: BackButton(
           onPressed: () async {
             await _flushSave();
@@ -2913,35 +2913,57 @@ class _EditorV2PageState extends State<EditorV2Page>
           maxLines: 1,
           onChanged: (_) => _scheduleSave(),
           onSubmitted: (_) => _save(force: true),
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
           decoration: const InputDecoration(
             hintText: 'Untitled note',
             border: InputBorder.none,
-            contentPadding: EdgeInsets.symmetric(horizontal: 8),
+            contentPadding: EdgeInsets.symmetric(horizontal: 6),
           ),
         ),
         actions: [
           IconButton(
-            tooltip: 'Fit page',
-            onPressed: () => _onMenuSelected('fit'),
-            icon: const Icon(Icons.fit_screen_rounded),
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Undo',
+            onPressed: _undoStack.isEmpty ? null : _undo,
+            icon: const Icon(Icons.undo_rounded),
           ),
           IconButton(
-            tooltip: 'Save note',
-            onPressed: () => _save(force: true),
-            icon: const Icon(Icons.save_outlined),
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Redo',
+            onPressed: _redoStack.isEmpty ? null : _redo,
+            icon: const Icon(Icons.redo_rounded),
           ),
-          if (_exporting)
-            const Padding(
-              padding: EdgeInsets.all(12),
-              child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
-            )
-          else
-            IconButton(
-              tooltip: 'Export annotated document to PDF',
-              onPressed: _exportPdf,
-              icon: const Icon(Icons.picture_as_pdf_outlined),
-            ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Page previews and reorder',
+            onPressed: _showPagePicker,
+            icon: const Icon(Icons.view_carousel_outlined),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Scientific calculator',
+            onPressed: _openCalculator,
+            icon: const Icon(Icons.calculate_outlined),
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Note and application controls',
+            onSelected: _onMenuSelected,
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'fit', child: Text('Fit page to width')),
+              const PopupMenuItem(value: 'fullscreen', child: Text('Toggle full screen')),
+              const PopupMenuItem(value: 'text', child: Text('Toggle rich text / handwriting')),
+              const PopupMenuItem(value: 'image', child: Text('Insert screenshot or image')),
+              const PopupMenuItem(value: 'pageSettings', child: Text('Note page settings')),
+              PopupMenuItem(
+                value: 'togglePageLock',
+                child: Text(_pageData['locked'] == true ? 'Unlock current page' : 'Lock current page'),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(value: 'save', child: Text('Save note now')),
+              const PopupMenuItem(value: 'export', child: Text('Export annotated document to PDF')),
+            ],
+            icon: const Icon(Icons.more_vert_rounded),
+          ),
         ],
       ),
       body: _loading
