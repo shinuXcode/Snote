@@ -7,7 +7,6 @@ import android.media.projection.MediaProjectionManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
-import androidx.annotation.NonNull;
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.embedding.engine.plugins.activity.ActivityAware;
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
@@ -27,13 +26,13 @@ public final class SnoteScreenCapturePlugin implements FlutterPlugin, MethodChan
     private Activity activity;
 
     @Override
-    public void onAttachedToEngine(@NonNull FlutterPluginBinding engine) {
+    public void onAttachedToEngine(FlutterPluginBinding engine) {
         channel = new MethodChannel(engine.getBinaryMessenger(), "com.snote/screen_capture");
         channel.setMethodCallHandler(this);
     }
 
     @Override
-    public void onMethodCall(@NonNull MethodCall call, @NonNull MethodChannel.Result result) {
+    public void onMethodCall(MethodCall call, MethodChannel.Result result) {
         if (!"captureScreen".equals(call.method)) {
             result.notImplemented();
             return;
@@ -91,8 +90,8 @@ public final class SnoteScreenCapturePlugin implements FlutterPlugin, MethodChan
         });
     }
 
-    @Override public void onAttachedToActivity(@NonNull ActivityPluginBinding b) { attach(b); }
-    @Override public void onReattachedToActivityForConfigChanges(@NonNull ActivityPluginBinding b) { attach(b); }
+    @Override public void onAttachedToActivity(ActivityPluginBinding b) { attach(b); }
+    @Override public void onReattachedToActivityForConfigChanges(ActivityPluginBinding b) { attach(b); }
     private void attach(ActivityPluginBinding b) {
         binding = b;
         activity = b.getActivity();
@@ -106,7 +105,7 @@ public final class SnoteScreenCapturePlugin implements FlutterPlugin, MethodChan
         activity = null;
     }
     @Override
-    public void onDetachedFromEngine(@NonNull FlutterPluginBinding engine) {
+    public void onDetachedFromEngine(FlutterPluginBinding engine) {
         if (channel != null) channel.setMethodCallHandler(null);
         detach();
         channel = null;

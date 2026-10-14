@@ -5602,8 +5602,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   final value = double.tryParse(raw);
                   if (value == null || value < 25 || value > 3000) return;
                   final height = (pageData['pageHeightMm'] as num?)?.toDouble() ?? 297;
-                  pageData['pageWidthMm'] = value;
-                  pageData['pageAspectRatio'] = math.min(value, height) / math.max(value, height);
+                  setState(() {
+                    pageData['pageWidthMm'] = value;
+                    pageData['pageAspectRatio'] = math.min(value, height) / math.max(value, height);
+                  });
                   _scheduleSave();
                 },
               )),
@@ -5617,8 +5619,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   final value = double.tryParse(raw);
                   if (value == null || value < 25 || value > 3000) return;
                   final width = (pageData['pageWidthMm'] as num?)?.toDouble() ?? 210;
-                  pageData['pageHeightMm'] = value;
-                  pageData['pageAspectRatio'] = math.min(width, value) / math.max(width, value);
+                  setState(() {
+                    pageData['pageHeightMm'] = value;
+                    pageData['pageAspectRatio'] = math.min(width, value) / math.max(width, value);
+                  });
                   _scheduleSave();
                 },
               )),

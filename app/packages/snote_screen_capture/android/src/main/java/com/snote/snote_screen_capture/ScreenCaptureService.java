@@ -107,8 +107,10 @@ public final class ScreenCaptureService extends Service {
             if (manager != null) manager.createNotificationChannel(new NotificationChannel(
                     CHANNEL_ID, "Snote screen capture", NotificationManager.IMPORTANCE_LOW));
         }
-        Notification notification = new Notification.Builder(this,
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ? CHANNEL_ID : "")
+        Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                ? new Notification.Builder(this, CHANNEL_ID)
+                : new Notification.Builder(this);
+        Notification notification = builder
                 .setSmallIcon(android.R.drawable.ic_menu_camera)
                 .setContentTitle("Snote screen capture")
                 .setContentText("Capturing a screen image for your note")
