@@ -1390,25 +1390,96 @@ class _EditorV2PageState extends State<EditorV2Page>
   }
 
   Future<void> _addSticker() async {
-    const stickers = <String>[
-      '⭐', '✅', '❌', '💡', '📌', '📖', '🧠', '🎯', '❤️', '🔥', '⚠️', '💯',
-      '🧪', '🔬', '🧬', '⚛️', '📐', '📈', '📝', '🏁', '🌱', '☀️', '🌙', '✨',
-    ];
+    const stickerCategories = <String, List<String>>{
+      'Study': ['✅','❌','⭐','📌','📖','🧠','🎯','💯','📝','✍️','📚','🔖','📎','🖊️','🗒️','📄','🗃️','🏆','💡','📍'],
+      'Math': ['➕','➖','✖️','➗','＝','≠','≈','∞','√','∑','∫','π','Δ','θ','α','β','γ','λ','μ','Ω'],
+      'Science': ['⚛️','🧪','🔬','🧫','🧬','🧯','🧲','🌡️','🔭','🛰️','🪐','🌌','☄️','🌍','🌑','🌕','🌞','⭐','🌟','💫'],
+      'Biology': ['🧬','🦠','🧫','🌱','🌿','🍀','🍃','🌵','🌳','🌲','🌷','🌻','🌼','🌾','🍄','🪴','🧠','🫀','🫁','🦴'],
+      'Chemistry': ['⚗️','🧪','🧫','🧬','💧','🔥','🧯','🔬','🧴','🧂','🫧','🧼','🧱','💥','🧲','🪨','🧿','🧊','☢️','☣️'],
+      'Physics': ['🧲','🔋','🔌','💡','⚡','🌩️','🪫','🔧','⚙️','🛠️','📐','📏','🧭','🪛','🪜','🛞','🪝','🪂','🎢','🚀'],
+      'Planner': ['📅','🗓️','⏰','🕒','⌛','⏳','⏱️','🔔','🔕','📣','📢','📥','📤','📂','📁','🗂️','🗄️','📊','📈','📉'],
+      'Nature': ['🌈','☀️','🌤️','⛅','🌦️','🌧️','⛈️','❄️','☃️','🌨️','💨','🌬️','🌪️','🌫️','🌊','💧','🔥','🌋','🏔️','🌅'],
+      'Emotions': ['😀','😃','😄','😁','😆','😅','😂','🙂','🙃','😉','😊','😎','🤓','🤔','🧐','😴','🤯','🥳','😭','👍'],
+      'Symbols': ['⚠️','⛔','🚫','🚩','❗','❓','⁉️','💢','🔱','☑️','☒','✔️','✖️','➰','➿','🔄','🔁','🔀','⬆️','⬇️'],
+      'Celebration': ['🎉','🎊','🎈','🎁','🥇','🥈','🥉','🏅','🏆','🎖️','✨','🌟','💫','🎵','🎶','❤️','🧡','💛','💚','💙'],
+    };
+    var category = 'All';
+    var query = '';
+    final allCategories = <String>['All', ...stickerCategories.keys];
     final chosen = await showModalBottomSheet<String>(
       context: context,
+      isScrollControlled: true,
       showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: GridView.count(
-            shrinkWrap: true,
-            crossAxisCount: 6,
-            children: stickers.map((sticker) => InkWell(
-              onTap: () => Navigator.pop(sheetContext, sticker),
-              child: Center(child: Text(sticker, style: const TextStyle(fontSize: 30))),
-            )).toList(),
-          ),
-        ),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final source = category == 'All'
+              ? stickerCategories.values.expand((items) => items).toList()
+              : stickerCategories[category] ?? <String>[];
+          final stickers = source.where((value) => query.isEmpty || value.contains(query)).toList();
+          return SafeArea(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(14, 2, 14, 14 + MediaQuery.viewInsetsOf(context).bottom),
+              child: SizedBox(
+                height: MediaQuery.sizeOf(context).height * .68,
+                child: Column(
+                  children: [
+                    Row(children: [
+                      Expanded(child: Text('Sticker library • 200+ stickers', style: Theme.of(context).textTheme.titleLarge)),
+                      IconButton(tooltip: 'Close stickers', onPressed: () => Navigator.pop(sheetContext), icon: const Icon(Icons.close_rounded)),
+                    ]),
+                    TextField(
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.search_rounded),
+                        hintText: 'Search stickers',
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (value) => setSheetState(() => query = value.trim()),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 42,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        children: allCategories.map((value) => Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: ChoiceChip(
+                            label: Text(value, style: const TextStyle(fontSize: 11)),
+                            selected: category == value,
+                            onSelected: (_) => setSheetState(() => category = value),
+                          ),
+                        )).toList(),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: GridView.builder(
+                        itemCount: stickers.length,
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 6,
+                          crossAxisSpacing: 5,
+                          mainAxisSpacing: 5,
+                        ),
+                        itemBuilder: (_, index) => InkWell(
+                          borderRadius: BorderRadius.circular(9),
+                          onTap: () => Navigator.pop(sheetContext, stickers[index]),
+                          child: Ink(
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                              borderRadius: BorderRadius.circular(9),
+                              border: Border.all(color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: .5)),
+                            ),
+                            child: Center(child: Text(stickers[index], style: const TextStyle(fontSize: 25))),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
     if (chosen == null || !mounted) return;
