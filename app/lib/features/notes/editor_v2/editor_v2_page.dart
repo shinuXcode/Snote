@@ -5201,19 +5201,37 @@ class _EditorV2PageState extends State<EditorV2Page>
   }
 
   Widget _buildToolbar({required bool vertical}) {
-    Widget action({required String tooltip, required IconData icon, required VoidCallback onPressed, Color? color}) =>
-        IconButton(
-          visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
-          padding: const EdgeInsets.all(2),
-          constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-          tooltip: tooltip,
-          onPressed: onPressed,
-          icon: Icon(icon, size: 17, color: color),
-        );
+    Widget action({
+      required String tooltip,
+      required IconData icon,
+      required VoidCallback onPressed,
+      Color? color,
+      bool captureAnchor = false,
+    }) {
+      final button = IconButton(
+        visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+        padding: const EdgeInsets.all(2),
+        constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+        tooltip: tooltip,
+        onPressed: onPressed,
+        icon: Icon(icon, size: 17, color: color),
+      );
+      if (!captureAnchor) return button;
+      return Listener(
+        onPointerDown: (event) => _toolSettingsAnchor = event.position,
+        child: button,
+      );
+    }
     final actions = <Widget>[
       action(tooltip: _panMode ? 'Exit pan mode' : 'Pan / zoom', icon: _panMode ? Icons.pan_tool : Icons.pan_tool_outlined, onPressed: () => setState(() => _panMode = !_panMode)),
       action(tooltip: _textMode ? 'Handwriting mode' : 'Rich text mode', icon: _textMode ? Icons.draw_rounded : Icons.text_fields_rounded, onPressed: () => setState(() { _textMode = !_textMode; _scheduleSave(); })),
-      action(tooltip: 'Color palette', icon: Icons.palette_outlined, color: _color, onPressed: _chooseColor),
+      action(
+        tooltip: 'Color palette & opacity',
+        icon: Icons.palette_outlined,
+        color: _color,
+        captureAnchor: true,
+        onPressed: () => unawaited(_strokeSettings(globalAnchor: _toolSettingsAnchor)),
+      ),
       action(tooltip: 'Text box', icon: Icons.text_fields_rounded, onPressed: _addTextBox),
       action(tooltip: 'Capture screen to canvas', icon: Icons.screenshot_monitor_rounded, onPressed: () => unawaited(_captureScreenToCanvas())),
 
