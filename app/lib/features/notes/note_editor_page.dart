@@ -6114,7 +6114,7 @@ class _PageThumbnailPainter extends CustomPainter {
           final painter = TextPainter(
             text: TextSpan(text: text, style: TextStyle(color: textColor, fontSize: fontSize, height: 1.12)),
             textDirection: TextDirection.ltr,
-            maxLines: math.max(1, (height * sourceSize.height / math.max(8, fontSize)).floor()),
+            maxLines: math.max(1, (height * sourceSize.height / math.max(8.0, fontSize)).floor()).toInt(),
             ellipsis: '…',
           )..layout(maxWidth: math.max(1, width * sourceSize.width));
           painter.paint(canvas, Offset(x * sourceSize.width, y * sourceSize.height));
@@ -6132,7 +6132,7 @@ class _PageThumbnailPainter extends CustomPainter {
           final y = ((item['y'] as num?)?.toDouble() ?? .16) * sourceSize.height;
           final width = ((item['width'] as num?)?.toDouble() ?? .22) * sourceSize.width;
           final height = ((item['height'] as num?)?.toDouble() ?? .12) * sourceSize.height;
-          final rect = Rect.fromLTWH(x, y, width.clamp(8.0, sourceSize.width), height.clamp(8.0, sourceSize.height));
+          final rect = Rect.fromLTWH(x, y, width.clamp(8.0, sourceSize.width).toDouble(), height.clamp(8.0, sourceSize.height).toDouble());
           canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(3)), markerPaint);
           canvas.drawLine(rect.topLeft, rect.bottomRight, markerPaint);
           canvas.drawLine(rect.topRight, rect.bottomLeft, markerPaint);
