@@ -731,10 +731,11 @@ class _EditorV2PageState extends State<EditorV2Page>
     } catch (error) {
       debugPrint('[Snote][EditorV2] ignoring invalid toolbar order: $error');
     }
-    for (final tool in _quickTools) {
+    // Persist a stable order for every tool, not only the small quick-tools
+    // subset; otherwise drop targets for custom science tools cannot reorder.
+    for (final tool in CanvasTool.values) {
       if (!_toolbarOrder.contains(tool.name)) _toolbarOrder.add(tool.name);
     }
-    // Include utility tools in the same persistent order as drawing tools.
     for (final key in const <String>['calculator', 'screenshot']) {
       if (!_toolbarOrder.contains(key)) _toolbarOrder.add(key);
     }
@@ -3040,7 +3041,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                 );
                 setState(() {
                   _toolPlacements[targetTool.name] = <String>{
-                    ..._placementsFor(targetTool),
+                    ...places,
                     'pencase',
                   };
                 });
