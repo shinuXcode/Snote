@@ -4475,6 +4475,68 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     nameController.dispose();
   }
 
+  List<String> get _favoriteShapeKeys {
+    try {
+      final value = jsonDecode(_settings.getString('favoriteShapeTools'));
+      if (value is List) {
+        return value.map((item) => item.toString())
+            .where((name) => _canvasToolForKey(name) != null).toSet().toList();
+      }
+    } catch (_) {}
+    return <String>[];
+  }
+
+  List<CanvasTool> get _favoriteShapeTools =>
+      _favoriteShapeKeys.map(_canvasToolForKey).whereType<CanvasTool>().toList();
+
+  List<String> get _favoriteStickers {
+    try {
+      final value = jsonDecode(_settings.getString('favoriteStickerEmojis'));
+      if (value is List) {
+        return value.map((item) => item.toString()).where((item) => item.isNotEmpty).toSet().toList();
+      }
+    } catch (_) {}
+    return <String>[];
+  }
+
+  Future<void> _toggleFavoriteShape(CanvasTool tool) async {
+    final keys = _favoriteShapeKeys.toSet();
+    if (!keys.add(tool.name)) {
+      keys.remove(tool.name);
+    }
+    await _settings.setString('favoriteShapeTools', jsonEncode(keys.toList()));
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _toggleFavoriteSticker(String sticker) async {
+    final stickers = _favoriteStickers.toSet();
+    if (!stickers.add(sticker)) {
+      stickers.remove(sticker);
+    }
+    await _settings.setString('favoriteStickerEmojis', jsonEncode(stickers.toList()));
+    if (mounted) setState(() {});
+  }
+
+  Widget _favoriteShapesTab() {
+    final favorites = _favoriteShapeTools;
+    if (favorites.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.star_border_rounded, size: 34),
+              SizedBox(height: 8),
+              Text('Your favorite shapes appear here. Tap the star on any shape to pin it.'),
+            ],
+          ),
+        ),
+      );
+    }
+    return _shapeGrid(favorites);
+  }
+
   Widget _shapePanelWidget() => Positioned(
         right: 8,
         top: 88,
@@ -4486,7 +4548,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           borderRadius: BorderRadius.circular(18),
           clipBehavior: Clip.antiAlias,
           child: DefaultTabController(
-            length: 7,
+            length: 8,
             child: Column(children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 8, 6, 0),
@@ -4511,6 +4573,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   Tab(text: 'Physics'),
                   Tab(text: 'Chemistry'),
                   Tab(text: 'Biology'),
+                  Tab(text: 'Favorites'),
                 ],
               ),
               Expanded(child: TabBarView(children: [
@@ -4564,6 +4627,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   CanvasTool.animalCell, CanvasTool.plantCell, CanvasTool.dnaHelix,
                   CanvasTool.neuron, CanvasTool.leaf, CanvasTool.microscope,
                 ]),
+                _favoriteShapesTab(),
               ])),
             ]),
           ),
@@ -4603,16 +4667,37 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(_toolIcon(tool), size: 25),
-                      const SizedBox(height: 5),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 3),
-                        child: Text(
-                          tool.label,
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 10, height: 1.05),
+                      Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(_toolIcon(tool), size: 21),
+                          const SizedBox(height: 5),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(3, 6, 3, 2),
+                            child: Text(
+                              tool.label,
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 10, height: 1.05),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Positioned(
+                        top: -5,
+                        right: -5,
+                        child: IconButton(
+                          tooltip: _favoriteShapeKeys.contains(tool.name) ? 'Remove from favorites' : 'Add to favorites',
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+                          iconSize: 17,
+                          onPressed: () => unawaited(_toggleFavoriteShape(tool)),
+                          icon: Icon(
+                            _favoriteShapeKeys.contains(tool.name) ? Icons.star_rounded : Icons.star_border_rounded,
+                            color: _favoriteShapeKeys.contains(tool.name) ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       ),
                     ],
@@ -6296,7 +6381,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   }
 
   Future<void> _stickers() async {
-    const categories = <String, List<String>>{
+    final categories = <String, List<String>>{
       'Study': ['📚','📖','📝','📓','📒','📔','📕','📗','📘','📙','🗂️','🗒️','📌','✅','❌','⭐','💡','🎯','🧠','🔖','📅','🗓️'],
       'Science': ['🔬','🧪','🧬','⚗️','🧫','🛰️','🌍','🪐','☄️','📐','📏','🧮','💻','🔒','🫀','🫁','🦴','🧑‍🔬'],
       'Nature': ['☀️','🌙','🌈','🌱','🌿','🍀','🌸','🌻','🍁','🪴','🐝','🦋','🌌','💎'],
@@ -6304,6 +6389,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       'Arrows & Math': ['↗️','↘️','↔️','↕️','🔁','🔄','🔀','📈','📉','📊','🧭','🧩','⚙️','🛠️','📐','📏','🧮','➕','➖','✖️','➗'],
       'Fun': ['⭐','❤️','😊','👍','✨','🎉','☕','🔥','🚀','🎨','🎼','🎵','🎹','🏆','🥇','🥈','🥉','🚩','🏁','💯','💬','🗯️','💭','🟢','🟡','🟠','🔵','🟣','🟤','🩷','🩵','🩶','💜','💙','💚','💛','🧡','🤍','🖤','🤎'],
     };
+    categories['Favorites'] = _favoriteStickers;
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -6331,24 +6417,56 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   child: TabBarView(
                     children: [
                       for (final items in categories.values)
-                        GridView.builder(
-                          padding: const EdgeInsets.all(18),
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 6,
-                            crossAxisSpacing: 8,
-                            mainAxisSpacing: 8,
-                          ),
-                          itemCount: items.length,
-                          itemBuilder: (_, index) => InkWell(
-                            onTap: () {
-                              setState(() {
-                                _tool = CanvasTool.sticker;
-                                _sticker = items[index];
-                              });
-                              Navigator.pop(sheetContext);
-                            },
-                            child: Center(child: Text(items[index], style: const TextStyle(fontSize: 30))),
-                          ),
+                        items.isEmpty
+                            ? const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(24),
+                                  child: Text('No favorites yet. Tap a star on any sticker to pin it here.'),
+                                ),
+                              )
+                            : GridView.builder(
+                                padding: const EdgeInsets.all(12),
+                                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 7,
+                                  crossAxisSpacing: 5,
+                                  mainAxisSpacing: 5,
+                                  childAspectRatio: 1.0,
+                                ),
+                                itemCount: items.length,
+                                itemBuilder: (_, index) {
+                                  final sticker = items[index];
+                                  final favorite = _favoriteStickers.contains(sticker);
+                                  return Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      InkWell(
+                                        borderRadius: BorderRadius.circular(8),
+                                        onTap: () {
+                                          setState(() {
+                                            _tool = CanvasTool.sticker;
+                                            _sticker = sticker;
+                                          });
+                                          Navigator.pop(sheetContext);
+                                        },
+                                        child: Center(child: Text(sticker, style: const TextStyle(fontSize: 22))),
+                                      ),
+                                      Positioned(
+                                        top: -7,
+                                        right: -7,
+                                        child: IconButton(
+                                          tooltip: favorite ? 'Remove favorite sticker' : 'Add favorite sticker',
+                                          padding: EdgeInsets.zero,
+                                          visualDensity: VisualDensity.compact,
+                                          constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+                                          iconSize: 15,
+                                          onPressed: () => unawaited(_toggleFavoriteSticker(sticker)),
+                                          icon: Icon(favorite ? Icons.star_rounded : Icons.star_border_rounded),
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                },
+                              ),
                         ),
                     ],
                   ),
