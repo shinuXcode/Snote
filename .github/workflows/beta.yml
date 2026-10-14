@@ -181,7 +181,7 @@ jobs:
           ]
           missing = [line for line in required if line not in text]
           if missing:
-              text = text.replace(marker, marker + '\\n' + '\\n'.join(missing), 1)
+              text = text.replace(marker, marker + '\n' + '\n'.join(missing), 1)
               build.write_text(text)
 
           final_text = build.read_text()
