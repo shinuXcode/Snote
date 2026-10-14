@@ -2014,6 +2014,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   Future<void> _chooseColor() async {
     var selectedColor = _color;
     var selectedOpacity = _opacity;
+    var spectrumHue = HSVColor.fromColor(_color).hue;
     final hexController = TextEditingController(
       text: _color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase(),
     );
@@ -2031,29 +2032,135 @@ class _EditorV2PageState extends State<EditorV2Page>
               children: [
                 Text('Ink palette & opacity', style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 12),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: _palette.map((color) => InkWell(
-                    onTap: () => setSheetState(() {
-                      selectedColor = color;
-                      hexController.text = color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase();
-                    }),
-                    borderRadius: BorderRadius.circular(30),
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: color,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: color == selectedColor ? Theme.of(context).colorScheme.primary : Colors.black26,
-                          width: color == selectedColor ? 3 : 1,
+                DefaultTabController(
+                  length: 2,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const TabBar(
+                        tabs: [
+                          Tab(text: 'Grid'),
+                          Tab(text: 'Spectrum'),
+                        ],
+                      ),
+                      SizedBox(
+                        height: 236,
+                        child: TabBarView(
+                          children: [
+                            GridView.builder(
+                              padding: const EdgeInsets.symmetric(vertical: 5),
+                              itemCount: 120,
+                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 12,
+                                crossAxisSpacing: 2,
+                                mainAxisSpacing: 2,
+                              ),
+                              itemBuilder: (context, index) {
+                                final column = index % 12;
+                                final row = index ~/ 12;
+                                final color = column == 0
+                                    ? HSVColor.fromAHSV(1, 0, 0, (1 - row / 9).clamp(0.0, 1.0)).toColor()
+                                    : HSVColor.fromAHSV(
+                                        1,
+                                        (column - 1) * 360 / 11,
+                                        (.22 + row * .085).clamp(0.0, 1.0),
+                                        (1 - row * .065).clamp(.35, 1.0),
+                                      ).toColor();
+                                final selected = color.toARGB32() == selectedColor.toARGB32();
+                                return InkWell(
+                                  borderRadius: BorderRadius.circular(3),
+                                  onTap: () => setSheetState(() {
+                                    selectedColor = color;
+                                    spectrumHue = HSVColor.fromColor(color).hue;
+                                    hexController.text = color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase();
+                                  }),
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: color,
+                                      borderRadius: BorderRadius.circular(3),
+                                      border: Border.all(
+                                        color: selected ? Theme.of(context).colorScheme.primary : Colors.black12,
+                                        width: selected ? 2 : 0.5,
+                                      ),
+                                    ),
+                                    child: selected
+                                        ? const Icon(Icons.check_rounded, size: 12, color: Colors.white)
+                                        : null,
+                                  ),
+                                );
+                              },
+                            ),
+                            Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    const Text('Hue', style: TextStyle(fontSize: 12)),
+                                    Expanded(
+                                      child: Slider(
+                                        min: 0,
+                                        max: 360,
+                                        value: spectrumHue.clamp(0.0, 360.0).toDouble(),
+                                        onChanged: (value) => setSheetState(() {
+                                          spectrumHue = value;
+                                          selectedColor = HSVColor.fromColor(selectedColor)
+                                              .withHue(value.clamp(0.0, 360.0).toDouble())
+                                              .toColor();
+                                          hexController.text = selectedColor.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase();
+                                        }),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Expanded(
+                                  child: GridView.builder(
+                                    padding: const EdgeInsets.symmetric(vertical: 3),
+                                    itemCount: 80,
+                                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: 10,
+                                      crossAxisSpacing: 2,
+                                      mainAxisSpacing: 2,
+                                    ),
+                                    itemBuilder: (context, index) {
+                                      final column = index % 10;
+                                      final row = index ~/ 10;
+                                      final color = HSVColor.fromAHSV(
+                                        1,
+                                        spectrumHue,
+                                        column / 9,
+                                        (1 - row * .105).clamp(.05, 1.0),
+                                      ).toColor();
+                                      final selected = color.toARGB32() == selectedColor.toARGB32();
+                                      return InkWell(
+                                        borderRadius: BorderRadius.circular(3),
+                                        onTap: () => setSheetState(() {
+                                          selectedColor = color;
+                                          spectrumHue = HSVColor.fromColor(color).hue;
+                                          hexController.text = color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase();
+                                        }),
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            color: color,
+                                            borderRadius: BorderRadius.circular(3),
+                                            border: Border.all(
+                                              color: selected ? Theme.of(context).colorScheme.primary : Colors.black12,
+                                              width: selected ? 2 : .5,
+                                            ),
+                                          ),
+                                          child: selected
+                                              ? const Icon(Icons.check_rounded, size: 12, color: Colors.white)
+                                              : null,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
-                      child: color == selectedColor ? const Icon(Icons.check_rounded, size: 17, color: Colors.white) : null,
-                    ),
-                  )).toList(),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 10),
                 TextField(
@@ -2073,7 +2180,10 @@ class _EditorV2PageState extends State<EditorV2Page>
                     if (value.length != 6 && value.length != 8) return;
                     final parsed = int.tryParse(value, radix: 16);
                     if (parsed == null) return;
-                    setSheetState(() => selectedColor = Color(value.length == 6 ? 0xff000000 | parsed : parsed));
+                    setSheetState(() {
+                      selectedColor = Color(value.length == 6 ? 0xff000000 | parsed : parsed);
+                      spectrumHue = HSVColor.fromColor(selectedColor).hue;
+                    });
                   },
                 ),
                 const SizedBox(height: 12),
@@ -5192,7 +5302,8 @@ class _ToolPickerChoice {
 
 class _EditorV2ToolPicker extends StatefulWidget {
   final CanvasTool selected;
-  const _EditorV2ToolPicker({required this.selected});
+  final String? initialCategory;
+  const _EditorV2ToolPicker({required this.selected, this.initialCategory});
 
   @override
   State<_EditorV2ToolPicker> createState() => _EditorV2ToolPickerState();
@@ -5201,6 +5312,12 @@ class _EditorV2ToolPicker extends StatefulWidget {
 class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
   final TextEditingController _search = TextEditingController();
   String _category = 'All tools';
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialCategory != null) _category = widget.initialCategory!;
+  }
   Offset _lastGlobalPointer = Offset.zero;
 
   static const Set<String> _mathTools = <String>{
@@ -5259,7 +5376,7 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
 
   String _categoryOf(CanvasTool tool) {
     if (tool.isPen) return 'Pens';
-    if (const {'eraser', 'pixelEraser', 'lasso'}.contains(tool.name)) return 'Editing';
+    if (const {'eraser', 'pixelEraser', 'lasso', 'fill'}.contains(tool.name)) return 'Editing';
     if (_geometryTools.contains(tool.name)) return 'Geometry & symbols';
     if (_mathTools.contains(tool.name)) return 'Math & graphs';
     if (_chartTools.contains(tool.name)) return 'Charts & flowcharts';
@@ -5283,6 +5400,7 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
       CanvasTool.eraser => Icons.cleaning_services_rounded,
       CanvasTool.pixelEraser => Icons.auto_fix_normal_rounded,
       CanvasTool.lasso => Icons.gesture_rounded,
+      CanvasTool.fill => Icons.format_color_fill_rounded,
       CanvasTool.sticker => Icons.emoji_emotions_outlined,
       CanvasTool.ruler => Icons.straighten_rounded,
       CanvasTool.compass || CanvasTool.protractor => Icons.architecture_rounded,
