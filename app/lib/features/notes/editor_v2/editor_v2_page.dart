@@ -909,6 +909,111 @@ class _EditorV2PageState extends State<EditorV2Page>
     _scheduleSave();
   }
 
+  Rect? _selectionBounds() {
+    final selected = _strokesFor(_pageData).where((stroke) => _selectedStrokeIds.contains(stroke.id));
+    final points = selected.expand((stroke) => stroke.points).map((point) => point.position).toList();
+    if (points.isEmpty) return null;
+    var left = points.first.dx, right = points.first.dx, top = points.first.dy, bottom = points.first.dy;
+    for (final point in points.skip(1)) {
+      left = math.min(left, point.dx);
+      right = math.max(right, point.dx);
+      top = math.min(top, point.dy);
+      bottom = math.max(bottom, point.dy);
+    }
+    return Rect.fromLTRB(left, top, right, bottom).inflate(3);
+  }
+
+  void _copySelection() {
+    if (_selectedStrokeIds.isEmpty) return;
+    _strokeClipboard = _strokesFor(_pageData)
+        .where((stroke) => _selectedStrokeIds.contains(stroke.id))
+        .map((stroke) => StrokeCodec.strokeToJson(stroke).map<String, Object?>(
+              (key, value) => MapEntry(key.toString(), value),
+            ))
+        .toList();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Copied \${_strokeClipboard.length} stroke(s)')),
+    );
+  }
+
+  void _cutSelection() {
+    _copySelection();
+    _deleteSelection();
+  }
+
+  void _pasteStrokes({bool duplicate = false}) {
+    final source = duplicate
+        ? _strokesFor(_pageData).where((stroke) => _selectedStrokeIds.contains(stroke.id)).toList()
+        : StrokeCodec.documentToStrokes(<String, Object?>{'strokes': _strokeClipboard});
+    if (source.isEmpty) return;
+    _pushUndo();
+    final raw = _pageData['strokes'] as List<Object?>;
+    final offset = duplicate ? const Offset(22, 22) : const Offset(18, 18);
+    final added = source.map((stroke) => StrokeCodec.strokeToJson(stroke.copyWith(
+      id: DateTime.now().microsecondsSinceEpoch.toString() + '-\${math.Random().nextInt(100000)}',
+      points: stroke.points.map((point) => point.copyWith(position: point.position + offset)).toList(),
+    ))).toList();
+    raw.addAll(added);
+    final ids = added.map((item) => item['id']?.toString() ?? '').where((value) => value.isNotEmpty).toSet();
+    setState(() {
+      _selectedStrokeIds
+        ..clear()
+        ..addAll(ids);
+      _lassoRect = _selectionBounds();
+    });
+    _scheduleSave();
+  }
+
+  void _scaleSelection(double factor) {
+    if (_selectedStrokeIds.isEmpty) return;
+    final bounds = _selectionBounds();
+    if (bounds == null) return;
+    _pushUndo();
+    final center = bounds.center;
+    final raw = _pageData['strokes'] as List<Object?>;
+    final strokes = StrokeCodec.documentToStrokes(<String, Object?>{'strokes': raw});
+    _pageData['strokes'] = strokes.map((stroke) {
+      if (!_selectedStrokeIds.contains(stroke.id)) return StrokeCodec.strokeToJson(stroke);
+      return StrokeCodec.strokeToJson(stroke.copyWith(
+        points: stroke.points.map((point) => point.copyWith(
+          position: center + (point.position - center) * factor,
+        )).toList(),
+      ));
+    }).toList();
+    setState(() {
+      final updated = _selectionBounds();
+      if (updated != null) _lassoRect = updated;
+    });
+    _scheduleSave();
+  }
+
+  bool _selectStrokeAt(Offset position, {double radius = 12}) {
+    for (final stroke in _strokesFor(_pageData).reversed) {
+      for (var i = 0; i < stroke.points.length; i++) {
+        if ((stroke.points[i].position - position).distance <= radius ||
+            (i > 0 && _distanceToSegment(position, stroke.points[i - 1].position, stroke.points[i].position) <= radius)) {
+          final points = stroke.points.map((point) => point.position).toList();
+          var left = points.first.dx, right = points.first.dx, top = points.first.dy, bottom = points.first.dy;
+          for (final point in points.skip(1)) {
+            left = math.min(left, point.dx);
+            right = math.max(right, point.dx);
+            top = math.min(top, point.dy);
+            bottom = math.max(bottom, point.dy);
+          }
+          setState(() {
+            _tool = CanvasTool.lasso;
+            _selectedStrokeIds
+              ..clear()
+              ..add(stroke.id);
+            _lassoRect = Rect.fromLTRB(left, top, right, bottom).inflate(5);
+          });
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   void _selectTool(CanvasTool tool) {
     final profile = _toolProfiles[tool.name];
     setState(() {
