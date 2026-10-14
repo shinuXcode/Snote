@@ -186,9 +186,12 @@ class _LiveInkPainter extends CustomPainter {
     }
 
     if (showEraser && eraserPoint != null && eraserRadius > 0) {
-      canvas.drawCircle(
-        eraserPoint,
-        eraserRadius,
+      canvas.drawRect(
+        Rect.fromCenter(
+          center: eraserPoint,
+          width: eraserRadius * 2,
+          height: eraserRadius * 1.4,
+        ),
         Paint()
           ..color = const Color(0xff4f6df6).withValues(alpha: .55)
           ..style = PaintingStyle.stroke
@@ -842,6 +845,14 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
 
     _activePointer = event.pointer;
     _stylusDownPosition = event.localPosition;
+
+    if (widget.tool == CanvasTool.fill) {
+      // Fill is a discrete tap action, not an ink stroke.
+      _ignorePointer = true;
+      _fillAt(event.localPosition);
+      _syncLivePainter();
+      return;
+    }
     _stylusHoldHandled = false;
     _temporaryEraser = widget.eraseWithStylusButton &&
         (event.kind == PointerDeviceKind.invertedStylus ||
@@ -1186,18 +1197,214 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       ShapeRecognizer.recognize(points);
 
   double _eraseRadius(double pressure) {
-    final raw = pressure.isFinite ? pressure : 1.0;
-    final normalized = widget.pressureErase ? raw.clamp(0, 1).toDouble() : 1.0;
+    final raw = pressure.isFinite ? pressure.clamp(0.0, 1.0).toDouble() : 1.0;
+    final threshold = widget.pressureEraseThreshold.clamp(0.0, .95).toDouble();
+    // The threshold slider changes where the stylus begins scaling the eraser.
+    final normalized = !widget.pressureErase
+        ? 1.0
+        : raw < threshold
+            ? 0.0
+            : ((raw - threshold) / (1.0 - threshold)).clamp(0.0, 1.0).toDouble();
     final base = (widget.pen.size * 5.0).clamp(18, 64).toDouble();
     if (widget.pressureErase && widget.pressureEraseArea) {
-      // Keep light stylus pressure usable; apply a wider dynamic range instead
-      // of refusing to erase below a pressure threshold.
       return (base * (0.28 + normalized * 1.35)).clamp(6, 96).toDouble();
     }
     if (widget.pressureErase) {
       return (base * (0.65 + normalized * 0.35)).clamp(10, 72).toDouble();
     }
     return base;
+  }
+
+  Rect _eraserRect(Offset center, double radius) => Rect.fromCenter(
+        center: center,
+        width: radius * 2,
+        height: radius * 1.4,
+      );
+
+  List<double>? _segmentRectInterval(Offset a, Offset b, Rect rect) {
+    final delta = b - a;
+    var enter = 0.0;
+    var exit = 1.0;
+    const epsilon = 1e-10;
+    final p = <double>[-delta.dx, delta.dx, -delta.dy, delta.dy];
+    final q = <double>[
+      a.dx - rect.left,
+      rect.right - a.dx,
+      a.dy - rect.top,
+      rect.bottom - a.dy,
+    ];
+    for (var i = 0; i < 4; i++) {
+      if (p[i].abs() <= epsilon) {
+        if (q[i] < 0) return null;
+        continue;
+      }
+      final ratio = q[i] / p[i];
+      if (p[i] < 0) {
+        if (ratio > exit) return null;
+        if (ratio > enter) enter = ratio;
+      } else {
+        if (ratio < enter) return null;
+        if (ratio < exit) exit = ratio;
+      }
+    }
+    if (enter > exit || exit - enter <= 1e-8) return null;
+    return <double>[
+      enter.clamp(0.0, 1.0).toDouble(),
+      exit.clamp(0.0, 1.0).toDouble(),
+    ];
+  }
+
+  bool _polylineTouchesRect(List<StrokePoint> points, Rect rect) {
+    if (points.isEmpty) return false;
+    if (points.length == 1) return rect.contains(points.first.position);
+    for (var i = 1; i < points.length; i++) {
+      if (_segmentRectInterval(
+            points[i - 1].position,
+            points[i].position,
+            rect,
+          ) !=
+          null) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  List<List<StrokePoint>> _subtractRect(
+    List<StrokePoint> points,
+    Rect rect,
+  ) {
+    if (points.isEmpty) return <List<StrokePoint>>[];
+    if (points.length == 1) {
+      return rect.contains(points.first.position)
+          ? <List<StrokePoint>>[]
+          : <List<StrokePoint>>[List<StrokePoint>.of(points)];
+    }
+
+    final pieces = <List<StrokePoint>>[];
+    var current = <StrokePoint>[];
+
+    void append(StrokePoint point) {
+      if (current.isEmpty ||
+          current.last.position != point.position ||
+          current.last.pressure != point.pressure) {
+        current.add(point);
+      }
+    }
+
+    void finish() {
+      if (current.isNotEmpty) {
+        pieces.add(current);
+        current = <StrokePoint>[];
+      }
+    }
+
+    for (var i = 1; i < points.length; i++) {
+      final a = points[i - 1];
+      final b = points[i];
+      final clipped = _segmentRectInterval(a.position, b.position, rect);
+      if (clipped == null) {
+        append(a);
+        append(b);
+        continue;
+      }
+      final enter = clipped[0];
+      final exit = clipped[1];
+      if (enter > 1e-8) {
+        append(a);
+        append(_interpolateStrokePoint(a, b, enter));
+        finish();
+      } else {
+        finish();
+      }
+      if (exit < 1 - 1e-8) {
+        append(_interpolateStrokePoint(a, b, exit));
+        append(b);
+      } else {
+        finish();
+      }
+    }
+    finish();
+    return pieces;
+  }
+
+  bool _isClosedFreehand(Stroke stroke) {
+    if (stroke.shape != null || stroke.stickerText != null || stroke.points.length < 3) {
+      return false;
+    }
+    final points = stroke.points;
+    return (points.last.position - points.first.position).distance <=
+        math.max(16.0, stroke.pen.size * 4);
+  }
+
+  Rect _strokeBounds(List<StrokePoint> points) {
+    var left = double.infinity;
+    var top = double.infinity;
+    var right = double.negativeInfinity;
+    var bottom = double.negativeInfinity;
+    for (final point in points) {
+      left = math.min(left, point.position.dx);
+      top = math.min(top, point.position.dy);
+      right = math.max(right, point.position.dx);
+      bottom = math.max(bottom, point.position.dy);
+    }
+    return Rect.fromLTRB(left, top, right, bottom);
+  }
+
+  bool _isPointInsideFill(Stroke stroke, Offset point) {
+    if (stroke.points.length < 2 || stroke.stickerText != null) return false;
+    final shape = stroke.shape;
+    if (shape == 'line' ||
+        shape == 'arrow' ||
+        shape == 'dottedLine' ||
+        shape == 'dashedLine' ||
+        shape == 'ruler' ||
+        shape == 'compass' ||
+        shape == 'divider' ||
+        shape == 'protractor') {
+      return false;
+    }
+
+    if (shape != null) {
+      final bounds = _strokeBounds(stroke.points);
+      if (!bounds.contains(point)) return false;
+      if (shape == 'ellipse' || shape == 'circle') {
+        final rx = (shape == 'circle'
+                ? math.min(bounds.width, bounds.height)
+                : bounds.width) /
+            2;
+        final ry = (shape == 'circle'
+                ? math.min(bounds.width, bounds.height)
+                : bounds.height) /
+            2;
+        if (rx <= 0 || ry <= 0) return false;
+        final dx = (point.dx - bounds.center.dx) / rx;
+        final dy = (point.dy - bounds.center.dy) / ry;
+        return dx * dx + dy * dy <= 1;
+      }
+      return true;
+    }
+
+    if (!_isClosedFreehand(stroke)) return false;
+    return LassoGeometry.pointInPolygon(
+      point,
+      stroke.points.map((sample) => sample.position).toList(growable: false),
+    );
+  }
+
+  void _fillAt(Offset point) {
+    for (var index = _strokes.length - 1; index >= 0; index--) {
+      final stroke = _strokes[index];
+      if (!_isPointInsideFill(stroke, point)) continue;
+      _snapshot();
+      _strokes[index] = stroke.copyWith(
+        fill: true,
+        fillColor: widget.fillColor ?? widget.pen.color,
+        fillOpacity: .38,
+      );
+      _finishDocumentMutation();
+      return;
+    }
   }
 
   void _eraseAt(
@@ -1210,7 +1417,10 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     for (final index in candidates) {
       if (index < 0 || index >= _strokes.length) continue;
       final stroke = _strokes[index];
-      if (_polylineTouchesCircle(stroke.points, point, radius)) {
+      if (_polylineTouchesRect(
+        stroke.points,
+        _eraserRect(point, radius).inflate(stroke.pen.size / 2),
+      )) {
         if (!snapshotAlreadyTaken && !_eraseSnapshotTaken) {
           _snapshot();
           _eraseSnapshotTaken = true;
@@ -1236,8 +1446,9 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       if (index < 0 || index >= _strokes.length) continue;
       final stroke = _strokes[index];
       if (stroke.shape != null || stroke.stickerText != null) {
-        if (stroke.points.any(
-          (p) => (p.position - point).distance <= radius,
+        if (_polylineTouchesRect(
+          stroke.points,
+          _eraserRect(point, radius).inflate(stroke.pen.size / 2),
         )) {
           if (!snapshotAlreadyTaken && !_eraseSnapshotTaken) {
             _snapshot();
@@ -1250,7 +1461,10 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
         continue;
       }
 
-      final pieces = _subtractCircle(stroke.points, point, radius);
+      final pieces = _subtractRect(
+        stroke.points,
+        _eraserRect(point, radius).inflate(stroke.pen.size / 2),
+      );
 
       if (pieces.length == 1 &&
           pieces.first.length == stroke.points.length) {
@@ -1591,7 +1805,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
 
     _selected.clear();
     for (final stroke in _strokes) {
-      if (LassoGeometry.strokeIntersectsPolygon(stroke.points, _lasso)) {
+      if (LassoGeometry.strokeMostlyInsidePolygon(stroke.points, _lasso)) {
         _selected.add(stroke.id);
       }
     }

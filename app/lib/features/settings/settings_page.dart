@@ -152,7 +152,11 @@ class _SettingsPageState extends State<SettingsPage> {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 5, 16, 8),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Trigger pressure value', style: TextStyle(fontWeight: FontWeight.w800)),
+            Row(children: [
+              Icon(Icons.speed_rounded, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 8),
+              const Text('Trigger pressure value', style: TextStyle(fontWeight: FontWeight.w800)),
+            ]),
             Slider(
               value: _settings.getDouble('pressureEraseThreshold'),
               min: .05, max: 1,
@@ -216,7 +220,7 @@ class _SettingsPageState extends State<SettingsPage> {
         _toggle('showPageNavigation', 'Show page navigation', 'Display previous/next/add controls.'),
         _toggle('showPageNumbers', 'Show page number', 'Number pages automatically.'),
         _toggle('showVisitedHistory', 'Show visited history', 'Remember recent page positions.'),
-        _toggle('showPagePreview', 'Show page preview on the right', 'Keep the thumbnail rail available.'),
+        _toggle('showPagePreview', 'Show page preview in the left sidebar', 'Keep the thumbnail rail available.'),
         _toggle('showUndoOnRight', 'Show undo on the right', 'Mirror undo and redo near navigation.'),
         _toggle('screenshotNotification', 'Notification bar displays screenshot', 'Platform-dependent screenshot feedback.'),
         _toggle('clickHyperlink', 'Click hyperlink to jump', 'Open rich-text hyperlinks.'),
@@ -388,8 +392,28 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  IconData _settingsIcon(String value) {
+    final key = value.toLowerCase();
+    if (key.contains('pressure') || key.contains('eras')) return Icons.speed_rounded;
+    if (key.contains('page') || key.contains('swipe') || key.contains('navigation')) return Icons.auto_stories_outlined;
+    if (key.contains('pen') || key.contains('stroke') || key.contains('writing')) return Icons.draw_rounded;
+    if (key.contains('theme') || key.contains('color') || key.contains('grayscale') || key.contains('e-ink') || key.contains('display')) return Icons.palette_outlined;
+    if (key.contains('motion') || key.contains('gesture') || key.contains('long press') || key.contains('double tap')) return Icons.gesture_rounded;
+    if (key.contains('sync') || key.contains('backup')) return Icons.cloud_sync_outlined;
+    if (key.contains('security') || key.contains('lock') || key.contains('privacy')) return Icons.lock_outline_rounded;
+    if (key.contains('hyperlink') || key.contains('link')) return Icons.link_rounded;
+    if (key.contains('screenshot') || key.contains('notification') || key.contains('push')) return Icons.notifications_outlined;
+    if (key.contains('history') || key.contains('visited')) return Icons.history_rounded;
+    if (key.contains('screen')) return Icons.screen_lock_portrait_outlined;
+    if (key.contains('recognition') || key.contains('shape')) return Icons.auto_awesome_rounded;
+    if (key.contains('book') || key.contains('shelf')) return Icons.menu_book_outlined;
+    if (key.contains('select') || key.contains('menu')) return Icons.touch_app_outlined;
+    return Icons.tune_rounded;
+  }
+
   Widget _toggle(String key, String title, String subtitle) => SwitchListTile.adaptive(
     contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+    secondary: Icon(_settingsIcon(key)),
     value: _settings.getBool(key),
     onChanged: (v) => _settings.setBool(key, v),
     title: Text(title),
@@ -397,7 +421,14 @@ class _SettingsPageState extends State<SettingsPage> {
   );
 
   Widget _customToggle({required bool value, required String title, required String subtitle, required ValueChanged<bool> onChanged}) =>
-      SwitchListTile.adaptive(contentPadding: const EdgeInsets.symmetric(horizontal: 16), value: value, onChanged: onChanged, title: Text(title), subtitle: Text(subtitle));
+      SwitchListTile.adaptive(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+        secondary: Icon(_settingsIcon(title)),
+        value: value,
+        onChanged: onChanged,
+        title: Text(title),
+        subtitle: Text(subtitle),
+      );
 
   Future<void> _privateTransfer() async {
     final action = await showModalBottomSheet<String>(

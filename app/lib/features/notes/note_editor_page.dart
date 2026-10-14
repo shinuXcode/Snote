@@ -37,6 +37,13 @@ import '../folders/folder_cover_library_page.dart';
 // Open-note tabs are shared by editor routes during the current app session.
 final ValueNotifier<List<LocalNote>> _snoteOpenNoteTabs = ValueNotifier<List<LocalNote>>(<LocalNote>[]);
 
+class _ToolPlacementDrag {
+  const _ToolPlacementDrag(this.key, this.sourceLocation);
+
+  final String key;
+  final String sourceLocation;
+}
+
 class NoteEditorPage extends StatefulWidget {
   final Uint8List? initialPdfBytes;
   final String? initialPdfName;
@@ -123,6 +130,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   int _sides = 6;
   bool _shapePanel = false;
   bool _showcaseOpen = false;
+  double _toolPencaseX = SnoteSettings.instance.getDouble('toolPencaseX');
+  double _toolPencaseY = SnoteSettings.instance.getDouble('toolPencaseY');
+  String _toolPencaseDock = SnoteSettings.instance.getString('toolPencaseDockSide');
+  Timer? _auxToolTapTimer;
   bool _studyTimerVisible = false;
   bool _viewportZoomLocked = false;
   int _viewportResetToken = 0;
@@ -742,6 +753,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     if (_loading || (_locked && !_unlocked)) return;
     _savePending = true;
     _saveTimer?.cancel();
+    _auxToolTapTimer?.cancel();
     if (!_settings.getBool('autoSave')) return;
     _saveTimer = Timer(const Duration(milliseconds: 700), () {
       unawaited(_save());
@@ -1115,6 +1127,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     PointerDeviceKind.trackpad,
                   },
                   onHorizontalDragEnd: (_pan || _selected > 0) ? null : _pageSwipe,
+                  onVerticalDragEnd: (_pan || _selected > 0) ? null : _pageSwipe,
                   onDoubleTap: () => setState(() => _toolbar = !_toolbar),
                   onLongPress: _settings.getBool('fingerLongPressSelection')
                       ? () => _selectTool(CanvasTool.lasso)
@@ -1124,9 +1137,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
               ),
               if (!_full) _header(),
               if (!_full && _tabsVisible) _openNotesTabsBar(),
-              if (!_full && !_readingMode) _movablePageChanger(),
+              if (!_full && !_readingMode && _settings.getBool('showPageNavigation')) _movablePageChanger(),
               if (_preview && !_full && !_readingMode) _previewRail(),
               if (_toolbar && _draw && !_readingMode) _toolbarWidget(),
+              if (!_full && _draw && !_readingMode) _toolPencaseWidget(),
               if (_shapePanel && !_full && !_readingMode) _shapePanelWidget(),
               if (_showcaseOpen && !_full && !_readingMode) _showcaseWidget(),
               if (!_full) _viewportZoomControls(),
@@ -2227,6 +2241,17 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     ),
                     IconButton(
                       visualDensity: VisualDensity.compact,
+                      tooltip: 'Calculator tool settings',
+                      onPressed: () {
+                        Navigator.pop(sheetContext);
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted) unawaited(_toolPlacementSheet('calculator'));
+                        });
+                      },
+                      icon: const Icon(Icons.tune_rounded),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
                       tooltip: 'Close calculator',
                       onPressed: () => Navigator.pop(sheetContext),
                       icon: const Icon(Icons.close_rounded),
@@ -2416,6 +2441,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   Widget _header() {
     final viewport = MediaQuery.sizeOf(context);
     final compact = viewport.width < 760 || viewport.height < 440;
+    final titleTools = _toolKeysForLocation('titleBar');
     return Positioned(
       left: 0,
       right: 0,
@@ -2471,6 +2497,22 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   onSubmitted: (_) => _save(force: true),
                 ),
               ),
+              if (titleTools.isNotEmpty)
+                SizedBox(
+                  width: math.min(112.0, titleTools.length * 32.0).toDouble(),
+                  child: _toolDropArea(
+                    'titleBar',
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: titleTools
+                            .map((key) => _placedToolButton(key, 'titleBar'))
+                            .toList(),
+                      ),
+                    ),
+                  ),
+                ),
               _compactAction(
                 tooltip: 'Save note',
                 icon: Icons.save_outlined,
@@ -2599,57 +2641,79 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
 
   Widget _movablePageChanger() {
     final size = MediaQuery.sizeOf(context);
+    final defaultLeft = math.max(0.0, size.width - 42);
+    final left = (_pageChangerX < 0 ? defaultLeft : _pageChangerX)
+        .clamp(0.0, math.max(0.0, size.width - 40))
+        .toDouble();
+    final top = _pageChangerY
+        .clamp(50.0, math.max(50.0, size.height - 142))
+        .toDouble();
+
     return Positioned(
-      left: _pageChangerX < 0 ? null : _pageChangerX,
+      left: _pageChangerX < 0 ? null : left,
       right: _pageChangerX < 0 ? 8 : null,
-      top: _pageChangerY.clamp(50.0, math.max(50.0, size.height - 62)),
+      top: top,
       child: Material(
-        elevation: 8,
+        elevation: 3,
         color: Theme.of(context).colorScheme.surface.withValues(alpha: .94),
-        borderRadius: BorderRadius.circular(16),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          GestureDetector(
-            onPanUpdate: (details) {
-              setState(() {
-                final x = _pageChangerX < 0 ? size.width - 166 : _pageChangerX;
-                _pageChangerX = (x + details.delta.dx).clamp(4.0, math.max(4.0, size.width - 170));
-                _pageChangerY = (_pageChangerY + details.delta.dy).clamp(50.0, math.max(50.0, size.height - 62));
-              });
-            },
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 5, vertical: 8),
-              child: Icon(Icons.drag_indicator_rounded, size: 18),
-            ),
+        borderRadius: BorderRadius.circular(11),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              GestureDetector(
+                onPanUpdate: (details) {
+                  setState(() {
+                    _pageChangerX = (left + details.delta.dx)
+                        .clamp(2.0, math.max(2.0, size.width - 42))
+                        .toDouble();
+                    _pageChangerY = (top + details.delta.dy)
+                        .clamp(50.0, math.max(50.0, size.height - 142))
+                        .toDouble();
+                  });
+                },
+                child: const SizedBox(
+                  width: 28,
+                  height: 16,
+                  child: Icon(Icons.drag_indicator_rounded, size: 14),
+                ),
+              ),
+              if (_settings.getBool('showPageNumbers'))
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Text(
+                    '${_page + 1}/${_pages.length}',
+                    style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800),
+                  ),
+                ),
+              IconButton(
+                onPressed: _previousPage,
+                tooltip: 'Previous page',
+                constraints: const BoxConstraints.tightFor(width: 28, height: 26),
+                padding: EdgeInsets.zero,
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.keyboard_arrow_up_rounded, size: 18),
+              ),
+              IconButton(
+                onPressed: _nextPage,
+                tooltip: 'Next page',
+                constraints: const BoxConstraints.tightFor(width: 28, height: 26),
+                padding: EdgeInsets.zero,
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+              ),
+              IconButton(
+                onPressed: _addPage,
+                tooltip: 'Add page',
+                constraints: const BoxConstraints.tightFor(width: 28, height: 26),
+                padding: EdgeInsets.zero,
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.add_rounded, size: 17),
+              ),
+            ],
           ),
-          IconButton(
-            onPressed: _previousPage,
-            tooltip: 'Previous page',
-            constraints: const BoxConstraints.tightFor(width: 30, height: 34),
-            padding: EdgeInsets.zero,
-            visualDensity: VisualDensity.compact,
-            icon: const Icon(Icons.chevron_left_rounded, size: 20),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 3),
-            child: Text('${_page + 1}/${_pages.length}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
-          ),
-          IconButton(
-            onPressed: _nextPage,
-            tooltip: 'Next page',
-            constraints: const BoxConstraints.tightFor(width: 30, height: 34),
-            padding: EdgeInsets.zero,
-            visualDensity: VisualDensity.compact,
-            icon: const Icon(Icons.chevron_right_rounded, size: 20),
-          ),
-          IconButton(
-            onPressed: _addPage,
-            tooltip: 'Add page',
-            constraints: const BoxConstraints.tightFor(width: 30, height: 34),
-            padding: EdgeInsets.zero,
-            visualDensity: VisualDensity.compact,
-            icon: const Icon(Icons.add_rounded, size: 18),
-          ),
-        ]),
+        ),
       ),
     );
   }
@@ -2685,7 +2749,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     final toolbar = ConstrainedBox(
       constraints: constraints,
       child: _toolbarSurface(
-        _toolbarContent(axis, docked: _docked),
+        _toolDropArea(
+          'toolbar',
+          _toolbarContent(axis, docked: _docked),
+        ),
         key: _toolbarKey,
       ),
     );
@@ -2735,29 +2802,13 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   }
 
   Widget _toolbarContent(Axis axis, {required bool docked}) {
-    final configured = _settings.getString('pencaseTools').split(',').where((v) => v.isNotEmpty).toSet();
-    final defaultTools = <CanvasTool>[
-      CanvasTool.ballpoint,
-      CanvasTool.fountain,
-      CanvasTool.pencil,
-      CanvasTool.highlighter,
-      CanvasTool.marker,
-      CanvasTool.brush,
-      CanvasTool.eraser,
-      CanvasTool.lasso,
-      CanvasTool.line,
-      CanvasTool.arrow,
-      CanvasTool.rectangle,
-      CanvasTool.ellipse,
-      CanvasTool.cartesianPlane,
-      CanvasTool.dashedLine,
-      CanvasTool.dottedLine,
-      CanvasTool.ruler,
-      CanvasTool.compass,
-      CanvasTool.protractor, CanvasTool.divider,
-    ];
-    final pencaseTools = defaultTools.where((tool) => tool != CanvasTool.pixelEraser && configured.contains(tool.name)).toList();
-
+    final pencaseTools = _toolKeysForLocation('toolbar')
+        .map(_canvasToolForKey)
+        .whereType<CanvasTool>()
+        .toList();
+    final auxiliaryTools = _toolKeysForLocation('toolbar')
+        .where((key) => key == 'calculator' || key == 'screenshot')
+        .toList();
     final items = <Widget>[
       GestureDetector(
         onPanUpdate: (details) {
@@ -2813,7 +2864,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           child: Icon(Icons.drag_indicator_rounded, size: 19, color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
       ),
-      ...pencaseTools.map((tool) => _toolButton(tool, _toolIcon(tool))),
+      ...pencaseTools.map((tool) => _placedToolButton(tool.name, 'toolbar')),
+      ...auxiliaryTools.map((key) => _placedToolButton(key, 'toolbar')),
       IconButton.filledTonal(
         onPressed: () => setState(() => _shapePanel = !_shapePanel),
         icon: const Icon(Icons.category_outlined),
@@ -2831,6 +2883,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           switch (action) {
             case 'calculator':
               await _calculatorSheet();
+              break;
+            case 'placements':
+              await _toolPlacementManagerSheet();
               break;
             case 'templates':
               await _paperSheet();
@@ -2861,6 +2916,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         },
         itemBuilder: (_) => const [
           PopupMenuItem(value: 'calculator', child: Row(children: [Icon(Icons.calculate_outlined, size: 19), SizedBox(width: 10), Text('Calculator')])),
+          PopupMenuItem(value: 'placements', child: Row(children: [Icon(Icons.widgets_outlined, size: 19), SizedBox(width: 10), Text('Manage tool placements')])),
           PopupMenuItem(value: 'templates', child: Row(children: [Icon(Icons.grid_4x4_rounded, size: 19), SizedBox(width: 10), Text('Page templates')])),
           PopupMenuItem(value: 'reading', child: Row(children: [Icon(Icons.chrome_reader_mode_outlined, size: 19), SizedBox(width: 10), Text('Reading mode')])),
           PopupMenuItem(value: 'timer', child: Row(children: [Icon(Icons.timer_outlined, size: 19), SizedBox(width: 10), Text('Study timer')])),
@@ -2927,6 +2983,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       CanvasTool.eraser: Icons.auto_fix_normal_rounded,
       CanvasTool.pixelEraser: Icons.auto_fix_high_rounded,
       CanvasTool.lasso: Icons.gesture_rounded,
+      CanvasTool.fill: Icons.format_color_fill_rounded,
       CanvasTool.line: Icons.horizontal_rule_rounded,
       CanvasTool.dottedLine: Icons.more_horiz_rounded,
       CanvasTool.dashedLine: Icons.linear_scale_rounded,
@@ -3133,6 +3190,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     var opacity = target == _tool ? _opacity : 1.0;
     var color = _toolColorOverrides[target.name] ?? _defaultToolColor(target);
     var fill = target == _tool && _fill;
+    final selectedLocations = <String>{
+      ...(_resolvedToolPlacements()[target.name] ?? const <String>['hidden']),
+    };
+    const placementLocations = <String>['titleBar', 'toolbar', 'pencase', 'hidden'];
     var showAdvanced = false;
     await showGeneralDialog<void>(
       context: context,
@@ -3225,6 +3286,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                               SwitchListTile(
                                 contentPadding: EdgeInsets.zero,
                                 dense: true,
+                                secondary: const Icon(Icons.format_color_fill_outlined),
                                 value: fill,
                                 onChanged: (value) {
                                   setPopup(() => fill = value);
@@ -3232,6 +3294,55 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                                 },
                                 title: const Text('Fill shape'),
                               ),
+                            const Divider(height: 18),
+                            const Text('Display location', style: TextStyle(fontWeight: FontWeight.w900)),
+                            ...placementLocations.map((location) => CheckboxListTile(
+                              contentPadding: EdgeInsets.zero,
+                              dense: true,
+                              secondary: Icon(_toolPlacementIcon(location), size: 19),
+                              title: Text(_toolPlacementLabel(location)),
+                              value: selectedLocations.contains(location) ||
+                                  (location == 'hidden' && selectedLocations.isEmpty),
+                              onChanged: (value) => setPopup(() {
+                                if (value == true) {
+                                  if (location == 'hidden') {
+                                    selectedLocations..clear()..add('hidden');
+                                  } else {
+                                    selectedLocations..remove('hidden')..add(location);
+                                  }
+                                } else {
+                                  selectedLocations.remove(location);
+                                }
+                              }),
+                            )),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: () async {
+                                  final next = _resolvedToolPlacements();
+                                  next[target.name] = <String>['pencase'];
+                                  await _saveToolLayout(next, _toolOrder);
+                                  if (dialogContext.mounted) Navigator.pop(dialogContext);
+                                },
+                                icon: const Icon(Icons.inventory_2_outlined, size: 18),
+                                label: const Text('Collect to Pencase'),
+                              ),
+                            ),
+                            SizedBox(
+                              width: double.infinity,
+                              child: FilledButton.icon(
+                                onPressed: () async {
+                                  final next = _resolvedToolPlacements();
+                                  next[target.name] = selectedLocations.isEmpty
+                                      ? <String>['hidden']
+                                      : selectedLocations.toList();
+                                  await _saveToolLayout(next, _toolOrder);
+                                  if (dialogContext.mounted) Navigator.pop(dialogContext);
+                                },
+                                icon: const Icon(Icons.save_outlined, size: 18),
+                                label: const Text('Save locations'),
+                              ),
+                            ),
                             const SizedBox(height: 8),
                             Align(
                               alignment: Alignment.centerLeft,
@@ -3349,6 +3460,452 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tool added to your showcase.')));
     }
+  }
+
+  List<String> get _allToolKeys => <String>[
+        ...CanvasTool.values.map((tool) => tool.name),
+        'calculator',
+        'screenshot',
+      ];
+
+  CanvasTool? _canvasToolForKey(String key) {
+    for (final tool in CanvasTool.values) {
+      if (tool.name == key) return tool;
+    }
+    return null;
+  }
+
+  Map<String, List<String>> _resolvedToolPlacements() {
+    const validLocations = <String>{'titleBar', 'toolbar', 'pencase', 'hidden'};
+    final saved = <String, List<String>>{};
+    try {
+      final decoded = jsonDecode(_settings.getString('toolPlacements'));
+      if (decoded is Map) {
+        for (final entry in decoded.entries) {
+          if (entry.value is! List) continue;
+          var locations = (entry.value as List)
+              .map((value) => value.toString())
+              .where(validLocations.contains)
+              .toList();
+          if (locations.contains('hidden') || locations.isEmpty) {
+            locations = <String>['hidden'];
+          } else {
+            locations = locations.toSet().toList();
+          }
+          saved[entry.key.toString()] = locations;
+        }
+      }
+    } catch (_) {
+      // Safely migrate older settings that did not store a placement map.
+    }
+
+    final legacyToolbar = _settings
+        .getString('pencaseTools')
+        .split(',')
+        .where((value) => value.isNotEmpty)
+        .toSet();
+    final result = <String, List<String>>{};
+    for (final key in _allToolKeys) {
+      if (saved.containsKey(key)) {
+        result[key] = List<String>.from(saved[key]!);
+      } else if (legacyToolbar.contains(key) ||
+          key == 'calculator' ||
+          key == 'screenshot') {
+        result[key] = <String>['toolbar'];
+      } else {
+        result[key] = <String>['hidden'];
+      }
+    }
+    return result;
+  }
+
+  List<String> get _toolOrder {
+    final result = <String>[];
+    final seen = <String>{};
+    try {
+      final decoded = jsonDecode(_settings.getString('toolOrder'));
+      if (decoded is List) {
+        for (final entry in decoded) {
+          final key = entry.toString();
+          if (_allToolKeys.contains(key) && seen.add(key)) result.add(key);
+        }
+      }
+    } catch (_) {}
+    for (final key in _settings.getString('pencaseTools').split(',')) {
+      if (_allToolKeys.contains(key) && seen.add(key)) result.add(key);
+    }
+    for (final key in _allToolKeys) {
+      if (seen.add(key)) result.add(key);
+    }
+    return result;
+  }
+
+  List<String> _toolKeysForLocation(String location) {
+    final placements = _resolvedToolPlacements();
+    return _toolOrder.where((key) => (placements[key] ?? const <String>[]).contains(location)).toList();
+  }
+
+  String _toolPlacementLabel(String location) {
+    switch (location) {
+      case 'titleBar': return 'Title Bar';
+      case 'toolbar': return 'Toolbar';
+      case 'pencase': return 'Pencase';
+      default: return 'Hidden';
+    }
+  }
+
+  IconData _toolPlacementIcon(String location) {
+    switch (location) {
+      case 'titleBar': return Icons.title_rounded;
+      case 'toolbar': return Icons.widgets_outlined;
+      case 'pencase': return Icons.inventory_2_outlined;
+      default: return Icons.visibility_off_outlined;
+    }
+  }
+
+  IconData _toolIconForKey(String key) {
+    if (key == 'calculator') return Icons.calculate_outlined;
+    if (key == 'screenshot') return Icons.screenshot_monitor_rounded;
+    final tool = _canvasToolForKey(key);
+    return tool == null ? Icons.widgets_outlined : _toolIcon(tool);
+  }
+
+  Future<void> _saveToolLayout(
+    Map<String, List<String>> placements,
+    List<String> order,
+  ) async {
+    const visibleLocations = <String>{'titleBar', 'toolbar', 'pencase'};
+    final normalized = <String, List<String>>{};
+    for (final key in _allToolKeys) {
+      final locations = (placements[key] ?? const <String>[])
+          .where(visibleLocations.contains)
+          .toSet()
+          .toList();
+      normalized[key] = locations.isEmpty
+          ? <String>['hidden']
+          : locations;
+    }
+
+    final normalizedOrder = <String>[];
+    final seen = <String>{};
+    for (final key in order) {
+      if (_allToolKeys.contains(key) && seen.add(key)) normalizedOrder.add(key);
+    }
+    for (final key in _allToolKeys) {
+      if (seen.add(key)) normalizedOrder.add(key);
+    }
+
+    await _settings.setString('toolPlacements', jsonEncode(normalized));
+    await _settings.setString('toolOrder', jsonEncode(normalizedOrder));
+    await _settings.setString(
+      'pencaseTools',
+      normalizedOrder.where((key) =>
+        _canvasToolForKey(key) != null &&
+        (normalized[key] ?? const <String>[]).contains('toolbar')
+      ).join(','),
+    );
+    if (mounted) setState(() {});
+  }
+
+  Widget _toolDropArea(String location, Widget child) => DragTarget<_ToolPlacementDrag>(
+        onAcceptWithDetails: (details) => unawaited(
+          _movePlacedTool(details.data.key, details.data.sourceLocation, location),
+        ),
+        builder: (context, candidates, rejected) => child,
+      );
+
+  Future<void> _movePlacedTool(
+    String key,
+    String sourceLocation,
+    String targetLocation, {
+    String? targetKey,
+  }) async {
+    if (!_allToolKeys.contains(key)) return;
+    final placements = _resolvedToolPlacements()
+        .map((name, values) => MapEntry(name, List<String>.from(values)));
+    final order = _toolOrder..remove(key);
+    final targetIndex = targetKey == null ? -1 : order.indexOf(targetKey);
+    order.insert(targetIndex < 0 ? order.length : targetIndex, key);
+
+    if (sourceLocation != targetLocation) {
+      final locations = placements[key] ?? <String>['hidden'];
+      locations.remove(sourceLocation);
+      locations.remove('hidden');
+      if (!locations.contains(targetLocation)) locations.add(targetLocation);
+      placements[key] = locations.isEmpty ? <String>['hidden'] : locations;
+    }
+    await _saveToolLayout(placements, order);
+  }
+
+  Widget _placedToolButton(String key, String location) {
+    final icon = _toolIconForKey(key);
+    final tool = _canvasToolForKey(key);
+    final active = tool != null && _tool == tool;
+    final inner = tool != null
+        ? _toolButton(tool, icon)
+        : Tooltip(
+            message: key == 'calculator'
+                ? 'Calculator · double-tap for settings'
+                : 'Screenshot / image · double-tap for settings',
+            child: GestureDetector(
+              onTap: () {
+                _auxToolTapTimer?.cancel();
+                _auxToolTapTimer = Timer(const Duration(milliseconds: 260), () {
+                  if (mounted) _activatePlacedTool(key);
+                });
+              },
+              onDoubleTap: () {
+                _auxToolTapTimer?.cancel();
+                _auxToolTapTimer = null;
+                unawaited(_toolPlacementSheet(key));
+              },
+              child: SizedBox(
+                width: 29,
+                height: 30,
+                child: Center(child: Icon(icon, size: 18)),
+              ),
+            ),
+          );
+
+    return DragTarget<_ToolPlacementDrag>(
+      onAcceptWithDetails: (details) => unawaited(
+        _movePlacedTool(
+          details.data.key,
+          details.data.sourceLocation,
+          location,
+          targetKey: key,
+        ),
+      ),
+      builder: (context, candidates, rejected) => LongPressDraggable<_ToolPlacementDrag>(
+        data: _ToolPlacementDrag(key, location),
+        maxSimultaneousDrags: 1,
+        feedback: Material(
+          elevation: 8,
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(10),
+          child: SizedBox(
+            width: 40,
+            height: 40,
+            child: Icon(icon, color: Theme.of(context).colorScheme.primary),
+          ),
+        ),
+        childWhenDragging: Opacity(opacity: .25, child: inner),
+        child: inner,
+      ),
+    );
+  }
+
+  void _activatePlacedTool(String key) {
+    if (key == 'calculator') {
+      unawaited(_calculatorSheet());
+    } else if (key == 'screenshot') {
+      unawaited(_insertScreenshot());
+    } else {
+      final tool = _canvasToolForKey(key);
+      if (tool != null) _selectTool(tool);
+    }
+  }
+
+  Future<void> _toolPlacementSheet(String key) async {
+    final selected = <String>{
+      ...(_resolvedToolPlacements()[key] ?? const <String>['hidden']),
+    };
+    const locations = <String>['titleBar', 'toolbar', 'pencase', 'hidden'];
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 22),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    Icon(_toolIconForKey(key), size: 26),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '${_canvasToolForKey(key)?.label ?? (key == 'calculator' ? 'Calculator' : 'Screenshot / image')} settings',
+                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 6),
+                  const Text('Choose one or more locations. Hidden removes the tool from all visible tool docks. Long-press a tool icon to reorder or move it.'),
+                  const SizedBox(height: 8),
+                  ...locations.map((location) => CheckboxListTile(
+                    secondary: Icon(_toolPlacementIcon(location)),
+                    title: Text(_toolPlacementLabel(location)),
+                    value: selected.contains(location) || (location == 'hidden' && selected.isEmpty),
+                    onChanged: (value) => setSheetState(() {
+                      if (value == true) {
+                        if (location == 'hidden') {
+                          selected..clear()..add('hidden');
+                        } else {
+                          selected..remove('hidden')..add(location);
+                        }
+                      } else {
+                        selected.remove(location);
+                      }
+                    }),
+                  )),
+                  const Divider(),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          final next = _resolvedToolPlacements();
+                          next[key] = <String>['pencase'];
+                          await _saveToolLayout(next, _toolOrder);
+                          if (sheetContext.mounted) Navigator.pop(sheetContext);
+                        },
+                        icon: const Icon(Icons.inventory_2_outlined),
+                        label: const Text('Collect to Pencase'),
+                      ),
+                      FilledButton.icon(
+                        onPressed: () async {
+                          final next = _resolvedToolPlacements();
+                          next[key] = selected.isEmpty ? <String>['hidden'] : selected.toList();
+                          await _saveToolLayout(next, _toolOrder);
+                          if (sheetContext.mounted) Navigator.pop(sheetContext);
+                        },
+                        icon: const Icon(Icons.save_outlined),
+                        label: const Text('Save locations'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _toolPlacementManagerSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(context).height * .78,
+          child: Column(children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(18, 4, 18, 10),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Tool placements', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(18, 0, 18, 10),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Double-tap a visible tool for settings. Select any tool here to configure where it appears.'),
+              ),
+            ),
+            Expanded(
+              child: ListView(
+                children: _toolOrder.map((key) {
+                  final selected = _resolvedToolPlacements()[key] ?? const <String>['hidden'];
+                  return ListTile(
+                    leading: Icon(_toolIconForKey(key)),
+                    title: Text(_canvasToolForKey(key)?.label ?? (key == 'calculator' ? 'Calculator' : 'Screenshot / image')),
+                    subtitle: Text(selected.map(_toolPlacementLabel).join(' · ')),
+                    trailing: const Icon(Icons.tune_rounded),
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) unawaited(_toolPlacementSheet(key));
+                      });
+                    },
+                  );
+                }).toList(),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _toolPencaseWidget() {
+    final keys = _toolKeysForLocation('pencase');
+    if (keys.isEmpty) return const SizedBox.shrink();
+    final size = MediaQuery.sizeOf(context);
+    final left = (_toolPencaseX < 0
+            ? math.max(0.0, size.width - 50)
+            : _toolPencaseX)
+        .clamp(0.0, math.max(0.0, size.width - 50))
+        .toDouble();
+    final top = _toolPencaseY.clamp(50.0, math.max(50.0, size.height - 100)).toDouble();
+    final vertical = _toolPencaseDock == 'left' || _toolPencaseDock == 'right';
+    final children = <Widget>[
+      GestureDetector(
+        onPanUpdate: (details) {
+          setState(() {
+            _toolPencaseDock = 'free';
+            _toolPencaseX = (left + details.delta.dx).clamp(0.0, math.max(0.0, size.width - 50)).toDouble();
+            _toolPencaseY = (top + details.delta.dy).clamp(50.0, math.max(50.0, size.height - 100)).toDouble();
+          });
+        },
+        onPanEnd: (_) async {
+          await _settings.setString('toolPencaseDockSide', _toolPencaseDock);
+          await _settings.setDouble('toolPencaseX', _toolPencaseX);
+          await _settings.setDouble('toolPencaseY', _toolPencaseY);
+        },
+        child: const SizedBox(
+          width: 34,
+          height: 28,
+          child: Icon(Icons.drag_indicator_rounded, size: 18),
+        ),
+      ),
+      PopupMenuButton<String>(
+        tooltip: 'Attach or float tool dock',
+        onSelected: (side) async {
+          setState(() => _toolPencaseDock = side);
+          await _settings.setString('toolPencaseDockSide', side);
+        },
+        itemBuilder: (_) => const [
+          PopupMenuItem(value: 'left', child: Text('Attach left')),
+          PopupMenuItem(value: 'right', child: Text('Attach right')),
+          PopupMenuItem(value: 'top', child: Text('Attach top')),
+          PopupMenuItem(value: 'bottom', child: Text('Attach bottom')),
+          PopupMenuItem(value: 'free', child: Text('Float freely')),
+        ],
+        icon: const Icon(Icons.dock_rounded, size: 18),
+      ),
+      ...keys.map((key) => _placedToolButton(key, 'pencase')),
+    ];
+    final axis = vertical ? Axis.vertical : Axis.horizontal;
+    final panel = Material(
+      elevation: SnoteThemeController.instance.eInk ? 0 : 6,
+      color: Theme.of(context).colorScheme.surface.withValues(alpha: .94),
+      borderRadius: BorderRadius.circular(12),
+      child: _toolDropArea(
+        'pencase',
+        SingleChildScrollView(
+          scrollDirection: axis,
+          child: Padding(
+            padding: const EdgeInsets.all(2),
+            child: Flex(direction: axis, mainAxisSize: MainAxisSize.min, children: children),
+          ),
+        ),
+      ),
+    );
+    if (_toolPencaseDock == 'left') return Positioned(left: 0, top: top, child: panel);
+    if (_toolPencaseDock == 'right') return Positioned(right: 0, top: top, child: panel);
+    if (_toolPencaseDock == 'top') return Positioned(left: left, top: 46, child: panel);
+    if (_toolPencaseDock == 'bottom') return Positioned(left: left, bottom: 0, child: panel);
+    return Positioned(left: left, top: top, child: panel);
   }
 
   Widget _toolButton(CanvasTool tool, IconData icon) => GestureDetector(
@@ -3616,7 +4173,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     const tools = <CanvasTool>[
       CanvasTool.ballpoint, CanvasTool.fountain, CanvasTool.pencil,
       CanvasTool.highlighter, CanvasTool.marker, CanvasTool.brush,
-      CanvasTool.eraser, CanvasTool.lasso, CanvasTool.line,
+      CanvasTool.eraser, CanvasTool.lasso, CanvasTool.fill, CanvasTool.line,
       CanvasTool.arrow, CanvasTool.rectangle, CanvasTool.ellipse,
     ];
     final selected = _settings.getString('pencaseTools').split(',').where((v) => v.isNotEmpty).toSet();

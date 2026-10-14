@@ -7,6 +7,7 @@ on:
       - feat/snote-editor-engine-rebuild
       - feat/snote-beta79-nextgen
       - feat/snote-beta80-workspace-tools
+      - feat/snote-beta81-tool-layout-fill
     paths:
       - "app/**"
       - ".github/workflows/beta.yml"
@@ -174,10 +175,31 @@ jobs:
         working-directory: app
         run: flutter build apk --release
 
-      - name: Rename beta APK
-        run: cp app/build/app/outputs/flutter-apk/app-release.apk Snote-Android-Beta.apk
+      - name: Sign beta APK for Android installation
+        run: |
+          set -euo pipefail
+          APK="app/build/app/outputs/flutter-apk/app-release.apk"
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          BUILD_TOOLS="$(find "$SDK_ROOT/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          APKSIGNER="$BUILD_TOOLS/apksigner"
+          test -x "$APKSIGNER"
+          keytool -genkeypair -v \
+            -keystore beta-signing.keystore \
+            -storepass beta-temp-password \
+            -keypass beta-temp-password \
+            -alias snote-beta \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Snote Beta Test, OU=Beta, O=Snote, L=Katihar, ST=Bihar, C=IN"
+          "$APKSIGNER" sign \
+            --ks beta-signing.keystore \
+            --ks-pass pass:beta-temp-password \
+            --key-pass pass:beta-temp-password \
+            --ks-key-alias snote-beta \
+            --out Snote-Android-Beta.apk "$APK"
+          "$APKSIGNER" verify --verbose --print-certs Snote-Android-Beta.apk
+          rm -f beta-signing.keystore
 
-      - name: Verify beta APK identity and checksum
+      - name: Verify beta APK identity, signature and checksum
         env:
           EXPECTED_VERSION: ${{ steps.beta_version.outputs.release_version }}
         run: |
@@ -185,8 +207,12 @@ jobs:
           APK="Snote-Android-Beta.apk"
           test -s "$APK"
           SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
-          AAPT="$(find "$SDK_ROOT/build-tools" -type f -name aapt 2>/dev/null | sort -V | tail -n 1)"
-          test -n "$AAPT"
+          BUILD_TOOLS="$(find "$SDK_ROOT/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          AAPT="$BUILD_TOOLS/aapt"
+          APKSIGNER="$BUILD_TOOLS/apksigner"
+          test -x "$AAPT"
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify --verbose "$APK"
           BADGING="$("$AAPT" dump badging "$APK")"
           APP_ID="$(printf '%s\n' "$BADGING" | awk -F"'" '/^package:/ {print $2; exit}')"
           VERSION_NAME="$(printf '%s\n' "$BADGING" | grep '^package:' | grep -o "versionName='[^']*'" | cut -d"'" -f2)"

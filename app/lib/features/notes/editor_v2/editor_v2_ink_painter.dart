@@ -46,7 +46,14 @@ class EditorV2InkPainter extends CustomPainter {
         ..color = const Color(0xff3979e8).withValues(alpha: .65)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.4;
-      canvas.drawCircle(eraserCursor!, eraserRadius, cursor);
+      canvas.drawRect(
+        Rect.fromCenter(
+          center: eraserCursor!,
+          width: eraserRadius * 2,
+          height: eraserRadius * 1.4,
+        ),
+        cursor,
+      );
     }
   }
 
@@ -86,6 +93,28 @@ class EditorV2InkPainter extends CustomPainter {
       ..strokeJoin = StrokeJoin.round
       ..strokeWidth = baseWidth
       ..isAntiAlias = true;
+
+    if (stroke.fill && stroke.points.length >= 4 &&
+        (stroke.points.first.position - stroke.points.last.position).distance <=
+            math.max(18.0, baseWidth * 2.5)) {
+      final loop = Path()..moveTo(
+        stroke.points.first.position.dx,
+        stroke.points.first.position.dy,
+      );
+      for (final sample in stroke.points.skip(1)) {
+        loop.lineTo(sample.position.dx, sample.position.dy);
+      }
+      loop.close();
+      canvas.drawPath(
+        loop,
+        Paint()
+          ..color = (stroke.fillColor ?? stroke.pen.color).withValues(
+            alpha: stroke.fillOpacity.clamp(0, 1).toDouble(),
+          )
+          ..style = PaintingStyle.fill
+          ..isAntiAlias = true,
+      );
+    }
     if (type == PenType.highlighter) {
       paint
         ..strokeWidth = math.max(baseWidth, 7)
@@ -100,9 +129,11 @@ class EditorV2InkPainter extends CustomPainter {
     }
 
     if (stroke.points.length == 1) {
+      final pressure = stroke.points.first.pressure.clamp(.08, 1.0);
+      final pressureWidth = baseWidth * (1 - stroke.pen.pressureSensitivity * .52 + stroke.pen.pressureSensitivity * pressure);
       canvas.drawCircle(
         stroke.points.first.position,
-        math.max(.6, baseWidth * .42).toDouble(),
+        math.max(.6, pressureWidth * .42).toDouble(),
         Paint()
           ..color = paint.color
           ..style = PaintingStyle.fill
@@ -126,18 +157,27 @@ class EditorV2InkPainter extends CustomPainter {
     }
     final last = stroke.points.last.position;
     path.lineTo(last.dx, last.dy);
-    canvas.drawPath(path, paint);
+    final pressureSensitive = type != PenType.pointer &&
+        stroke.pen.pressureSensitivity > .001 &&
+        stroke.points.length > 1;
+    final inkBaseWidth = type == PenType.highlighter
+        ? math.max(baseWidth, 7).toDouble()
+        : type == PenType.marker
+            ? baseWidth * 1.35
+            : type == PenType.brush
+                ? baseWidth * 1.2
+                : baseWidth;
 
-    // Width modulation preserves the captured pressure signal without
-    // rebuilding the path for every pointer update.
-    if (type != PenType.highlighter &&
-        type != PenType.pointer &&
-        stroke.points.length > 2) {
+    if (!pressureSensitive) {
+      canvas.drawPath(path, paint);
+    } else {
+      // Use variable-width segments only: a full-width base path would hide
+      // the pressure effect beneath those segments.
       for (var i = 1; i < stroke.points.length; i++) {
         final a = stroke.points[i - 1];
         final b = stroke.points[i];
         final pressure = ((a.pressure + b.pressure) / 2).clamp(.08, 1.0);
-        final width = baseWidth *
+        final width = inkBaseWidth *
             (1 - stroke.pen.pressureSensitivity * .52 +
                 stroke.pen.pressureSensitivity * pressure);
         canvas.drawLine(
@@ -145,8 +185,10 @@ class EditorV2InkPainter extends CustomPainter {
           b.position,
           Paint()
             ..color = paint.color
+            ..blendMode = paint.blendMode
             ..strokeWidth = width.clamp(.5, 60).toDouble()
             ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round
             ..isAntiAlias = true,
         );
       }
@@ -167,11 +209,19 @@ class EditorV2InkPainter extends CustomPainter {
           )
         : rect;
     final shape = stroke.shape ?? 'line';
+    final pressureMean = points.isEmpty
+        ? 1.0
+        : points.fold<double>(0, (sum, point) => sum + point.pressure) / points.length;
+    final pressureSensitivity = stroke.pen.type == PenType.pointer
+        ? 0.0
+        : stroke.pen.pressureSensitivity.clamp(0, 1).toDouble();
+    final pressureWidth = stroke.pen.size *
+        (1 - pressureSensitivity * .52 + pressureSensitivity * pressureMean.clamp(.08, 1.0));
     final base = Paint()
       ..color = stroke.pen.color.withValues(
         alpha: stroke.pen.opacity.clamp(.05, 1).toDouble(),
       )
-      ..strokeWidth = stroke.pen.size.clamp(.6, 20).toDouble()
+      ..strokeWidth = pressureWidth.clamp(.6, 20).toDouble()
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
@@ -230,6 +280,103 @@ class EditorV2InkPainter extends CustomPainter {
           safeRect.center.dy - painter.height / 2,
         ),
       );
+    }
+
+    if (stroke.fill) {
+      final lower = shape.toLowerCase();
+      final openShape = const {
+        'line', 'dottedLine', 'dashedLine', 'divider', 'arrow',
+        'vectorArrow', 'curvedArrow', 'doubleArrow', 'dimensionLine',
+        'numberLine', 'ruler', 'compass', 'protractor', 'rayDiagram',
+        'waveform', 'projectilePath',
+      }.contains(shape) || lower.contains('arrow') || lower.contains('line');
+
+      if (!openShape) {
+        late Path fillPath;
+        switch (shape) {
+          case 'roundedRectangle':
+            fillPath = Path()..addRRect(RRect.fromRectAndRadius(safeRect, const Radius.circular(12)));
+            break;
+          case 'ellipse':
+          case 'circle':
+          case 'sphere':
+          case 'flowchartConnector':
+          case 'animalCell':
+          case 'unitCircle':
+          case 'atom':
+          case 'orbital':
+            fillPath = Path()..addOval(safeRect);
+            break;
+          case 'triangle':
+          case 'pyramid':
+            fillPath = polygon([
+              Offset(safeRect.center.dx, safeRect.top),
+              safeRect.bottomRight,
+              Offset(safeRect.left, safeRect.bottom),
+            ]);
+            break;
+          case 'diamond':
+          case 'flowchartDecision':
+            fillPath = polygon([
+              Offset(safeRect.center.dx, safeRect.top),
+              safeRect.centerRight,
+              Offset(safeRect.center.dx, safeRect.bottom),
+              safeRect.centerLeft,
+            ]);
+            break;
+          case 'pentagon':
+            fillPath = polygon(regularPolygon(5));
+            break;
+          case 'hexagon':
+            fillPath = polygon(regularPolygon(6));
+            break;
+          case 'heptagon':
+            fillPath = polygon(regularPolygon(7));
+            break;
+          case 'octagon':
+            fillPath = polygon(regularPolygon(8));
+            break;
+          case 'nonagon':
+            fillPath = polygon(regularPolygon(9));
+            break;
+          case 'decagon':
+            fillPath = polygon(regularPolygon(10));
+            break;
+          case 'customPolygon':
+            fillPath = polygon(regularPolygon(stroke.customSides.clamp(3, 24)));
+            break;
+          case 'parallelogram':
+            fillPath = polygon([
+              Offset(safeRect.left + safeRect.width * .22, safeRect.top),
+              safeRect.topRight,
+              Offset(safeRect.right - safeRect.width * .22, safeRect.bottom),
+              safeRect.bottomLeft,
+            ]);
+            break;
+          case 'trapezoid':
+            fillPath = polygon([
+              Offset(safeRect.left + safeRect.width * .2, safeRect.top),
+              Offset(safeRect.right - safeRect.width * .2, safeRect.top),
+              safeRect.bottomRight,
+              safeRect.bottomLeft,
+            ]);
+            break;
+          case 'star':
+            fillPath = polygon(List<Offset>.generate(10, (index) {
+              final radius = index.isEven ? .48 : .21;
+              final angle = -math.pi / 2 + index * math.pi / 5;
+              return Offset(
+                safeRect.center.dx + math.cos(angle) * safeRect.width * radius,
+                safeRect.center.dy + math.sin(angle) * safeRect.height * radius,
+              );
+            }));
+            break;
+          default:
+            fillPath = Path()..addRect(safeRect);
+            break;
+        }
+        canvas.drawPath(fillPath, fill);
+      }
     }
 
     switch (shape) {
@@ -1312,12 +1459,6 @@ class EditorV2InkPainter extends CustomPainter {
         label(_humanize(shape));
     }
 
-    if (stroke.fill && shape != 'flowchartDecision') {
-      // Fill remains opt-in, preserving the previous editor's default no-fill
-      // semantics while making the new renderer capable of filled geometry.
-      final fillPath = Path()..addRect(safeRect);
-      canvas.drawPath(fillPath, fill);
-    }
   }
 
   static String _humanize(String raw) {

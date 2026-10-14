@@ -21,7 +21,7 @@ class SnoteSettings extends ChangeNotifier {
     'autoBackupLocal': true, 'writingPostureRightHand': true, 'disableBackGesture': false,
     'turnOffPush': false, 'pageSwipe': true, 'autoAddPage': true,
     'securePagePreviews': true, 'eInk': false, 'grayscaleEInk': true, 'reduceMotion': false,
-    'welcomeGuideSeen': false, 'editorV2FloatingToolbar': false, 'editorV2FavoritesVertical': false, 'editorV2FloatingPageNavigation': false, 'editorV2ShowFavoritesShowcase': true,
+    'welcomeGuideSeen': false, 'editorV2FloatingToolbar': false, 'editorV2FavoritesVertical': false, 'editorV2FloatingPageNavigation': false, 'editorV2ShowFavoritesShowcase': true, 'editorV2ShowNoteSwitcher': true,
   };
 
   static const doubleDefaults = <String, double>{
@@ -30,6 +30,8 @@ class SnoteSettings extends ChangeNotifier {
     'velocitySensitivity': .65,
     'pressureExponent': 1.0,
     'noteZoom': 1.0,
+    'toolPencaseX': -1.0,
+    'toolPencaseY': 170.0,
   };
 
   static const stringDefaults = <String, String>{
@@ -39,12 +41,15 @@ class SnoteSettings extends ChangeNotifier {
     'eInkProfile': 'physical',
     'defaultPageTemplate': 'dotted',
     'defaultPaperPalette': 'paper-white',
-    'pencaseTools': 'ballpoint,fountain,pencil,highlighter,marker,brush,eraser,lasso,line,arrow,rectangle,ellipse,cartesianPlane,dashedLine,dottedLine,ruler,compass,protractor,divider',
+    'pencaseTools': 'ballpoint,fountain,pencil,highlighter,marker,brush,eraser,lasso,fill,line,arrow,rectangle,ellipse,cartesianPlane,dashedLine,dottedLine,ruler,compass,protractor,divider',
+    'toolPlacements': '{}',
+    'toolOrder': '[]',
+    'toolPencaseDockSide': 'right',
     'toolInstrumentDefaultsV1': '',
     'pencasePresets': '[]',
     'coverLibrary': '[]',
     'folderSort': 'nameAsc',
-    'pressureCurve': 'linear', 'editorV2ToolbarDock': 'top', 'editorV2FavoritePens': '[]', 'editorV2ToolProfiles': '{}',
+    'pressureCurve': 'linear', 'editorV2ToolbarDock': 'top', 'editorV2FavoritePens': '[]', 'editorV2ToolProfiles': '{}', 'editorV2ToolPlacements': '{}', 'editorV2ToolbarOrder': '[]',
     'toolSizes': '{}',
     'toolColors': '{}',
     'toolDashed': '{}',
