@@ -202,11 +202,19 @@ class EditorV2InkPainter extends CustomPainter {
           )
         : rect;
     final shape = stroke.shape ?? 'line';
+    final pressureMean = points.isEmpty
+        ? 1.0
+        : points.fold<double>(0, (sum, point) => sum + point.pressure) / points.length;
+    final pressureSensitivity = stroke.pen.type == PenType.pointer
+        ? 0.0
+        : stroke.pen.pressureSensitivity.clamp(0, 1).toDouble();
+    final pressureWidth = stroke.pen.size *
+        (1 - pressureSensitivity * .52 + pressureSensitivity * pressureMean.clamp(.08, 1.0));
     final base = Paint()
       ..color = stroke.pen.color.withValues(
         alpha: stroke.pen.opacity.clamp(.05, 1).toDouble(),
       )
-      ..strokeWidth = stroke.pen.size.clamp(.6, 20).toDouble()
+      ..strokeWidth = pressureWidth.clamp(.6, 20).toDouble()
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
