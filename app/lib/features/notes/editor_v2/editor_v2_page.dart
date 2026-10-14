@@ -204,6 +204,17 @@ class _EditorV2PageState extends State<EditorV2Page>
     _showPageNavigation = _settings.getBool('showPageNavigation');
     _floatingPageNavigation = _settings.getBool('editorV2FloatingPageNavigation');
     _showFavoritesShowcase = _settings.getBool('editorV2ShowFavoritesShowcase');
+    try {
+      final favoriteOffset = jsonDecode(_settings.getString('editorV2FavoriteOffset'));
+      if (favoriteOffset is Map) {
+        _favoriteOffset = Offset(
+          (favoriteOffset['dx'] as num?)?.toDouble() ?? _favoriteOffset.dx,
+          (favoriteOffset['dy'] as num?)?.toDouble() ?? _favoriteOffset.dy,
+        );
+      }
+    } catch (_) {
+      // Invalid or absent position preferences simply use the safe default.
+    }
     _restoreToolProfiles();
     _pressureSensitivity = .55;
     _pressureCurve = PressureCurve.values.firstWhere(
@@ -1213,6 +1224,9 @@ class _EditorV2PageState extends State<EditorV2Page>
   Future<void> _chooseColor() async {
     var selectedColor = _color;
     var selectedOpacity = _opacity;
+    final hexController = TextEditingController(
+      text: _color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase(),
+    );
     final chosen = await showModalBottomSheet<({Color color, double opacity})>(
       context: context,
       isScrollControlled: true,
@@ -1231,7 +1245,10 @@ class _EditorV2PageState extends State<EditorV2Page>
                   spacing: 12,
                   runSpacing: 12,
                   children: _palette.map((color) => InkWell(
-                    onTap: () => setSheetState(() => selectedColor = color),
+                    onTap: () => setSheetState(() {
+                      selectedColor = color;
+                      hexController.text = color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase();
+                    }),
                     borderRadius: BorderRadius.circular(30),
                     child: Container(
                       width: 36,
@@ -1247,6 +1264,27 @@ class _EditorV2PageState extends State<EditorV2Page>
                       child: color == selectedColor ? const Icon(Icons.check_rounded, size: 17, color: Colors.white) : null,
                     ),
                   )).toList(),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: hexController,
+                  textCapitalization: TextCapitalization.characters,
+                  maxLength: 8,
+                  decoration: const InputDecoration(
+                    labelText: 'Custom HEX color',
+                    hintText: 'RRGGBB or AARRGGBB',
+                    prefixText: '#',
+                    counterText: '',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (raw) {
+                    final value = raw.trim().replaceAll('#', '');
+                    if (value.length != 6 && value.length != 8) return;
+                    final parsed = int.tryParse(value, radix: 16);
+                    if (parsed == null) return;
+                    setSheetState(() => selectedColor = Color(value.length == 6 ? 0xff000000 | parsed : parsed));
+                  },
                 ),
                 const SizedBox(height: 12),
                 Row(children: [
@@ -1273,6 +1311,7 @@ class _EditorV2PageState extends State<EditorV2Page>
         ),
       ),
     );
+    hexController.dispose();
     if (chosen == null || !mounted) return;
     setState(() {
       _color = chosen.color;
@@ -2529,11 +2568,37 @@ class _EditorV2PageState extends State<EditorV2Page>
         ),
       );
     }).toList();
+    final screen = MediaQuery.sizeOf(context);
     return Positioned(
-      left: _favoriteOffset.dx.clamp(0, math.max(0, MediaQuery.sizeOf(context).width - 120)).toDouble(),
-      top: _favoriteOffset.dy.clamp(0, math.max(0, MediaQuery.sizeOf(context).height - 120)).toDouble(),
+      left: _favoriteOffset.dx.clamp(0, math.max(0, screen.width - (_favoritesVertical ? 62 : 120))).toDouble(),
+      top: _favoriteOffset.dy.clamp(0, math.max(0, screen.height - 120)).toDouble(),
       child: GestureDetector(
         onPanUpdate: (details) => setState(() => _favoriteOffset += details.delta),
+        onPanEnd: (_) {
+          final leftEdge = _favoriteOffset.dx < 28;
+          final rightEdge = _favoriteOffset.dx > screen.width - 120;
+          if (leftEdge || rightEdge) {
+            setState(() {
+              _favoritesVertical = true;
+              _favoriteOffset = Offset(
+                leftEdge ? 4 : math.max(4, screen.width - 62),
+                _favoriteOffset.dy.clamp(72, math.max(72, screen.height - 120)).toDouble(),
+              );
+            });
+            unawaited(_settings.setBool('editorV2FavoritesVertical', true));
+            unawaited(_settings.setString('editorV2FavoriteDock', leftEdge ? 'left' : 'right'));
+            unawaited(_settings.setString('editorV2FavoriteOffset', jsonEncode({
+              'dx': _favoriteOffset.dx,
+              'dy': _favoriteOffset.dy,
+            })));
+          } else {
+            unawaited(_settings.setString('editorV2FavoriteDock', 'floating'));
+            unawaited(_settings.setString('editorV2FavoriteOffset', jsonEncode({
+              'dx': _favoriteOffset.dx,
+              'dy': _favoriteOffset.dy,
+            })));
+          }
+        },
         child: Material(
           elevation: 7,
           color: Theme.of(context).colorScheme.surfaceContainerHigh,
