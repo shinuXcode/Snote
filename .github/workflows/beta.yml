@@ -118,12 +118,40 @@ jobs:
               if '</activity>' not in text:
                   raise SystemExit('Could not find activity closing tag for Android share filters')
               text = text.replace('</activity>', share_filters + '\n            </activity>', 1)
+          if 'android:authorities="${applicationId}.provider"' not in text:
+              provider = '''
+                  <provider
+                      android:name="androidx.core.content.FileProvider"
+                      android:authorities="${applicationId}.provider"
+                      android:exported="false"
+                      android:grantUriPermissions="true">
+                      <meta-data
+                          android:name="android.support.FILE_PROVIDER_PATHS"
+                          android:resource="@xml/provider_paths" />
+                  </provider>
+              '''
+              if '</application>' not in text:
+                  raise SystemExit('Could not find application closing tag for clipboard image provider')
+              text = text.replace('</application>', provider + '\n</application>', 1)
           manifest.write_text(text)
+
+          provider_paths = Path('android/app/src/main/res/xml/provider_paths.xml')
+          provider_paths.parent.mkdir(parents=True, exist_ok=True)
+          if not provider_paths.is_file():
+              provider_paths.write_text('''<?xml version="1.0" encoding="utf-8"?>
+          <paths xmlns:android="http://schemas.android.com/apk/res/android">
+              <external-path name="external_files" path="." />
+          </paths>
+          ''')
 
           if 'Snote Beta' not in manifest.read_text():
               raise SystemExit('Beta app label was not set')
           if 'android.intent.action.SEND' not in manifest.read_text():
               raise SystemExit('Android image share filters were not configured')
+          if 'android:authorities="${applicationId}.provider"' not in manifest.read_text():
+              raise SystemExit('Clipboard image provider was not configured')
+          if not provider_paths.is_file():
+              raise SystemExit('Clipboard provider paths file is missing')
           PY
 
       - name: Install dependencies
