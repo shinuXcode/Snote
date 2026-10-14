@@ -78,6 +78,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     CanvasTool.eraser,
     CanvasTool.pixelEraser,
     CanvasTool.lasso,
+    CanvasTool.fill,
     CanvasTool.line,
     CanvasTool.arrow,
     CanvasTool.rectangle,
@@ -158,6 +159,10 @@ class _EditorV2PageState extends State<EditorV2Page>
   final Map<String, Map<String, Object?>> _toolProfiles = <String, Map<String, Object?>>{};
   Map<String, Object?>? _pageClipboard;
   Map<String, Object?>? _selectionClipboard;
+  final List<Map<String, Object?>> _selectionClipboardHistory = <Map<String, Object?>>[];
+  final Map<String, Set<String>> _toolPlacements = <String, Set<String>>{};
+  List<String> _toolbarOrder = <String>[];
+  bool _showNoteSwitcherInTitleBar = true;
   List<Map<String, Object?>>? _selectionTransformImageSnapshot;
   List<Map<String, Object?>>? _selectionTransformTextSnapshot;
   bool _showFavoritesShowcase = true;
@@ -224,6 +229,8 @@ class _EditorV2PageState extends State<EditorV2Page>
       // Invalid or absent position preferences simply use the safe default.
     }
     _restoreToolProfiles();
+    _restoreToolPlacements();
+    _showNoteSwitcherInTitleBar = _settings.getBool('editorV2ShowNoteSwitcher');
     _pressureSensitivity = .55;
     _pressureCurve = PressureCurve.values.firstWhere(
       (curve) => curve.name == _settings.getString('pressureCurve'),
@@ -512,6 +519,83 @@ class _EditorV2PageState extends State<EditorV2Page>
   Future<void> _saveToolProfiles() =>
       _settings.setString('editorV2ToolProfiles', jsonEncode(_toolProfiles));
 
+  void _restoreToolPlacements() {
+    try {
+      final decoded = jsonDecode(_settings.getString('editorV2ToolPlacements'));
+      if (decoded is Map) {
+        _toolPlacements
+          ..clear()
+          ..addEntries(decoded.entries.where((entry) => entry.value is List).map((entry) {
+            final locations = (entry.value as List)
+                .whereType<String>()
+                .where((value) => const {'titleBar', 'toolbar', 'pencase'}.contains(value))
+                .toSet();
+            return MapEntry(entry.key.toString(), locations);
+          }));
+      }
+    } catch (error) {
+      debugPrint('[Snote][EditorV2] ignoring invalid tool layout settings: $error');
+    }
+    try {
+      final decoded = jsonDecode(_settings.getString('editorV2ToolbarOrder'));
+      if (decoded is List) {
+        _toolbarOrder = decoded.whereType<String>().where((name) {
+          return CanvasTool.values.any((tool) => tool.name == name);
+        }).toList();
+      }
+    } catch (error) {
+      debugPrint('[Snote][EditorV2] ignoring invalid toolbar order: $error');
+    }
+    for (final tool in _quickTools) {
+      if (!_toolbarOrder.contains(tool.name)) _toolbarOrder.add(tool.name);
+    }
+  }
+
+  Future<void> _saveToolPlacements() => _settings.setString(
+        'editorV2ToolPlacements',
+        jsonEncode(_toolPlacements.map((key, value) => MapEntry(key, value.toList()))),
+      );
+
+  Set<String> _placementsFor(CanvasTool tool) {
+    final saved = _toolPlacements[tool.name];
+    if (saved != null) return saved;
+    return _quickTools.contains(tool) ? <String>{'toolbar'} : <String>{};
+  }
+
+  bool _toolInLocation(CanvasTool tool, String location) =>
+      _placementsFor(tool).contains(location);
+
+  List<CanvasTool> get _toolbarTools {
+    final result = <CanvasTool>[];
+    for (final name in _toolbarOrder) {
+      final tool = CanvasTool.values.where((candidate) => candidate.name == name).firstOrNull;
+      if (tool != null && _toolInLocation(tool, 'toolbar') && !result.contains(tool)) {
+        result.add(tool);
+      }
+    }
+    for (final tool in CanvasTool.values) {
+      if (_toolInLocation(tool, 'toolbar') && !result.contains(tool)) result.add(tool);
+    }
+    return result;
+  }
+
+  List<CanvasTool> get _titleBarTools =>
+      CanvasTool.values.where((tool) => _toolInLocation(tool, 'titleBar')).toList();
+
+  List<CanvasTool> get _pencaseTools =>
+      CanvasTool.values.where((tool) => _toolInLocation(tool, 'pencase')).toList();
+
+  void _reorderToolbarTool(CanvasTool source, CanvasTool target) {
+    final order = _toolbarTools.map((tool) => tool.name).toList();
+    final from = order.indexOf(source.name);
+    final to = order.indexOf(target.name);
+    if (from < 0 || to < 0 || from == to) return;
+    order.removeAt(from);
+    order.insert(to, source.name);
+    setState(() => _toolbarOrder = order);
+    unawaited(_settings.setString('editorV2ToolbarOrder', jsonEncode(order)));
+  }
+
   void _rememberCurrentToolProfile() {
     _toolProfiles[_tool.name] = <String, Object?>{
       'size': _size,
@@ -704,6 +788,9 @@ class _EditorV2PageState extends State<EditorV2Page>
   Stroke _buildLiveStroke() {
     final start = _gestureStart ?? Offset.zero;
     final shapeTool = _tool.isShape && _tool != CanvasTool.lasso;
+    if (_tool == CanvasTool.fill) {
+      return Stroke(id: 'live-${_activePointer ?? 0}', points: const <StrokePoint>[], pen: _penConfig());
+    }
     final points = shapeTool && _livePoints.isNotEmpty
         ? <StrokePoint>[_livePoints.first, _livePoints.last]
         : List<StrokePoint>.from(_livePoints);
@@ -713,6 +800,140 @@ class _EditorV2PageState extends State<EditorV2Page>
       pen: _penConfig(),
       shape: shapeTool ? _tool.name : null,
       dashed: _tool == CanvasTool.dashedLine || _tool == CanvasTool.dottedLine,
+    );
+  }
+
+  bool _pointInPolygon(Offset point, List<Offset> polygon) {
+    if (polygon.length < 3) return false;
+    var inside = false;
+    var previous = polygon.length - 1;
+    for (var current = 0; current < polygon.length; current++) {
+      final a = polygon[current];
+      final b = polygon[previous];
+      if ((a.dy > point.dy) != (b.dy > point.dy)) {
+        final denominator = b.dy - a.dy;
+        final intersectionX = denominator.abs() < 1e-9
+            ? a.dx
+            : (b.dx - a.dx) * (point.dy - a.dy) / denominator + a.dx;
+        if (point.dx < intersectionX) inside = !inside;
+      }
+      previous = current;
+    }
+    return inside;
+  }
+
+  bool _pointInsideFillTarget(Stroke stroke, Offset point) {
+    if (stroke.points.length < 2) return false;
+    final points = stroke.points.map((sample) => sample.position).toList();
+    var left = points.first.dx;
+    var right = left;
+    var top = points.first.dy;
+    var bottom = top;
+    for (final sample in points.skip(1)) {
+      left = math.min(left, sample.dx);
+      right = math.max(right, sample.dx);
+      top = math.min(top, sample.dy);
+      bottom = math.max(bottom, sample.dy);
+    }
+    final bounds = Rect.fromLTRB(left, top, right, bottom);
+    if (!bounds.inflate(2).contains(point)) return false;
+
+    final shape = stroke.shape;
+    if (shape == null || shape.isEmpty) {
+      final closeTolerance = math.max(18.0, stroke.pen.size * 2.5).toDouble();
+      if (points.length < 4 || (points.first - points.last).distance > closeTolerance) {
+        return false;
+      }
+      return _pointInPolygon(point, points);
+    }
+
+    const openShapes = <String>{
+      'line', 'arrow', 'vectorArrow', 'dashedLine', 'dottedLine',
+      'divider', 'dimensionLine', 'numberLine', 'ruler', 'compass',
+      'protractor', 'rayDiagram', 'waveform', 'projectilePath',
+    };
+    if (openShapes.contains(shape) ||
+        shape.toLowerCase().contains('arrow') ||
+        shape.toLowerCase().contains('line')) {
+      return false;
+    }
+    if (const {'ellipse', 'circle', 'sphere', 'flowchartConnector', 'animalCell'}.contains(shape)) {
+      if (bounds.width <= 0 || bounds.height <= 0) return false;
+      final nx = (point.dx - bounds.center.dx) / (bounds.width / 2);
+      final ny = (point.dy - bounds.center.dy) / (bounds.height / 2);
+      return nx * nx + ny * ny <= 1;
+    }
+    if (const {'triangle', 'pyramid'}.contains(shape)) {
+      return _pointInPolygon(point, <Offset>[
+        Offset(bounds.center.dx, bounds.top),
+        bounds.bottomRight,
+        Offset(bounds.left, bounds.bottom),
+      ]);
+    }
+    if (shape == 'diamond') {
+      return _pointInPolygon(point, <Offset>[
+        Offset(bounds.center.dx, bounds.top),
+        bounds.centerRight,
+        Offset(bounds.center.dx, bounds.bottom),
+        bounds.centerLeft,
+      ]);
+    }
+    if (shape == 'parallelogram') {
+      return _pointInPolygon(point, <Offset>[
+        Offset(bounds.left + bounds.width * .22, bounds.top),
+        Offset(bounds.right, bounds.top),
+        Offset(bounds.right - bounds.width * .22, bounds.bottom),
+        Offset(bounds.left, bounds.bottom),
+      ]);
+    }
+    if (shape == 'trapezoid') {
+      return _pointInPolygon(point, <Offset>[
+        Offset(bounds.left + bounds.width * .2, bounds.top),
+        Offset(bounds.right - bounds.width * .2, bounds.top),
+        bounds.bottomRight,
+        Offset(bounds.left, bounds.bottom),
+      ]);
+    }
+    final sides = <String, int>{
+      'pentagon': 5, 'hexagon': 6, 'heptagon': 7,
+      'octagon': 8, 'nonagon': 9, 'decagon': 10,
+    }[shape];
+    if (sides != null) {
+      final polygon = List<Offset>.generate(sides, (index) {
+        final angle = -math.pi / 2 + index * math.pi * 2 / sides;
+        return Offset(
+          bounds.center.dx + math.cos(angle) * bounds.width * .48,
+          bounds.center.dy + math.sin(angle) * bounds.height * .48,
+        );
+      });
+      return _pointInPolygon(point, polygon);
+    }
+    return bounds.contains(point);
+  }
+
+  void _fillShapeAt(Offset position) {
+    if (_pageData['locked'] == true) return;
+    for (final stroke in _strokesFor(_pageData).reversed) {
+      if (!_pointInsideFillTarget(stroke, position)) continue;
+      final raw = _pageData['strokes'];
+      if (raw is! List) return;
+      _pushUndo();
+      _pageData['strokes'] = raw.map((item) {
+        if (item is! Map || item['id']?.toString() != stroke.id) return item;
+        final updated = item.map<String, Object?>(
+          (key, value) => MapEntry(key.toString(), value),
+        );
+        updated['fill'] = true;
+        updated['fillColor'] = _color.toARGB32();
+        updated['fillOpacity'] = _opacity.clamp(.05, 1).toDouble();
+        return updated;
+      }).toList();
+      setState(() {});
+      _scheduleSave();
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Tap inside a closed shape or loop to fill it.')),
     );
   }
 
@@ -965,6 +1186,8 @@ class _EditorV2PageState extends State<EditorV2Page>
       _eraseAt(end, _tool == CanvasTool.pixelEraser ? 7 : math.max(18, _size * 2));
     } else if (_tool == CanvasTool.lasso) {
       _selectInRect(Rect.fromPoints(start, end));
+    } else if (_tool == CanvasTool.fill) {
+      _fillShapeAt(end);
     } else if (completedPoints.isNotEmpty) {
       _pushUndo();
       final shape = _tool.isShape;
@@ -1426,12 +1649,62 @@ class _EditorV2PageState extends State<EditorV2Page>
     };
   }
 
+  Map<String, Object?> _cloneSelectionPayload(Map<String, Object?> payload) {
+    final decoded = jsonDecode(jsonEncode(payload)) as Map;
+    return decoded.map<String, Object?>((key, value) => MapEntry(key.toString(), value));
+  }
+
   void _copySelection() {
     if (_selectionCount == 0) return;
-    _selectionClipboard = _currentSelectionPayload();
+    final payload = _cloneSelectionPayload(_currentSelectionPayload());
+    _selectionClipboard = payload;
+    _selectionClipboardHistory.insert(0, _cloneSelectionPayload(payload));
+    if (_selectionClipboardHistory.length > 4) {
+      _selectionClipboardHistory.removeRange(4, _selectionClipboardHistory.length);
+    }
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Copied selection ($_selectionCount item(s))')),
+      SnackBar(content: Text('Copied selection ($_selectionCount item(s)); clipboard keeps the last 4 actions.')),
     );
+  }
+
+  Future<void> _showClipboardHistory() async {
+    if (_selectionClipboardHistory.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Copy or cut a selection first.')),
+      );
+      return;
+    }
+    final selected = await showModalBottomSheet<Map<String, Object?>>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+          children: [
+            const ListTile(
+              leading: Icon(Icons.content_paste_rounded),
+              title: Text('Selection clipboard'),
+              subtitle: Text('Choose one of the last four copied or cut actions'),
+            ),
+            for (var index = 0; index < _selectionClipboardHistory.length; index++)
+              Builder(builder: (context) {
+                final payload = _selectionClipboardHistory[index];
+                final count = (payload['strokes'] as List? ?? const []).length +
+                    (payload['images'] as List? ?? const []).length +
+                    (payload['textBoxes'] as List? ?? const []).length;
+                return ListTile(
+                  leading: CircleAvatar(child: Text('${index + 1}')),
+                  title: Text(index == 0 ? 'Most recent selection' : 'Clipboard item ${index + 1}'),
+                  subtitle: Text('$count object(s)'),
+                  onTap: () => Navigator.pop(sheetContext, _cloneSelectionPayload(payload)),
+                );
+              }),
+          ],
+        ),
+      ),
+    );
+    if (selected != null && mounted) _pasteStrokes(payloadOverride: selected);
   }
 
   void _cutSelection() {
@@ -1439,9 +1712,9 @@ class _EditorV2PageState extends State<EditorV2Page>
     _deleteSelection();
   }
 
-  void _pasteStrokes({bool duplicate = false}) {
+  void _pasteStrokes({bool duplicate = false, Map<String, Object?>? payloadOverride}) {
     if (_pageData['locked'] == true) return;
-    final payload = duplicate ? _currentSelectionPayload() : _selectionClipboard;
+    final payload = payloadOverride ?? (duplicate ? _currentSelectionPayload() : _selectionClipboard);
     if (payload == null) return;
     final sourceStrokes = StrokeCodec.documentToStrokes(
       <String, Object?>{'strokes': payload['strokes'] is List ? payload['strokes'] : <Object?>[]},
@@ -1639,6 +1912,55 @@ class _EditorV2PageState extends State<EditorV2Page>
     return false;
   }
 
+  Future<void> _toggleNoteSwitcher() async {
+    setState(() => _showNoteSwitcherInTitleBar = !_showNoteSwitcherInTitleBar);
+    await _settings.setBool('editorV2ShowNoteSwitcher', _showNoteSwitcherInTitleBar);
+  }
+
+  Future<void> _openNoteSwitcher() async {
+    final notes = await _repo.listAllVisible(limit: 100);
+    if (!mounted) return;
+    final selected = await showModalBottomSheet<LocalNote>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(sheetContext).height * .72,
+          child: Column(children: [
+            const ListTile(
+              leading: Icon(Icons.tab_rounded),
+              title: Text('Switch note'),
+              subtitle: Text('Open a recent local note without returning to the shelf'),
+            ),
+            Expanded(
+              child: ListView.builder(
+                itemCount: notes.length,
+                itemBuilder: (_, index) {
+                  final note = notes[index];
+                  final active = note.id == widget.note.id;
+                  return ListTile(
+                    leading: Icon(active ? Icons.edit_note_rounded : Icons.note_outlined),
+                    title: Text(note.title.isEmpty ? 'Untitled note' : note.title),
+                    subtitle: Text(note.noteType),
+                    trailing: active ? const Icon(Icons.check_circle_rounded) : null,
+                    onTap: () => Navigator.pop(sheetContext, note),
+                  );
+                },
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+    if (selected == null || selected.id == widget.note.id || !mounted) return;
+    await _flushSave();
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(builder: (_) => EditorV2Page(note: selected)),
+    );
+  }
+
   void _selectTool(CanvasTool tool) {
     final profile = _toolProfiles[tool.name];
     setState(() {
@@ -1674,12 +1996,12 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
   }
 
-  Future<void> _openToolPicker() async {
+  Future<void> _openToolPicker({String? initialCategory}) async {
     final choice = await showModalBottomSheet<_ToolPickerChoice>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (_) => _EditorV2ToolPicker(selected: _tool),
+      builder: (_) => _EditorV2ToolPicker(selected: _tool, initialCategory: initialCategory),
     );
     if (choice == null || !mounted) return;
     if (choice.configure) {
@@ -1800,6 +2122,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     var velocity = _velocitySensitivity;
     var curve = _pressureCurve;
     var color = _color;
+    var places = Set<String>.from(_placementsFor(targetTool));
 
     void saveProfile() {
       setState(() {
@@ -1811,6 +2134,8 @@ class _EditorV2PageState extends State<EditorV2Page>
         _pressureCurve = curve;
         _color = color;
       });
+      _toolPlacements[targetTool.name] = Set<String>.from(places);
+      unawaited(_saveToolPlacements());
       _toolProfiles[targetTool.name] = <String, Object?>{
         'size': size,
         'color': color.toARGB32(),
@@ -1910,6 +2235,82 @@ class _EditorV2PageState extends State<EditorV2Page>
             onChanged: (value) {
               if (value != null) setPanelState(() => curve = value);
             },
+          ),
+          const SizedBox(height: 8),
+          const Divider(),
+          const Text('Tool placement', style: TextStyle(fontWeight: FontWeight.w800)),
+          CheckboxListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Show in Title Bar'),
+            value: places.contains('titleBar'),
+            onChanged: (value) => setPanelState(() {
+              if (value == true) {
+                places.add('titleBar');
+              } else {
+                places.remove('titleBar');
+              }
+            }),
+          ),
+          CheckboxListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Show in Main Toolbar'),
+            value: places.contains('toolbar'),
+            onChanged: (value) => setPanelState(() {
+              if (value == true) {
+                places.add('toolbar');
+              } else {
+                places.remove('toolbar');
+              }
+            }),
+          ),
+          CheckboxListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Show in Pencase'),
+            value: places.contains('pencase'),
+            onChanged: (value) => setPanelState(() {
+              if (value == true) {
+                places.add('pencase');
+              } else {
+                places.remove('pencase');
+              }
+            }),
+          ),
+          SwitchListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Hidden / nowhere'),
+            subtitle: const Text('Hide this tool from all three locations'),
+            value: places.isEmpty,
+            onChanged: (value) => setPanelState(() {
+              if (value) {
+                places.clear();
+              } else {
+                places.add('toolbar');
+              }
+            }),
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              icon: const Icon(Icons.add_circle_outline_rounded),
+              label: const Text('Collect to Pencase'),
+              onPressed: () async {
+                saveProfile();
+                await _collectToolToPencase(
+                  tool: targetTool,
+                  color: color,
+                  size: size,
+                  opacity: opacity,
+                  pressure: pressure,
+                  velocity: velocity,
+                  curve: curve,
+                );
+                close();
+              },
+            ),
           ),
           const SizedBox(height: 8),
           Row(
@@ -2666,6 +3067,34 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
   }
 
+  Future<void> _collectToolToPencase({
+    required CanvasTool tool,
+    required Color color,
+    required double size,
+    required double opacity,
+    required double pressure,
+    required double velocity,
+    required PressureCurve curve,
+  }) async {
+    final preset = <String, Object?>{
+      'tool': tool.name,
+      'color': color.toARGB32(),
+      'size': size,
+      'opacity': opacity,
+      'pressureSensitivity': pressure,
+      'velocitySensitivity': velocity,
+      'pressureCurve': curve.name,
+      'label': '${tool.label} ${_favoritePens.length + 1}',
+    };
+    setState(() {
+      _favoritePens.add(preset);
+      if (_favoritePens.length > 200) _favoritePens.removeAt(0);
+      _showFavoritesShowcase = true;
+    });
+    await _saveFavoritePens();
+    await _settings.setBool('editorV2ShowFavoritesShowcase', true);
+  }
+
   Future<void> _addFavoritePen() async {
     final nameController = TextEditingController(text: '${_tool.label} ${_favoritePens.length + 1}');
     final name = await showDialog<String>(
@@ -3008,6 +3437,14 @@ class _EditorV2PageState extends State<EditorV2Page>
         unawaited(_pasteClipboardImage());
       case 'pasteSelection':
         _pasteStrokes();
+      case 'clipboardHistory':
+        unawaited(_showClipboardHistory());
+      case 'noteSwitcher':
+        unawaited(_openNoteSwitcher());
+      case 'toggleNoteSwitcher':
+        unawaited(_toggleNoteSwitcher());
+      case 'calculator':
+        _openCalculator();
       case 'sticker':
         unawaited(_addSticker());
       case 'pdf':
