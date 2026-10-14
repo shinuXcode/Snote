@@ -606,35 +606,77 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
     return Stack(
       children: <Widget>[
         Positioned.fill(
-          child: PdfViewPinch(
-            controller: controller,
-            scrollDirection: Axis.vertical,
-            onDocumentLoaded: (document) {
-              if (mounted) {
-                setState(() => _pageCount = document.pagesCount);
-              }
-            },
-            onPageChanged: (page) {
-              if (mounted) setState(() => _page = page);
-            },
+          child: RepaintBoundary(
+            child: PdfViewPinch(
+              controller: controller,
+              scrollDirection: Axis.vertical,
+              onDocumentLoaded: (document) {
+                if (mounted) {
+                  _pageCount = document.pagesCount;
+                  _pageCountValue.value = document.pagesCount;
+                }
+              },
+              onPageChanged: (page) {
+                if (mounted) {
+                  // Update only listening overlays; rebuilding PdfViewPinch here
+                  // caused repeated page rasterization and white flashes.
+                  _page = page;
+                  _currentPageValue.value = page;
+                }
+              },
+            ),
           ),
         ),
         Positioned(
           top: 12,
           left: 12,
           child: Material(
-            elevation: 4,
-            borderRadius: BorderRadius.circular(14),
+            elevation: 3,
+            borderRadius: BorderRadius.circular(12),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-              child: Text(
-                'Page ' + _page.toString() + '/' +
-                    (_pageCount == 0 ? '?' : _pageCount.toString()),
-                style: const TextStyle(fontWeight: FontWeight.w800),
+              child: ValueListenableBuilder<int>(
+                valueListenable: _currentPageValue,
+                builder: (context, page, _) => ValueListenableBuilder<int>(
+                  valueListenable: _pageCountValue,
+                  builder: (context, count, __) => Text(
+                    'Page $page/${count == 0 ? '?' : count}',
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
               ),
             ),
           ),
         ),
+        if (_annotateMode)
+          ValueListenableBuilder<int>(
+            valueListenable: _currentPageValue,
+            builder: (context, page, _) {
+              final initial = Map<String, Object?>.from(
+                _pdfAnnotationDocuments[page] ??
+                    <String, Object?>{'version': 5, 'strokes': <Object?>[]},
+              );
+              return Positioned.fill(
+                child: RepaintBoundary(
+                  child: SnoteCanvas(
+                    key: ValueKey<String>('pdf-annotation-$page'),
+                    pen: const PenConfig(
+                      type: PenType.ballpoint,
+                      color: Colors.indigo,
+                      size: 3,
+                    ),
+                    initialDocument: initial,
+                    backgroundColor: Colors.transparent,
+                    onChanged: (document) => _schedulePdfAnnotationSave(page, document),
+                    pressureErase: _settings.getBool('pressureErase'),
+                    pressureEraseArea: _settings.getBool('pressureEraseArea'),
+                    pressureEraseThreshold: _settings.getDouble('pressureEraseThreshold'),
+                    smoothing: _settings.getDouble('strokeSmoothing'),
+                  ),
+                ),
+              );
+            },
+          ),
         if (_selectionMode)
           Positioned(
             left: 12,
@@ -664,13 +706,22 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
               lineOpacity: .6,
             ),
           ),
-          SnoteCanvas(
-            pen: const PenConfig(
-              type: PenType.ballpoint,
-              color: Colors.indigo,
-              size: 3,
+          ValueListenableBuilder<int>(
+            valueListenable: _currentPageValue,
+            builder: (context, page, _) => SnoteCanvas(
+              key: ValueKey<String>('pdf-side-annotation-$page'),
+              pen: const PenConfig(type: PenType.ballpoint, color: Colors.indigo, size: 3),
+              initialDocument: Map<String, Object?>.from(
+                _pdfAnnotationDocuments[page] ??
+                    <String, Object?>{'version': 5, 'strokes': <Object?>[]},
+              ),
+              backgroundColor: Colors.transparent,
+              onChanged: (document) => _schedulePdfAnnotationSave(page, document),
+              pressureErase: _settings.getBool('pressureErase'),
+              pressureEraseArea: _settings.getBool('pressureEraseArea'),
+              pressureEraseThreshold: _settings.getDouble('pressureEraseThreshold'),
+              smoothing: _settings.getDouble('strokeSmoothing'),
             ),
-            backgroundColor: Colors.transparent,
           ),
         ],
       );
@@ -683,6 +734,11 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
       appBar: AppBar(
         title: Text(_asset?.name ?? 'PDF workspace'),
         actions: <Widget>[
+          IconButton(
+            tooltip: _annotateMode ? 'Finish annotating' : 'Annotate PDF',
+            onPressed: _controller == null ? null : () => setState(() => _annotateMode = !_annotateMode),
+            icon: Icon(_annotateMode ? Icons.edit_off_outlined : Icons.draw_outlined),
+          ),
           IconButton(
             tooltip: 'Open PDF',
             onPressed: _openPdf,
@@ -724,7 +780,11 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
 
   @override
   void dispose() {
+    _annotationSaveTimer?.cancel();
+    if (_note != null) unawaited(_persistPdfAnnotations());
     _controller?.dispose();
+    _currentPageValue.dispose();
+    _pageCountValue.dispose();
     super.dispose();
   }
 }
