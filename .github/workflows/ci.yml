@@ -215,10 +215,10 @@ jobs:
 
           podfile = Path("ios/Podfile")
           pod = podfile.read_text()
-          if re.search(r"^\\s*platform :ios,", pod, re.MULTILINE):
-              pod = re.sub(r"^\\s*platform :ios,.*$", "platform :ios, '15.5'", pod, flags=re.MULTILINE)
+          if re.search(r"^\s*platform :ios,", pod, re.MULTILINE):
+              pod = re.sub(r"^\s*platform :ios,.*$", "platform :ios, '15.5'", pod, flags=re.MULTILINE)
           else:
-              pod = "platform :ios, '15.5'\\n" + pod
+              pod = "platform :ios, '15.5'\n" + pod
           podfile.write_text(pod)
 
           project_file = Path("ios/Runner.xcodeproj/project.pbxproj")
