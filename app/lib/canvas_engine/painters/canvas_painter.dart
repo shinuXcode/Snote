@@ -84,9 +84,12 @@ class SnoteCanvasPainter extends CustomPainter {
         ..color = const Color(0xff4f6df6).withValues(alpha: .55)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.4;
-      canvas.drawCircle(
-        eraserPoint!,
-        eraserRadius,
+      canvas.drawRect(
+        Rect.fromCenter(
+          center: eraserPoint!,
+          width: eraserRadius * 2,
+          height: eraserRadius * 1.4,
+        ),
         eraserPaint,
       );
     }
@@ -142,6 +145,26 @@ class SnoteCanvasPainter extends CustomPainter {
       return;
     }
 
+    // Freehand closed loops can be bucket-filled without converting or
+    // replacing the user's original vector stroke.
+    if (stroke.fill && points.length >= 3 &&
+        (points.last.position - points.first.position).distance <=
+            math.max(14.0, stroke.pen.size * 4)) {
+      final path = Path()..moveTo(points.first.position.dx, points.first.position.dy);
+      for (final point in points.skip(1)) {
+        path.lineTo(point.position.dx, point.position.dy);
+      }
+      path.close();
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = (stroke.fillColor ?? stroke.pen.color).withValues(
+            alpha: stroke.fillOpacity.clamp(0.0, 1.0).toDouble(),
+          )
+          ..style = PaintingStyle.fill
+          ..isAntiAlias = true,
+      );
+    }
     InkRenderer.drawInk(canvas, points, stroke.pen);
   }
 
