@@ -1259,6 +1259,23 @@ class _EditorV2PageState extends State<EditorV2Page>
     _scheduleSave();
   }
 
+  void _changeSelectionLayer({required bool bringToFront}) {
+    if (_pageData['locked'] == true || _selectedStrokeIds.isEmpty) return;
+    final raw = _pageData['strokes'];
+    if (raw is! List) return;
+    final strokes = StrokeCodec.documentToStrokes(<String, Object?>{'strokes': raw});
+    final selected = strokes.where((stroke) => _selectedStrokeIds.contains(stroke.id)).toList();
+    if (selected.isEmpty) return;
+    final unselected = strokes.where((stroke) => !_selectedStrokeIds.contains(stroke.id)).toList();
+    _pushUndo();
+    final reordered = bringToFront
+        ? <Stroke>[...unselected, ...selected]
+        : <Stroke>[...selected, ...unselected];
+    _pageData['strokes'] = reordered.map(StrokeCodec.strokeToJson).toList();
+    setState(() {});
+    _scheduleSave();
+  }
+
   bool _selectStrokeAt(Offset position, {double radius = 12}) {
     for (final stroke in _strokesFor(_pageData).reversed) {
       for (var i = 0; i < stroke.points.length; i++) {
@@ -3268,6 +3285,8 @@ class _EditorV2PageState extends State<EditorV2Page>
                       IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Cut selection', onPressed: _cutSelection, icon: const Icon(Icons.content_cut_rounded, size: 16)),
                       IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Paste copied strokes', onPressed: _strokeClipboard.isEmpty ? null : () => _pasteStrokes(), icon: const Icon(Icons.content_paste_rounded, size: 16)),
                       IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Duplicate selection', onPressed: () => _pasteStrokes(duplicate: true), icon: const Icon(Icons.control_point_duplicate_rounded, size: 16)),
+                      IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Bring selection to front', onPressed: () => _changeSelectionLayer(bringToFront: true), icon: const Icon(Icons.flip_to_front_rounded, size: 16)),
+                      IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Send selection to back', onPressed: () => _changeSelectionLayer(bringToFront: false), icon: const Icon(Icons.flip_to_back_rounded, size: 16)),
                       IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Increase selection size', onPressed: () => _scaleSelection(1.12), icon: const Icon(Icons.zoom_in_rounded, size: 16)),
                       IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Decrease selection size', onPressed: () => _scaleSelection(.88), icon: const Icon(Icons.zoom_out_rounded, size: 16)),
                       IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Move selection left', onPressed: () => _moveSelection(const Offset(-8, 0)), icon: const Icon(Icons.arrow_left_rounded, size: 16)),
