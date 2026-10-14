@@ -145,6 +145,20 @@ class _EditorV2PageState extends State<EditorV2Page>
   Stroke? _liveStroke;
   Rect? _lassoRect;
   final Set<String> _selectedStrokeIds = <String>{};
+  final Map<String, Map<String, Object?>> _toolProfiles = <String, Map<String, Object?>>{};
+  List<Map<String, Object?>> _strokeClipboard = <Map<String, Object?>>[];
+  Map<String, Object?>? _pageClipboard;
+  bool _showFavoritesShowcase = true;
+  bool _showPageNavigation = true;
+  bool _floatingPageNavigation = false;
+  bool _fullScreenMode = false;
+  bool _pressureEraseActive = false;
+  bool _pressureEraseUsed = false;
+  CanvasTool? _toolBeforePressureErase;
+  Offset _favoriteOffset = const Offset(16, 220);
+  Offset _pageNavOffset = const Offset(8, 280);
+  double _calculatorWidth = 330;
+  double _calculatorHeight = 470;
 
   Map<String, Object?> get _pageData {
     if (_pages.isEmpty) return <String, Object?>{};
@@ -166,6 +180,10 @@ class _EditorV2PageState extends State<EditorV2Page>
         : 'top';
     _floatingToolbar = _settings.getBool('editorV2FloatingToolbar');
     _favoritesVertical = _settings.getBool('editorV2FavoritesVertical');
+    _showPageNavigation = _settings.getBool('showPageNavigation');
+    _floatingPageNavigation = _settings.getBool('editorV2FloatingPageNavigation');
+    _showFavoritesShowcase = _settings.getBool('editorV2ShowFavoritesShowcase');
+    _restoreToolProfiles();
     _pressureSensitivity = .55;
     _pressureCurve = PressureCurve.values.firstWhere(
       (curve) => curve.name == _settings.getString('pressureCurve'),
@@ -433,6 +451,39 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
   }
 
+  void _restoreToolProfiles() {
+    try {
+      final decoded = jsonDecode(_settings.getString('editorV2ToolProfiles'));
+      if (decoded is Map) {
+        _toolProfiles
+          ..clear()
+          ..addEntries(decoded.entries.where((entry) => entry.value is Map).map((entry) {
+            final map = (entry.value as Map).map<String, Object?>(
+              (key, value) => MapEntry(key.toString(), value),
+            );
+            return MapEntry(entry.key.toString(), map);
+          }));
+      }
+    } catch (error) {
+      debugPrint('[Snote][EditorV2] ignoring invalid per-tool profile settings: $error');
+    }
+  }
+
+  Future<void> _saveToolProfiles() =>
+      _settings.setString('editorV2ToolProfiles', jsonEncode(_toolProfiles));
+
+  void _rememberCurrentToolProfile() {
+    _toolProfiles[_tool.name] = <String, Object?>{
+      'size': _size,
+      'color': _color.toARGB32(),
+      'opacity': _opacity,
+      'pressureSensitivity': _pressureSensitivity,
+      'velocitySensitivity': _velocitySensitivity,
+      'pressureCurve': _pressureCurve.name,
+    };
+    unawaited(_saveToolProfiles());
+  }
+
   void _restoreFavoritePens() {
     final raw = _settings.getString('editorV2FavoritePens');
     try {
@@ -444,7 +495,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                   (key, value) => MapEntry(key.toString(), value),
                 ))
             .where((item) => item['tool'] is String && item['color'] is num)
-            .take(12)
+            .take(200)
             .toList();
       }
     } catch (_) {
