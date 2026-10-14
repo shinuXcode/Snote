@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snote/features/notes/editor_v2/editor_v2_document.dart';
+import 'package:snote/features/notes/note_content_compatibility.dart';
 
 void main() {
   group('EditorV2DocumentCodec', () {
@@ -91,6 +92,36 @@ void main() {
       expect(restored['pdfSourceAssetId'], 'asset-pdf-001');
       expect(restored['pdfSourcePage'], 500);
       expect(restored.containsKey('backgroundImage'), isFalse);
+    });
+
+    test('PDF restoration only checks pages belonging to the active source', () {
+      final pages = <Map<String, Object?>>[
+        <String, Object?>{
+          'id': 'pdf-a-1',
+          'pdfLazyRender': true,
+          'pdfSourceAssetId': 'asset-a',
+          'pdfSourceName': 'a.pdf',
+          'pdfSourceHash': 'hash-a',
+          'pdfSourcePage': 1,
+        },
+        <String, Object?>{
+          'id': 'pdf-b-1',
+          'pdfLazyRender': true,
+          'pdfSourceAssetId': 'asset-b',
+          'pdfSourceName': 'b.pdf',
+          'pdfSourceHash': 'hash-b',
+          'pdfSourcePage': 1,
+        },
+      ];
+
+      expect(
+        shouldRestorePdfPageBackgrounds(pages, sourceHash: 'hash-b'),
+        isFalse,
+      );
+      expect(
+        shouldRestorePdfPageBackgrounds(pages, sourceHash: 'changed-hash'),
+        isFalse,
+      );
     });
 
     test('page indices are safely clamped after insertions/deletions', () {
