@@ -1011,7 +1011,7 @@ class _EditorV2PageState extends State<EditorV2Page>
             ))
         .toList();
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Copied \${_strokeClipboard.length} stroke(s)')),
+      SnackBar(content: Text('Copied ${_strokeClipboard.length} stroke(s)')),
     );
   }
 
@@ -1029,7 +1029,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     final raw = _pageData['strokes'] as List<Object?>;
     final offset = duplicate ? const Offset(22, 22) : const Offset(18, 18);
     final added = source.map((stroke) => StrokeCodec.strokeToJson(stroke.copyWith(
-      id: DateTime.now().microsecondsSinceEpoch.toString() + '-\${math.Random().nextInt(100000)}',
+      id: DateTime.now().microsecondsSinceEpoch.toString() + '-${math.Random().nextInt(100000)}',
       points: stroke.points.map((point) => point.copyWith(position: point.position + offset)).toList(),
     ))).toList();
     raw.addAll(added);
@@ -2631,7 +2631,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
                   child: Text(
-                    '\${_page + 1}/\${_pages.length}',
+                    '${_page + 1}/${_pages.length}',
                     style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
                   ),
                 ),
@@ -2647,7 +2647,7 @@ class _EditorV2PageState extends State<EditorV2Page>
               if (_selectedStrokeIds.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 3),
-                  child: Text('\${_selectedStrokeIds.length} selected', style: const TextStyle(fontSize: 10)),
+                  child: Text('${_selectedStrokeIds.length} selected', style: const TextStyle(fontSize: 10)),
                 ),
               const Spacer(),
               if (_saving || _savePending)
@@ -2718,7 +2718,7 @@ class _EditorV2PageState extends State<EditorV2Page>
             Padding(
               padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
               child: Row(children: [
-                Expanded(child: Text('Pages • \${_pages.length}', style: Theme.of(context).textTheme.titleLarge)),
+                Expanded(child: Text('Pages • ${_pages.length}', style: Theme.of(context).textTheme.titleLarge)),
                 IconButton(
                   tooltip: 'Paste copied page after current',
                   onPressed: _pageClipboard == null ? null : () {
@@ -2768,10 +2768,10 @@ class _EditorV2PageState extends State<EditorV2Page>
                             spacing: 8,
                             lineOpacity: ((page['lineOpacity'] as num?)?.toDouble() ?? .85).clamp(0, 1).toDouble(),
                           ),
-                          child: Center(child: Text('\${index + 1}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900))),
+                          child: Center(child: Text('${index + 1}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900))),
                         ),
                       ),
-                      title: Text('Page \${index + 1}'),
+                      title: Text('Page ${index + 1}'),
                       subtitle: Text(isPdf ? 'PDF background / annotations' : template),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
