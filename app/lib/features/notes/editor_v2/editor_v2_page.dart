@@ -1715,112 +1715,93 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
   }
 
+  IconData _toolIcon(CanvasTool tool) {
+    return switch (tool) {
+      CanvasTool.ballpoint => Icons.edit_rounded,
+      CanvasTool.fountain => Icons.draw_rounded,
+      CanvasTool.pencil => Icons.create_rounded,
+      CanvasTool.highlighter => Icons.brush_rounded,
+      CanvasTool.marker => Icons.border_color_rounded,
+      CanvasTool.brush => Icons.format_paint_rounded,
+      CanvasTool.eraser => Icons.cleaning_services_rounded,
+      CanvasTool.pixelEraser => Icons.auto_fix_normal_rounded,
+      CanvasTool.lasso => Icons.gesture_rounded,
+      CanvasTool.line || CanvasTool.dashedLine || CanvasTool.dottedLine => Icons.horizontal_rule_rounded,
+      CanvasTool.arrow || CanvasTool.vectorArrow => Icons.trending_flat_rounded,
+      CanvasTool.rectangle || CanvasTool.roundedRectangle => Icons.crop_square_rounded,
+      CanvasTool.ellipse || CanvasTool.circle => Icons.circle_outlined,
+      CanvasTool.triangle => Icons.change_history_rounded,
+      CanvasTool.diamond => Icons.diamond_outlined,
+      CanvasTool.star => Icons.star_border_rounded,
+      CanvasTool.ruler || CanvasTool.divider => Icons.straighten_rounded,
+      CanvasTool.compass || CanvasTool.protractor => Icons.architecture_rounded,
+      CanvasTool.sticker => Icons.emoji_emotions_outlined,
+      _ when tool.isPen => Icons.edit_rounded,
+      _ when tool.isMeasurementTool => Icons.architecture_rounded,
+      _ => Icons.category_outlined,
+    };
+  }
+
   Widget _buildToolbar({required bool vertical}) {
+    Widget action({required String tooltip, required IconData icon, required VoidCallback onPressed, Color? color}) =>
+        IconButton(
+          visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+          padding: const EdgeInsets.all(4),
+          constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+          tooltip: tooltip,
+          onPressed: onPressed,
+          icon: Icon(icon, size: 19, color: color),
+        );
     final actions = <Widget>[
-      IconButton(
-        tooltip: _panMode ? 'Exit pan mode' : 'Pan / zoom mode',
-        onPressed: () => setState(() => _panMode = !_panMode),
-        icon: Icon(_panMode ? Icons.pan_tool : Icons.pan_tool_outlined),
-      ),
-      IconButton(tooltip: 'Undo', onPressed: _undoStack.isEmpty ? null : _undo, icon: const Icon(Icons.undo_rounded)),
-      IconButton(tooltip: 'Redo', onPressed: _redoStack.isEmpty ? null : _redo, icon: const Icon(Icons.redo_rounded)),
-      IconButton(
-        tooltip: _textMode ? 'Switch to handwriting' : 'Switch to rich text',
-        onPressed: () => setState(() {
-          _textMode = !_textMode;
-          _scheduleSave();
-        }),
-        icon: Icon(_textMode ? Icons.draw_rounded : Icons.text_fields_rounded),
-      ),
-      IconButton(
-        tooltip: 'Choose colour',
-        onPressed: _chooseColor,
-        icon: Icon(Icons.circle, color: _color, shadows: const [Shadow(color: Colors.black45, blurRadius: 1)]),
-      ),
-      IconButton(tooltip: 'Pen settings', onPressed: _strokeSettings, icon: const Icon(Icons.tune_rounded)),
-      IconButton(tooltip: 'Add text box', onPressed: _addTextBox, icon: const Icon(Icons.title_rounded)),
-      IconButton(tooltip: 'All tools', onPressed: _openToolPicker, icon: const Icon(Icons.apps_rounded)),
-      IconButton(tooltip: 'Save favorite pen', onPressed: _addFavoritePen, icon: const Icon(Icons.add_circle_outline)),
+      action(tooltip: _panMode ? 'Exit pan mode' : 'Pan / zoom', icon: _panMode ? Icons.pan_tool : Icons.pan_tool_outlined, onPressed: () => setState(() => _panMode = !_panMode)),
+      action(tooltip: 'Undo', icon: Icons.undo_rounded, onPressed: _undo),
+      action(tooltip: 'Redo', icon: Icons.redo_rounded, onPressed: _redo),
+      action(tooltip: _textMode ? 'Handwriting mode' : 'Rich text mode', icon: _textMode ? Icons.draw_rounded : Icons.text_fields_rounded, onPressed: () => setState(() { _textMode = !_textMode; _scheduleSave(); })),
+      action(tooltip: 'Color palette', icon: Icons.palette_outlined, color: _color, onPressed: _chooseColor),
+      action(tooltip: 'Tool settings', icon: Icons.tune_rounded, onPressed: () => _strokeSettings()),
+      action(tooltip: 'Text box', icon: Icons.text_fields_rounded, onPressed: _addTextBox),
+      action(tooltip: 'Scientific calculator', icon: Icons.calculate_outlined, onPressed: _openCalculator),
+      action(tooltip: 'All tools / categories', icon: Icons.apps_rounded, onPressed: _openToolPicker),
+      action(tooltip: 'Save current tool to pen case', icon: Icons.add_circle_outline_rounded, onPressed: _addFavoritePen),
     ];
-    final toolbarBackground = Theme.of(context).colorScheme.surfaceContainerHighest;
-    final favoriteWidgets = _favoritePens.map((favorite) {
-      final color = Color((favorite['color'] as num?)?.toInt() ?? 0xff17202a);
-      return GestureDetector(
-        onTap: () => _applyFavorite(favorite),
-        onLongPress: () => _removeFavorite(favorite),
-        child: Container(
-          constraints: BoxConstraints(maxWidth: vertical ? 64 : 116),
-          margin: const EdgeInsets.all(3),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: _tool.name == favorite['tool'] && _color.toARGB32() == favorite['color']
-                  ? Theme.of(context).colorScheme.primary
-                  : Theme.of(context).colorScheme.outlineVariant,
+    final quickButtons = _quickTools.map((tool) => Padding(
+      padding: const EdgeInsets.all(1),
+      child: Tooltip(
+        message: '\${tool.label}\nDouble-tap for its own settings',
+        child: GestureDetector(
+          onDoubleTap: () => _strokeSettings(tool),
+          child: Material(
+            color: _tool == tool ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+              side: BorderSide(color: _tool == tool ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outlineVariant.withValues(alpha: .65)),
+            ),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () => _selectTool(tool),
+              child: SizedBox(width: 31, height: 31, child: Icon(_toolIcon(tool), size: 18, color: _tool == tool ? Theme.of(context).colorScheme.primary : null)),
             ),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                height: 4,
-                width: vertical ? 35 : 58,
-                decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4)),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                favorite['label']?.toString() ?? 'Favorite',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-        ),
-      );
-    }).toList();
-
-    final quickButtons = _quickTools.map((tool) => Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: Tooltip(
-        message: tool.label,
-        child: ChoiceChip(
-          selected: _tool == tool,
-          showCheckmark: false,
-          label: Text(tool.label, style: const TextStyle(fontSize: 10)),
-          visualDensity: const VisualDensity(horizontal: -3, vertical: -3),
-          onSelected: (_) => _selectTool(tool),
         ),
       ),
     )).toList();
-
     final children = <Widget>[
-      if (_favoritesVertical) ...favoriteWidgets else ...favoriteWidgets,
-      if (!vertical) const VerticalDivider(width: 8),
       ...actions,
-      if (!vertical) const VerticalDivider(width: 8),
+      if (!vertical) const VerticalDivider(width: 5, indent: 6, endIndent: 6),
       ...quickButtons,
-      IconButton(
-        tooltip: 'Add page after current',
-        onPressed: _addPage,
-        icon: const Icon(Icons.note_add_outlined),
-      ),
-      IconButton(
-        tooltip: 'Page background',
-        onPressed: _chooseTemplate,
-        icon: const Icon(Icons.grid_on_rounded),
-      ),
+      action(tooltip: 'Insert page', icon: Icons.note_add_outlined, onPressed: _addPage),
+      action(tooltip: 'Page template', icon: Icons.grid_on_rounded, onPressed: _chooseTemplate),
       PopupMenuButton<String>(
-        tooltip: 'Editor layout and tools',
+        tooltip: 'Workspace options',
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints.tightFor(width: 32, height: 32),
         onSelected: _onMenuSelected,
         itemBuilder: (_) => const <PopupMenuEntry<String>>[
-          PopupMenuItem(value: 'text', child: Text('Add text box')),
+          PopupMenuItem(value: 'text', child: Text('Insert text box')),
           PopupMenuItem(value: 'image', child: Text('Insert image')),
           PopupMenuItem(value: 'sticker', child: Text('Sticker library')),
           PopupMenuItem(value: 'pdf', child: Text('Import / annotate PDF')),
-          PopupMenuItem(value: 'export', child: Text('Export all pages to PDF')),
+          PopupMenuItem(value: 'export', child: Text('Export pages to PDF')),
           PopupMenuItem(value: 'bookmarks', child: Text('Bookmarks')),
           PopupMenuItem(value: 'timer', child: Text('Study timer')),
           PopupMenuDivider(),
@@ -1829,24 +1810,133 @@ class _EditorV2PageState extends State<EditorV2Page>
           PopupMenuItem(value: 'dockLeft', child: Text('Dock toolbar to left')),
           PopupMenuItem(value: 'dockRight', child: Text('Dock toolbar to right')),
           PopupMenuItem(value: 'float', child: Text('Toggle floating toolbar')),
-          PopupMenuItem(value: 'favoritesOrientation', child: Text('Toggle favourite-pen showcase orientation')),
+          PopupMenuItem(value: 'favoritesShowcase', child: Text('Show / hide favorite pen case')),
+          PopupMenuItem(value: 'favoritesOrientation', child: Text('Rotate pen case')),
+          PopupMenuItem(value: 'pageNavigation', child: Text('Show / hide page navigation')),
+          PopupMenuItem(value: 'floatingPageNavigation', child: Text('Toggle movable vertical page bar')),
+          PopupMenuItem(value: 'palmRejection', child: Text('Toggle palm rejection')),
+          PopupMenuItem(value: 'pageSettings', child: Text('Note page and editor settings')),
           PopupMenuItem(value: 'zoomIn', child: Text('Zoom in')),
           PopupMenuItem(value: 'zoomOut', child: Text('Zoom out')),
           PopupMenuItem(value: 'fit', child: Text('Fit page to width')),
+          PopupMenuItem(value: 'fullscreen', child: Text('Toggle full screen')),
           PopupMenuItem(value: 'save', child: Text('Save now')),
         ],
-        icon: const Icon(Icons.more_horiz_rounded),
+        icon: const Icon(Icons.more_horiz_rounded, size: 20),
       ),
     ];
-
     return Material(
-      color: toolbarBackground.withValues(alpha: .96),
-      elevation: 1,
+      color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: .97),
+      elevation: 2,
+      borderRadius: BorderRadius.circular(vertical ? 12 : 10),
       child: SingleChildScrollView(
+        padding: EdgeInsets.symmetric(horizontal: vertical ? 2 : 3, vertical: vertical ? 3 : 2),
         scrollDirection: vertical ? Axis.vertical : Axis.horizontal,
-        child: vertical
-            ? Column(mainAxisSize: MainAxisSize.min, children: children)
-            : Row(mainAxisSize: MainAxisSize.min, children: children),
+        child: vertical ? Column(mainAxisSize: MainAxisSize.min, children: children) : Row(mainAxisSize: MainAxisSize.min, children: children),
+      ),
+    );
+  }
+
+  Widget _buildFavoriteShowcase() {
+    final chips = _favoritePens.map((favorite) {
+      final favoriteTool = CanvasTool.values.where((tool) => tool.name == favorite['tool']?.toString()).firstOrNull ?? CanvasTool.ballpoint;
+      final color = Color((favorite['color'] as num?)?.toInt() ?? 0xff17202a);
+      final active = _tool == favoriteTool && _color.toARGB32() == color.toARGB32() && (_size - ((favorite['size'] as num?)?.toDouble() ?? 3)).abs() < .1;
+      return Tooltip(
+        message: '\${favorite['label'] ?? favoriteTool.label}\nTap to select • long-press to remove',
+        child: InkWell(
+          borderRadius: BorderRadius.circular(9),
+          onTap: () => _applyFavorite(favorite),
+          onLongPress: () => _removeFavorite(favorite),
+          child: Container(
+            width: _favoritesVertical ? 38 : 42,
+            height: _favoritesVertical ? 42 : 38,
+            margin: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              color: active ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(color: active ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outlineVariant),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(_toolIcon(favoriteTool), size: 17, color: color),
+                Container(margin: const EdgeInsets.only(top: 3), width: 18, height: 2, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3))),
+              ],
+            ),
+          ),
+        ),
+      );
+    }).toList();
+    return Positioned(
+      left: _favoriteOffset.dx.clamp(0, math.max(0, MediaQuery.sizeOf(context).width - 120)).toDouble(),
+      top: _favoriteOffset.dy.clamp(0, math.max(0, MediaQuery.sizeOf(context).height - 120)).toDouble(),
+      child: GestureDetector(
+        onPanUpdate: (details) => setState(() => _favoriteOffset += details.delta),
+        child: Material(
+          elevation: 7,
+          color: Theme.of(context).colorScheme.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.drag_indicator_rounded, size: 14),
+                  const SizedBox(width: 3),
+                  const Text('PEN CASE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: .6)),
+                  const SizedBox(width: 3),
+                  InkWell(onTap: _toggleFavoritesOrientation, child: Icon(_favoritesVertical ? Icons.swap_vert_rounded : Icons.swap_horiz_rounded, size: 14)),
+                ]),
+                const SizedBox(height: 2),
+                if (_favoritesVertical)
+                  ConstrainedBox(constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * .55), child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: chips)))
+                else
+                  ConstrainedBox(constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * .72), child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(mainAxisSize: MainAxisSize.min, children: chips))),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFloatingPageNavigation() {
+    return Positioned(
+      left: _pageNavOffset.dx.clamp(0, math.max(0, MediaQuery.sizeOf(context).width - 52)).toDouble(),
+      top: _pageNavOffset.dy.clamp(0, math.max(0, MediaQuery.sizeOf(context).height - 150)).toDouble(),
+      child: GestureDetector(
+        onPanUpdate: (details) => setState(() => _pageNavOffset += details.delta),
+        child: Material(
+          elevation: 6,
+          color: Theme.of(context).colorScheme.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 2),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.drag_indicator_rounded, size: 16),
+              IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 34, height: 30), tooltip: 'Previous page', onPressed: _page > 0 ? () => _goToPage(_page - 1) : null, icon: const Icon(Icons.keyboard_arrow_up_rounded, size: 19)),
+              InkWell(onTap: _showPagePicker, child: Padding(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3), child: Text('\${_page + 1}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900)))),
+              IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 34, height: 30), tooltip: 'Next page', onPressed: _page + 1 < _pages.length ? () => _goToPage(_page + 1) : _addPage, icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 19)),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openCalculator() async {
+    await showDialog<void>(
+      context: context,
+      barrierColor: Colors.black38,
+      builder: (_) => _ScientificCalculatorDialog(
+        initialWidth: _calculatorWidth,
+        initialHeight: _calculatorHeight,
+        onResize: (width, height) {
+          _calculatorWidth = width;
+          _calculatorHeight = height;
+        },
       ),
     );
   }
