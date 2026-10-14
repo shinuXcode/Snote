@@ -220,7 +220,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     WidgetsBinding.instance.addObserver(this);
     _title.text = widget.note.title;
     _quill.addListener(_scheduleSave);
-    _toolbarDock = const <String>{'top', 'bottom', 'left', 'right'}
+    _toolbarDock = const <String>{'top', 'left', 'right'}
             .contains(_settings.getString('editorV2ToolbarDock'))
         ? _settings.getString('editorV2ToolbarDock')
         : 'top';
@@ -4071,11 +4071,14 @@ class _EditorV2PageState extends State<EditorV2Page>
   }
 
   Future<void> _setToolbarDock(String value) async {
+    // The editor no longer renders a bottom dock/navigation panel. Keep old
+    // saved preferences compatible by mapping a requested bottom dock to top.
+    final dock = value == 'bottom' ? 'top' : value;
     setState(() {
-      _toolbarDock = value;
+      _toolbarDock = dock;
       _floatingToolbar = false;
     });
-    await _settings.setString('editorV2ToolbarDock', value);
+    await _settings.setString('editorV2ToolbarDock', dock);
     await _settings.setBool('editorV2FloatingToolbar', false);
   }
 
@@ -4564,7 +4567,6 @@ class _EditorV2PageState extends State<EditorV2Page>
           PopupMenuItem(value: 'timer', child: Text('Study timer')),
           PopupMenuDivider(),
           PopupMenuItem(value: 'dockTop', child: Text('Dock toolbar to top')),
-          PopupMenuItem(value: 'dockBottom', child: Text('Dock toolbar to bottom')),
           PopupMenuItem(value: 'dockLeft', child: Text('Dock toolbar to left')),
           PopupMenuItem(value: 'dockRight', child: Text('Dock toolbar to right')),
           PopupMenuItem(value: 'float', child: Text('Toggle floating toolbar')),
@@ -5934,7 +5936,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                   } else if (y <= 18) {
                     unawaited(_setToolbarDock('top'));
                   } else if (y >= screen.height - 230) {
-                    unawaited(_setToolbarDock('bottom'));
+                    unawaited(_setToolbarDock('right'));
                   }
                 },
                 child: Material(
