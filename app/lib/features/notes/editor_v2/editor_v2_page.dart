@@ -158,7 +158,6 @@ class _EditorV2PageState extends State<EditorV2Page>
   bool _fullScreenMode = false;
   bool _pdfBackgroundVisible = true;
   bool _pressureEraseActive = false;
-  bool _pressureEraseUsed = false;
   CanvasTool? _toolBeforePressureErase;
   Offset _favoriteOffset = const Offset(16, 220);
   Offset _pageNavOffset = const Offset(8, 280);
@@ -746,7 +745,6 @@ class _EditorV2PageState extends State<EditorV2Page>
         if (_settings.getBool('pressureErase')) {
           _longPressTriggered = true;
           _pressureEraseActive = true;
-          _pressureEraseUsed = false;
           _toolBeforePressureErase = _tool;
           _rememberCurrentToolProfile();
           setState(() {
@@ -772,7 +770,6 @@ class _EditorV2PageState extends State<EditorV2Page>
       _holdStartPosition = null;
     }
     if (_activePointer == event.pointer && _pressureEraseActive) {
-      _pressureEraseUsed = true;
       _eraserCursor = event.localPosition;
       _eraseAt(event.localPosition, math.max(18, _size * 2).toDouble());
       setState(() {});
@@ -877,7 +874,6 @@ class _EditorV2PageState extends State<EditorV2Page>
     final restoreTool = _pressureEraseActive ? _toolBeforePressureErase : null;
     _toolBeforePressureErase = null;
     _pressureEraseActive = false;
-    _pressureEraseUsed = false;
     _longPressTriggered = false;
     _ignoredPointers.remove(event.pointer);
     if (_activePointer == event.pointer) {
@@ -2778,14 +2774,17 @@ class _EditorV2PageState extends State<EditorV2Page>
             Positioned.fill(child: _buildPageBackground(page, showPdf: _pdfBackgroundVisible)),
             if (_textMode)
               Positioned.fill(
-                child: Padding(
-                  padding: const EdgeInsets.all(42),
-                  child: QuillEditor(
-                    focusNode: _quillFocus,
-                    scrollController: _quillScroll,
-                    controller: _quill,
-                    config: const QuillEditorConfig(
-                      placeholder: 'Start writing rich text…',
+                child: IgnorePointer(
+                  ignoring: page['locked'] == true,
+                  child: Padding(
+                    padding: const EdgeInsets.all(42),
+                    child: QuillEditor(
+                      focusNode: _quillFocus,
+                      scrollController: _quillScroll,
+                      controller: _quill,
+                      config: const QuillEditorConfig(
+                        placeholder: 'Start writing rich text…',
+                      ),
                     ),
                   ),
                 ),
