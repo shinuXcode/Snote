@@ -736,6 +736,24 @@ class _EditorV2PageState extends State<EditorV2Page>
       _stylusPointers.add(event.pointer);
     }
     if (_pageData['locked'] == true) {
+      final position = event.localPosition;
+      final atPageEdge = position.dx < 30 ||
+          position.dx > _pageWidth - 30 ||
+          position.dy < 30 ||
+          position.dy > _pageHeight - 30;
+      if (event.kind == PointerDeviceKind.touch &&
+          _settings.getBool('pageSwipe') &&
+          atPageEdge) {
+        // Keep page navigation available while the page content is locked.
+        _activePointer = event.pointer;
+        _gestureStart = position;
+        _holdStartPosition = null;
+        _pageSwipeStart = position;
+        _pageSwipeTriggered = false;
+        _livePoints = <StrokePoint>[];
+        _liveStroke = null;
+        return;
+      }
       _ignoredPointers.add(event.pointer);
       return;
     }
@@ -827,6 +845,9 @@ class _EditorV2PageState extends State<EditorV2Page>
       }
     }
     if (_activePointer == event.pointer && _pageSwipeTriggered) return;
+    // A locked page may participate in edge swipes, but must never render a
+    // transient ink preview from an unfinished navigation gesture.
+    if (_pageData['locked'] == true) return;
     if (_activePointer == event.pointer && _holdStartPosition != null &&
         (event.localPosition - _holdStartPosition!).distance > 11 &&
         !_pressureEraseActive && !_longPressTriggered) {
@@ -894,6 +915,16 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
     _pageSwipeStart = null;
     _pageSwipeTriggered = false;
+    if (_pageData['locked'] == true) {
+      setState(() {
+        _activePointer = null;
+        _gestureStart = null;
+        _livePoints = <StrokePoint>[];
+        _liveStroke = null;
+        _eraserCursor = null;
+      });
+      return;
+    }
     if (_longPressTriggered) {
       final wasPressureErase = _pressureEraseActive;
       final restoreTool = _toolBeforePressureErase;
