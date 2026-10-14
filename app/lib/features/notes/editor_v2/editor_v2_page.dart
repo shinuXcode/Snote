@@ -3310,28 +3310,44 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
     'unitCircle', 'cubicGraph', 'exponentialGraph', 'logarithmicGraph',
     'tangentGraph', 'ellipseAxes', 'vectorField', 'polarGraph',
     'cartesianPlane', 'coordinateAxes', 'parabola', 'sineWave', 'angle',
-    'vectorArrow', 'projectilePath', 'numberLine',
+    'vectorArrow', 'projectilePath', 'numberLine', 'equalsSign', 'notEqualSign',
+    'approximateEqual', 'greaterThanSign', 'lessThanSign', 'plusMinus',
+    'infinitySymbol', 'integralSymbol', 'sigmaSymbol', 'deltaSymbol', 'thetaSymbol',
+    'omegaSymbol', 'squareRootSymbol', 'fractionBar', 'matrixGrid', 'summationSymbol',
+    'derivativeSymbol', 'coordinatePoint', 'linearGraph', 'circleGraph', 'scatterPlot',
+    'lineChart', 'areaChart', 'donutChart', 'stackedBarChart', 'networkGraph', 'vennDiagram',
   };
   static const Set<String> _chartTools = <String>{
     'histogram', 'barChart', 'pieChart', 'flowchartTerminator',
     'flowchartProcess', 'flowchartDecision', 'flowchartInputOutput',
     'flowchartDocument', 'flowchartDatabase', 'flowchartConnector',
-    'timeline', 'tableGrid', 'checklist',
+    'timeline', 'tableGrid', 'checklist', 'flowchartPreparation',
+    'flowchartManualInput', 'flowchartDelay', 'flowchartOffPage',
+    'documentStack', 'databaseCylinder', 'serverRack', 'networkNode', 'networkLink',
   };
   static const Set<String> _physicsTools = <String>{
     'rayDiagram', 'convexLens', 'concaveLens', 'planeMirror',
     'forceDiagram', 'pulley', 'spring', 'lever', 'inclinedPlane',
     'gear', 'magnet', 'thermometer', 'stopwatch', 'waveform',
+    'gearTrain', 'pendulum', 'weightSymbol', 'electricField', 'magneticField',
+    'waveFront', 'photonSymbol',
   };
   static const Set<String> _circuitTools = <String>{
     'circuitResistor', 'circuitBattery', 'capacitor', 'circuitSwitch', 'circuitLamp',
+    'wifiSymbol', 'batterySymbol', 'groundSymbol', 'voltageSource', 'currentSource',
+    'inductorSymbol', 'diodeSymbol', 'transistorSymbol', 'logicAnd', 'logicOr',
+    'logicNot', 'logicXor', 'cloudSymbol',
   };
   static const Set<String> _chemistryTools = <String>{
     'atom', 'molecule', 'benzeneRing', 'beaker', 'testTube',
-    'conicalFlask', 'orbital',
+    'conicalFlask', 'orbital', 'ionSymbol', 'ionicBond', 'covalentBond',
+    'moleculeChain', 'crystalLattice', 'organicChain', 'aminoAcid', 'proteinSymbol',
   };
   static const Set<String> _biologyTools = <String>{
     'animalCell', 'plantCell', 'dnaHelix', 'neuron', 'leaf', 'microscope',
+    'cellMembrane', 'chloroplast', 'mitochondrion', 'ribosome', 'brainIcon',
+    'heartOrgan', 'lungIcon', 'bloodCell', 'bacteriaIcon', 'virusIcon',
+    'flowerIcon', 'treeIcon', 'atomNucleus', 'electronOrbit',
   };
   static const Set<String> _instrumentTools = <String>{
     'ruler', 'compass', 'protractor', 'divider', 'dashedLine', 'dottedLine',
@@ -3341,6 +3357,7 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
     if (tool.isPen) return 'Pens';
     if (const {'eraser', 'pixelEraser', 'lasso'}.contains(tool.name)) return 'Editing';
     if (_mathTools.contains(tool.name)) return 'Math & graphs';
+    if (const {'octagon','nonagon','decagon','heptagon','hexagram','pentagram','arrowUp','arrowDown','arrowLeft','arrowRight','doubleArrow','curvedArrow','zigzag','lightningBolt','crescentMoon','sunSymbol','doubleChevron','chevron','bracketLeft','bracketRight','braceLeft','braceRight','checkMark','crossMark','questionMark','exclamationMark','infoSymbol','warningSymbol','shieldIcon','lockSymbol','keySymbol','targetIcon','medalIcon','trophyIcon','bookmarkIcon','tagIcon','priceTag','quoteBox','stickyNote','indexCard'}.contains(tool.name)) return 'Geometry & symbols';
     if (_chartTools.contains(tool.name)) return 'Charts & flowcharts';
     if (_physicsTools.contains(tool.name)) return 'Physics & mechanics';
     if (_circuitTools.contains(tool.name)) return 'Electrical circuits';
@@ -3361,7 +3378,7 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
     final categories = <String>[
       'All tools', 'Pens', 'Editing', 'Shapes & diagrams', 'Rulers & measuring',
       'Math & graphs', 'Charts & flowcharts', 'Physics & mechanics',
-      'Electrical circuits', 'Chemistry', 'Biology',
+      'Electrical circuits', 'Chemistry', 'Biology', 'Geometry & symbols',
     ];
     final query = _search.text.trim().toLowerCase();
     final items = CanvasTool.values.where((tool) {
