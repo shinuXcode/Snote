@@ -1392,14 +1392,14 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   Future<void> _calculatorSheet() async {
     String display = '0';
     double? stored;
-    String? operator;
+    String? pendingOperation;
     bool replaceDisplay = true;
     void press(String key, void Function(void Function()) setSheetState) {
       setSheetState(() {
         if (key == 'C') {
           display = '0';
           stored = null;
-          operator = null;
+          pendingOperation = null;
           replaceDisplay = true;
           return;
         }
@@ -1415,15 +1415,15 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         }
         if (const <String>['+', '−', '×', '÷'].contains(key)) {
           stored = double.tryParse(display);
-          operator = key;
+          pendingOperation = key;
           replaceDisplay = true;
           return;
         }
         if (key == '=') {
           final right = double.tryParse(display);
-          if (stored == null || operator == null || right == null) return;
+          if (stored == null || pendingOperation == null || right == null) return;
           final left = stored!;
-          final result = switch (operator) {
+          final result = switch (pendingOperation) {
             '+' => left + right,
             '−' => left - right,
             '×' => left * right,
@@ -1432,7 +1432,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           };
           display = result.isFinite ? _formatCalculation(result) : 'Error';
           stored = null;
-          operator = null;
+          pendingOperation = null;
           replaceDisplay = true;
           return;
         }
