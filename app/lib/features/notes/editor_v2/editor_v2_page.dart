@@ -4219,7 +4219,10 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
     if (!mounted) return;
     final currentIndex = _pages.indexWhere((page) => page['id']?.toString() == targetId);
-    if (currentIndex >= 0) _addPage(insertAfter: currentIndex);
+    if (currentIndex >= 0) {
+      // Match the exact target PDF page's paper size and orientation.
+      _addPage(insertAfter: currentIndex, templateFrom: _pages[currentIndex]);
+    }
   }
 
   Future<void> _choosePageBackground(int index) async {
