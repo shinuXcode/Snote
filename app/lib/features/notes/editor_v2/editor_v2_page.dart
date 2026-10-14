@@ -4187,7 +4187,7 @@ class _ScientificCalculatorDialogState extends State<_ScientificCalculatorDialog
               child: Padding(
                 padding: const EdgeInsets.all(6),
                 child: GridView.builder(
-                  physics: const NeverScrollableScrollPhysics(),
+                  physics: const ClampingScrollPhysics(),
                   itemCount: _keys.length,
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 4,
