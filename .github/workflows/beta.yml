@@ -160,45 +160,6 @@ jobs:
               raise SystemExit('Clipboard provider paths file is missing')
           PY
 
-      - name: Add ML Kit text script dependencies for release R8
-        working-directory: app
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          # The Flutter plugin references these optional language classes. R8
-          # fails the release build unless the matching ML Kit artifacts exist.
-          build = Path('android/app/build.gradle.kts')
-          if not build.is_file():
-              raise SystemExit('Generated Android app/build.gradle.kts is missing')
-          text = build.read_text()
-          text = build.read_text()
-          marker = 'dependencies {'
-
-          required = [
-              '    implementation("com.google.mlkit:text-recognition-chinese:16.0.1")',
-              '    implementation("com.google.mlkit:text-recognition-devanagari:16.0.1")',
-              '    implementation("com.google.mlkit:text-recognition-japanese:16.0.1")',
-              '    implementation("com.google.mlkit:text-recognition-korean:16.0.1")',
-          ]
-          block_count = text.count(marker)
-          if block_count == 0:
-              text = text.rstrip() + chr(10) + chr(10) + marker + chr(10) + chr(10).join(required) + chr(10) + '}' + chr(10)
-          elif block_count == 1:
-              missing = [line for line in required if line not in text]
-              if missing:
-                  text = text.replace(marker, marker + chr(10) + chr(10).join(missing), 1)
-          else:
-              raise SystemExit(f'Expected zero or one dependencies block, found {block_count}')
-          build.write_text(text)
-
-          final_text = build.read_text()
-          absent = [line for line in required if line not in final_text]
-          if absent:
-              raise SystemExit(f'ML Kit language dependencies were not configured: {absent}')
-          print('Configured ML Kit Latin (plugin dependency), Chinese, Devanagari, Japanese and Korean release classes.')
-          PY
-
       - name: Install dependencies
         working-directory: app
         run: flutter pub get

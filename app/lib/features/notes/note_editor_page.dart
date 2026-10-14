@@ -6,9 +6,10 @@ import 'dart:ui' as ui;
 
 import 'package:crypto/crypto.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/rendering.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:snote_screen_capture/snote_screen_capture.dart';
 import 'package:pdf/pdf.dart' as pdfcore;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdfx/pdfx.dart';
@@ -146,6 +147,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   bool _studyTimerVisible = false;
   bool _viewportZoomLocked = false;
   int _viewportResetToken = 0;
+  bool _viewportIslandVisible = false;
+  Timer? _viewportIslandTimer;
   final ValueNotifier<ViewportTransform> _viewportTransform = ValueNotifier(
     ViewportTransform(scale: SnoteSettings.instance.getDouble('noteZoom')),
   );
@@ -462,6 +465,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     String? storedCoverIcon;
     String? storedCoverKey;
     bool? storedDrawMode;
+    int storedPageIndex = 0;
     if (note?.contentJson != null && note!.contentJson!.trim().isNotEmpty) {
       // Do not silently turn an unreadable saved note into a new blank page:
       // that can make the next autosave overwrite the user's recoverable data.
@@ -475,6 +479,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         throw const FormatException('Saved note content has an unsupported format.');
       }
       final json = decoded;
+      storedPageIndex = (json['lastViewedPageIndex'] as num?)?.toInt() ?? 0;
       storedCoverColor = (json['coverColor'] as num?)?.toInt();
       storedCoverIcon = json['coverIcon']?.toString();
       storedCoverKey = json['coverKey']?.toString();
@@ -626,7 +631,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     if (!mounted) return;
     setState(() {
       _pages = parsed;
-      _page = 0;
+      _page = clampNotePageIndex(storedPageIndex, parsed.length);
       _draw = storedDrawMode ?? _draw;
       _noteCoverColor = storedCoverColor;
       _noteCoverIcon = storedCoverIcon;
@@ -715,6 +720,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       'spacing': inheritedSpacing,
       'lineWidth': _pages.isNotEmpty ? _pageDouble('lineWidth', .7) : .7,
       'pageSize': _pages.isNotEmpty ? (pageData['pageSize']?.toString() ?? 'A4') : 'A4',
+      if (_pages.isNotEmpty && pageData['pageWidthMm'] is num) 'pageWidthMm': pageData['pageWidthMm'],
+      if (_pages.isNotEmpty && pageData['pageHeightMm'] is num) 'pageHeightMm': pageData['pageHeightMm'],
+      if (_pages.isNotEmpty && pageData['pageAspectRatio'] is num) 'pageAspectRatio': pageData['pageAspectRatio'],
+      'textLineSpacing': _pages.isNotEmpty ? _pageDouble('textLineSpacing', 1.15) : 1.15,
       'cornellAssist': inheritedCornell,
       'orientation': inheritedOrientation,
       'strokes': <Object?>[],
@@ -788,6 +797,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         'coverKey': _noteCoverKey,
         'editorMode': _draw ? 'handwriting' : 'text',
         'pages': _pages,
+        'lastViewedPageIndex': _page,
         'text_delta': _quill.document.toDelta().toJson(),
       });
       final title = _title.text.trim();
@@ -889,13 +899,14 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       _selected = 0;
     });
     _restoreToolbar();
+    _scheduleSave();
   }
 
   void _pageSwipe(DragEndDetails d) {
     if (!_settings.getBool('pageSwipe')) return;
     final speed = d.primaryVelocity ?? 0;
-    if (speed < -350) _nextPage();
-    if (speed > 350) _previousPage();
+    if (speed > 350) _nextPage();
+    if (speed < -350) _previousPage();
   }
 
   Future<void> _chooseNoteCover() async {
@@ -1005,6 +1016,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _viewportIslandTimer?.cancel();
     _snoteOpenNoteTabs.removeListener(_onOpenTabsChanged);
     _saveTimer?.cancel();
     _quill.removeListener(_scheduleSave);
@@ -1139,7 +1151,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     PointerDeviceKind.trackpad,
                   },
                   onHorizontalDragEnd: (_pan || _selected > 0) ? null : _pageSwipe,
-                  onVerticalDragEnd: (_pan || _selected > 0) ? null : _pageSwipe,
                   onDoubleTap: () => setState(() => _toolbar = !_toolbar),
                   onLongPress: _settings.getBool('fingerLongPressSelection')
                       ? () => _selectTool(CanvasTool.lasso)
@@ -1154,7 +1165,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
               if (!_full && _draw && !_readingMode) _toolPencaseWidget(),
               if (_shapePanel && !_full && !_readingMode) _shapePanelWidget(),
               if (_showcaseOpen && !_full && !_readingMode) _showcaseWidget(),
-              if (!_full) _viewportZoomControls(),
+              _viewportZoomControls(),
               _StudyTimerFloating(
                 visible: _studyTimerVisible && !_full,
                 onVisibilityChanged: (visible) => setState(() => _studyTimerVisible = visible),
@@ -1194,24 +1205,37 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   }
 
 
+  void _showViewportIsland() {
+    _viewportIslandTimer?.cancel();
+    if (!_viewportIslandVisible && mounted) setState(() => _viewportIslandVisible = true);
+    _viewportIslandTimer = Timer(const Duration(milliseconds: 2300), () {
+      if (mounted) setState(() => _viewportIslandVisible = false);
+    });
+  }
+
+  void _onViewportTransformChanged(ViewportTransform transform) {
+    final previous = _viewportTransform.value;
+    final changed = (previous.scale - transform.scale).abs() > .001 ||
+        (previous.pan - transform.pan).distance > .5;
+    _viewportTransform.value = transform;
+    if (changed) _showViewportIsland();
+  }
+
   Widget _viewportZoomControls() {
     final theme = Theme.of(context);
-    final initialScale = _settings.getDouble('noteZoom').clamp(.5, 4).toDouble();
     return ValueListenableBuilder<ViewportTransform>(
       valueListenable: _viewportTransform,
       builder: (context, transform, _) {
-        final scaleChanged = (transform.scale - initialScale).abs() > .025;
-        final positionChanged = transform.pan.distance > 3;
-        if (!scaleChanged && !positionChanged) return const SizedBox.shrink();
+        if (!_viewportIslandVisible) return const SizedBox.shrink();
         return Positioned(
-          right: 12,
-          bottom: 18,
+          left: math.max(0.0, (MediaQuery.sizeOf(context).width - 132) / 2),
+          top: _full ? 8 : 52,
           child: Material(
             elevation: 8,
             color: theme.colorScheme.surface.withValues(alpha: .96),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(22),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -1234,11 +1258,14 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     visualDensity: VisualDensity.compact,
                     constraints: const BoxConstraints.tightFor(width: 34, height: 34),
                     padding: EdgeInsets.zero,
-                    tooltip: 'Reset zoom and page position',
-                    onPressed: () => setState(() {
-                      _viewportZoomLocked = false;
-                      _viewportResetToken++;
-                    }),
+                    tooltip: 'Reset location',
+                    onPressed: () {
+                      setState(() {
+                        _viewportZoomLocked = false;
+                        _viewportResetToken++;
+                      });
+                      _showViewportIsland();
+                    },
                     icon: const Icon(Icons.center_focus_strong_rounded, size: 18),
                   ),
                 ],
@@ -1383,15 +1410,20 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     final sizeKey = pageData['pageSize']?.toString() ?? 'A4';
     final horizontal = pageData['orientation']?.toString() == 'horizontal';
     final storedAspectRatio = pageData['pageAspectRatio'];
+    final customWidth = (pageData['pageWidthMm'] as num?)?.toDouble();
+    final customHeight = (pageData['pageHeightMm'] as num?)?.toDouble();
+    final customRatio = customWidth != null && customHeight != null && customWidth > 0 && customHeight > 0
+        ? math.min(customWidth, customHeight) / math.max(customWidth, customHeight)
+        : null;
     final baseAspectRatio = storedAspectRatio is num && storedAspectRatio > 0
         ? storedAspectRatio.toDouble()
-        : switch (sizeKey) {
-      'A3' => 297 / 420,
-      'A5' => 148 / 210,
-      'Letter' => 215.9 / 279.4,
-      'Legal' => 215.9 / 355.6,
-      'Infinite' => 1.0,
-      _ => 210 / 297,
+        : customRatio ?? switch (sizeKey) {
+      'A0' => 841 / 1189, 'A1' => 594 / 841, 'A2' => 420 / 594,
+      'A3' => 297 / 420, 'A5' => 148 / 210, 'A6' => 105 / 148,
+      'B0' => 1000 / 1414, 'B1' => 707 / 1000, 'B2' => 500 / 707,
+      'B3' => 353 / 500, 'B4' => 250 / 353, 'B5' => 176 / 250, 'B6' => 125 / 176,
+      'Letter' => 215.9 / 279.4, 'Legal' => 215.9 / 355.6,
+      'Tabloid' => 279.4 / 431.8, 'Infinite' => 1.0, _ => 210 / 297,
     };
     final aspectRatio = horizontal ? 1 / baseAspectRatio : baseAspectRatio;
     final infiniteCanvas = sizeKey == 'Infinite';
@@ -1676,7 +1708,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         initialScale: _settings.getDouble('noteZoom'),
         zoomLocked: _viewportZoomLocked,
         resetToken: _viewportResetToken,
-        onTransformChanged: (transform) => _viewportTransform.value = transform,
+        onTransformChanged: _onViewportTransformChanged,
         child: Padding(
           padding: EdgeInsets.only(
             left: 8,
@@ -1779,8 +1811,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       width: (width * pageWidth).clamp(80.0, math.max(80.0, pageWidth)).toDouble(),
       height: (height * pageHeight).clamp(54.0, math.max(54.0, pageHeight)).toDouble(),
       child: Material(
-        color: Theme.of(context).colorScheme.surface.withValues(alpha: .93),
-        elevation: 3,
+        color: Colors.transparent,
+        elevation: 0,
         borderRadius: BorderRadius.circular(8),
         clipBehavior: Clip.antiAlias,
         child: DecoratedBox(
@@ -1844,7 +1876,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   minLines: null,
                   maxLines: null,
                   textAlignVertical: TextAlignVertical.top,
-                  style: TextStyle(fontSize: fontSize, color: color, height: 1.15),
+                  style: TextStyle(fontSize: fontSize, color: color, height: (box['lineSpacing'] as num?)?.toDouble() ?? _pageDouble('textLineSpacing', 1.15)),
                   onChanged: (value) => _updateTextBox(id, 'text', value),
                   decoration: const InputDecoration(
                     hintText: 'Type while keeping your handwritten notes',
@@ -1890,8 +1922,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           children: [
             Container(
               decoration: BoxDecoration(
-                border: Border.all(color: Theme.of(context).colorScheme.primary, width: 1.2),
-                color: Colors.white,
+                border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: .55), width: 1.0),
+                color: Colors.transparent,
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Image.memory(
@@ -1925,6 +1957,69 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         ),
       ),
     );
+  }
+
+  Future<Uint8List?> _captureScreenInMemory() async {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      // MediaProjection requests visible system consent, then returns bytes
+      // over a MethodChannel. The PNG is not written to storage or the gallery.
+      return SnoteScreenCapture.captureScreen();
+    }
+    // iOS and desktop capture Snote's own note page only; iOS cannot silently
+    // capture the screen contents of another application.
+    await WidgetsBinding.instance.endOfFrame;
+    final renderObject = _pageCaptureKey.currentContext?.findRenderObject();
+    if (renderObject is! RenderRepaintBoundary) {
+      throw StateError('The current note canvas is not ready to capture.');
+    }
+    final ratio = MediaQuery.devicePixelRatioOf(context).clamp(1.0, 3.0).toDouble();
+    final image = await renderObject.toImage(pixelRatio: ratio);
+    try {
+      final data = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (data == null) throw StateError('Could not encode the canvas screenshot.');
+      return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+    } finally {
+      image.dispose();
+    }
+  }
+
+  Future<void> _captureScreenshotToCanvas() async {
+    if (_loading || _pages.isEmpty || (_locked && !_unlocked)) return;
+    try {
+      final bytes = await _captureScreenInMemory();
+      if (bytes == null || bytes.isEmpty || !mounted) return;
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      final imageWidth = frame.image.width;
+      final imageHeight = frame.image.height;
+      frame.image.dispose();
+      codec.dispose();
+      if (imageWidth < 1 || imageHeight < 1) throw StateError('Captured image dimensions are invalid.');
+      final ratio = _thumbnailAspectRatio(pageData);
+      const imageWidthRatio = .78;
+      final imageHeightRatio = (imageWidthRatio * ratio / (imageWidth / imageHeight)).clamp(.12, .82).toDouble();
+      setState(() {
+        final images = _pageImages;
+        images.add(<String, Object?>{
+          'id': 'screen-${DateTime.now().microsecondsSinceEpoch}',
+          'name': 'Screen capture',
+          'data': base64Encode(bytes),
+          'x': (1 - imageWidthRatio) / 2,
+          'y': (1 - imageHeightRatio) / 2,
+          'width': imageWidthRatio,
+          'height': imageHeightRatio,
+        });
+        pageData['images'] = images;
+      });
+      _scheduleSave();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Screenshot inserted into the current canvas.')),
+      );
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Screen capture failed: $error')),
+      );
+    }
   }
 
   Future<void> _insertScreenshot() async {
@@ -2039,7 +2134,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
             'lineOpacity': .85,
             'spacing': 28.0,
             'lineWidth': .7,
-            'pageSize': 'A4',
+            'pageSize': 'Custom',
+            'pageWidthMm': pdfPage.width * 25.4 / 72,
+            'pageHeightMm': pdfPage.height * 25.4 / 72,
             'pageAspectRatio': math.min(pdfPage.width, pdfPage.height) /
                 math.max(pdfPage.width, pdfPage.height),
             'cornellAssist': false,
@@ -2574,6 +2671,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   onPressed: _toggleFullscreen,
                 ),
                 _compactAction(
+                  tooltip: 'Capture screen to canvas',
+                  icon: Icons.screenshot_monitor_rounded,
+                  onPressed: () => unawaited(_captureScreenshotToCanvas()),
+                ),
+                _compactAction(
                   tooltip: 'Note settings',
                   icon: Icons.settings_outlined,
                   onPressed: () => Navigator.push(
@@ -2625,6 +2727,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                       case 'screenshot':
                         await _exportLiveScreenshot();
                         break;
+                      case 'capture':
+                        await _captureScreenshotToCanvas();
+                        break;
                     }
                   },
                   itemBuilder: (_) => const [
@@ -2635,6 +2740,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     PopupMenuItem(value: 'lock', child: Text('Lock note')),
                     PopupMenuItem(value: 'fullscreen', child: Text('Fullscreen')),
                     PopupMenuItem(value: 'settings', child: Text('Note settings')),
+                    PopupMenuItem(value: 'capture', child: Text('Capture screen to canvas')),
                     PopupMenuItem(value: 'screenshot', child: Text('Save page screenshot')),
                   ],
                 ),
@@ -2931,7 +3037,13 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
               await _chooseNoteCover();
               break;
             case 'screenshot':
+              await _captureScreenshotToCanvas();
+              break;
+            case 'savePageScreenshot':
               await _exportLiveScreenshot();
+              break;
+            case 'importImage':
+              await _insertScreenshot();
               break;
           }
         },
@@ -2945,7 +3057,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           PopupMenuItem(value: 'pdf', child: Row(children: [Icon(Icons.picture_as_pdf_outlined, size: 19), SizedBox(width: 10), Text('Insert PDF pages')])),
           PopupMenuItem(value: 'showcase', child: Row(children: [Icon(Icons.inventory_2_outlined, size: 19), SizedBox(width: 10), Text('Tool showcase')])),
           PopupMenuItem(value: 'cover', child: Row(children: [Icon(Icons.photo_album_outlined, size: 19), SizedBox(width: 10), Text('Note cover page')])),
-          PopupMenuItem(value: 'screenshot', child: Row(children: [Icon(Icons.screenshot_monitor_rounded, size: 19), SizedBox(width: 10), Text('Save page screenshot')])),
+          PopupMenuItem(value: 'screenshot', child: Row(children: [Icon(Icons.screenshot_monitor_rounded, size: 19), SizedBox(width: 10), Text('Capture screen to canvas')])),
+          PopupMenuItem(value: 'importImage', child: Row(children: [Icon(Icons.add_photo_alternate_outlined, size: 19), SizedBox(width: 10), Text('Import image / camera')])),
+          PopupMenuItem(value: 'savePageScreenshot', child: Row(children: [Icon(Icons.save_alt_rounded, size: 19), SizedBox(width: 10), Text('Export current page screenshot')])),
         ],
       ),
       IconButton(
@@ -3744,7 +3858,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     if (key == 'calculator') {
       unawaited(_calculatorSheet());
     } else if (key == 'screenshot') {
-      unawaited(_insertScreenshot());
+      unawaited(_captureScreenshotToCanvas());
     } else {
       final tool = _canvasToolForKey(key);
       if (tool != null) _selectTool(tool);
@@ -4775,7 +4889,14 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
 
   void _insertBlankPage(int index) {
     final target = (index + 1).clamp(0, _pages.length);
-    _pages.insert(target, _newPage());
+    final blankPage = _newPage();
+    if (index >= 0 && index < _pages.length) {
+      final source = _pages[index];
+      for (final key in const ['pageSize', 'pageAspectRatio', 'pageWidthMm', 'pageHeightMm', 'orientation']) {
+        if (source.containsKey(key)) blankPage[key] = source[key];
+      }
+    }
+    _pages.insert(target, blankPage);
     setState(() => _page = target);
     _scheduleSave();
   }
@@ -4986,13 +5107,17 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   }
 
   double _thumbnailAspectRatio(Map<String, Object?> page) {
-    final ratio = switch (page['pageSize']?.toString() ?? 'A4') {
-      'A3' => 297 / 420,
-      'A5' => 148 / 210,
-      'Letter' => 215.9 / 279.4,
-      'Legal' => 215.9 / 355.6,
-      'Infinite' => 1.0,
-      _ => 210 / 297,
+    final stored = (page['pageAspectRatio'] as num?)?.toDouble();
+    final width = (page['pageWidthMm'] as num?)?.toDouble();
+    final height = (page['pageHeightMm'] as num?)?.toDouble();
+    final custom = width != null && height != null && width > 0 && height > 0 ? math.min(width, height) / math.max(width, height) : null;
+    final ratio = stored != null && stored > 0 ? stored : custom ?? switch (page['pageSize']?.toString() ?? 'A4') {
+      'A0' => 841 / 1189, 'A1' => 594 / 841, 'A2' => 420 / 594,
+      'A3' => 297 / 420, 'A5' => 148 / 210, 'A6' => 105 / 148,
+      'B0' => 1000 / 1414, 'B1' => 707 / 1000, 'B2' => 500 / 707,
+      'B3' => 353 / 500, 'B4' => 250 / 353, 'B5' => 176 / 250, 'B6' => 125 / 176,
+      'Letter' => 215.9 / 279.4, 'Legal' => 215.9 / 355.6, 'Tabloid' => 279.4 / 431.8,
+      'Infinite' => 1.0, _ => 210 / 297,
     };
     return page['orientation']?.toString() == 'horizontal' ? 1 / ratio : ratio;
   }
@@ -5007,6 +5132,63 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       return object.size;
     }
     return const Size(700, 990);
+  }
+
+  Future<void> _searchPagesDialog() async {
+    final controller = TextEditingController();
+    final query = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Find or jump to page'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textInputAction: TextInputAction.search,
+          decoration: const InputDecoration(
+            hintText: 'Page number, text, or PDF page',
+            prefixIcon: Icon(Icons.search_rounded),
+          ),
+          onSubmitted: (value) => Navigator.pop(dialogContext, value.trim()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(dialogContext, controller.text.trim()),
+            icon: const Icon(Icons.search_rounded),
+            label: const Text('Find'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (query == null || query.trim().isEmpty || !mounted) return;
+    final number = int.tryParse(query.trim());
+    if (number != null) {
+      if (number >= 1 && number <= _pages.length) {
+        _selectPage(number - 1);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Enter a page number from 1 to ${_pages.length}.')),
+        );
+      }
+      return;
+    }
+    final needle = query.trim().toLowerCase();
+    final index = _pages.indexWhere((page) {
+      final fields = <String>[
+        page['title']?.toString() ?? '',
+        page['pdfSourceName']?.toString() ?? '',
+        page['pdfSourcePage']?.toString() ?? '',
+        if (page['textBoxes'] is List)
+          ...(page['textBoxes'] as List).whereType<Map>().map((box) => box['text']?.toString() ?? ''),
+      ];
+      return fields.any((field) => field.toLowerCase().contains(needle));
+    });
+    if (index >= 0) {
+      _selectPage(index);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No page matched "$query".')));
+    }
   }
 
   Widget _previewRail() {
@@ -5030,6 +5212,12 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                 const Icon(Icons.auto_stories_rounded, size: 18),
                 const SizedBox(width: 8),
                 const Expanded(child: Text('Pages', style: TextStyle(fontWeight: FontWeight.w900))),
+                IconButton(
+                  tooltip: 'Search pages or jump to page number',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: _searchPagesDialog,
+                  icon: const Icon(Icons.search_rounded),
+                ),
                 if (_pageClipboard != null)
                   IconButton(
                     tooltip: 'Paste copied page',
@@ -5105,6 +5293,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                                     fit: BoxFit.fill,
                                     filterQuality: FilterQuality.low,
                                     gaplessPlayback: true,
+                                    loadingBuilder: (_, child, progress) => progress == null
+                                        ? child
+                                        : const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))),
                                     errorBuilder: (_, __, ___) => const SizedBox.shrink(),
                                   ),
                                 ),
@@ -5312,11 +5503,25 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
 
   List<double> _paperDimensions(String size) {
     switch (size) {
+      case 'A0': return const [841, 1189];
+      case 'A1': return const [594, 841];
+      case 'A2': return const [420, 594];
       case 'A3': return const [297, 420];
+      case 'A4': return const [210, 297];
       case 'A5': return const [148, 210];
+      case 'A6': return const [105, 148];
+      case 'B0': return const [1000, 1414];
+      case 'B1': return const [707, 1000];
+      case 'B2': return const [500, 707];
+      case 'B3': return const [353, 500];
+      case 'B4': return const [250, 353];
+      case 'B5': return const [176, 250];
+      case 'B6': return const [125, 176];
       case 'Letter': return const [215.9, 279.4];
       case 'Legal': return const [215.9, 355.6];
+      case 'Tabloid': return const [279.4, 431.8];
       case 'Infinite': return const [0, 0];
+      case 'Custom': return <double>[(pageData['pageWidthMm'] as num?)?.toDouble() ?? 210, (pageData['pageHeightMm'] as num?)?.toDouble() ?? 297];
       default: return const [210, 297];
     }
   }
@@ -5360,14 +5565,22 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           ),
           const SizedBox(height: 16),
           DropdownButtonFormField<String>(
-            initialValue: const {'A3', 'A4', 'A5', 'Letter', 'Legal', 'Infinite'}.contains(sizeKey) ? sizeKey : 'A4',
+            initialValue: const ['A0','A1','A2','A3','A4','A5','A6','B0','B1','B2','B3','B4','B5','B6','Letter','Legal','Tabloid','Infinite','Custom'].contains(sizeKey) ? sizeKey : 'A4',
             decoration: const InputDecoration(labelText: 'Paper size'),
-            items: const ['A3', 'A4', 'A5', 'Letter', 'Legal', 'Infinite'].map((size) =>
-              DropdownMenuItem(value: size, child: Text(size == 'Infinite' ? 'Infinite canvas (large workspace)' : size))
+            items: const ['A0','A1','A2','A3','A4','A5','A6','B0','B1','B2','B3','B4','B5','B6','Letter','Legal','Tabloid','Infinite','Custom'].map((size) =>
+              DropdownMenuItem(value: size, child: Text(size == 'Infinite' ? 'Infinite canvas (large workspace)' : size == 'Custom' ? 'Custom size (mm)' : size))
             ).toList(),
             onChanged: (value) {
               if (value == null) return;
-              setState(() => pageData['pageSize'] = value);
+              final next = _paperDimensions(value);
+              setState(() {
+                pageData['pageSize'] = value;
+                if (value != 'Infinite' && next[0] > 0 && next[1] > 0) {
+                  pageData['pageWidthMm'] = next[0];
+                  pageData['pageHeightMm'] = next[1];
+                  pageData['pageAspectRatio'] = math.min(next[0], next[1]) / math.max(next[0], next[1]);
+                }
+              });
               _scheduleSave();
             },
           ),
@@ -5377,6 +5590,40 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
             const SizedBox(width: 10),
             Expanded(child: _infoBox('Height', sizeKey == 'Infinite' ? 'Unlimited workspace' : '${dimensions[horizontal ? 0 : 1]} mm')),
           ]),
+          if (sizeKey == 'Custom') ...[
+            const SizedBox(height: 8),
+            Row(children: [
+              Expanded(child: TextFormField(
+                key: const ValueKey('customPageWidthMm'),
+                initialValue: dimensions[0].toStringAsFixed(1),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'Custom width (mm)'),
+                onChanged: (raw) {
+                  final value = double.tryParse(raw);
+                  if (value == null || value < 25 || value > 3000) return;
+                  final height = (pageData['pageHeightMm'] as num?)?.toDouble() ?? 297;
+                  pageData['pageWidthMm'] = value;
+                  pageData['pageAspectRatio'] = math.min(value, height) / math.max(value, height);
+                  _scheduleSave();
+                },
+              )),
+              const SizedBox(width: 10),
+              Expanded(child: TextFormField(
+                key: const ValueKey('customPageHeightMm'),
+                initialValue: dimensions[1].toStringAsFixed(1),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'Custom height (mm)'),
+                onChanged: (raw) {
+                  final value = double.tryParse(raw);
+                  if (value == null || value < 25 || value > 3000) return;
+                  final width = (pageData['pageWidthMm'] as num?)?.toDouble() ?? 210;
+                  pageData['pageHeightMm'] = value;
+                  pageData['pageAspectRatio'] = math.min(width, value) / math.max(width, value);
+                  _scheduleSave();
+                },
+              )),
+            ]),
+          ],
           const SizedBox(height: 8),
           Row(children: [
             Expanded(child: _infoBox('Orientation', pageData['orientation'] == 'horizontal' ? 'Landscape' : 'Portrait', onTap: () {
@@ -5398,6 +5645,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           _range('Line Opacity', _pageDouble('lineOpacity', .85), 0, 1, (v) { setState(() => pageData['lineOpacity'] = v); _scheduleSave(); }),
           _range('Line Width', _pageDouble('lineWidth', .7), .25, 4, (v) { setState(() => pageData['lineWidth'] = v); _scheduleSave(); }),
           _range('Line Spacing', _pageDouble('spacing', 28), 12, 64, (v) { setState(() => pageData['spacing'] = v); _scheduleSave(); }),
+          _range('Text line height', _pageDouble('textLineSpacing', 1.15), .8, 2.4, (v) { setState(() => pageData['textLineSpacing'] = v); _scheduleSave(); }),
           ListTile(
             leading: const Icon(Icons.copy_all_rounded),
             title: const Text('Copy current paper settings to all pages'),
@@ -5416,6 +5664,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       'lineOpacity',
       'lineWidth',
       'spacing',
+      'textLineSpacing',
+      'pageWidthMm',
+      'pageHeightMm',
+      'pageAspectRatio',
       'pageSize',
       'orientation',
       'cornellAssist',

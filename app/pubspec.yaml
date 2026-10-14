@@ -1,7 +1,7 @@
 name: snote
 description: Open-source offline-first handwriting and rich-text notes.
 publish_to: "none"
-version: 1.1.0-beta.85+88
+version: 1.1.0-beta.86+89
 
 environment:
   sdk: ">=3.12.0 <4.0.0"
@@ -32,6 +32,8 @@ dependencies:
   pdfx: ^2.11.0
   flutter_quill: ^11.5.1
   google_mlkit_text_recognition: ^0.15.0
+  snote_screen_capture:
+    path: packages/snote_screen_capture
   flutter_secure_storage: ^11.2.0
   crypto: ^3.0.6
   archive: ^4.0.9
