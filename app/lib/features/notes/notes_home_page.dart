@@ -1182,6 +1182,137 @@ class _NotesHomePageState extends State<NotesHomePage> {
     );
   }
 
+
+  /// Beta 79's new notebook launch panel. Feature-specific destinations remain
+  /// available from the existing action sheet; these are only quick shortcuts.
+  Widget _beta79WelcomePanel({bool compact = false}) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final narrow = constraints.maxWidth < 520;
+        final headline = Text(
+          'Give your ideas a page.',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: compact ? 20 : 22,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.45,
+          ),
+        );
+        final intro = Text(
+          'Write naturally. Mark up PDFs. Keep everything in one notebook.',
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: .82),
+            fontSize: 12.5,
+            height: 1.3,
+          ),
+        );
+        final actions = Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFFF795C),
+                foregroundColor: Colors.white,
+                minimumSize: const Size(0, 42),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+              ),
+              onPressed: () => unawaited(_createNote()),
+              icon: const Icon(Icons.draw_rounded, size: 18),
+              label: const Text('New note'),
+            ),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                side: BorderSide(color: Colors.white.withValues(alpha: .5)),
+                minimumSize: const Size(0, 42),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+              ),
+              onPressed: () => unawaited(_openPdfAnnotation()),
+              icon: const Icon(Icons.picture_as_pdf_rounded, size: 18),
+              label: const Text('Annotate PDF'),
+            ),
+          ],
+        );
+
+        return Container(
+          margin: EdgeInsets.fromLTRB(compact ? 16 : 16, 4, 16, compact ? 6 : 12),
+          padding: EdgeInsets.all(compact ? 16 : 18),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF183D3B), Color(0xFF176B66), Color(0xFF227E70)],
+            ),
+            borderRadius: BorderRadius.circular(22),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x20176B66),
+                blurRadius: 18,
+                offset: Offset(0, 7),
+              ),
+            ],
+          ),
+          child: narrow
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'TIDAL INK  •  BETA 79',
+                      style: TextStyle(
+                        color: Color(0xFF9FE0D1),
+                        fontSize: 10,
+                        letterSpacing: 1.45,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 7),
+                    headline,
+                    const SizedBox(height: 5),
+                    intro,
+                    const SizedBox(height: 13),
+                    actions,
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'TIDAL INK  •  BETA 79',
+                            style: TextStyle(
+                              color: Color(0xFF9FE0D1),
+                              fontSize: 10,
+                              letterSpacing: 1.45,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 7),
+                          headline,
+                          const SizedBox(height: 5),
+                          intro,
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    actions,
+                  ],
+                ),
+        );
+      },
+    );
+  }
+
+  Future<void> _openPdfAnnotation() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => PdfAnnotationPage(folderId: _folderId)),
+    );
+    if (mounted) await _load();
+  }
+
   Widget _desktop() {
     // The split workspace must never remain visually blank while the note
     // list contains visible notes. Restore a deterministic active note even
@@ -1223,6 +1354,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
                 onSync: _syncNow,
                 onToggleView: () => setState(() => _gridView = !_gridView),
               ),
+              _beta79WelcomePanel(compact: true),
               _Breadcrumbs(
                 items: _breadcrumbs,
                 onBack: _goBackFolder,
@@ -1345,6 +1477,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
             ],
           ),
         ),
+        _beta79WelcomePanel(),
         if (_searchVisible) ...[
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
