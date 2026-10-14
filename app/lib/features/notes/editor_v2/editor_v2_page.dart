@@ -156,7 +156,6 @@ class _EditorV2PageState extends State<EditorV2Page>
   final Set<String> _selectedImageIds = <String>{};
   final Set<String> _selectedTextBoxIds = <String>{};
   final Map<String, Map<String, Object?>> _toolProfiles = <String, Map<String, Object?>>{};
-  List<Map<String, Object?>> _strokeClipboard = <Map<String, Object?>>[];
   Map<String, Object?>? _pageClipboard;
   Map<String, Object?>? _selectionClipboard;
   List<Map<String, Object?>>? _selectionTransformImageSnapshot;
@@ -1304,8 +1303,8 @@ class _EditorV2PageState extends State<EditorV2Page>
     return Rect.fromLTWH(
       center.dx + (original.left - center.dx) * factor + offset.dx,
       center.dy + (original.top - center.dy) * factor + offset.dy,
-      math.max(8, original.width * factor),
-      math.max(8, original.height * factor),
+      math.max(8.0, original.width * factor).toDouble(),
+      math.max(8.0, original.height * factor).toDouble(),
     );
   }
 
@@ -1428,10 +1427,6 @@ class _EditorV2PageState extends State<EditorV2Page>
   void _copySelection() {
     if (_selectionCount == 0) return;
     _selectionClipboard = _currentSelectionPayload();
-    _strokeClipboard = ((_selectionClipboard!['strokes'] as List?) ?? const [])
-        .whereType<Map<String, Object?>>()
-        .map((item) => Map<String, Object?>.from(item))
-        .toList();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Copied selection ($_selectionCount item(s))')),
     );
