@@ -3395,7 +3395,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           top: y * _pageHeight,
           width: width * _pageWidth,
           height: height * _pageHeight,
-          child: Image.memory(bytes, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined)),
+          child: IgnorePointer(child: Image.memory(bytes, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined))),
         ));
       } catch (_) {}
     }
@@ -3425,7 +3425,9 @@ class _EditorV2PageState extends State<EditorV2Page>
         top: y * _pageHeight,
         width: width * _pageWidth,
         height: height * _pageHeight,
-        child: DecoratedBox(
+        child: IgnorePointer(
+          ignoring: _tool == CanvasTool.lasso,
+          child: DecoratedBox(
           decoration: BoxDecoration(
             color: (box['sticker'] == true ? Colors.transparent : Colors.white).withValues(alpha: .12),
             border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: .25)),
@@ -3465,6 +3467,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                 ),
               ),
             ],
+          ),
           ),
         ),
       ));
