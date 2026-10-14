@@ -1159,39 +1159,74 @@ class _EditorV2PageState extends State<EditorV2Page>
   }
 
   Future<void> _chooseColor() async {
-    final chosen = await showModalBottomSheet<Color>(
+    var selectedColor = _color;
+    var selectedOpacity = _opacity;
+    final chosen = await showModalBottomSheet<({Color color, double opacity})>(
       context: context,
+      isScrollControlled: true,
       showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Wrap(
-            spacing: 14,
-            runSpacing: 14,
-            children: _palette.map((color) => InkWell(
-              onTap: () => Navigator.pop(sheetContext, color),
-              borderRadius: BorderRadius.circular(30),
-              child: Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: color == _color
-                        ? Theme.of(context).colorScheme.primary
-                        : Colors.black26,
-                    width: color == _color ? 3 : 1,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 6, 18, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Ink palette & opacity', style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: _palette.map((color) => InkWell(
+                    onTap: () => setSheetState(() => selectedColor = color),
+                    borderRadius: BorderRadius.circular(30),
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: color == selectedColor ? Theme.of(context).colorScheme.primary : Colors.black26,
+                          width: color == selectedColor ? 3 : 1,
+                        ),
+                      ),
+                      child: color == selectedColor ? const Icon(Icons.check_rounded, size: 17, color: Colors.white) : null,
+                    ),
+                  )).toList(),
+                ),
+                const SizedBox(height: 12),
+                Row(children: [
+                  const Expanded(child: Text('Opacity')),
+                  Text('\${(selectedOpacity * 100).round()}%'),
+                ]),
+                Slider(
+                  min: .05,
+                  max: 1,
+                  value: selectedOpacity.clamp(.05, 1).toDouble(),
+                  onChanged: (value) => setSheetState(() => selectedOpacity = value),
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton.icon(
+                    onPressed: () => Navigator.pop(sheetContext, (color: selectedColor, opacity: selectedOpacity)),
+                    icon: const Icon(Icons.check_rounded),
+                    label: const Text('Use color'),
                   ),
                 ),
-              ),
-            )).toList(),
+              ],
+            ),
           ),
         ),
       ),
     );
     if (chosen == null || !mounted) return;
-    setState(() => _color = chosen);
+    setState(() {
+      _color = chosen.color;
+      _opacity = chosen.opacity;
+    });
+    _rememberCurrentToolProfile();
   }
 
   Future<void> _strokeSettings([CanvasTool? requestedTool]) async {
