@@ -1830,10 +1830,19 @@ class _EditorV2PageState extends State<EditorV2Page>
       showDragHandle: true,
       builder: (sheetContext) => StatefulBuilder(
         builder: (context, setSheetState) {
-          final source = category == 'All'
-              ? stickerCategories.values.expand((items) => items).toList()
-              : stickerCategories[category] ?? <String>[];
-          final stickers = source.where((value) => query.isEmpty || value.contains(query)).toList();
+          final groups = stickerCategories.entries
+              .where((entry) => category == 'All' || entry.key == category)
+              .toList();
+          final stickers = groups
+              .where((entry) =>
+                  query.isEmpty || entry.key.toLowerCase().contains(query))
+              .expand((entry) => entry.value.where(
+                    (symbol) =>
+                        query.isEmpty ||
+                        entry.key.toLowerCase().contains(query) ||
+                        symbol.contains(query),
+                  ))
+              .toList();
           return SafeArea(
             child: Padding(
               padding: EdgeInsets.fromLTRB(14, 2, 14, 14 + MediaQuery.viewInsetsOf(context).bottom),
@@ -1848,7 +1857,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                     TextField(
                       decoration: const InputDecoration(
                         prefixIcon: Icon(Icons.search_rounded),
-                        hintText: 'Search stickers',
+                        hintText: 'Search stickers or categories',
                         isDense: true,
                         border: OutlineInputBorder(),
                       ),
