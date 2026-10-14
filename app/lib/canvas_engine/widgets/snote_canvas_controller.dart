@@ -2,6 +2,8 @@ import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 
+import '../models/stroke.dart';
+
 class SnoteCanvasController extends ChangeNotifier {
   VoidCallback? _undoAction;
   VoidCallback? _redoAction;
@@ -17,6 +19,7 @@ class SnoteCanvasController extends ChangeNotifier {
   VoidCallback? _toggleFillAction;
   VoidCallback? _bringToFrontAction;
   VoidCallback? _sendToBackAction;
+  List<Stroke> Function()? _selectedStrokesProvider;
 
   bool _canUndo = false;
   bool _canRedo = false;
@@ -25,6 +28,9 @@ class SnoteCanvasController extends ChangeNotifier {
   bool get canUndo => _canUndo;
   bool get canRedo => _canRedo;
   int get selectionCount => _selectionCount;
+  List<Stroke> get selectedStrokes => List<Stroke>.unmodifiable(
+        _selectedStrokesProvider?.call() ?? const <Stroke>[],
+      );
 
   void bind({
     required VoidCallback undo,
@@ -44,6 +50,7 @@ class SnoteCanvasController extends ChangeNotifier {
     VoidCallback? toggleFill,
     VoidCallback? bringToFront,
     VoidCallback? sendToBack,
+    List<Stroke> Function()? selectedStrokes,
   }) {
     _undoAction = undo;
     _redoAction = redo;
@@ -62,6 +69,7 @@ class SnoteCanvasController extends ChangeNotifier {
     _toggleFillAction = toggleFill;
     _bringToFrontAction = bringToFront;
     _sendToBackAction = sendToBack;
+    _selectedStrokesProvider = selectedStrokes;
     notifyListeners();
   }
 
@@ -95,6 +103,7 @@ class SnoteCanvasController extends ChangeNotifier {
     _toggleFillAction = null;
     _bringToFrontAction = null;
     _sendToBackAction = null;
+    _selectedStrokesProvider = null;
   }
 
   @override
