@@ -112,7 +112,8 @@ bool shouldRestorePdfPageBackgrounds(
     // belonging to the current source; never replace another PDF's page set.
     final scopedPages = sourceHash == null
         ? pdfPages
-        : pdfPages.where((page) => page['pdfSourceHash'] == sourceHash).toList(growable: false);
+        : pdfPages.where((page) =>
+            page['pdfSourceHash'] == null || page['pdfSourceHash'] == sourceHash).toList(growable: false);
     if (scopedPages.isEmpty) return false;
     return scopedPages.any((page) => !hasVerifiedBackground(page));
   }
@@ -217,11 +218,61 @@ List<Map<String, Object?>> mergeSavedAnnotationsWithPdfPages({
   }
 
   if (matchingIndices.isEmpty) {
-    if (savedPages.isEmpty) return refreshedPages;
-    return <Map<String, Object?>>[
-      ...savedPages.map((page) => Map<String, Object?>.from(page)),
-      ...refreshedPages,
-    ];
+    final hasStablePdfPageIdentity = savedPages.any((page) =>
+        page['pdfSourcePage'] is num &&
+        ((page['pdfSourceAssetId'] is String && (page['pdfSourceAssetId'] as String).isNotEmpty) ||
+            (page['pdfSourceHash'] is String && (page['pdfSourceHash'] as String).isNotEmpty) ||
+            (page['pdfSourceName'] is String && (page['pdfSourceName'] as String).isNotEmpty)));
+    if (hasStablePdfPageIdentity) {
+      // Another identified PDF is already in this note. Keep it and append
+      // the new source rather than overlaying the wrong source's annotations.
+      return <Map<String, Object?>>[
+        ...savedPages.map((page) => Map<String, Object?>.from(page)),
+        ...refreshedPages,
+      ];
+    }
+
+    // Legacy notebooks often have blank page placeholders or page records
+    // without a source-page number. Keep old index-based recovery semantics
+    // only for these ambiguous records, and preserve their annotations.
+    final positional = <Map<String, Object?>>[];
+    for (var index = 0; index < refreshedPages.length; index++) {
+      final rendered = Map<String, Object?>.from(refreshedPages[index]);
+      if (index < savedPages.length) {
+        final saved = savedPages[index];
+        rendered.addAll(saved);
+        rendered['id'] = saved['id'] ?? refreshedPages[index]['id'];
+        for (final key in const [
+          'pdfLazyRender', 'pdfSourceAssetId', 'pdfSourceName',
+          'pdfSourcePage', 'pdfSourceHash', 'pdfBackgroundHash',
+          'pageAspectRatio',
+        ]) {
+          if (refreshedPages[index].containsKey(key)) {
+            rendered[key] = refreshedPages[index][key];
+          } else {
+            rendered.remove(key);
+          }
+        }
+        if (refreshedPages[index]['pdfLazyRender'] == true) {
+          rendered.remove('backgroundImage');
+          rendered.remove('pdfBackgroundHash');
+        } else if (refreshedPages[index].containsKey('backgroundImage')) {
+          rendered['backgroundImage'] = refreshedPages[index]['backgroundImage'];
+        } else {
+          rendered.remove('backgroundImage');
+        }
+        rendered['strokes'] = saved['strokes'] ?? refreshedPages[index]['strokes'];
+        rendered['images'] = saved['images'] ?? refreshedPages[index]['images'];
+        rendered['textBoxes'] = saved['textBoxes'] ?? refreshedPages[index]['textBoxes'];
+      }
+      positional.add(rendered);
+    }
+    if (savedPages.length > refreshedPages.length) {
+      positional.addAll(savedPages.skip(refreshedPages.length).map(
+        (page) => Map<String, Object?>.from(page),
+      ));
+    }
+    return positional;
   }
 
   final firstMatch = matchingIndices.first;
