@@ -3265,7 +3265,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                             Row(children: [
                     const Icon(Icons.opacity_rounded, size: 18),
                     const SizedBox(width: 8),
+                    Row(children: [
+                    const Icon(Icons.opacity_rounded, size: 18),
+                    const SizedBox(width: 8),
                     Text('Opacity: ${(opacity * 100).round()}%'),
+                  ]),
                   ]),
                             Slider(
                               value: opacity.clamp(.05, 1).toDouble(),
@@ -3276,7 +3280,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                                 unawaited(_commitToolOptions(target: target, size: size, color: color, opacity: value, fill: fill));
                               },
                             ),
-                            const Text('Color', style: TextStyle(fontWeight: FontWeight.w800)),
+                            const Row(children: [
+                              Icon(Icons.palette_outlined, size: 18),
+                              SizedBox(width: 8),
+                              Text('Color', style: TextStyle(fontWeight: FontWeight.w800)),
+                            ]),
                             const SizedBox(height: 7),
                             Wrap(
                               spacing: 8,
@@ -3313,11 +3321,14 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                                   setPopup(() => fill = value);
                                   unawaited(_commitToolOptions(target: target, size: size, color: color, opacity: opacity, fill: value));
                                 },
-                                secondary: const Icon(Icons.format_color_fill_outlined),
-                      title: const Text('Fill shape'),
+                                title: const Text('Fill shape'),
                               ),
                             const Divider(height: 18),
-                            const Text('Display location', style: TextStyle(fontWeight: FontWeight.w900)),
+                            const Row(children: [
+                              Icon(Icons.place_outlined, size: 18),
+                              SizedBox(width: 8),
+                              Text('Display location', style: TextStyle(fontWeight: FontWeight.w900)),
+                            ]),
                             ...placementLocations.map((location) => CheckboxListTile(
                               contentPadding: EdgeInsets.zero,
                               dense: true,
@@ -3325,17 +3336,24 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                               title: Text(_toolPlacementLabel(location)),
                               value: selectedLocations.contains(location) ||
                                   (location == 'hidden' && selectedLocations.isEmpty),
-                              onChanged: (value) => setPopup(() {
-                                if (value == true) {
-                                  if (location == 'hidden') {
-                                    selectedLocations..clear()..add('hidden');
+                              onChanged: (value) async {
+                                setPopup(() {
+                                  if (value == true) {
+                                    if (location == 'hidden') {
+                                      selectedLocations..clear()..add('hidden');
+                                    } else {
+                                      selectedLocations..remove('hidden')..add(location);
+                                    }
                                   } else {
-                                    selectedLocations..remove('hidden')..add(location);
+                                    selectedLocations.remove(location);
                                   }
-                                } else {
-                                  selectedLocations.remove(location);
-                                }
-                              }),
+                                });
+                                final next = _resolvedToolPlacements();
+                                next[target.name] = selectedLocations.isEmpty
+                                    ? <String>['hidden']
+                                    : selectedLocations.toList();
+                                await _saveToolLayout(next, _toolOrder);
+                              },
                             )),
                             SizedBox(
                               width: double.infinity,
@@ -3350,21 +3368,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                                 label: const Text('Collect to Pencase'),
                               ),
                             ),
-                            SizedBox(
-                              width: double.infinity,
-                              child: FilledButton.icon(
-                                onPressed: () async {
-                                  final next = _resolvedToolPlacements();
-                                  next[target.name] = selectedLocations.isEmpty
-                                      ? <String>['hidden']
-                                      : selectedLocations.toList();
-                                  await _saveToolLayout(next, _toolOrder);
-                                  if (dialogContext.mounted) Navigator.pop(dialogContext);
-                                },
-                                icon: const Icon(Icons.save_outlined, size: 18),
-                                label: const Text('Save locations'),
-                              ),
-                            ),
                             const SizedBox(height: 8),
                             Align(
                               alignment: Alignment.centerLeft,
@@ -3377,6 +3380,22 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                                 label: const Text('More settings'),
                               ),
                             ),
+                            if (target == CanvasTool.lasso) ...[
+                              const SizedBox(height: 8),
+                              SizedBox(
+                                width: double.infinity,
+                                child: OutlinedButton.icon(
+                                  onPressed: _selected > 0
+                                      ? () {
+                                          Navigator.pop(dialogContext);
+                                          unawaited(_convertSelectionToText());
+                                        }
+                                      : null,
+                                  icon: const Icon(Icons.text_fields_rounded, size: 18),
+                                  label: const Text('Convert selected ink to text'),
+                                ),
+                              ),
+                            ],
                             const SizedBox(height: 8),
                             SizedBox(
                               width: double.infinity,
@@ -5797,6 +5816,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     ),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
+                      secondary: const Icon(Icons.gesture_rounded),
                       value: pressureErase,
                       onChanged: (value) {
                         setModal(() => pressureErase = value);
@@ -5806,6 +5826,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     ),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
+                      secondary: const Icon(Icons.radio_button_unchecked_rounded),
                       value: pressureEraseArea,
                       onChanged: (value) {
                         setModal(() => pressureEraseArea = value);
@@ -5816,7 +5837,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   ],
                   if (target == CanvasTool.lasso) ...[
                     const SizedBox(height: 8),
-                    const Text('Selection outline', style: TextStyle(fontWeight: FontWeight.w800)),
+                    const Row(children: [
+                      Icon(Icons.gesture_rounded, size: 18),
+                      SizedBox(width: 8),
+                      Text('Selection outline', style: TextStyle(fontWeight: FontWeight.w800)),
+                    ]),
                     SegmentedButton<String>(
                       segments: const [
                         ButtonSegment(value: 'solid', label: Text('Solid'), icon: Icon(Icons.horizontal_rule_rounded)),
@@ -5861,10 +5886,12 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                         setModal(() => fill = value);
                         unawaited(_commitToolOptions(target: target, size: size, color: color, opacity: opacity, fill: value, dashed: dashed, sides: sides));
                       },
+                      secondary: const Icon(Icons.format_color_fill_outlined),
                       title: const Text('Fill shape'),
                     ),
                   if (target == CanvasTool.customPolygon)
                     ListTile(
+                      leading: const Icon(Icons.hexagon_outlined),
                       title: Text('Polygon sides: $sides'),
                       subtitle: Slider(value: sides.toDouble(), min: 3, max: 24, divisions: 21, onChanged: (v) {
                           setModal(() => sides = v.round());
@@ -5895,6 +5922,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     ),
                     if (curve == 'custom')
                       ListTile(
+                        leading: const Icon(Icons.tune_rounded),
                         title: Text('Custom pressure curve: ${exponent.toStringAsFixed(2)}'),
                         subtitle: Slider(value: exponent.clamp(.35, 2.5), min: .35, max: 2.5, onChanged: (v) {
                           setModal(() => exponent = v);
