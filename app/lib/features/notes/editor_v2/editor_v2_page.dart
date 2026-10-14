@@ -2721,20 +2721,18 @@ class _EditorV2PageState extends State<EditorV2Page>
       padding: const EdgeInsets.all(1),
       child: Tooltip(
         message: '${tool.label}\nDouble-tap for its own settings',
-        child: GestureDetector(
-          onDoubleTapDown: (details) => _toolSettingsAnchor = details.globalPosition,
-          onDoubleTap: () => _strokeSettings(tool, _toolSettingsAnchor),
-          child: Material(
-            color: _tool == tool ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surface,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-              side: BorderSide(color: _tool == tool ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outlineVariant.withValues(alpha: .65)),
-            ),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(8),
-              onTap: () => _selectTool(tool),
-              child: SizedBox(width: 31, height: 31, child: Icon(_toolIcon(tool), size: 18, color: _tool == tool ? Theme.of(context).colorScheme.primary : null)),
-            ),
+        child: Material(
+          color: _tool == tool ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(color: _tool == tool ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outlineVariant.withValues(alpha: .65)),
+          ),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTapDown: (details) => _toolSettingsAnchor = details.globalPosition,
+            onDoubleTap: () => _strokeSettings(tool, _toolSettingsAnchor),
+            onTap: () => _selectTool(tool),
+            child: SizedBox(width: 31, height: 31, child: Icon(_toolIcon(tool), size: 18, color: _tool == tool ? Theme.of(context).colorScheme.primary : null)),
           ),
         ),
       ),
@@ -4393,26 +4391,24 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
                 itemBuilder: (_, index) {
                   final tool = items[index];
                   final selected = tool == widget.selected;
-                  return GestureDetector(
-                    onDoubleTapDown: (details) => _lastGlobalPointer = details.globalPosition,
+                  return InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTapDown: (details) => _lastGlobalPointer = details.globalPosition,
                     onDoubleTap: () => Navigator.pop(
                       context,
                       _ToolPickerChoice(tool, configure: true, anchor: _lastGlobalPointer),
                     ),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(10),
-                      onTap: () => Navigator.pop(context, _ToolPickerChoice(tool)),
-                      child: Ink(
-                        decoration: BoxDecoration(
-                          color: selected ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: selected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outlineVariant),
-                        ),
-                        child: Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(5),
-                            child: Text(tool.label, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
-                          ),
+                    onTap: () => Navigator.pop(context, _ToolPickerChoice(tool)),
+                    child: Ink(
+                      decoration: BoxDecoration(
+                        color: selected ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: selected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outlineVariant),
+                      ),
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(5),
+                          child: Text(tool.label, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
                         ),
                       ),
                     ),
