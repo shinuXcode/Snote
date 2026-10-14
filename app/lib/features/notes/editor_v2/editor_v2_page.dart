@@ -3516,6 +3516,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       CanvasTool.eraser => Icons.cleaning_services_rounded,
       CanvasTool.pixelEraser => Icons.auto_fix_normal_rounded,
       CanvasTool.lasso => Icons.gesture_rounded,
+      CanvasTool.fill => Icons.format_color_fill_rounded,
       CanvasTool.line || CanvasTool.dashedLine || CanvasTool.dottedLine => Icons.horizontal_rule_rounded,
       CanvasTool.arrow || CanvasTool.vectorArrow => Icons.trending_flat_rounded,
       CanvasTool.rectangle || CanvasTool.roundedRectangle => Icons.crop_square_rounded,
@@ -3532,66 +3533,89 @@ class _EditorV2PageState extends State<EditorV2Page>
     };
   }
 
+  Widget _buildToolbarToolButton(CanvasTool tool) {
+    Widget tile({required bool faded}) => Opacity(
+          opacity: faded ? .25 : 1,
+          child: Tooltip(
+            message: '${tool.label}\nDouble-tap for settings • long-press and drag to reorder',
+            child: Material(
+              color: _tool == tool ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(7),
+                side: BorderSide(color: _tool == tool ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outlineVariant.withValues(alpha: .65)),
+              ),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(7),
+                onTapDown: (details) => _toolSettingsAnchor = details.globalPosition,
+                onDoubleTap: () => _strokeSettings(tool, _toolSettingsAnchor),
+                onTap: () => _selectTool(tool),
+                child: SizedBox(width: 27, height: 27, child: Icon(_toolIcon(tool), size: 16, color: _tool == tool ? Theme.of(context).colorScheme.primary : null)),
+              ),
+            ),
+          ),
+        );
+
+    return DragTarget<CanvasTool>(
+      onWillAcceptWithDetails: (details) => details.data != tool,
+      onAcceptWithDetails: (details) => _reorderToolbarTool(details.data, tool),
+      builder: (context, candidates, rejected) => LongPressDraggable<CanvasTool>(
+        data: tool,
+        maxSimultaneousDrags: 1,
+        feedback: Material(
+          elevation: 8,
+          borderRadius: BorderRadius.circular(7),
+          child: SizedBox(width: 29, height: 29, child: Icon(_toolIcon(tool), size: 17, color: Theme.of(context).colorScheme.primary)),
+        ),
+        childWhenDragging: tile(faded: true),
+        child: tile(faded: false),
+      ),
+    );
+  }
+
   Widget _buildToolbar({required bool vertical}) {
     Widget action({required String tooltip, required IconData icon, required VoidCallback onPressed, Color? color}) =>
         IconButton(
           visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
-          padding: const EdgeInsets.all(4),
-          constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+          padding: const EdgeInsets.all(2),
+          constraints: const BoxConstraints.tightFor(width: 28, height: 28),
           tooltip: tooltip,
           onPressed: onPressed,
-          icon: Icon(icon, size: 19, color: color),
+          icon: Icon(icon, size: 17, color: color),
         );
     final actions = <Widget>[
       action(tooltip: _panMode ? 'Exit pan mode' : 'Pan / zoom', icon: _panMode ? Icons.pan_tool : Icons.pan_tool_outlined, onPressed: () => setState(() => _panMode = !_panMode)),
-      action(tooltip: 'Undo', icon: Icons.undo_rounded, onPressed: _undo),
-      action(tooltip: 'Redo', icon: Icons.redo_rounded, onPressed: _redo),
       action(tooltip: _textMode ? 'Handwriting mode' : 'Rich text mode', icon: _textMode ? Icons.draw_rounded : Icons.text_fields_rounded, onPressed: () => setState(() { _textMode = !_textMode; _scheduleSave(); })),
       action(tooltip: 'Color palette', icon: Icons.palette_outlined, color: _color, onPressed: _chooseColor),
-      action(tooltip: 'Tool settings', icon: Icons.tune_rounded, onPressed: () => _strokeSettings()),
       action(tooltip: 'Text box', icon: Icons.text_fields_rounded, onPressed: _addTextBox),
       action(tooltip: 'Paste screenshot from clipboard', icon: Icons.content_paste_rounded, onPressed: () => unawaited(_pasteClipboardImage())),
-      action(tooltip: 'Scientific calculator', icon: Icons.calculate_outlined, onPressed: _openCalculator),
+      action(tooltip: 'Selection clipboard history', icon: Icons.content_paste_go_rounded, onPressed: () => unawaited(_showClipboardHistory())),
+      action(tooltip: 'Shape box', icon: Icons.category_outlined, onPressed: () => _openToolPicker(initialCategory: 'Shapes & diagrams')),
+      action(tooltip: 'Sticker library', icon: Icons.emoji_emotions_outlined, onPressed: () => unawaited(_addSticker())),
       action(tooltip: 'All tools / categories', icon: Icons.apps_rounded, onPressed: _openToolPicker),
-      action(tooltip: 'Save current tool to pen case', icon: Icons.add_circle_outline_rounded, onPressed: _addFavoritePen),
     ];
-    final quickButtons = _quickTools.map((tool) => Padding(
+    final quickButtons = _toolbarTools.map((tool) => Padding(
       padding: const EdgeInsets.all(1),
-      child: Tooltip(
-        message: '${tool.label}\nDouble-tap for its own settings',
-        child: Material(
-          color: _tool == tool ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-            side: BorderSide(color: _tool == tool ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outlineVariant.withValues(alpha: .65)),
-          ),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(8),
-            onTapDown: (details) => _toolSettingsAnchor = details.globalPosition,
-            onDoubleTap: () => _strokeSettings(tool, _toolSettingsAnchor),
-            onTap: () => _selectTool(tool),
-            child: SizedBox(width: 31, height: 31, child: Icon(_toolIcon(tool), size: 18, color: _tool == tool ? Theme.of(context).colorScheme.primary : null)),
-          ),
-        ),
-      ),
+      child: _buildToolbarToolButton(tool),
     )).toList();
     final children = <Widget>[
       ...actions,
       if (!vertical) const VerticalDivider(width: 5, indent: 6, endIndent: 6),
       ...quickButtons,
       action(tooltip: 'Insert page', icon: Icons.note_add_outlined, onPressed: _addPage),
-      action(tooltip: 'Page template', icon: Icons.grid_on_rounded, onPressed: _chooseTemplate),
       PopupMenuButton<String>(
         tooltip: 'Workspace options',
         padding: EdgeInsets.zero,
-        constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+        constraints: const BoxConstraints.tightFor(width: 28, height: 28),
         onSelected: _onMenuSelected,
         itemBuilder: (_) => <PopupMenuEntry<String>>[
           PopupMenuItem(value: 'text', child: Text('Insert text box')),
           PopupMenuItem(value: 'image', child: Text('Insert image from file')),
           PopupMenuItem(value: 'clipboardImage', child: Text('Paste screenshot from clipboard')),
           PopupMenuItem(value: 'pasteSelection', enabled: _selectionClipboard != null, child: Text('Paste copied selection')),
+          PopupMenuItem(value: 'clipboardHistory', enabled: _selectionClipboardHistory.isNotEmpty, child: Text('Clipboard history (last 4)')),
+          PopupMenuItem(value: 'calculator', child: Text('Scientific calculator')),
           PopupMenuItem(value: 'sticker', child: Text('Sticker library')),
+
           PopupMenuItem(value: 'pdf', child: Text('Import / annotate PDF')),
           PopupMenuItem(value: 'export', child: Text('Export pages to PDF')),
           PopupMenuItem(value: 'bookmarks', child: Text('Bookmarks')),
@@ -3606,7 +3630,6 @@ class _EditorV2PageState extends State<EditorV2Page>
           PopupMenuItem(value: 'favoritesOrientation', child: Text('Rotate pen case')),
           PopupMenuItem(value: 'pageNavigation', child: Text('Show / hide page navigation')),
           PopupMenuItem(value: 'floatingPageNavigation', child: Text('Toggle movable vertical page bar')),
-          PopupMenuItem(value: 'palmRejection', child: Text('Toggle palm rejection')),
           PopupMenuItem(value: 'pageSettings', child: Text('Note page and editor settings')),
           PopupMenuItem(value: 'zoomIn', child: Text('Zoom in')),
           PopupMenuItem(value: 'zoomOut', child: Text('Zoom out')),
@@ -3630,7 +3653,29 @@ class _EditorV2PageState extends State<EditorV2Page>
   }
 
   Widget _buildFavoriteShowcase() {
-    final chips = _favoritePens.map((favorite) {
+    final placedToolChips = _pencaseTools.map((tool) {
+      final active = _tool == tool;
+      return Tooltip(
+        message: '${tool.label} • tap to choose, long-press to configure',
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () => _selectTool(tool),
+          onLongPress: () => _strokeSettings(tool),
+          child: Container(
+            width: _favoritesVertical ? 34 : 38,
+            height: _favoritesVertical ? 38 : 34,
+            margin: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              color: active ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: active ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outlineVariant),
+            ),
+            child: Icon(_toolIcon(tool), size: 16),
+          ),
+        ),
+      );
+    }).toList();
+    final favoriteChips = _favoritePens.map((favorite) {
       final favoriteTool = CanvasTool.values.where((tool) => tool.name == favorite['tool']?.toString()).firstOrNull ?? CanvasTool.ballpoint;
       final color = Color((favorite['color'] as num?)?.toInt() ?? 0xff17202a);
       final active = _tool == favoriteTool && _color.toARGB32() == color.toARGB32() && (_size - ((favorite['size'] as num?)?.toDouble() ?? 3)).abs() < .1;
@@ -3641,8 +3686,8 @@ class _EditorV2PageState extends State<EditorV2Page>
           onTap: () => _applyFavorite(favorite),
           onLongPress: () => _removeFavorite(favorite),
           child: Container(
-            width: _favoritesVertical ? 38 : 42,
-            height: _favoritesVertical ? 42 : 38,
+            width: _favoritesVertical ? 34 : 38,
+            height: _favoritesVertical ? 38 : 34,
             margin: const EdgeInsets.all(2),
             decoration: BoxDecoration(
               color: active ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surface,
@@ -3660,6 +3705,7 @@ class _EditorV2PageState extends State<EditorV2Page>
         ),
       );
     }).toList();
+    final chips = <Widget>[...placedToolChips, ...favoriteChips];
     final screen = MediaQuery.sizeOf(context);
     return Positioned(
       left: _favoriteOffset.dx.clamp(0, math.max(0, screen.width - (_favoritesVertical ? 62 : 120))).toDouble(),
@@ -4459,6 +4505,30 @@ class _EditorV2PageState extends State<EditorV2Page>
         titleSpacing: 0,
         title: Row(
           children: [
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 27, height: 30),
+              tooltip: 'Page previews and reorder',
+              onPressed: _showPagePicker,
+              icon: const Icon(Icons.view_carousel_outlined, size: 18),
+            ),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 27, height: 30),
+              tooltip: 'Undo',
+              onPressed: _undoStack.isEmpty ? null : _undo,
+              icon: const Icon(Icons.undo_rounded, size: 18),
+            ),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 27, height: 30),
+              tooltip: 'Redo',
+              onPressed: _redoStack.isEmpty ? null : _redo,
+              icon: const Icon(Icons.redo_rounded, size: 18),
+            ),
             Expanded(
               child: TextField(
                 controller: _title,
@@ -4570,37 +4640,35 @@ class _EditorV2PageState extends State<EditorV2Page>
               onPressed: () => _save(force: true),
               icon: Icon(Icons.cloud_off_rounded, color: Theme.of(context).colorScheme.error),
             ),
-          IconButton(
-            visualDensity: VisualDensity.compact,
-            tooltip: 'Undo',
-            onPressed: _undoStack.isEmpty ? null : _undo,
-            icon: const Icon(Icons.undo_rounded),
-          ),
-          IconButton(
-            visualDensity: VisualDensity.compact,
-            tooltip: 'Redo',
-            onPressed: _redoStack.isEmpty ? null : _redo,
-            icon: const Icon(Icons.redo_rounded),
-          ),
-          IconButton(
-            visualDensity: VisualDensity.compact,
-            tooltip: 'Page previews and reorder',
-            onPressed: _showPagePicker,
-            icon: const Icon(Icons.view_carousel_outlined),
-          ),
+          if (_showNoteSwitcherInTitleBar)
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Switch note',
+              onPressed: _openNoteSwitcher,
+              icon: const Icon(Icons.tab_rounded),
+            ),
+          if (MediaQuery.sizeOf(context).width >= 500)
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Page template',
+              onPressed: _chooseTemplate,
+              icon: const Icon(Icons.grid_on_rounded),
+            ),
+          ..._titleBarTools.map((tool) => GestureDetector(
+            onDoubleTap: () => _strokeSettings(tool),
+            child: IconButton(
+              visualDensity: VisualDensity.compact,
+              tooltip: '${tool.label} • double-tap for settings',
+              onPressed: () => _selectTool(tool),
+              icon: Icon(_toolIcon(tool), size: 19),
+            ),
+          )),
           if (_hasPdfBackgroundPages && MediaQuery.sizeOf(context).width < 640)
             IconButton(
               visualDensity: VisualDensity.compact,
               tooltip: _pdfBackgroundVisible ? 'Switch to Notes layer' : 'Switch to PDF layer',
               onPressed: () => _setPdfBackgroundVisible(!_pdfBackgroundVisible),
               icon: Icon(_pdfBackgroundVisible ? Icons.edit_note_rounded : Icons.picture_as_pdf_rounded),
-            ),
-          if (MediaQuery.sizeOf(context).width >= 520)
-            IconButton(
-              visualDensity: VisualDensity.compact,
-              tooltip: 'Scientific calculator',
-              onPressed: _openCalculator,
-              icon: const Icon(Icons.calculate_outlined),
             ),
           PopupMenuButton<String>(
             tooltip: 'Note and application controls',
@@ -4612,8 +4680,13 @@ class _EditorV2PageState extends State<EditorV2Page>
               const PopupMenuItem(value: 'image', child: Text('Insert image from file')),
               const PopupMenuItem(value: 'clipboardImage', child: Text('Paste screenshot from clipboard')),
               PopupMenuItem(value: 'pasteSelection', enabled: _selectionClipboard != null, child: const Text('Paste copied selection')),
+              PopupMenuItem(value: 'clipboardHistory', enabled: _selectionClipboardHistory.isNotEmpty, child: const Text('Clipboard history (last 4)')),
               const PopupMenuItem(value: 'pageSettings', child: Text('Note page settings')),
               const PopupMenuItem(value: 'appSettings', child: Text('App settings')),
+              const PopupMenuItem(value: 'template', child: Text('Page template')),
+              PopupMenuItem(value: 'toggleNoteSwitcher', child: Text(_showNoteSwitcherInTitleBar ? 'Hide note switcher in title bar' : 'Show note switcher in title bar')),
+              const PopupMenuItem(value: 'noteSwitcher', child: Text('Switch note')),
+              const PopupMenuItem(value: 'calculator', child: Text('Scientific calculator')),
               if (_hasPdfBackgroundPages) ...[
                 PopupMenuItem(value: 'notesLayer', child: Text(_pdfBackgroundVisible ? 'Switch to notes layer' : 'Notes layer active')),
                 PopupMenuItem(value: 'pdfLayer', child: Text(_pdfBackgroundVisible ? 'PDF layer active' : 'Switch to PDF layer')),
@@ -4626,7 +4699,7 @@ class _EditorV2PageState extends State<EditorV2Page>
               const PopupMenuItem(value: 'save', child: Text('Save note now')),
               const PopupMenuItem(value: 'export', child: Text('Export annotated document to PDF')),
             ],
-            icon: const Icon(Icons.more_vert_rounded),
+            icon: const Icon(Icons.settings_rounded),
           ),
         ],
       ),
@@ -4726,7 +4799,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           children: [
             if (!_floatingToolbar)
               SizedBox(
-                width: 40,
+                width: 34,
                 child: _buildToolbar(vertical: true),
               ),
             Expanded(child: canvasWithFooter),
@@ -4738,7 +4811,7 @@ class _EditorV2PageState extends State<EditorV2Page>
             Expanded(child: canvasWithFooter),
             if (!_floatingToolbar)
               SizedBox(
-                width: 40,
+                width: 34,
                 child: _buildToolbar(vertical: true),
               ),
           ],
