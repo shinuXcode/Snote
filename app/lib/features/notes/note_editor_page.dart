@@ -1137,7 +1137,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
               ),
               if (!_full) _header(),
               if (!_full && _tabsVisible) _openNotesTabsBar(),
-              if (!_full && !_readingMode) _movablePageChanger(),
+              if (!_full && !_readingMode && _settings.getBool('showPageNavigation')) _movablePageChanger(),
               if (_preview && !_full && !_readingMode) _previewRail(),
               if (_toolbar && _draw && !_readingMode) _toolbarWidget(),
               if (!_full && _draw && !_readingMode) _toolPencaseWidget(),
@@ -2641,57 +2641,79 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
 
   Widget _movablePageChanger() {
     final size = MediaQuery.sizeOf(context);
+    final defaultLeft = math.max(0.0, size.width - 42);
+    final left = (_pageChangerX < 0 ? defaultLeft : _pageChangerX)
+        .clamp(0.0, math.max(0.0, size.width - 40))
+        .toDouble();
+    final top = _pageChangerY
+        .clamp(50.0, math.max(50.0, size.height - 142))
+        .toDouble();
+
     return Positioned(
-      left: _pageChangerX < 0 ? null : _pageChangerX,
+      left: _pageChangerX < 0 ? null : left,
       right: _pageChangerX < 0 ? 8 : null,
-      top: _pageChangerY.clamp(50.0, math.max(50.0, size.height - 62)),
+      top: top,
       child: Material(
-        elevation: 8,
+        elevation: 3,
         color: Theme.of(context).colorScheme.surface.withValues(alpha: .94),
-        borderRadius: BorderRadius.circular(16),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          GestureDetector(
-            onPanUpdate: (details) {
-              setState(() {
-                final x = _pageChangerX < 0 ? size.width - 166 : _pageChangerX;
-                _pageChangerX = (x + details.delta.dx).clamp(4.0, math.max(4.0, size.width - 170));
-                _pageChangerY = (_pageChangerY + details.delta.dy).clamp(50.0, math.max(50.0, size.height - 62));
-              });
-            },
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 5, vertical: 8),
-              child: Icon(Icons.drag_indicator_rounded, size: 18),
-            ),
+        borderRadius: BorderRadius.circular(11),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              GestureDetector(
+                onPanUpdate: (details) {
+                  setState(() {
+                    _pageChangerX = (left + details.delta.dx)
+                        .clamp(2.0, math.max(2.0, size.width - 42))
+                        .toDouble();
+                    _pageChangerY = (top + details.delta.dy)
+                        .clamp(50.0, math.max(50.0, size.height - 142))
+                        .toDouble();
+                  });
+                },
+                child: const SizedBox(
+                  width: 28,
+                  height: 16,
+                  child: Icon(Icons.drag_indicator_rounded, size: 14),
+                ),
+              ),
+              if (_settings.getBool('showPageNumbers'))
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Text(
+                    '${_page + 1}/${_pages.length}',
+                    style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800),
+                  ),
+                ),
+              IconButton(
+                onPressed: _previousPage,
+                tooltip: 'Previous page',
+                constraints: const BoxConstraints.tightFor(width: 28, height: 26),
+                padding: EdgeInsets.zero,
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.keyboard_arrow_up_rounded, size: 18),
+              ),
+              IconButton(
+                onPressed: _nextPage,
+                tooltip: 'Next page',
+                constraints: const BoxConstraints.tightFor(width: 28, height: 26),
+                padding: EdgeInsets.zero,
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+              ),
+              IconButton(
+                onPressed: _addPage,
+                tooltip: 'Add page',
+                constraints: const BoxConstraints.tightFor(width: 28, height: 26),
+                padding: EdgeInsets.zero,
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.add_rounded, size: 17),
+              ),
+            ],
           ),
-          IconButton(
-            onPressed: _previousPage,
-            tooltip: 'Previous page',
-            constraints: const BoxConstraints.tightFor(width: 30, height: 34),
-            padding: EdgeInsets.zero,
-            visualDensity: VisualDensity.compact,
-            icon: const Icon(Icons.chevron_left_rounded, size: 20),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 3),
-            child: Text('${_page + 1}/${_pages.length}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
-          ),
-          IconButton(
-            onPressed: _nextPage,
-            tooltip: 'Next page',
-            constraints: const BoxConstraints.tightFor(width: 30, height: 34),
-            padding: EdgeInsets.zero,
-            visualDensity: VisualDensity.compact,
-            icon: const Icon(Icons.chevron_right_rounded, size: 20),
-          ),
-          IconButton(
-            onPressed: _addPage,
-            tooltip: 'Add page',
-            constraints: const BoxConstraints.tightFor(width: 30, height: 34),
-            padding: EdgeInsets.zero,
-            visualDensity: VisualDensity.compact,
-            icon: const Icon(Icons.add_rounded, size: 18),
-          ),
-        ]),
+        ),
       ),
     );
   }
