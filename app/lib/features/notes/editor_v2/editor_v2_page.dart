@@ -108,6 +108,8 @@ class _EditorV2PageState extends State<EditorV2Page>
   final Map<String, Future<PdfDocument>> _pdfDocumentFutures = <String, Future<PdfDocument>>{};
   final Map<String, Future<Uint8List?>> _pdfRasterPending = <String, Future<Uint8List?>>{};
   final LinkedHashMap<String, Uint8List> _pdfRasterCache = LinkedHashMap<String, Uint8List>();
+  final LinkedHashMap<String, Future<Uint8List?>> _pdfRasterFutureCache =
+      LinkedHashMap<String, Future<Uint8List?>>();
   final Set<int> _activePointers = <int>{};
   final Set<int> _ignoredPointers = <int>{};
   final Set<int> _stylusPointers = <int>{};
@@ -504,29 +506,61 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
   }
 
-  Future<Uint8List?> _lazyPdfPageRaster(String assetId, int pageNumber, {bool thumbnail = false}) async {
+  void _rememberPdfRasterFuture(String key, Future<Uint8List?> future) {
+    _pdfRasterFutureCache.remove(key);
+    _pdfRasterFutureCache[key] = future;
+    while (_pdfRasterFutureCache.length > 12) {
+      _pdfRasterFutureCache.remove(_pdfRasterFutureCache.keys.first);
+    }
+  }
+
+  Future<Uint8List?> _lazyPdfPageRaster(
+    String assetId,
+    int pageNumber, {
+    bool thumbnail = false,
+  }) {
     final key = '$assetId:$pageNumber:${thumbnail ? 'thumb' : 'full'}';
-    final cached = _pdfRasterCache.remove(key);
-    if (cached != null) {
-      _pdfRasterCache[key] = cached;
-      return cached;
+
+    final cachedFuture = _pdfRasterFutureCache.remove(key);
+    if (cachedFuture != null) {
+      _pdfRasterFutureCache[key] = cachedFuture;
+      return cachedFuture;
     }
+
+    final cachedBytes = _pdfRasterCache.remove(key);
+    if (cachedBytes != null) {
+      _pdfRasterCache[key] = cachedBytes;
+      final ready = Future<Uint8List?>.value(cachedBytes);
+      _rememberPdfRasterFuture(key, ready);
+      return ready;
+    }
+
     final pending = _pdfRasterPending[key];
-    if (pending != null) return pending;
-    final future = _renderPdfPageRaster(assetId, pageNumber, thumbnail: thumbnail);
-    _pdfRasterPending[key] = future;
-    try {
-      final bytes = await future;
-      if (bytes != null && bytes.isNotEmpty) {
-        _pdfRasterCache[key] = bytes;
-        while (_pdfRasterCache.length > 12) {
-          _pdfRasterCache.remove(_pdfRasterCache.keys.first);
-        }
-      }
-      return bytes;
-    } finally {
-      _pdfRasterPending.remove(key);
+    if (pending != null) {
+      _rememberPdfRasterFuture(key, pending);
+      return pending;
     }
+
+    final future = _renderPdfPageRaster(
+      assetId,
+      pageNumber,
+      thumbnail: thumbnail,
+    );
+    _pdfRasterPending[key] = future;
+    _rememberPdfRasterFuture(key, future);
+    unawaited(future.then<void>((bytes) {
+      if (bytes == null || bytes.isEmpty) return;
+      _pdfRasterCache.remove(key);
+      _pdfRasterCache[key] = bytes;
+      while (_pdfRasterCache.length > 12) {
+        _pdfRasterCache.remove(_pdfRasterCache.keys.first);
+      }
+    }).catchError((Object error) {
+      debugPrint('[Snote][EditorV2] lazy PDF page render failed ($pageNumber): $error');
+    }).whenComplete(() {
+      _pdfRasterPending.remove(key);
+    }));
+    return future;
   }
 
   Future<({List<Map<String, Object?>> pages, int totalPages})> _renderPdfPages(
@@ -4749,17 +4783,43 @@ class _EditorV2PageState extends State<EditorV2Page>
                     color: index == _page ? Theme.of(context).colorScheme.primaryContainer : null,
                     child: ListTile(
                       leading: SizedBox(
-                        width: 38,
-                        height: 48,
-                        child: CustomPaint(
-                          painter: PageBackground(
-                            template: PageTemplate.values.firstWhere((value) => value.name == template, orElse: () => PageTemplate.blank),
-                            paperColor: Color((page['paperColor'] as num?)?.toInt() ?? 0xffffffff),
-                            lineColor: Color((page['lineColor'] as num?)?.toInt() ?? 0xffd8dee8),
-                            spacing: 8,
-                            lineOpacity: ((page['lineOpacity'] as num?)?.toDouble() ?? .85).clamp(0, 1).toDouble(),
+                        width: 42,
+                        height: 52,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              _buildPageBackground(page, showPdf: true, thumbnail: true),
+                              Align(
+                                alignment: Alignment.bottomRight,
+                                child: Container(
+                                  margin: const EdgeInsets.all(2),
+                                  padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: .88),
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
+                                  child: Text(
+                                    '${index + 1}',
+                                    style: const TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w900,
+                                      color: Colors.black,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              if (isPdf)
+                                const Align(
+                                  alignment: Alignment.topLeft,
+                                  child: Padding(
+                                    padding: EdgeInsets.all(2),
+                                    child: Icon(Icons.picture_as_pdf_rounded, size: 10, color: Colors.redAccent),
+                                  ),
+                                ),
+                            ],
                           ),
-                          child: Center(child: Text('${index + 1}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900))),
                         ),
                       ),
                       title: Text('Page ${index + 1}'),
@@ -5595,6 +5655,155 @@ class _ToolPickerChoice {
   const _ToolPickerChoice(this.tool, {this.configure = false, this.anchor});
 }
 
+class _EditorV2ShapePreviewPainter extends CustomPainter {
+  final String shape;
+  final Color color;
+
+  const _EditorV2ShapePreviewPainter({
+    required this.shape,
+    required this.color,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final bounds = Rect.fromCenter(
+      center: Offset(size.width / 2, size.height / 2),
+      width: size.width * .72,
+      height: size.height * .72,
+    );
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.8
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..isAntiAlias = true;
+
+    Path polygon(List<Offset> points) {
+      final path = Path()..moveTo(points.first.dx, points.first.dy);
+      for (final point in points.skip(1)) {
+        path.lineTo(point.dx, point.dy);
+      }
+      path.close();
+      return path;
+    }
+
+    void drawArrowHead(Offset from, Offset to) {
+      final direction = to - from;
+      if (direction.distance < 1) return;
+      final unit = direction / direction.distance;
+      final normal = Offset(-unit.dy, unit.dx);
+      final base = to - unit * 5;
+      canvas.drawLine(to, base + normal * 3, paint);
+      canvas.drawLine(to, base - normal * 3, paint);
+    }
+
+    final name = shape.toLowerCase();
+    if (name.contains('doublearrow')) {
+      final a = Offset(bounds.left, bounds.center.dy);
+      final b = Offset(bounds.right, bounds.center.dy);
+      canvas.drawLine(a, b, paint);
+      drawArrowHead(a, b);
+      drawArrowHead(b, a);
+    } else if (name.contains('arrow') || name == 'vectorarrow') {
+      final a = Offset(bounds.left, bounds.bottom);
+      final b = Offset(bounds.right, bounds.top);
+      canvas.drawLine(a, b, paint);
+      drawArrowHead(a, b);
+    } else if (name.contains('line') || name == 'divider' || name == 'raydiagram') {
+      canvas.drawLine(
+        Offset(bounds.left, bounds.bottom),
+        Offset(bounds.right, bounds.top),
+        paint,
+      );
+    } else if (name.contains('roundedrectangle') || name == 'flowchartterminator') {
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(bounds, const Radius.circular(4)),
+        paint,
+      );
+    } else if (name.contains('rectangle') || name == 'flowchartprocess' || name == 'cuboid') {
+      canvas.drawRect(bounds, paint);
+    } else if (name.contains('ellipse') || name == 'circle' || name == 'sphere' || name == 'flowchartconnector') {
+      canvas.drawOval(bounds, paint);
+    } else if (name.contains('triangle') || name == 'pyramid') {
+      canvas.drawPath(polygon(<Offset>[
+        Offset(bounds.center.dx, bounds.top),
+        bounds.bottomRight,
+        bounds.bottomLeft,
+      ]), paint);
+    } else if (name.contains('diamond') || name == 'flowchartdecision') {
+      canvas.drawPath(polygon(<Offset>[
+        Offset(bounds.center.dx, bounds.top),
+        bounds.centerRight,
+        Offset(bounds.center.dx, bounds.bottom),
+        bounds.centerLeft,
+      ]), paint);
+    } else if (name.contains('parallelogram') || name == 'flowchartinputoutput') {
+      canvas.drawPath(polygon(<Offset>[
+        Offset(bounds.left + bounds.width * .2, bounds.top),
+        bounds.topRight,
+        Offset(bounds.right - bounds.width * .2, bounds.bottom),
+        bounds.bottomLeft,
+      ]), paint);
+    } else if (name.contains('star')) {
+      final points = List<Offset>.generate(10, (index) {
+        final radius = index.isEven ? .48 : .22;
+        final angle = -math.pi / 2 + index * math.pi / 5;
+        return Offset(
+          bounds.center.dx + math.cos(angle) * bounds.width * radius,
+          bounds.center.dy + math.sin(angle) * bounds.height * radius,
+        );
+      });
+      canvas.drawPath(polygon(points), paint);
+    } else if (name.contains('hexagon') ||
+        name.contains('pentagon') ||
+        name.contains('octagon') ||
+        name.contains('nonagon') ||
+        name.contains('decagon') ||
+        name.contains('custompolygon')) {
+      final sides = name.contains('pentagon')
+          ? 5
+          : name.contains('octagon')
+              ? 8
+              : name.contains('nonagon')
+                  ? 9
+                  : name.contains('decagon')
+                      ? 10
+                      : 6;
+      final points = List<Offset>.generate(sides, (index) {
+        final angle = -math.pi / 2 + index * math.pi * 2 / sides;
+        return Offset(
+          bounds.center.dx + math.cos(angle) * bounds.width * .48,
+          bounds.center.dy + math.sin(angle) * bounds.height * .48,
+        );
+      });
+      canvas.drawPath(polygon(points), paint);
+    } else if (name.contains('graph') || name.contains('chart') || name.contains('plot')) {
+      canvas.drawLine(bounds.bottomLeft, bounds.topLeft, paint);
+      canvas.drawLine(bounds.bottomLeft, bounds.bottomRight, paint);
+      final curve = Path()
+        ..moveTo(bounds.left + bounds.width * .12, bounds.bottom - bounds.height * .15)
+        ..lineTo(bounds.left + bounds.width * .38, bounds.top + bounds.height * .45)
+        ..lineTo(bounds.left + bounds.width * .58, bounds.top + bounds.height * .58)
+        ..lineTo(bounds.right - bounds.width * .08, bounds.top + bounds.height * .14);
+      canvas.drawPath(curve, paint);
+    } else {
+      // Science and math tools without a dedicated pictogram still get a
+      // visible preview, rather than a blank card.
+      canvas.drawRect(bounds, paint);
+      canvas.drawLine(
+        Offset(bounds.left, bounds.bottom),
+        Offset(bounds.right, bounds.top),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _EditorV2ShapePreviewPainter oldDelegate) =>
+      oldDelegate.shape != shape || oldDelegate.color != color;
+}
+
 class _EditorV2ToolPicker extends StatefulWidget {
   final CanvasTool selected;
   final String? initialCategory;
@@ -5718,31 +5927,17 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
     final scheme = Theme.of(context).colorScheme;
     if (tool.isShape) {
       return SizedBox(
-        width: 48,
-        height: 30,
+        width: 42,
+        height: 26,
         child: CustomPaint(
-          painter: EditorV2InkPainter(
-            strokes: <Stroke>[
-              Stroke(
-                id: 'picker-preview-' + tool.name,
-                points: const <StrokePoint>[
-                  StrokePoint(position: Offset(4, 4)),
-                  StrokePoint(position: Offset(44, 26)),
-                ],
-                pen: PenConfig(
-                  type: PenType.ballpoint,
-                  color: scheme.primary,
-                  size: 1.5,
-                ),
-                shape: tool.name,
-                dashed: tool == CanvasTool.dashedLine || tool == CanvasTool.dottedLine,
-              ),
-            ],
+          painter: _EditorV2ShapePreviewPainter(
+            shape: tool.name,
+            color: scheme.primary,
           ),
         ),
       );
     }
-    return Icon(_pickerIcon(tool), size: 26, color: scheme.primary);
+    return Icon(_pickerIcon(tool), size: 23, color: scheme.primary);
   }
 
   @override
@@ -5797,14 +5992,18 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
             ),
             const SizedBox(height: 8),
             SizedBox(
-              height: MediaQuery.sizeOf(context).height * .56,
+              height: MediaQuery.sizeOf(context).height * .54,
               child: GridView.builder(
                 itemCount: items.length,
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: MediaQuery.sizeOf(context).width >= 1100
+                      ? 5
+                      : MediaQuery.sizeOf(context).width >= 700
+                          ? 4
+                          : 3,
                   crossAxisSpacing: 6,
                   mainAxisSpacing: 6,
-                  childAspectRatio: 1.22,
+                  childAspectRatio: 1.7,
                 ),
                 itemBuilder: (_, index) {
                   final tool = items[index];
