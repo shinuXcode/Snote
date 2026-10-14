@@ -3155,6 +3155,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     var opacity = target == _tool ? _opacity : 1.0;
     var color = _toolColorOverrides[target.name] ?? _defaultToolColor(target);
     var fill = target == _tool && _fill;
+    final selectedLocations = <String>{
+      ...(_resolvedToolPlacements()[target.name] ?? const <String>['hidden']),
+    };
+    const placementLocations = <String>['titleBar', 'toolbar', 'pencase', 'hidden'];
     var showAdvanced = false;
     await showGeneralDialog<void>(
       context: context,
@@ -3247,6 +3251,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                               SwitchListTile(
                                 contentPadding: EdgeInsets.zero,
                                 dense: true,
+                                secondary: const Icon(Icons.format_color_fill_outlined),
                                 value: fill,
                                 onChanged: (value) {
                                   setPopup(() => fill = value);
@@ -3254,6 +3259,55 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                                 },
                                 title: const Text('Fill shape'),
                               ),
+                            const Divider(height: 18),
+                            const Text('Display location', style: TextStyle(fontWeight: FontWeight.w900)),
+                            ...placementLocations.map((location) => CheckboxListTile(
+                              contentPadding: EdgeInsets.zero,
+                              dense: true,
+                              secondary: Icon(_toolPlacementIcon(location), size: 19),
+                              title: Text(_toolPlacementLabel(location)),
+                              value: selectedLocations.contains(location) ||
+                                  (location == 'hidden' && selectedLocations.isEmpty),
+                              onChanged: (value) => setPopup(() {
+                                if (value == true) {
+                                  if (location == 'hidden') {
+                                    selectedLocations..clear()..add('hidden');
+                                  } else {
+                                    selectedLocations..remove('hidden')..add(location);
+                                  }
+                                } else {
+                                  selectedLocations.remove(location);
+                                }
+                              }),
+                            )),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: () async {
+                                  final next = _resolvedToolPlacements();
+                                  next[target.name] = <String>['pencase'];
+                                  await _saveToolLayout(next, _toolOrder);
+                                  if (dialogContext.mounted) Navigator.pop(dialogContext);
+                                },
+                                icon: const Icon(Icons.inventory_2_outlined, size: 18),
+                                label: const Text('Collect to Pencase'),
+                              ),
+                            ),
+                            SizedBox(
+                              width: double.infinity,
+                              child: FilledButton.icon(
+                                onPressed: () async {
+                                  final next = _resolvedToolPlacements();
+                                  next[target.name] = selectedLocations.isEmpty
+                                      ? <String>['hidden']
+                                      : selectedLocations.toList();
+                                  await _saveToolLayout(next, _toolOrder);
+                                  if (dialogContext.mounted) Navigator.pop(dialogContext);
+                                },
+                                icon: const Icon(Icons.save_outlined, size: 18),
+                                label: const Text('Save locations'),
+                              ),
+                            ),
                             const SizedBox(height: 8),
                             Align(
                               alignment: Alignment.centerLeft,
@@ -4074,7 +4128,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     const tools = <CanvasTool>[
       CanvasTool.ballpoint, CanvasTool.fountain, CanvasTool.pencil,
       CanvasTool.highlighter, CanvasTool.marker, CanvasTool.brush,
-      CanvasTool.eraser, CanvasTool.lasso, CanvasTool.line,
+      CanvasTool.eraser, CanvasTool.lasso, CanvasTool.fill, CanvasTool.line,
       CanvasTool.arrow, CanvasTool.rectangle, CanvasTool.ellipse,
     ];
     final selected = _settings.getString('pencaseTools').split(',').where((v) => v.isNotEmpty).toSet();
