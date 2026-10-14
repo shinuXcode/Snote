@@ -3739,7 +3739,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                         borderRadius: BorderRadius.circular(8),
                         onTap: () => _goToPage(index),
                         child: Container(
-                          width: 54,
+                          width: 36,
                           decoration: BoxDecoration(
                             color: selected ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surfaceContainerHigh,
                             border: Border.all(
@@ -3753,16 +3753,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                             children: [
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(7),
-                                child: CustomPaint(
-                                  painter: PageBackground(
-                                    template: template,
-                                    paperColor: Color((page['paperColor'] as num?)?.toInt() ?? 0xffffffff),
-                                    lineColor: Color((page['lineColor'] as num?)?.toInt() ?? 0xffd8dee8),
-                                    spacing: 8,
-                                    lineOpacity: ((page['lineOpacity'] as num?)?.toDouble() ?? .85).clamp(0, 1).toDouble(),
-                                  ),
-                                  child: const SizedBox.expand(),
-                                ),
+                                child: _buildPageBackground(page, showPdf: true),
                               ),
                               Align(
                                 alignment: Alignment.bottomRight,
