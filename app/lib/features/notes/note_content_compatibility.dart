@@ -81,6 +81,13 @@ bool shouldRestorePdfPageBackgrounds(
   }
 
   bool hasVerifiedBackground(Map<String, Object?> page) {
+    if (page['pdfLazyRender'] == true) {
+      final assetId = page['pdfSourceAssetId'];
+      final sourcePage = page['pdfSourcePage'];
+      return (sourceHash == null || page['pdfSourceHash'] == sourceHash) &&
+          assetId is String && assetId.isNotEmpty &&
+          sourcePage is num && sourcePage.toInt() > 0;
+    }
     if (!hasBackground(page)) return false;
     if (sourceHash == null) return true;
     if (page['pdfSourceHash'] != sourceHash) return false;
