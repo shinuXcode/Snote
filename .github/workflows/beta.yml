@@ -217,7 +217,7 @@ jobs:
 
       - name: Build release APK
         working-directory: app
-        run: flutter build apk --release
+        run: flutter build apk --release --no-shrink
 
       - name: Sign beta APK for Android installation
         run: |
