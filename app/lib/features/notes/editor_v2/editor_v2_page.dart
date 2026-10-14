@@ -22,6 +22,7 @@ import '../../../canvas_engine/models/stroke_codec.dart';
 import '../../../canvas_engine/widgets/page_background.dart';
 import '../../../core/security/note_lock_service.dart';
 import '../../../core/settings/app_settings.dart';
+import '../../settings/settings_page.dart';
 import '../../../data/local/file_document_repository.dart';
 import '../../../data/local/note_repository.dart';
 import '../note_content_compatibility.dart';
@@ -2351,6 +2352,8 @@ class _EditorV2PageState extends State<EditorV2Page>
         unawaited(_togglePalmRejection());
       case 'pageSettings':
         unawaited(_showPageAndEditorSettings());
+      case 'appSettings':
+        unawaited(Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SettingsPage())));
       case 'togglePageLock':
         unawaited(_togglePageLock());
       case 'notesLayer':
@@ -3403,6 +3406,7 @@ class _EditorV2PageState extends State<EditorV2Page>
               const PopupMenuItem(value: 'text', child: Text('Toggle rich text / handwriting')),
               const PopupMenuItem(value: 'image', child: Text('Insert screenshot or image')),
               const PopupMenuItem(value: 'pageSettings', child: Text('Note page settings')),
+              const PopupMenuItem(value: 'appSettings', child: Text('App settings')),
               if (_hasPdfBackgroundPages) ...[
                 PopupMenuItem(value: 'notesLayer', child: Text(_pdfBackgroundVisible ? 'Switch to notes layer' : 'Notes layer active')),
                 PopupMenuItem(value: 'pdfLayer', child: Text(_pdfBackgroundVisible ? 'PDF layer active' : 'Switch to PDF layer')),
