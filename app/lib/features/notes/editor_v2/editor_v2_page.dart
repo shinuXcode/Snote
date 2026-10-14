@@ -1953,13 +1953,17 @@ class _EditorV2PageState extends State<EditorV2Page>
       _eraseWorkingStrokes = null;
       return;
     }
-    // Keep one decoded working set for the whole pointer gesture. Re-decoding
-    // every vector stroke at 60 Hz made large pages expensive to erase.
+
+    // Decode once for the entire drag. Mutate the cached working vector set
+    // until the pointer is released instead of reparsing every saved sample.
     final decoded = _eraseWorkingStrokes ??
         StrokeCodec.documentToStrokes(<String, Object?>{'strokes': raw});
     _eraseWorkingStrokes = decoded;
     final retained = <Stroke>[];
-    var removed = false;
+    var changed = false;
+    final partialErase = _tool == CanvasTool.pixelEraser ||
+        _settings.getString('eraserMode') == 'pixel';
+
     for (final stroke in decoded) {
       if (stroke.points.isEmpty) {
         retained.add(stroke);
@@ -1979,16 +1983,32 @@ class _EditorV2PageState extends State<EditorV2Page>
               footprint,
             );
       }
-      if (hit) {
-        removed = true;
-      } else {
+
+      if (!hit) {
         retained.add(stroke);
+        continue;
+      }
+
+      changed = true;
+      // Freehand ink can be clipped into two or more surviving pieces in
+      // pixel mode. Shape primitives and text-like strokes remain atomic.
+      if (!partialErase || stroke.shape != null || stroke.stickerText != null) {
+        continue;
+      }
+      final fragments = _splitStrokeOutsideRect(stroke.points, footprint);
+      var fragmentNumber = 0;
+      for (final fragment in fragments) {
+        if (fragment.length < 2) continue;
+        final fragmentId =
+            '${stroke.id}-px-${DateTime.now().microsecondsSinceEpoch}-${fragmentNumber++}';
+        retained.add(stroke.copyWith(id: fragmentId, points: fragment));
       }
     }
-    if (!removed) return;
+
+    if (!changed) return;
     _eraseWorkingStrokes = retained;
-    // Capturing a complete document snapshot for every pointer sample can
-    // freeze large notes. One undo checkpoint covers a whole erase gesture.
+    // One undo checkpoint covers an entire eraser gesture, not each pointer
+    // sample. This avoids repeated deep snapshots on long documents.
     if (!_eraseUndoCaptured) {
       _pushUndo();
       _eraseUndoCaptured = true;
@@ -1999,6 +2019,62 @@ class _EditorV2PageState extends State<EditorV2Page>
       _eraserCursor = position;
     });
     _scheduleSave();
+  }
+
+  List<List<StrokePoint>> _splitStrokeOutsideRect(
+    List<StrokePoint> points,
+    Rect eraseRect,
+  ) {
+    if (points.isEmpty) return const <List<StrokePoint>>[];
+    if (points.length == 1) {
+      return eraseRect.contains(points.single.position)
+          ? const <List<StrokePoint>>[]
+          : <List<StrokePoint>>[points];
+    }
+
+    final fragments = <List<StrokePoint>>[];
+    var current = <StrokePoint>[];
+    final sampleSpacing = math.max(
+      1.5,
+      math.min(eraseRect.width, eraseRect.height) * .12,
+    );
+
+    void flush() {
+      // Two or more samples are required for a surviving line fragment.
+      if (current.length >= 2) fragments.add(current);
+      current = <StrokePoint>[];
+    }
+
+    void addOutside(StrokePoint point) {
+      if (eraseRect.contains(point.position)) {
+        flush();
+        return;
+      }
+      if (current.isEmpty ||
+          (current.last.position - point.position).distance > .15) {
+        current.add(point);
+      }
+    }
+
+    for (var i = 1; i < points.length; i++) {
+      final start = points[i - 1];
+      final end = points[i];
+      final distance = (end.position - start.position).distance;
+      final steps = math.max(1, (distance / sampleSpacing).ceil());
+      for (var step = i == 1 ? 0 : 1; step <= steps; step++) {
+        final t = step / steps;
+        addOutside(StrokePoint(
+          position: Offset.lerp(start.position, end.position, t)!,
+          pressure: start.pressure + (end.pressure - start.pressure) * t,
+          timestamp: start.timestamp + (end.timestamp - start.timestamp) * t,
+          tilt: start.tilt + (end.tilt - start.tilt) * t,
+          orientation: start.orientation +
+              (end.orientation - start.orientation) * t,
+        ));
+      }
+    }
+    flush();
+    return fragments;
   }
 
   double _distanceToSegment(Offset point, Offset a, Offset b) {
