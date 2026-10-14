@@ -1995,7 +1995,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     _scheduleSave();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Page \${index + 1} \${locked ? 'locked' : 'unlocked'}')),
+        SnackBar(content: Text('Page ${index + 1} ${locked ? 'locked' : 'unlocked'}')),
       );
     }
   }
