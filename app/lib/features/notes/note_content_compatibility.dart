@@ -112,8 +112,13 @@ bool shouldRestorePdfPageBackgrounds(
     // belonging to the current source; never replace another PDF's page set.
     final scopedPages = sourceHash == null
         ? pdfPages
-        : pdfPages.where((page) =>
-            page['pdfSourceHash'] == null || page['pdfSourceHash'] == sourceHash).toList(growable: false);
+        : pdfPages.where((page) {
+            final assetId = page['pdfSourceAssetId']?.toString() ?? '';
+            // New-format pages carry an asset ID, so other PDFs in the same
+            // notebook must not be rebuilt. Legacy pages lack that identity;
+            // a changed source hash means their raster must be refreshed.
+            return assetId.isEmpty || page['pdfSourceHash'] == sourceHash;
+          }).toList(growable: false);
     if (scopedPages.isEmpty) return false;
     return scopedPages.any((page) => !hasVerifiedBackground(page));
   }
