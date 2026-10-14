@@ -643,7 +643,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     setState(() {
       _pages = _undoStack.removeLast();
       _page = EditorV2DocumentCodec.clampPage(_page, _pages.length);
-      _selectedStrokeIds.clear();
+      _clearSelectionIds();
       _lassoRect = null;
     });
     _initializeTextControllers();
@@ -656,7 +656,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     setState(() {
       _pages = _redoStack.removeLast();
       _page = EditorV2DocumentCodec.clampPage(_page, _pages.length);
-      _selectedStrokeIds.clear();
+      _clearSelectionIds();
       _lassoRect = null;
     });
     _initializeTextControllers();
@@ -985,7 +985,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       strokes.add(StrokeCodec.strokeToJson(stroke));
       setState(() {
         _eraserCursor = null;
-        _selectedStrokeIds.clear();
+        _clearSelectionIds();
         _lassoRect = null;
       });
       _scheduleSave();
@@ -1067,7 +1067,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     _pushUndo();
     _pageData['strokes'] = retained.map(StrokeCodec.strokeToJson).toList();
     setState(() {
-      _selectedStrokeIds.clear();
+      _clearSelectionIds();
       _eraserCursor = position;
     });
     _scheduleSave();
@@ -1625,7 +1625,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       );
     });
     if (tool != CanvasTool.lasso) {
-      _selectedStrokeIds.clear();
+      _clearSelectionIds();
       _lassoRect = null;
     }
   }
@@ -2323,7 +2323,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       final insertion = ((insertAfter ?? _page) + 1).clamp(0, _pages.length).toInt();
       _pages.insert(insertion, page);
       _page = insertion;
-      _selectedStrokeIds.clear();
+      _clearSelectionIds();
       _lassoRect = null;
     });
     _scheduleSave();
@@ -2440,7 +2440,7 @@ class _EditorV2PageState extends State<EditorV2Page>
         _pages.removeAt(index);
       }
       _page = EditorV2DocumentCodec.clampPage(_page >= index ? _page - 1 : _page, _pages.length);
-      _selectedStrokeIds.clear();
+      _clearSelectionIds();
       _lassoRect = null;
       _initializeTextControllers();
     });
@@ -2468,7 +2468,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     if (index < 0 || index >= _pages.length || index == _page) return;
     setState(() {
       _page = index;
-      _selectedStrokeIds.clear();
+      _clearSelectionIds();
       _lassoRect = null;
     });
     _scheduleSave();
@@ -3530,7 +3530,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                   ),
                 ),
               ),
-            if (_lassoRect != null && _selectedStrokeIds.isNotEmpty && _selectionBounds() != null) ...[
+            if (_lassoRect != null && _selectionCount > 0 && _selectionBounds() != null) ...[
               Positioned(
                 left: _selectionBounds()!.center.dx - 11,
                 top: _selectionBounds()!.top - 12,
@@ -3571,7 +3571,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                 ),
               ),
             ],
-            if (_lassoRect != null && _selectedStrokeIds.isNotEmpty && _selectionBounds() != null)
+            if (_lassoRect != null && _selectionCount > 0 && _selectionBounds() != null)
               Positioned(
                 left: math.min(_pageWidth - 38, math.max(4, _selectionBounds()!.right + 7)),
                 top: _selectionBounds()!.top.clamp(4, _pageHeight - 340).toDouble(),
@@ -3584,7 +3584,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                     child: Column(mainAxisSize: MainAxisSize.min, children: [
                       IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Copy selection', onPressed: _copySelection, icon: const Icon(Icons.copy_rounded, size: 16)),
                       IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Cut selection', onPressed: _cutSelection, icon: const Icon(Icons.content_cut_rounded, size: 16)),
-                      IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Paste copied strokes', onPressed: _strokeClipboard.isEmpty ? null : () => _pasteStrokes(), icon: const Icon(Icons.content_paste_rounded, size: 16)),
+                      IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Paste copied selection', onPressed: _selectionClipboard == null ? null : () => _pasteStrokes(), icon: const Icon(Icons.content_paste_rounded, size: 16)),
                       IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Duplicate selection', onPressed: () => _pasteStrokes(duplicate: true), icon: const Icon(Icons.control_point_duplicate_rounded, size: 16)),
                       IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Bring selection to front', onPressed: () => _changeSelectionLayer(bringToFront: true), icon: const Icon(Icons.flip_to_front_rounded, size: 16)),
                       IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Send selection to back', onPressed: () => _changeSelectionLayer(bringToFront: false), icon: const Icon(Icons.flip_to_back_rounded, size: 16)),
@@ -3703,10 +3703,10 @@ class _EditorV2PageState extends State<EditorV2Page>
                 onPressed: _toggleBookmark,
                 icon: Icon(isBookmarked ? Icons.bookmark_rounded : Icons.bookmark_border_rounded, size: 17),
               ),
-              if (_selectedStrokeIds.isNotEmpty)
+              if (_selectionCount > 0)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 3),
-                  child: Text('${_selectedStrokeIds.length} selected', style: const TextStyle(fontSize: 10)),
+                  child: Text('$_selectionCount selected', style: const TextStyle(fontSize: 10)),
                 ),
               const Spacer(),
               if (_saving || _savePending)
@@ -3898,7 +3898,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     if (selected == null || !mounted) return;
     setState(() {
       _page = EditorV2DocumentCodec.clampPage(selected, _pages.length);
-      _selectedStrokeIds.clear();
+      _clearSelectionIds();
       _lassoRect = null;
     });
   }
