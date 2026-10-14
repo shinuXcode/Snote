@@ -724,7 +724,8 @@ class _EditorV2PageState extends State<EditorV2Page>
       final decoded = jsonDecode(_settings.getString('editorV2ToolbarOrder'));
       if (decoded is List) {
         _toolbarOrder = decoded.whereType<String>().where((name) {
-          return CanvasTool.values.any((tool) => tool.name == name);
+          return CanvasTool.values.any((tool) => tool.name == name) ||
+              _isSpecialToolKey(name);
         }).toList();
       }
     } catch (error) {
@@ -772,9 +773,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       }
     }
     for (final tool in CanvasTool.values) {
-      if (tool != CanvasTool.pixelEraser &&
-          seen.add(tool.name) &&
-          _toolInLocation(tool, location)) {
+      if (seen.add(tool.name) && _toolInLocation(tool, location)) {
         ordered.add(tool.name);
       }
     }
@@ -789,7 +788,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   Widget _buildPlacedToolButton(String key, String location) {
     if (_isSpecialToolKey(key)) return _specialToolButton(key, location);
     final tool = CanvasTool.values.where((candidate) => candidate.name == key).firstOrNull;
-    if (tool == null || tool == CanvasTool.pixelEraser) return const SizedBox.shrink();
+    if (tool == null) return const SizedBox.shrink();
     switch (location) {
       case 'titleBar':
         return _buildTitleBarToolButton(tool);
@@ -854,7 +853,8 @@ class _EditorV2PageState extends State<EditorV2Page>
     setState(() {
       // Dropping among tools already sharing the same location only reorders.
       // Dropping into a different location moves the tool there.
-      if (!(sourceAlreadyThere && targetAlreadyThere)) {
+      if (!(sourceAlreadyThere &&
+          (targetKey == null || targetAlreadyThere))) {
         _toolPlacements[sourceKey] = <String>{targetLocation};
       }
       _toolbarOrder = order;
