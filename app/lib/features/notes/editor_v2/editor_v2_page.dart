@@ -786,7 +786,9 @@ class _EditorV2PageState extends State<EditorV2Page>
     if (_ignoredPointers.remove(event.pointer)) return;
     if (_activePointer != event.pointer) return;
     if (_longPressTriggered) {
-      if (_pressureEraseActive) {
+      final wasPressureErase = _pressureEraseActive;
+      final restoreTool = _toolBeforePressureErase;
+      if (wasPressureErase) {
         _eraseAt(event.localPosition, math.max(18, _size * 2).toDouble());
       }
       setState(() {
@@ -795,14 +797,11 @@ class _EditorV2PageState extends State<EditorV2Page>
         _livePoints = <StrokePoint>[];
         _liveStroke = null;
         _pressureEraseActive = false;
-        if (_toolBeforePressureErase != null) {
-          _tool = _toolBeforePressureErase!;
-          _toolBeforePressureErase = null;
-          _selectTool(_tool);
-        }
+        _toolBeforePressureErase = null;
         _longPressTriggered = false;
         _eraserCursor = null;
       });
+      if (restoreTool != null) _selectTool(restoreTool);
       return;
     }
     final point = _pointFrom(event);
@@ -855,10 +854,8 @@ class _EditorV2PageState extends State<EditorV2Page>
     _holdTimer?.cancel();
     _holdTimer = null;
     _holdStartPosition = null;
-    if (_pressureEraseActive && _toolBeforePressureErase != null) {
-      _tool = _toolBeforePressureErase!;
-      _toolBeforePressureErase = null;
-    }
+    final restoreTool = _pressureEraseActive ? _toolBeforePressureErase : null;
+    _toolBeforePressureErase = null;
     _pressureEraseActive = false;
     _longPressTriggered = false;
     _ignoredPointers.remove(event.pointer);
@@ -869,6 +866,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       _liveStroke = null;
     }
     setState(() {});
+    if (restoreTool != null) _selectTool(restoreTool);
   }
 
   List<StrokePoint> _smoothPoints(List<StrokePoint> points) {
