@@ -5,6 +5,8 @@ import 'package:snote/canvas_engine/models/pen_config.dart';
 import 'package:snote/canvas_engine/models/stroke.dart';
 import 'package:snote/canvas_engine/models/stroke_codec.dart';
 import 'package:snote/canvas_engine/algorithms/velocity_calculator.dart';
+import 'package:snote/canvas_engine/painters/canvas_painter.dart';
+import 'package:snote/canvas_engine/widgets/page_background.dart';
 
 void main() {
   test('stroke codec round-trips vector data', () {
@@ -55,5 +57,75 @@ void main() {
 
     expect(fast, lessThan(slow));
     expect(fast, greaterThan(1));
+  });
+
+  test('every shape tool has a label and paints visible pixels', () async {
+    const pen = PenConfig(
+      type: PenType.ballpoint,
+      color: Color(0xff253047),
+      size: 2.5,
+    );
+
+    final tools = CanvasTool.values.where((tool) => tool.isShape).toList();
+    expect(tools.length, greaterThanOrEqualTo(100));
+    expect(CanvasTool.dottedLine.isShape, isTrue);
+    expect(CanvasTool.dashedLine.isShape, isTrue);
+    expect(CanvasTool.cartesianPlane.isShape, isTrue);
+    for (final tool in tools) {
+      expect(tool.label, isNotEmpty, reason: tool.name);
+      final recorder = PictureRecorder();
+      final canvas = Canvas(recorder);
+      final stroke = Stroke(
+        id: tool.name,
+        points: const [
+          StrokePoint(position: Offset(24, 30), pressure: .7, timestamp: 1),
+          StrokePoint(position: Offset(180, 170), pressure: .8, timestamp: 2),
+        ],
+        pen: pen,
+        shape: tool.name,
+      );
+      SnoteCanvasPainter(
+        strokes: [stroke],
+        activeStroke: null,
+        activePoints: const [],
+        activePen: null,
+        activeTool: null,
+        activeFill: false,
+        activeCustomSides: 6,
+        activeStickerText: null,
+        selectedIds: const {},
+        lassoPath: const [],
+        drawActive: false,
+      ).paint(canvas, const Size(220, 220));
+
+      final picture = recorder.endRecording();
+      final image = await picture.toImage(220, 220);
+      final pixels = await image.toByteData(format: ImageByteFormat.rawRgba);
+      expect(pixels, isNotNull, reason: tool.name);
+      var visiblePixels = 0;
+      for (var i = 3; i < pixels!.lengthInBytes; i += 4) {
+        if (pixels.getUint8(i) > 0) visiblePixels++;
+      }
+      image.dispose();
+      picture.dispose();
+      expect(
+        visiblePixels,
+        greaterThan(0),
+        reason: 'Shape tool "${tool.name}" produced no visible pixels',
+      );
+    }
+  });
+
+  test('every paper template paints without throwing', () {
+    for (final template in PageTemplate.values) {
+      final recorder = PictureRecorder();
+      final canvas = Canvas(recorder);
+      PageBackground(
+        template: template,
+        paperColor: const Color(0xffffffff),
+        lineColor: const Color(0xffb6c0cc),
+      ).paint(canvas, const Size(320, 480));
+      recorder.endRecording().dispose();
+    }
   });
 }
