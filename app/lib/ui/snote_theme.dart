@@ -4,12 +4,12 @@ import 'package:flutter/material.dart';
 /// A notebook-first palette with cool paper, deep teal ink and coral actions.
 /// The editor canvas remains responsible for its own paper templates.
 class SnoteTheme {
-  static const violet = Color(0xFF315EAA); // Keep API name for saved theme compatibility.
-  static const ink = Color(0xFF172334);
-  static const canvas = Color(0xFFF4F6FA);
+  static const violet = Color(0xFF3559B8); // Kept for saved theme compatibility.
+  static const ink = Color(0xFF1B2638);
+  static const canvas = Color(0xFFF2F5F9);
   static const panel = Color(0xFFFFFFFF);
-  static const coral = Color(0xFFEA6A4B);
-  static const mint = Color(0xFFDCE7F7);
+  static const coral = Color(0xFF168C83); // Professional teal accent; legacy API name retained.
+  static const mint = Color(0xFFDDE7FA);
 
   static ThemeData light() {
     final scheme = ColorScheme.fromSeed(
@@ -31,18 +31,18 @@ class SnoteTheme {
     );
 
     final shape = RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(12),
     );
     final fieldBorder = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: Color(0xFFD4DCE8)),
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: Color(0xFFD5DDE8)),
     );
 
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
       scaffoldBackgroundColor: canvas,
-      splashFactory: InkSparkle.splashFactory,
+      splashFactory: InkRipple.splashFactory,
       visualDensity: VisualDensity.standard,
       materialTapTargetSize: MaterialTapTargetSize.padded,
       appBarTheme: const AppBarTheme(
@@ -52,7 +52,7 @@ class SnoteTheme {
         elevation: 0,
         centerTitle: false,
         titleSpacing: 16,
-        toolbarHeight: 64,
+        toolbarHeight: 56,
         titleTextStyle: TextStyle(
           color: ink,
           fontSize: 20,
@@ -75,10 +75,10 @@ class SnoteTheme {
         border: fieldBorder,
         enabledBorder: fieldBorder,
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: violet, width: 1.6),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       ),
       navigationBarTheme: const NavigationBarThemeData(
         height: 72,
@@ -117,7 +117,7 @@ class SnoteTheme {
           minimumSize: const Size(0, 48),
           backgroundColor: violet,
           foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           textStyle: const TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
@@ -141,7 +141,7 @@ class SnoteTheme {
     const background = Color(0xFF0E1522);
     const surface = Color(0xFF171F2E);
     const text = Color(0xFFE8EDF5);
-    const teal = Color(0xFF9BBDF7);
+    const teal = Color(0xFFA9BDFB);
 
     final scheme = ColorScheme.fromSeed(
       seedColor: teal,
@@ -150,8 +150,8 @@ class SnoteTheme {
     ).copyWith(
       primary: teal,
       onPrimary: const Color(0xFF0E1B32),
-      secondary: coral,
-      onSecondary: const Color(0xFF31150E),
+      secondary: const Color(0xFF62C7BB),
+      onSecondary: const Color(0xFF082B2B),
       surface: surface,
       onSurface: text,
       surfaceContainerLowest: const Color(0xFF111A29),
@@ -172,7 +172,7 @@ class SnoteTheme {
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         titleSpacing: 16,
-        toolbarHeight: 64,
+        toolbarHeight: 56,
         titleTextStyle: TextStyle(
           color: text,
           fontSize: 20,
