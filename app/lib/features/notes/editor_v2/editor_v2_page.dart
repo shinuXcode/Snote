@@ -748,6 +748,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           _pressureEraseActive = true;
           _pressureEraseUsed = false;
           _toolBeforePressureErase = _tool;
+          _rememberCurrentToolProfile();
           setState(() {
             _tool = CanvasTool.eraser;
             _size = 24;
@@ -977,6 +978,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     });
   }
 
+    if (_pageData['locked'] == true) return;
   void _deleteSelection() {
     if (_selectedStrokeIds.isEmpty) return;
     _pushUndo();
@@ -993,6 +995,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     _scheduleSave();
   }
 
+    if (_pageData['locked'] == true) return;
   void _moveSelection(Offset delta) {
     if (_selectedStrokeIds.isEmpty) return;
     _pushUndo();
@@ -1110,6 +1113,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     _scheduleSave();
   }
 
+    if (_pageData['locked'] == true) return;
   void _scaleSelection(double factor) {
     if (_selectedStrokeIds.isEmpty) return;
     final bounds = _selectionBounds();
@@ -1419,6 +1423,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     );
   }
 
+    if (_pageData['locked'] == true) return;
   void _addTextBox() {
     _pushUndo();
     final id = DateTime.now().microsecondsSinceEpoch.toString();
@@ -1454,6 +1459,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     _scheduleSave();
   }
 
+    if (_pageData['locked'] == true) return;
   Future<void> _addImage() async {
     try {
       final file = await FilePicker.pickFile(type: FileType.image);
@@ -1492,6 +1498,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
   }
 
+    if (_pageData['locked'] == true) return;
   Future<void> _addSticker() async {
     const stickerCategories = <String, List<String>>{
       'Study': ['✅','❌','⭐','📌','📖','🧠','🎯','💯','📝','✍️','📚','🔖','📎','🖊️','🗒️','📄','🗃️','🏆','💡','📍'],
