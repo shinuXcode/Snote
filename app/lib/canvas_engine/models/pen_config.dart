@@ -576,12 +576,13 @@ extension CanvasToolX on CanvasTool {
       case CanvasTool.dashedLine: return 'Dashed line';
       case CanvasTool.cartesianPlane: return 'Cartesian plane';
       case CanvasTool.sticker: return 'Sticker';
+      default:
+        return name
+            .replaceAllMapped(RegExp(r'(?<=[a-z])(?=[A-Z])'), (_) => ' ')
+            .split(' ')
+            .map((word) => word.isEmpty ? '' : word[0].toUpperCase() + word.substring(1))
+            .join(' ');
     }
-    return name
-        .replaceAllMapped(RegExp(r'(?<=[a-z])(?=[A-Z])'), (_) => ' ')
-        .split(' ')
-        .map((word) => word.isEmpty ? '' : word[0].toUpperCase() + word.substring(1))
-        .join(' ');
   }
 }
 
