@@ -2657,37 +2657,124 @@ class _EditorV2PageState extends State<EditorV2Page>
       isScrollControlled: true,
       showDragHandle: true,
       builder: (sheetContext) => SizedBox(
-        height: MediaQuery.sizeOf(sheetContext).height * .72,
-        child: ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: _pages.length,
-          itemBuilder: (_, index) {
-            final page = _pages[index];
-            final template = page['template']?.toString() ?? 'PDF';
-            final isPdf = page['backgroundImage'] is String && (page['backgroundImage'] as String).isNotEmpty;
-            return Card(
-              color: index == _page ? Theme.of(context).colorScheme.primaryContainer : null,
-              child: ListTile(
-                leading: SizedBox(
-                  width: 38,
-                  height: 48,
-                  child: CustomPaint(
-                    painter: PageBackground(
-                      template: PageTemplate.values.firstWhere((value) => value.name == template, orElse: () => PageTemplate.blank),
-                      paperColor: Color((page['paperColor'] as num?)?.toInt() ?? 0xffffffff),
-                      lineColor: Color((page['lineColor'] as num?)?.toInt() ?? 0xffd8dee8),
-                      spacing: 8,
-                    ),
-                    child: Center(child: Text('${index + 1}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900))),
-                  ),
+        height: MediaQuery.sizeOf(sheetContext).height * .78,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
+              child: Row(children: [
+                Expanded(child: Text('Pages • \${_pages.length}', style: Theme.of(context).textTheme.titleLarge)),
+                IconButton(
+                  tooltip: 'Paste copied page after current',
+                  onPressed: _pageClipboard == null ? null : () {
+                    Navigator.pop(sheetContext);
+                    _pastePage();
+                  },
+                  icon: const Icon(Icons.content_paste_rounded),
                 ),
-                title: Text('Page ${index + 1}'),
-                subtitle: Text(isPdf ? 'PDF background / annotations' : template),
-                trailing: _bookmarkedPages.contains(index + 1) ? const Icon(Icons.bookmark_rounded) : null,
-                onTap: () => Navigator.pop(sheetContext, index),
+                IconButton(
+                  tooltip: 'Insert blank page',
+                  onPressed: () {
+                    Navigator.pop(sheetContext);
+                    _addPage();
+                  },
+                  icon: const Icon(Icons.note_add_outlined),
+                ),
+              ]),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(18, 0, 18, 8),
+              child: Align(alignment: Alignment.centerLeft, child: Text('Drag a page to reorder it. Open ⋮ for page actions.', style: TextStyle(fontSize: 12))),
+            ),
+            Expanded(
+              child: ReorderableListView.builder(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                itemCount: _pages.length,
+                onReorder: (oldIndex, newIndex) {
+                  if (newIndex > oldIndex) newIndex--;
+                  _movePage(oldIndex, newIndex);
+                },
+                itemBuilder: (_, index) {
+                  final page = _pages[index];
+                  final template = page['template']?.toString() ?? 'PDF';
+                  final isPdf = page['backgroundImage'] is String && (page['backgroundImage'] as String).isNotEmpty;
+                  return Card(
+                    key: ValueKey(page['id']?.toString() ?? 'page-$index'),
+                    color: index == _page ? Theme.of(context).colorScheme.primaryContainer : null,
+                    child: ListTile(
+                      leading: SizedBox(
+                        width: 38,
+                        height: 48,
+                        child: CustomPaint(
+                          painter: PageBackground(
+                            template: PageTemplate.values.firstWhere((value) => value.name == template, orElse: () => PageTemplate.blank),
+                            paperColor: Color((page['paperColor'] as num?)?.toInt() ?? 0xffffffff),
+                            lineColor: Color((page['lineColor'] as num?)?.toInt() ?? 0xffd8dee8),
+                            spacing: 8,
+                            lineOpacity: ((page['lineOpacity'] as num?)?.toDouble() ?? .85).clamp(0, 1).toDouble(),
+                          ),
+                          child: Center(child: Text('\${index + 1}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900))),
+                        ),
+                      ),
+                      title: Text('Page \${index + 1}'),
+                      subtitle: Text(isPdf ? 'PDF background / annotations' : template),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_bookmarkedPages.contains(index + 1)) const Icon(Icons.bookmark_rounded, size: 18),
+                          PopupMenuButton<String>(
+                            tooltip: 'Page actions',
+                            onSelected: (action) {
+                              switch (action) {
+                                case 'copy':
+                                  _copyPage(index);
+                                case 'cut':
+                                  Navigator.pop(sheetContext);
+                                  _cutPage(index);
+                                case 'duplicate':
+                                  Navigator.pop(sheetContext);
+                                  _duplicatePage(index);
+                                case 'paste':
+                                  Navigator.pop(sheetContext);
+                                  setState(() => _page = index);
+                                  _pastePage();
+                                case 'background':
+                                  Navigator.pop(sheetContext);
+                                  setState(() => _page = index);
+                                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                                    if (mounted) unawaited(_chooseTemplate());
+                                  });
+                                case 'up':
+                                  _movePage(index, math.max(0, index - 1));
+                                case 'down':
+                                  _movePage(index, math.min(_pages.length - 1, index + 1));
+                                case 'delete':
+                                  Navigator.pop(sheetContext);
+                                  _deletePage(index);
+                              }
+                            },
+                            itemBuilder: (_) => const [
+                              PopupMenuItem(value: 'copy', child: Text('Copy page')),
+                              PopupMenuItem(value: 'cut', child: Text('Cut page')),
+                              PopupMenuItem(value: 'paste', child: Text('Paste copied page after this')),
+                              PopupMenuItem(value: 'duplicate', child: Text('Duplicate page')),
+                              PopupMenuItem(value: 'background', child: Text('Change page background')),
+                              PopupMenuItem(value: 'up', child: Text('Move page up')),
+                              PopupMenuItem(value: 'down', child: Text('Move page down')),
+                              PopupMenuDivider(),
+                              PopupMenuItem(value: 'delete', child: Text('Delete page')),
+                            ],
+                            icon: const Icon(Icons.more_vert_rounded),
+                          ),
+                        ],
+                      ),
+                      onTap: () => Navigator.pop(sheetContext, index),
+                    ),
+                  );
+                },
               ),
-            );
-          },
+            ),
+          ],
         ),
       ),
     );
