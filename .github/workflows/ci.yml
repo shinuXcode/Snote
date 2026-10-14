@@ -206,6 +206,26 @@ jobs:
         run: |
           flutter create --platforms=ios,macos --org=com.snote --no-pub .
           rm -f test/widget_test.dart
+      - name: Set iOS deployment target for ML Kit
+        working-directory: app
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          podfile = Path("ios/Podfile")
+          pod = podfile.read_text()
+          if re.search(r"^\\s*platform :ios,", pod, re.MULTILINE):
+              pod = re.sub(r"^\\s*platform :ios,.*$", "platform :ios, '15.5'", pod, flags=re.MULTILINE)
+          else:
+              pod = "platform :ios, '15.5'\\n" + pod
+          podfile.write_text(pod)
+
+          project_file = Path("ios/Runner.xcodeproj/project.pbxproj")
+          project = project_file.read_text()
+          project = re.sub(r"IPHONEOS_DEPLOYMENT_TARGET = [^;]+;", "IPHONEOS_DEPLOYMENT_TARGET = 15.5;", project)
+          project_file.write_text(project)
+          PY
       - name: Install dependencies
         working-directory: app
         run: flutter pub get
