@@ -1978,7 +1978,8 @@ class _EditorV2PageState extends State<EditorV2Page>
     _scheduleSave();
   }
 
-  void _addPage() {
+  void _addPage({int? insertAfter}) {
+    if (_pageData['locked'] == true) return;
     _pushUndo();
     final previous = _pageData;
     final page = EditorV2DocumentCodec.normalizePage(<String, Object?>{
@@ -2069,6 +2070,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   }
 
   void _pastePage({int? insertAfter}) {
+    if (_pageData['locked'] == true) return;
     final source = _pageClipboard;
     if (source == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copy a page first.')));
@@ -2078,7 +2080,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     final copy = EditorV2DocumentCodec.clonePages(<Map<String, Object?>>[source]).single;
     copy['id'] = DateTime.now().microsecondsSinceEpoch.toString();
     setState(() {
-      final insertion = (_page + 1).clamp(0, _pages.length).toInt();
+      final insertion = ((insertAfter ?? _page) + 1).clamp(0, _pages.length).toInt();
       _pages.insert(insertion, EditorV2DocumentCodec.normalizePage(copy));
       _page = insertion;
     });
