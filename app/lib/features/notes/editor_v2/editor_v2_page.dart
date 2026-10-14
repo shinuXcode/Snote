@@ -2847,7 +2847,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     var places = Set<String>.from(_placementsFor(targetTool));
     var precisionErase = _settings.getString('eraserMode') == 'pixel';
 
-    void saveProfile() {
+    void saveProfile({bool persist = true}) {
       setState(() {
         _tool = targetTool;
         _size = size;
@@ -2858,8 +2858,8 @@ class _EditorV2PageState extends State<EditorV2Page>
         _color = color;
       });
       _toolPlacements[targetTool.name] = Set<String>.from(places);
-      unawaited(_saveToolPlacements());
-      if (targetTool == CanvasTool.eraser) {
+      if (persist) unawaited(_saveToolPlacements());
+      if (persist && targetTool == CanvasTool.eraser) {
         unawaited(_settings.setString('eraserMode', precisionErase ? 'pixel' : 'stroke'));
       }
       _toolProfiles[targetTool.name] = <String, Object?>{
@@ -2870,7 +2870,7 @@ class _EditorV2PageState extends State<EditorV2Page>
         'velocitySensitivity': velocity,
         'pressureCurve': curve.name,
       };
-      unawaited(_saveToolProfiles());
+      if (persist) unawaited(_saveToolProfiles());
     }
 
     Widget panel(
@@ -2923,37 +2923,41 @@ class _EditorV2PageState extends State<EditorV2Page>
             )).toList(),
           ),
           const SizedBox(height: 8),
-          Text('Stroke size: ${size.toStringAsFixed(1)}'),
+          Row(children: [const Icon(Icons.line_weight_rounded, size: 17), const SizedBox(width: 7), Text('Stroke size: ${size.toStringAsFixed(1)}')]),
           Slider(
             min: .5,
             max: 40,
             value: size.clamp(.5, 40),
-            onChanged: (value) { setPanelState(() => size = value); saveProfile(); },
+            onChanged: (value) { setPanelState(() => size = value); saveProfile(persist: false); },
+            onChangeEnd: (_) => saveProfile(),
           ),
-          Text('Opacity: ${(opacity * 100).round()}%'),
+          Row(children: [const Icon(Icons.opacity_rounded, size: 17), const SizedBox(width: 7), Text('Opacity: ${(opacity * 100).round()}%')]),
           Slider(
             min: .05,
             max: 1,
             value: opacity.clamp(.05, 1),
-            onChanged: (value) { setPanelState(() => opacity = value); saveProfile(); },
+            onChanged: (value) { setPanelState(() => opacity = value); saveProfile(persist: false); },
+            onChangeEnd: (_) => saveProfile(),
           ),
-          Text('Pressure sensitivity: ${pressure.toStringAsFixed(2)}'),
+          Row(children: [const Icon(Icons.touch_app_rounded, size: 17), const SizedBox(width: 7), Text('Pressure sensitivity: ${pressure.toStringAsFixed(2)}')]),
           Slider(
             min: 0,
             max: 1,
             value: pressure,
-            onChanged: (value) { setPanelState(() => pressure = value); saveProfile(); },
+            onChanged: (value) { setPanelState(() => pressure = value); saveProfile(persist: false); },
+            onChangeEnd: (_) => saveProfile(),
           ),
-          Text('Velocity sensitivity: ${velocity.toStringAsFixed(2)}'),
+          Row(children: [const Icon(Icons.speed_rounded, size: 17), const SizedBox(width: 7), Text('Velocity sensitivity: ${velocity.toStringAsFixed(2)}')]),
           Slider(
             min: 0,
             max: 1,
             value: velocity,
-            onChanged: (value) { setPanelState(() => velocity = value); saveProfile(); },
+            onChanged: (value) { setPanelState(() => velocity = value); saveProfile(persist: false); },
+            onChangeEnd: (_) => saveProfile(),
           ),
           DropdownButtonFormField<PressureCurve>(
             initialValue: curve,
-            decoration: const InputDecoration(labelText: 'Pressure curve'),
+            decoration: const InputDecoration(labelText: 'Pressure curve', prefixIcon: Icon(Icons.show_chart_rounded)),
             items: PressureCurve.values.map((value) => DropdownMenuItem(
               value: value,
               child: Text(value.name),
