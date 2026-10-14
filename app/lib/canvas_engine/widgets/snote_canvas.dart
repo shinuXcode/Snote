@@ -978,7 +978,6 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     for (final index in sorted) {
       if (index < 0 || index >= _strokes.length) continue;
       final stroke = _strokes[index];
-      final hitRadius = radius + stroke.pen.size / 2;
       if (stroke.shape != null || stroke.stickerText != null) {
         if (InkHitTesting.polylineTouchesRect(
           stroke.points,
