@@ -2526,12 +2526,25 @@ class _EditorV2PageState extends State<EditorV2Page>
                   alignment: Alignment.centerRight,
                   child: FilledButton(
                     onPressed: () async {
-                      _pushUndo();
-                      _pageData['template'] = template.name;
-                      _pageData['spacing'] = spacing;
-                      _pageData['lineOpacity'] = opacity;
-                      _pageData['paperColor'] = paper.toARGB32();
-                      _pageData['lineColor'] = line.toARGB32();
+                      final pageLocked = _pageData['locked'] == true;
+                      final pageSettingsChanged =
+                          template.name != _pageData['template']?.toString() ||
+                          spacing != ((_pageData['spacing'] as num?)?.toDouble() ?? 28) ||
+                          opacity != ((_pageData['lineOpacity'] as num?)?.toDouble() ?? .85) ||
+                          paper.toARGB32() != ((_pageData['paperColor'] as num?)?.toInt() ?? 0xffffffff) ||
+                          line.toARGB32() != ((_pageData['lineColor'] as num?)?.toInt() ?? 0xffd8dee8);
+                      if (!pageLocked && pageSettingsChanged) {
+                        _pushUndo();
+                        _pageData['template'] = template.name;
+                        _pageData['spacing'] = spacing;
+                        _pageData['lineOpacity'] = opacity;
+                        _pageData['paperColor'] = paper.toARGB32();
+                        _pageData['lineColor'] = line.toARGB32();
+                      } else if (pageLocked && pageSettingsChanged && mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('App settings were saved. Unlock this page to change its paper or template.')),
+                        );
+                      }
                       setState(() {
                         _showPageNavigation = showNavigation;
                         _floatingPageNavigation = floatingNavigation;
