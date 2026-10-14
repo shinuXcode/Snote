@@ -3907,6 +3907,20 @@ class _EditorV2PageState extends State<EditorV2Page>
               top: _floatingOffset.dy.clamp(0, math.max(0, MediaQuery.sizeOf(context).height - 210)).toDouble(),
               child: GestureDetector(
                 onPanUpdate: (details) => setState(() => _floatingOffset += details.delta),
+                onPanEnd: (_) {
+                  final screen = MediaQuery.sizeOf(context);
+                  final x = _floatingOffset.dx;
+                  final y = _floatingOffset.dy;
+                  if (x <= 18) {
+                    unawaited(_setToolbarDock('left'));
+                  } else if (x >= screen.width - 100) {
+                    unawaited(_setToolbarDock('right'));
+                  } else if (y <= 18) {
+                    unawaited(_setToolbarDock('top'));
+                  } else if (y >= screen.height - 230) {
+                    unawaited(_setToolbarDock('bottom'));
+                  }
+                },
                 child: Material(
                   elevation: 8,
                   borderRadius: BorderRadius.circular(12),
