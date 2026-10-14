@@ -20,7 +20,7 @@ class SnoteSettings extends ChangeNotifier {
     'horizontalContinuousScroll': true, 'showPenFloatSettings': true, 'autoSyncNote': true,
     'autoBackupLocal': true, 'writingPostureRightHand': true, 'disableBackGesture': false,
     'turnOffPush': false, 'pageSwipe': true, 'autoAddPage': true,
-    'securePagePreviews': true, 'eInk': false, 'grayscaleEInk': true, 'reduceMotion': false,
+    'securePagePreviews': false, 'eInk': false, 'grayscaleEInk': true, 'reduceMotion': false,
     'welcomeGuideSeen': false, 'editorV2FloatingToolbar': false, 'editorV2FavoritesVertical': false, 'editorV2FloatingPageNavigation': false, 'editorV2ShowFavoritesShowcase': true, 'editorV2ShowNoteSwitcher': true,
   };
 
