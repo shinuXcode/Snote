@@ -82,6 +82,7 @@ void main() {
         pages: <Map<String, Object?>>[page],
         editorMode: 'handwriting',
         bookmarkedPages: <int>[],
+        textDelta: <dynamic>[],
         currentPageIndex: 0,
       );
       final restored = EditorV2DocumentCodec.decodePages(
