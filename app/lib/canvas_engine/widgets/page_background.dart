@@ -38,9 +38,13 @@ class PageBackground extends CustomPainter {
         for (double x = 0; x < size.width; x += s) canvas.drawLine(Offset(x, 0), Offset(x, size.height), line);
         for (double y = 0; y < size.height; y += s) canvas.drawLine(Offset(0, y), Offset(size.width, y), line);
       case PageTemplate.dotted:
-        final dot = Paint()..color = line.color;
-        for (double y = s * .42; y < size.height; y += s) {
-          for (double x = s * .42; x < size.width; x += s) canvas.drawCircle(Offset(x, y), 1.1, dot);
+        final dot = Paint()
+          ..color = effectiveLineColor.withValues(alpha: lineOpacity.clamp(.08, 1))
+          ..isAntiAlias = true;
+        for (double y = s * .5; y < size.height; y += s) {
+          for (double x = s * .5; x < size.width; x += s) {
+            canvas.drawCircle(Offset(x, y), 1.55, dot);
+          }
         }
       case PageTemplate.cornell:
         for (double y = s; y < size.height - 180; y += s) canvas.drawLine(Offset(0, y), Offset(size.width, y), line);
