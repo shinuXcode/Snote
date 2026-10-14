@@ -2594,58 +2594,113 @@ class _EditorV2PageState extends State<EditorV2Page>
 
   Widget _buildPageFooter() {
     final isBookmarked = _bookmarkedPages.contains(_page + 1);
-    return Material(
-      color: Theme.of(context).colorScheme.surface,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        child: Row(
-          children: [
-            IconButton(
-              visualDensity: VisualDensity.compact,
-              tooltip: 'Previous page',
-              onPressed: _page > 0 ? () => _goToPage(_page - 1) : null,
-              icon: const Icon(Icons.chevron_left_rounded),
-            ),
-            InkWell(
-              borderRadius: BorderRadius.circular(8),
-              onTap: _showPagePicker,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                child: Text(
-                  'Page ${_page + 1} of ${_pages.length}',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+    return GestureDetector(
+      onHorizontalDragEnd: (details) {
+        final velocity = details.primaryVelocity ?? 0;
+        if (velocity < -120 && _page + 1 < _pages.length) {
+          _goToPage(_page + 1);
+        } else if (velocity > 120 && _page > 0) {
+          _goToPage(_page - 1);
+        }
+      },
+      onVerticalDragEnd: (details) {
+        final velocity = details.primaryVelocity ?? 0;
+        if (velocity < -120 && _page + 1 < _pages.length) {
+          _goToPage(_page + 1);
+        } else if (velocity > 120 && _page > 0) {
+          _goToPage(_page - 1);
+        }
+      },
+      child: Material(
+        color: Theme.of(context).colorScheme.surface,
+        child: SizedBox(
+          height: 36,
+          child: Row(
+            children: [
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(width: 32, height: 30),
+                tooltip: 'Previous page',
+                onPressed: _page > 0 ? () => _goToPage(_page - 1) : null,
+                icon: const Icon(Icons.chevron_left_rounded, size: 20),
+              ),
+              InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: _showPagePicker,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+                  child: Text(
+                    '\${_page + 1}/\${_pages.length}',
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+                  ),
                 ),
               ),
-            ),
-            IconButton(
-              visualDensity: VisualDensity.compact,
-              tooltip: isBookmarked ? 'Remove bookmark' : 'Bookmark page',
-              onPressed: _toggleBookmark,
-              icon: Icon(isBookmarked ? Icons.bookmark_rounded : Icons.bookmark_border_rounded),
-            ),
-            if (_selectedStrokeIds.isNotEmpty) ...[
-              Text('${_selectedStrokeIds.length} selected', style: const TextStyle(fontSize: 10)),
-              IconButton(tooltip: 'Move selection left', onPressed: () => _moveSelection(const Offset(-8, 0)), icon: const Icon(Icons.arrow_left_rounded)),
-              IconButton(tooltip: 'Move selection right', onPressed: () => _moveSelection(const Offset(8, 0)), icon: const Icon(Icons.arrow_right_rounded)),
-              IconButton(tooltip: 'Delete selection', onPressed: _deleteSelection, icon: const Icon(Icons.delete_outline_rounded)),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+                tooltip: isBookmarked ? 'Remove bookmark' : 'Bookmark page',
+                onPressed: _toggleBookmark,
+                icon: Icon(isBookmarked ? Icons.bookmark_rounded : Icons.bookmark_border_rounded, size: 17),
+              ),
+              if (_selectedStrokeIds.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 3),
+                  child: Text('\${_selectedStrokeIds.length} selected', style: const TextStyle(fontSize: 10)),
+                ),
+              const Spacer(),
+              if (_saving || _savePending)
+                const SizedBox(width: 13, height: 13, child: CircularProgressIndicator(strokeWidth: 2))
+              else
+                const Icon(Icons.cloud_done_outlined, size: 15),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(width: 32, height: 30),
+                tooltip: 'Next page',
+                onPressed: _page + 1 < _pages.length ? () => _goToPage(_page + 1) : _addPage,
+                icon: const Icon(Icons.chevron_right_rounded, size: 20),
+              ),
+              PopupMenuButton<String>(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+                tooltip: 'Page actions',
+                onSelected: (action) {
+                  switch (action) {
+                    case 'add':
+                      _addPage();
+                    case 'copy':
+                      _copyPage(_page);
+                    case 'cut':
+                      _cutPage(_page);
+                    case 'duplicate':
+                      _duplicatePage(_page);
+                    case 'paste':
+                      _pastePage();
+                    case 'background':
+                      unawaited(_chooseTemplate());
+                    case 'delete':
+                      _deletePage(_page);
+                    case 'preview':
+                      unawaited(_showPagePicker());
+                  }
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'add', child: Text('Insert blank page')),
+                  PopupMenuItem(value: 'copy', child: Text('Copy page')),
+                  PopupMenuItem(value: 'cut', child: Text('Cut page')),
+                  PopupMenuItem(value: 'paste', child: Text('Paste as page')),
+                  PopupMenuItem(value: 'duplicate', child: Text('Duplicate page')),
+                  PopupMenuItem(value: 'background', child: Text('Change background')),
+                  PopupMenuItem(value: 'preview', child: Text('Page preview / reorder')),
+                  PopupMenuDivider(),
+                  PopupMenuItem(value: 'delete', child: Text('Delete page')),
+                ],
+                icon: const Icon(Icons.more_vert_rounded, size: 18),
+              ),
             ],
-            const Spacer(),
-            if (_studyRemaining > 0)
-              Text(_clock, style: const TextStyle(fontFeatures: [ui.FontFeature.tabularFigures()], fontWeight: FontWeight.w800)),
-            if (_saving || _savePending)
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 6),
-                child: SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
-              )
-            else
-              const Icon(Icons.cloud_done_outlined, size: 17),
-            IconButton(
-              visualDensity: VisualDensity.compact,
-              tooltip: 'Next page',
-              onPressed: _page + 1 < _pages.length ? () => _goToPage(_page + 1) : _addPage,
-              icon: const Icon(Icons.chevron_right_rounded),
-            ),
-          ],
+          ),
         ),
       ),
     );
