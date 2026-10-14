@@ -1080,7 +1080,15 @@ class _EditorV2PageState extends State<EditorV2Page>
                       : Theme.of(context).colorScheme.outlineVariant,
                 ),
               ),
-              child: Icon(_toolIcon(tool), size: 16),
+              child: _settings.getBool('showPenCaseStrokeSize') && active
+                  ? Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(_toolIcon(tool), size: 14),
+                        Text(_size.toStringAsFixed(1), style: const TextStyle(fontSize: 7, height: 1)),
+                      ],
+                    )
+                  : Icon(_toolIcon(tool), size: 16),
             ),
           ),
         ),
@@ -3984,6 +3992,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     var stylusHold = _settings.getBool('stylusHoldActions');
     var pressureErase = _settings.getBool('pressureErase');
     var showNavigation = _showPageNavigation;
+    var showPageNumbers = _settings.getBool('showPageNumbers');
     var floatingNavigation = _floatingPageNavigation;
     var floatingToolbar = _floatingToolbar;
     var showFavorites = _showFavoritesShowcase;
@@ -4001,12 +4010,12 @@ class _EditorV2PageState extends State<EditorV2Page>
                 const SizedBox(height: 12),
                 DropdownButtonFormField<PageTemplate>(
                   initialValue: template,
-                  decoration: const InputDecoration(labelText: 'Page template'),
+                  decoration: const InputDecoration(labelText: 'Page template', prefixIcon: Icon(Icons.grid_4x4_rounded)),
                   items: PageTemplate.values.map((value) => DropdownMenuItem(value: value, child: Text(value.name))).toList(),
                   onChanged: (value) { if (value != null) setSheetState(() => template = value); },
                 ),
                 const SizedBox(height: 12),
-                const Text('Paper color'),
+                Row(children: [Icon(Icons.palette_outlined, color: Theme.of(context).colorScheme.primary), const SizedBox(width: 8), const Text('Paper color')]),
                 const SizedBox(height: 6),
                 Wrap(spacing: 9, runSpacing: 8, children: _palette.map((candidate) => InkWell(
                   onTap: () => setSheetState(() => paper = candidate),
@@ -4016,7 +4025,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                   )),
                 )).toList()),
                 const SizedBox(height: 12),
-                const Text('Line / dot color'),
+                Row(children: [Icon(Icons.color_lens_outlined, color: Theme.of(context).colorScheme.primary), const SizedBox(width: 8), const Text('Line / dot color')]),
                 const SizedBox(height: 6),
                 Wrap(spacing: 9, children: _palette.where((candidate) => candidate != Colors.white).map((candidate) => InkWell(
                   onTap: () => setSheetState(() => line = candidate),
@@ -4025,12 +4034,13 @@ class _EditorV2PageState extends State<EditorV2Page>
                     border: Border.all(color: line == candidate ? Theme.of(context).colorScheme.primary : Colors.black26, width: line == candidate ? 3 : 1),
                   )),
                 )).toList()),
-                Text('Grid / dot spacing: ${spacing.round()}'),
+                Row(children: [Icon(Icons.space_dashboard_outlined, color: Theme.of(context).colorScheme.primary), const SizedBox(width: 8), Text('Grid / dot spacing: ${spacing.round()}')]),
                 Slider(min: 10, max: 80, value: spacing, onChanged: (value) => setSheetState(() => spacing = value)),
-                Text('Grid / dot opacity: ${(opacity * 100).round()}%'),
+                Row(children: [Icon(Icons.opacity_rounded, color: Theme.of(context).colorScheme.primary), const SizedBox(width: 8), Text('Grid / dot opacity: ${(opacity * 100).round()}%')]),
                 Slider(min: 0, max: 1, value: opacity, onChanged: (value) => setSheetState(() => opacity = value)),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
+                  secondary: const Icon(Icons.back_hand_outlined),
                   title: const Text('Palm rejection'),
                   subtitle: const Text('Ignore finger touches while the stylus is active'),
                   value: palm,
@@ -4038,30 +4048,42 @@ class _EditorV2PageState extends State<EditorV2Page>
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
+                  secondary: const Icon(Icons.swap_vert_rounded),
                   title: const Text('Show page navigation'),
                   value: showNavigation,
                   onChanged: (value) => setSheetState(() => showNavigation = value),
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
+                  secondary: const Icon(Icons.format_list_numbered_rounded),
+                  title: const Text('Show page numbers'),
+                  value: showPageNumbers,
+                  onChanged: (value) => setSheetState(() => showPageNumbers = value),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  secondary: const Icon(Icons.widgets_outlined),
                   title: const Text('Floating / movable toolbar'),
                   value: floatingToolbar,
                   onChanged: (value) => setSheetState(() => floatingToolbar = value),
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
+                  secondary: const Icon(Icons.inventory_2_outlined),
                   title: const Text('Favorite pen case'),
                   value: showFavorites,
                   onChanged: (value) => setSheetState(() => showFavorites = value),
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
+                  secondary: const Icon(Icons.vertical_align_center_rounded),
                   title: const Text('Floating vertical page navigation'),
                   value: floatingNavigation,
                   onChanged: (value) => setSheetState(() => floatingNavigation = value),
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
+                  secondary: const Icon(Icons.gesture_rounded),
                   title: const Text('Stylus hold actions'),
                   subtitle: const Text('Hold on a stroke to select it; hold on blank paper for temporary eraser'),
                   value: stylusHold,
@@ -4069,6 +4091,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
+                  secondary: const Icon(Icons.crop_16_9_rounded),
                   title: const Text('Hold-to-erase on blank paper'),
                   value: pressureErase,
                   onChanged: (value) => setSheetState(() => pressureErase = value),
@@ -4106,6 +4129,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                       await _settings.setBool('stylusHoldActions', stylusHold);
                       await _settings.setBool('pressureErase', pressureErase);
                       await _settings.setBool('showPageNavigation', showNavigation);
+                      await _settings.setBool('showPageNumbers', showPageNumbers);
                       await _settings.setBool('editorV2FloatingPageNavigation', floatingNavigation);
                       await _settings.setBool('editorV2FloatingToolbar', floatingToolbar);
                       await _settings.setBool('editorV2ShowFavoritesShowcase', showFavorites);
@@ -5101,7 +5125,8 @@ class _EditorV2PageState extends State<EditorV2Page>
                   onPressed: _page > 0 ? () => _goToPage(_page - 1) : null,
                   icon: const Icon(Icons.keyboard_arrow_up_rounded, size: 20),
                 ),
-                InkWell(
+                if (_settings.getBool('showPageNumbers'))
+                  InkWell(
                   borderRadius: BorderRadius.circular(8),
                   onTap: _showPagePicker,
                   child: Padding(
@@ -5446,22 +5471,24 @@ class _EditorV2PageState extends State<EditorV2Page>
                 size: 18,
               ),
             ),
-            IconButton(
-              visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints.tightFor(width: 27, height: 30),
-              tooltip: 'Undo',
-              onPressed: _undoStack.isEmpty ? null : _undo,
-              icon: const Icon(Icons.undo_rounded, size: 18),
-            ),
-            IconButton(
-              visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints.tightFor(width: 27, height: 30),
-              tooltip: 'Redo',
-              onPressed: _redoStack.isEmpty ? null : _redo,
-              icon: const Icon(Icons.redo_rounded, size: 18),
-            ),
+            if (!_settings.getBool('showUndoOnRight'))
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(width: 27, height: 30),
+                tooltip: 'Undo',
+                onPressed: _undoStack.isEmpty ? null : _undo,
+                icon: const Icon(Icons.undo_rounded, size: 18),
+              ),
+            if (!_settings.getBool('showUndoOnRight'))
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(width: 27, height: 30),
+                tooltip: 'Redo',
+                onPressed: _redoStack.isEmpty ? null : _redo,
+                icon: const Icon(Icons.redo_rounded, size: 18),
+              ),
             Expanded(
               child: DragTarget<Object>(
                 onAcceptWithDetails: (details) => unawaited(
@@ -5506,6 +5533,20 @@ class _EditorV2PageState extends State<EditorV2Page>
           ],
         ),
         actions: [
+          if (_settings.getBool('showUndoOnRight')) ...[
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Undo',
+              onPressed: _undoStack.isEmpty ? null : _undo,
+              icon: const Icon(Icons.undo_rounded, size: 18),
+            ),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Redo',
+              onPressed: _redoStack.isEmpty ? null : _redo,
+              icon: const Icon(Icons.redo_rounded, size: 18),
+            ),
+          ],
           if (_saveError != null)
             IconButton(
               visualDensity: VisualDensity.compact,
