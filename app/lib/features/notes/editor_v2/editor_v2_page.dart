@@ -805,8 +805,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       final wasPressureErase = _pressureEraseActive;
       final restoreTool = _toolBeforePressureErase;
       if (wasPressureErase) {
-        final erasePosition = _pressureEraseUsed ? event.localPosition : (_gestureStart ?? event.localPosition);
-        _eraseAt(erasePosition, math.max(18, _size * 2).toDouble());
+        _eraseAt(event.localPosition, math.max(18, _size * 2).toDouble());
       }
       setState(() {
         _activePointer = null;
