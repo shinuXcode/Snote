@@ -903,7 +903,7 @@ class EditorV2InkPainter extends CustomPainter {
       case 'fractionBar':
         line(Offset(safeRect.left, safeRect.center.dy), Offset(safeRect.right, safeRect.center.dy));
       case 'coordinatePoint':
-        canvas.drawLine(safeRect.topLeft, safeRect.bottomRight, __axisPaint(base));
+        canvas.drawLine(safeRect.topLeft, safeRect.bottomRight, _axisPaint(base));
         canvas.drawLine(safeRect.bottomLeft, safeRect.topRight, _axisPaint(base));
         canvas.drawCircle(safeRect.center, math.max(base.strokeWidth * 2.5, 3).toDouble(), base..style = PaintingStyle.fill);
       case 'linearGraph':
