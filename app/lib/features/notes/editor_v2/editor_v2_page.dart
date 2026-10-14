@@ -3221,7 +3221,7 @@ class _EditorV2PageState extends State<EditorV2Page>
               if (_hasPdfBackgroundPages) ...[
                 PopupMenuItem(value: 'notesLayer', child: Text(_pdfBackgroundVisible ? 'Switch to notes layer' : 'Notes layer active')),
                 PopupMenuItem(value: 'pdfLayer', child: Text(_pdfBackgroundVisible ? 'PDF layer active' : 'Switch to PDF layer')),
-              ]
+              ],
               PopupMenuItem(
                 value: 'togglePageLock',
                 child: Text(_pageData['locked'] == true ? 'Unlock current page' : 'Lock current page'),
@@ -3367,12 +3367,16 @@ class _EditorV2PageState extends State<EditorV2Page>
 class _ScientificCalculatorDialog extends StatefulWidget {
   final double initialWidth;
   final double initialHeight;
-  final void Function(double width, double height) onResize;
+  final ValueChanged<Size> onResize;
+  final VoidCallback onClose;
+  final ValueChanged<Offset> onMove;
 
   const _ScientificCalculatorDialog({
     required this.initialWidth,
     required this.initialHeight,
     required this.onResize,
+    required this.onClose,
+    required this.onMove,
   });
 
   @override
@@ -3385,13 +3389,17 @@ class _ScientificCalculatorDialogState extends State<_ScientificCalculatorDialog
   String? _error;
   bool _degrees = true;
   double _width = 330;
-  double _height = 470;
+  double _height = 465;
 
   static const List<String> _keys = <String>[
-    'sin', 'cos', 'tan', '√', '(', ')', '⌫',
-    'C', 'ln', 'log', 'π', '^', '÷', '×',
-    '7', '8', '9', 'AC', '4', '5', '6', '−',
-    '1', '2', '3', '+', '0', '.', 'e', '=',
+    'sin', 'cos', 'tan', '√',
+    'ln', 'log', 'π', '^',
+    '(', ')', '⌫', 'AC',
+    '7', '8', '9', '÷',
+    '4', '5', '6', '×',
+    '1', '2', '3', '−',
+    '0', '.', 'e', '+',
+    'C', 'abs', '=', '%',
   ];
 
   @override
@@ -3411,10 +3419,8 @@ class _ScientificCalculatorDialogState extends State<_ScientificCalculatorDialog
       }
       if (key == '⌫') {
         final text = _expression.text;
-        if (text.isNotEmpty) {
-          _expression.text = text.substring(0, text.length - 1);
-          _expression.selection = TextSelection.collapsed(offset: _expression.text.length);
-        }
+        if (text.isNotEmpty) _expression.text = text.substring(0, text.length - 1);
+        _expression.selection = TextSelection.collapsed(offset: _expression.text.length);
         return;
       }
       if (key == '=') {
@@ -3422,7 +3428,7 @@ class _ScientificCalculatorDialogState extends State<_ScientificCalculatorDialog
           final value = _ScientificExpressionParser(_expression.text, degrees: _degrees).parse();
           if (!value.isFinite) throw const FormatException('Result is not finite');
           _answer = value.abs() < 1e-12 ? '0' : _format(value);
-        } catch (error) {
+        } catch (_) {
           _error = 'Invalid expression';
         }
         return;
@@ -3433,182 +3439,25 @@ class _ScientificCalculatorDialogState extends State<_ScientificCalculatorDialog
         '÷' => '/',
         '×' => '*',
         '−' => '-',
-        'sin' || 'cos' || 'tan' || 'ln' || 'log' => '$key(',
+        'sin' || 'cos' || 'tan' || 'ln' || 'log' || 'abs' => '$key(',
+        '%' => '/100',
         _ => key,
       };
-      _expression.text += insert;
-      _expression.selection = TextSelection.collapsed(offset: _expression.text.length);
+      final selection = _expression.selection;
+      final text = _expression.text;
+      final start = selection.isValid ? selection.start : text.length;
+      final end = selection.isValid ? selection.end : text.length;
+      _expression.value = TextEditingValue(
+        text: text.replaceRange(start, end, insert),
+        selection: TextSelection.collapsed(offset: start + insert.length),
+      );
     });
   }
 
   String _format(double value) {
     final fixed = value.toStringAsPrecision(10);
-    return fixed.contains('.') ? fixed.replaceFirst(RegExp(r'\.?0+
-  final CanvasTool selected;
-  const _EditorV2ToolPicker({required this.selected});
-
-  @override
-  State<_EditorV2ToolPicker> createState() => _EditorV2ToolPickerState();
-}
-
-class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
-  final TextEditingController _search = TextEditingController();
-  String _category = 'All tools';
-
-  static const Set<String> _mathTools = <String>{
-    'unitCircle', 'cubicGraph', 'exponentialGraph', 'logarithmicGraph',
-    'tangentGraph', 'ellipseAxes', 'vectorField', 'polarGraph',
-    'cartesianPlane', 'coordinateAxes', 'parabola', 'sineWave', 'angle',
-    'vectorArrow', 'projectilePath', 'numberLine', 'equalsSign', 'notEqualSign',
-    'approximateEqual', 'greaterThanSign', 'lessThanSign', 'plusMinus',
-    'infinitySymbol', 'integralSymbol', 'sigmaSymbol', 'deltaSymbol', 'thetaSymbol',
-    'omegaSymbol', 'squareRootSymbol', 'fractionBar', 'matrixGrid', 'summationSymbol',
-    'derivativeSymbol', 'coordinatePoint', 'linearGraph', 'circleGraph', 'scatterPlot',
-    'lineChart', 'areaChart', 'donutChart', 'stackedBarChart', 'networkGraph', 'vennDiagram',
-  };
-  static const Set<String> _chartTools = <String>{
-    'histogram', 'barChart', 'pieChart', 'flowchartTerminator',
-    'flowchartProcess', 'flowchartDecision', 'flowchartInputOutput',
-    'flowchartDocument', 'flowchartDatabase', 'flowchartConnector',
-    'timeline', 'tableGrid', 'checklist', 'flowchartPreparation',
-    'flowchartManualInput', 'flowchartDelay', 'flowchartOffPage',
-    'documentStack', 'databaseCylinder', 'serverRack', 'networkNode', 'networkLink',
-  };
-  static const Set<String> _physicsTools = <String>{
-    'rayDiagram', 'convexLens', 'concaveLens', 'planeMirror',
-    'forceDiagram', 'pulley', 'spring', 'lever', 'inclinedPlane',
-    'gear', 'magnet', 'thermometer', 'stopwatch', 'waveform',
-    'gearTrain', 'pendulum', 'weightSymbol', 'electricField', 'magneticField',
-    'waveFront', 'photonSymbol',
-  };
-  static const Set<String> _circuitTools = <String>{
-    'circuitResistor', 'circuitBattery', 'capacitor', 'circuitSwitch', 'circuitLamp',
-    'wifiSymbol', 'batterySymbol', 'groundSymbol', 'voltageSource', 'currentSource',
-    'inductorSymbol', 'diodeSymbol', 'transistorSymbol', 'logicAnd', 'logicOr',
-    'logicNot', 'logicXor', 'cloudSymbol',
-  };
-  static const Set<String> _chemistryTools = <String>{
-    'atom', 'molecule', 'benzeneRing', 'beaker', 'testTube',
-    'conicalFlask', 'orbital', 'ionSymbol', 'ionicBond', 'covalentBond',
-    'moleculeChain', 'crystalLattice', 'organicChain', 'aminoAcid', 'proteinSymbol',
-  };
-  static const Set<String> _biologyTools = <String>{
-    'animalCell', 'plantCell', 'dnaHelix', 'neuron', 'leaf', 'microscope',
-    'cellMembrane', 'chloroplast', 'mitochondrion', 'ribosome', 'brainIcon',
-    'heartOrgan', 'lungIcon', 'bloodCell', 'bacteriaIcon', 'virusIcon',
-    'flowerIcon', 'treeIcon', 'atomNucleus', 'electronOrbit',
-  };
-  static const Set<String> _instrumentTools = <String>{
-    'ruler', 'compass', 'protractor', 'divider', 'dashedLine', 'dottedLine',
-  };
-
-  String _categoryOf(CanvasTool tool) {
-    if (tool.isPen) return 'Pens';
-    if (const {'eraser', 'pixelEraser', 'lasso'}.contains(tool.name)) return 'Editing';
-    if (_mathTools.contains(tool.name)) return 'Math & graphs';
-    if (const {'octagon','nonagon','decagon','heptagon','hexagram','pentagram','arrowUp','arrowDown','arrowLeft','arrowRight','doubleArrow','curvedArrow','zigzag','lightningBolt','crescentMoon','sunSymbol','doubleChevron','chevron','bracketLeft','bracketRight','braceLeft','braceRight','checkMark','crossMark','questionMark','exclamationMark','infoSymbol','warningSymbol','shieldIcon','lockSymbol','keySymbol','targetIcon','medalIcon','trophyIcon','bookmarkIcon','tagIcon','priceTag','quoteBox','stickyNote','indexCard'}.contains(tool.name)) return 'Geometry & symbols';
-    if (_chartTools.contains(tool.name)) return 'Charts & flowcharts';
-    if (_physicsTools.contains(tool.name)) return 'Physics & mechanics';
-    if (_circuitTools.contains(tool.name)) return 'Electrical circuits';
-    if (_chemistryTools.contains(tool.name)) return 'Chemistry';
-    if (_biologyTools.contains(tool.name)) return 'Biology';
-    if (_instrumentTools.contains(tool.name)) return 'Rulers & measuring';
-    return 'Shapes & diagrams';
-  }
-
-  @override
-  void dispose() {
-    _search.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final categories = <String>[
-      'All tools', 'Pens', 'Editing', 'Shapes & diagrams', 'Rulers & measuring',
-      'Math & graphs', 'Charts & flowcharts', 'Physics & mechanics',
-      'Electrical circuits', 'Chemistry', 'Biology', 'Geometry & symbols',
-    ];
-    final query = _search.text.trim().toLowerCase();
-    final items = CanvasTool.values.where((tool) {
-      final matchesQuery = query.isEmpty ||
-          tool.label.toLowerCase().contains(query) ||
-          tool.name.toLowerCase().contains(query);
-      return matchesQuery &&
-          (_category == 'All tools' || _categoryOf(tool) == _category);
-    }).toList();
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(16, 4, 16, 16 + MediaQuery.viewInsetsOf(context).bottom),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _search,
-              onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search_rounded),
-                hintText: 'Search pens, shapes, graphs or science tools',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: 40,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: categories.map((category) => Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: ChoiceChip(
-                    label: Text(category, style: const TextStyle(fontSize: 11)),
-                    selected: _category == category,
-                    onSelected: (_) => setState(() => _category = category),
-                  ),
-                )).toList(),
-              ),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: MediaQuery.sizeOf(context).height * .52,
-              child: GridView.builder(
-                itemCount: items.length,
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
-                  childAspectRatio: 1.3,
-                ),
-                itemBuilder: (_, index) {
-                  final tool = items[index];
-                  final selected = tool == widget.selected;
-                  return InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () => Navigator.pop(context, _ToolPickerChoice(tool)),
-                    onDoubleTap: () => Navigator.pop(context, _ToolPickerChoice(tool, configure: true)),
-                    child: Ink(
-                      decoration: BoxDecoration(
-                        color: selected ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: selected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outlineVariant),
-                      ),
-                      child: Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(6),
-                          child: Text(tool.label, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-), '') : fixed;
+    if (!fixed.contains('.')) return fixed;
+    return fixed.replaceFirst(RegExp(r'\.?0+$'), '');
   }
 
   @override
@@ -3620,66 +3469,63 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
   @override
   Widget build(BuildContext context) {
     final screen = MediaQuery.sizeOf(context);
-    final width = _width.clamp(290.0, math.max(290.0, screen.width - 24)).toDouble();
-    final height = _height.clamp(380.0, math.max(380.0, screen.height - 40)).toDouble();
+    final width = _width.clamp(270.0, math.max(270.0, screen.width - 16)).toDouble();
+    final height = _height.clamp(360.0, math.max(360.0, screen.height - 32)).toDouble();
     final scheme = Theme.of(context).colorScheme;
-    return Dialog(
-      insetPadding: const EdgeInsets.all(12),
-      backgroundColor: scheme.surface,
-      clipBehavior: Clip.antiAlias,
-      child: SizedBox(
-        width: width,
-        height: height,
+    return SizedBox(
+      width: width,
+      height: height,
+      child: Material(
+        color: scheme.surface,
+        elevation: 12,
+        borderRadius: BorderRadius.circular(16),
+        clipBehavior: Clip.antiAlias,
         child: Column(
           children: [
             GestureDetector(
-              onPanUpdate: (details) {
-                setState(() {
-                  _width = (_width + details.delta.dx).clamp(290.0, math.max(290.0, screen.width - 24)).toDouble();
-                  _height = (_height + details.delta.dy).clamp(380.0, math.max(380.0, screen.height - 40)).toDouble();
-                  widget.onResize(_width, _height);
-                });
-              },
+              onPanUpdate: (details) => widget.onMove(details.delta),
               child: Container(
                 color: scheme.primaryContainer,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: Row(
                   children: [
-                    const Icon(Icons.calculate_rounded, size: 19),
-                    const SizedBox(width: 8),
-                    const Expanded(child: Text('Scientific calculator', style: TextStyle(fontWeight: FontWeight.w800))),
+                    const Icon(Icons.drag_indicator_rounded, size: 18),
+                    const SizedBox(width: 4),
+                    const Expanded(child: Text('Calculator', style: TextStyle(fontWeight: FontWeight.w800))),
                     TextButton(
                       onPressed: () => setState(() => _degrees = !_degrees),
                       child: Text(_degrees ? 'DEG' : 'RAD'),
                     ),
                     IconButton(
                       visualDensity: VisualDensity.compact,
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close_rounded),
+                      constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+                      onPressed: widget.onClose,
+                      icon: const Icon(Icons.close_rounded, size: 18),
                     ),
                   ],
                 ),
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+              padding: const EdgeInsets.fromLTRB(10, 6, 10, 4),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   TextField(
                     controller: _expression,
                     textAlign: TextAlign.end,
-                    style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w600, fontFeatures: [ui.FontFeature.tabularFigures()]),
-                    decoration: const InputDecoration(
-                      hintText: '0',
-                      border: InputBorder.none,
-                      isDense: true,
-                    ),
+                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600, fontFeatures: [ui.FontFeature.tabularFigures()]),
+                    decoration: const InputDecoration(hintText: '0', border: InputBorder.none, isDense: true),
                     onSubmitted: (_) => _press('='),
                   ),
                   Align(
                     alignment: Alignment.centerRight,
-                    child: Text(_error ?? _answer, style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: _error == null ? scheme.primary : scheme.error, fontFeatures: const [ui.FontFeature.tabularFigures()])),
+                    child: Text(
+                      _error ?? _answer,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800, color: _error == null ? scheme.primary : scheme.error, fontFeatures: const [ui.FontFeature.tabularFigures()]),
+                    ),
                   ),
                 ],
               ),
@@ -3687,33 +3533,36 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
             const Divider(height: 1),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(6),
                 child: GridView.builder(
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: _keys.length,
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 4,
-                    crossAxisSpacing: 6,
-                    mainAxisSpacing: 6,
-                    childAspectRatio: 1.35,
+                    crossAxisSpacing: 5,
+                    mainAxisSpacing: 5,
+                    childAspectRatio: 1.3,
                   ),
                   itemBuilder: (_, index) {
                     final key = _keys[index];
-                    final isOperator = const {'÷', '×', '−', '+', '^', '='}.contains(key);
-                    final isUtility = const {'C', 'AC', '⌫'}.contains(key);
+                    final isOperator = const {'÷', '×', '−', '+', '^', '=', '%'}.contains(key);
+                    final isFunction = const {'sin','cos','tan','√','ln','log','π','abs'}.contains(key);
+                    final isClear = const {'C','AC','⌫'}.contains(key);
                     return FilledButton.tonal(
                       style: FilledButton.styleFrom(
                         padding: EdgeInsets.zero,
                         backgroundColor: isOperator
                             ? scheme.primaryContainer
-                            : isUtility
+                            : isFunction
                                 ? scheme.secondaryContainer
-                                : scheme.surfaceContainerHigh,
+                                : isClear
+                                    ? scheme.errorContainer.withValues(alpha: .7)
+                                    : scheme.surfaceContainerHigh,
                         foregroundColor: scheme.onSurface,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
                       ),
                       onPressed: () => _press(key),
-                      child: Text(key, style: TextStyle(fontSize: key.length > 2 ? 14 : 19, fontWeight: FontWeight.w700)),
+                      child: Text(key, style: TextStyle(fontSize: key.length > 2 ? 13 : 18, fontWeight: FontWeight.w700)),
                     );
                   },
                 ),
@@ -3721,17 +3570,16 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
             ),
             GestureDetector(
               onPanUpdate: (details) {
-                setState(() {
-                  _width = (_width + details.delta.dx).clamp(290.0, math.max(290.0, screen.width - 24)).toDouble();
-                  _height = (_height + details.delta.dy).clamp(380.0, math.max(380.0, screen.height - 40)).toDouble();
-                  widget.onResize(_width, _height);
-                });
+                _width = (_width + details.delta.dx).clamp(270.0, math.max(270.0, screen.width - 16)).toDouble();
+                _height = (_height + details.delta.dy).clamp(360.0, math.max(360.0, screen.height - 32)).toDouble();
+                widget.onResize(Size(_width, _height));
+                setState(() {});
               },
               child: Container(
                 height: 18,
-                alignment: Alignment.bottomRight,
-                padding: const EdgeInsets.only(right: 4, bottom: 2),
-                child: Icon(Icons.drag_handle_rounded, size: 18, color: scheme.outline),
+                alignment: Alignment.centerRight,
+                padding: const EdgeInsets.only(right: 5),
+                child: Icon(Icons.drag_handle_rounded, size: 17, color: scheme.outline),
               ),
             ),
           ],
@@ -3873,28 +3721,54 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
     'unitCircle', 'cubicGraph', 'exponentialGraph', 'logarithmicGraph',
     'tangentGraph', 'ellipseAxes', 'vectorField', 'polarGraph',
     'cartesianPlane', 'coordinateAxes', 'parabola', 'sineWave', 'angle',
-    'vectorArrow', 'projectilePath', 'numberLine',
+    'vectorArrow', 'projectilePath', 'numberLine', 'equalsSign', 'notEqualSign',
+    'approximateEqual', 'greaterThanSign', 'lessThanSign', 'plusMinus',
+    'infinitySymbol', 'integralSymbol', 'sigmaSymbol', 'deltaSymbol', 'thetaSymbol',
+    'omegaSymbol', 'squareRootSymbol', 'fractionBar', 'matrixGrid', 'summationSymbol',
+    'derivativeSymbol', 'coordinatePoint', 'linearGraph', 'circleGraph', 'scatterPlot',
+    'lineChart', 'areaChart', 'donutChart', 'stackedBarChart', 'networkGraph', 'vennDiagram',
   };
   static const Set<String> _chartTools = <String>{
     'histogram', 'barChart', 'pieChart', 'flowchartTerminator',
     'flowchartProcess', 'flowchartDecision', 'flowchartInputOutput',
     'flowchartDocument', 'flowchartDatabase', 'flowchartConnector',
-    'timeline', 'tableGrid', 'checklist',
+    'timeline', 'tableGrid', 'checklist', 'flowchartPreparation',
+    'flowchartManualInput', 'flowchartDelay', 'flowchartOffPage',
+    'documentStack', 'databaseCylinder', 'serverRack', 'networkNode', 'networkLink',
   };
   static const Set<String> _physicsTools = <String>{
     'rayDiagram', 'convexLens', 'concaveLens', 'planeMirror',
     'forceDiagram', 'pulley', 'spring', 'lever', 'inclinedPlane',
     'gear', 'magnet', 'thermometer', 'stopwatch', 'waveform',
+    'gearTrain', 'pendulum', 'weightSymbol', 'electricField', 'magneticField',
+    'waveFront', 'photonSymbol',
   };
   static const Set<String> _circuitTools = <String>{
     'circuitResistor', 'circuitBattery', 'capacitor', 'circuitSwitch', 'circuitLamp',
+    'wifiSymbol', 'batterySymbol', 'groundSymbol', 'voltageSource', 'currentSource',
+    'inductorSymbol', 'diodeSymbol', 'transistorSymbol', 'logicAnd', 'logicOr',
+    'logicNot', 'logicXor', 'cloudSymbol',
   };
   static const Set<String> _chemistryTools = <String>{
     'atom', 'molecule', 'benzeneRing', 'beaker', 'testTube',
-    'conicalFlask', 'orbital',
+    'conicalFlask', 'orbital', 'ionSymbol', 'ionicBond', 'covalentBond',
+    'moleculeChain', 'crystalLattice', 'organicChain', 'aminoAcid', 'proteinSymbol',
   };
   static const Set<String> _biologyTools = <String>{
     'animalCell', 'plantCell', 'dnaHelix', 'neuron', 'leaf', 'microscope',
+    'cellMembrane', 'chloroplast', 'mitochondrion', 'ribosome', 'brainIcon',
+    'heartOrgan', 'lungIcon', 'bloodCell', 'bacteriaIcon', 'virusIcon',
+    'flowerIcon', 'treeIcon', 'atomNucleus', 'electronOrbit',
+  };
+  static const Set<String> _geometryTools = <String>{
+    'octagon','nonagon','decagon','heptagon','hexagram','pentagram','arrowUp','arrowDown',
+    'arrowLeft','arrowRight','doubleArrow','curvedArrow','zigzag','lightningBolt',
+    'crescentMoon','sunSymbol','doubleChevron','chevron','bracketLeft','bracketRight',
+    'braceLeft','braceRight','equalsSign','notEqualSign','approximateEqual','greaterThanSign',
+    'lessThanSign','plusMinus','infinitySymbol','integralSymbol','sigmaSymbol','deltaSymbol',
+    'thetaSymbol','omegaSymbol','squareRootSymbol','fractionBar','matrixGrid','summationSymbol',
+    'derivativeSymbol','coordinatePoint','linearGraph','circleGraph','scatterPlot','lineChart',
+    'areaChart','donutChart','stackedBarChart','networkGraph','vennDiagram',
   };
   static const Set<String> _instrumentTools = <String>{
     'ruler', 'compass', 'protractor', 'divider', 'dashedLine', 'dottedLine',
@@ -3903,6 +3777,7 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
   String _categoryOf(CanvasTool tool) {
     if (tool.isPen) return 'Pens';
     if (const {'eraser', 'pixelEraser', 'lasso'}.contains(tool.name)) return 'Editing';
+    if (_geometryTools.contains(tool.name)) return 'Geometry & symbols';
     if (_mathTools.contains(tool.name)) return 'Math & graphs';
     if (_chartTools.contains(tool.name)) return 'Charts & flowcharts';
     if (_physicsTools.contains(tool.name)) return 'Physics & mechanics';
@@ -3910,6 +3785,7 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
     if (_chemistryTools.contains(tool.name)) return 'Chemistry';
     if (_biologyTools.contains(tool.name)) return 'Biology';
     if (_instrumentTools.contains(tool.name)) return 'Rulers & measuring';
+    if (tool == CanvasTool.sticker) return 'Stickers';
     return 'Shapes & diagrams';
   }
 
@@ -3922,21 +3798,20 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
   @override
   Widget build(BuildContext context) {
     final categories = <String>[
-      'All tools', 'Pens', 'Editing', 'Shapes & diagrams', 'Rulers & measuring',
-      'Math & graphs', 'Charts & flowcharts', 'Physics & mechanics',
-      'Electrical circuits', 'Chemistry', 'Biology',
+      'All tools', 'Pens', 'Editing', 'Shapes & diagrams', 'Geometry & symbols',
+      'Rulers & measuring', 'Math & graphs', 'Charts & flowcharts',
+      'Physics & mechanics', 'Electrical circuits', 'Chemistry', 'Biology', 'Stickers',
     ];
     final query = _search.text.trim().toLowerCase();
     final items = CanvasTool.values.where((tool) {
       final matchesQuery = query.isEmpty ||
           tool.label.toLowerCase().contains(query) ||
           tool.name.toLowerCase().contains(query);
-      return matchesQuery &&
-          (_category == 'All tools' || _categoryOf(tool) == _category);
+      return matchesQuery && (_category == 'All tools' || _categoryOf(tool) == _category);
     }).toList();
     return SafeArea(
       child: Padding(
-        padding: EdgeInsets.fromLTRB(16, 4, 16, 16 + MediaQuery.viewInsetsOf(context).bottom),
+        padding: EdgeInsets.fromLTRB(12, 4, 12, 12 + MediaQuery.viewInsetsOf(context).bottom),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -3966,31 +3841,34 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
             ),
             const SizedBox(height: 8),
             SizedBox(
-              height: MediaQuery.sizeOf(context).height * .52,
+              height: MediaQuery.sizeOf(context).height * .56,
               child: GridView.builder(
                 itemCount: items.length,
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 3,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
-                  childAspectRatio: 1.3,
+                  crossAxisSpacing: 6,
+                  mainAxisSpacing: 6,
+                  childAspectRatio: 1.22,
                 ),
                 itemBuilder: (_, index) {
                   final tool = items[index];
                   final selected = tool == widget.selected;
-                  return InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () => Navigator.pop(context, tool),
-                    child: Ink(
-                      decoration: BoxDecoration(
-                        color: selected ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: selected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outlineVariant),
-                      ),
-                      child: Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(6),
-                          child: Text(tool.label, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                  return GestureDetector(
+                    onDoubleTap: () => Navigator.pop(context, _ToolPickerChoice(tool, configure: true)),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: () => Navigator.pop(context, _ToolPickerChoice(tool)),
+                      child: Ink(
+                        decoration: BoxDecoration(
+                          color: selected ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: selected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outlineVariant),
+                        ),
+                        child: Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(5),
+                            child: Text(tool.label, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                          ),
                         ),
                       ),
                     ),
@@ -3998,6 +3876,8 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
                 },
               ),
             ),
+            const SizedBox(height: 4),
+            const Text('Tap to choose • double-tap to configure this tool', style: TextStyle(fontSize: 11)),
           ],
         ),
       ),
