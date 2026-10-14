@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:cross_file/cross_file.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:pdfx/pdfx.dart';
 import 'package:share_plus/share_plus.dart';
@@ -13,6 +14,7 @@ import '../../core/settings/app_settings.dart';
 import '../../data/local/file_document_repository.dart';
 import '../../data/local/folder_repository.dart';
 import '../../data/local/note_repository.dart';
+import '../notes/nextgen_editor_route.dart';
 
 class PdfAnnotationPage extends StatefulWidget {
   final String? folderId;
@@ -41,55 +43,91 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
   int _page = 1;
   final Set<int> _selectedPages = <int>{};
 
+  @override
+  void initState() {
+    super.initState();
+    debugPrint(
+      '[Snote][PDF] annotation workspace opened '
+      'platform=${defaultTargetPlatform.name} folder=${widget.folderId ?? 'root'}',
+    );
+  }
+
   Future<void> _openPdf() async {
     if (_busy) return;
-    final file = await FilePicker.pickFile(
-      type: FileType.custom,
-      allowedExtensions: ['pdf'],
-    );
-    if (file == null) return;
-
+    debugPrint('[Snote][PDF] picker requested folder=${widget.folderId ?? 'root'}');
+    LocalNote? createdNote;
+    DocumentAsset? savedAsset;
     setState(() => _busy = true);
     try {
+      final file = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: const ['pdf'],
+      );
+      if (file == null) return;
+
       final bytes = await file.readAsBytes();
+      debugPrint('[Snote][PDF] picked file name=${file.name} bytes=${bytes.length}');
+      if (bytes.isEmpty) {
+        throw StateError('The selected PDF file is empty or could not be read.');
+      }
+
+      final rawTitle = file.name.toLowerCase().endsWith('.pdf')
+          ? file.name.substring(0, file.name.length - 4)
+          : file.name;
       final note = await _notes.create(
-        title: file.name.replaceFirst(
-          RegExp(r'\.pdf$', caseSensitive: false),
-          '',
-        ),
+        title: rawTitle,
         folderId: widget.folderId,
       );
+      createdNote = note;
+
       final asset = await _documents.saveBytes(
         noteId: note.id,
         name: file.name,
         type: 'pdf',
         bytes: bytes,
-        metadata: <String, dynamic>{'source': 'pdf-import', 'isCover': true},
+        metadata: const <String, dynamic>{
+          'source': 'pdf-import',
+          'isCover': true,
+        },
       );
+      savedAsset = asset;
 
-      final controller = PdfControllerPinch(document: PdfDocument.openData(bytes));
       if (!mounted) {
-        controller.dispose();
         await _documents.delete(asset);
         await _notes.delete(note.id);
         return;
       }
 
-      _controller?.dispose();
-      setState(() {
-        _bytes = bytes;
-        _asset = asset;
-        _note = note;
-        _controller = controller;
-        _pageCount = controller.pagesCount ?? 0;
-        _page = 1;
-        _selectedPages.clear();
-        _selectionMode = false;
-      });
-    } catch (error) {
+      debugPrint(
+        '[Snote][PDF] open editor noteId=${note.id} '
+        'assetId=${asset.id} bytes=${bytes.length}',
+      );
+      await Navigator.of(context).pushReplacement<void, void>(
+        MaterialPageRoute<void>(
+          settings: RouteSettings(name: '/pdf-annotation/editor/${note.id}'),
+          builder: (_) => SnoteNextEditorRoute(
+            note: note,
+            initialPdfBytes: bytes,
+            initialPdfName: file.name,
+          ),
+        ),
+      );
+    } catch (error, stackTrace) {
+      debugPrint('[Snote][PDF] import/open failed: \$error\\n\$stackTrace');
+      // Remove only a placeholder whose source attachment never completed.
+      if (createdNote != null && savedAsset == null) {
+        try {
+          await _notes.delete(createdNote.id);
+        } catch (cleanupError, cleanupStack) {
+          debugPrint(
+            '[Snote][PDF] orphan-note cleanup failed: '
+            '\$cleanupError\\n\$cleanupStack',
+          );
+        }
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not open PDF: $error')),
+          SnackBar(content: Text('Could not open PDF: \$error')),
         );
       }
     } finally {
@@ -263,7 +301,7 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
         : (_controller?.pagesCount ?? 0);
     if (total <= 0) return;
 
-    var draft = Set<int>.from(_selectedPages);
+    final draft = Set<int>.from(_selectedPages);
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -286,6 +324,12 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
                         draft.remove(page);
                       }
                     });
+                    setState(() {
+                      _selectedPages
+                        ..clear()
+                        ..addAll(draft);
+                      _selectionMode = _selectedPages.isNotEmpty;
+                    });
                   },
                   title: Text('Page ' + page.toString()),
                 );
@@ -295,19 +339,7 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                setState(() {
-                  _selectedPages
-                    ..clear()
-                    ..addAll(draft);
-                  _selectionMode = _selectedPages.isNotEmpty;
-                });
-                Navigator.pop(dialogContext);
-              },
-              child: const Text('Apply'),
+              child: const Text('Done'),
             ),
           ],
         ),
@@ -534,13 +566,42 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
     final controller = _controller;
     if (controller == null) {
       return Center(
-        child: _busy
-            ? const CircularProgressIndicator()
-            : FilledButton.icon(
-                onPressed: _openPdf,
-                icon: const Icon(Icons.upload_file_rounded),
-                label: const Text('Choose PDF'),
-              ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 380),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.picture_as_pdf_rounded,
+                  size: 58,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Annotate a PDF',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Choose a PDF to open it as a notebook. Your PDF pages will become writing pages, so you can use Snote pens and tools directly on them.',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 20),
+                if (_busy)
+                  const CircularProgressIndicator()
+                else
+                  FilledButton.icon(
+                    onPressed: _openPdf,
+                    icon: const Icon(Icons.upload_file_rounded),
+                    label: const Text('Choose PDF'),
+                  ),
+              ],
+            ),
+          ),
+        ),
       );
     }
 
@@ -596,22 +657,27 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
   Widget _annotationPane() => Stack(
         fit: StackFit.expand,
         children: <Widget>[
-          CustomPaint(
-            painter: PageBackground(
-              template: _template,
-              paperColor: Colors.white,
-              lineColor: Colors.blueGrey,
-              spacing: 28,
-              lineOpacity: .6,
+          Positioned.fill(
+            child: CustomPaint(
+              painter: PageBackground(
+                template: _template,
+                paperColor: Colors.white,
+                lineColor: Colors.blueGrey,
+                spacing: 28,
+                lineOpacity: .6,
+              ),
+              child: const SizedBox.expand(),
             ),
           ),
-          SnoteCanvas(
-            pen: const PenConfig(
-              type: PenType.ballpoint,
-              color: Colors.indigo,
-              size: 3,
+          Positioned.fill(
+            child: SnoteCanvas(
+              pen: const PenConfig(
+                type: PenType.ballpoint,
+                color: Colors.indigo,
+                size: 3,
+              ),
+              backgroundColor: Colors.transparent,
             ),
-            backgroundColor: Colors.transparent,
           ),
         ],
       );

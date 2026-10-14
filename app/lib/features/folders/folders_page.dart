@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../data/local/folder_repository.dart';
 import '../../data/local/note_repository.dart';
-import '../notes/note_editor_page.dart';
+import '../notes/editor_v2/editor_v2_page.dart';
 import '../pdf/pdf_annotation_page.dart';
 
 class FoldersPage extends StatefulWidget {
@@ -50,7 +50,7 @@ class _FoldersPageState extends State<FoldersPage> {
   Future<void> _createNote() async {
     final note = await _notes.create(folderId: _parentId);
     if (!mounted) return;
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => NoteEditorPage(note: note)));
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => EditorV2Page(note: note)));
     await _load();
   }
 
@@ -143,7 +143,7 @@ class _FoldersPageState extends State<FoldersPage> {
               subtitle: const Text('Open note'),
               trailing: IconButton(onPressed: () => _moveNote(n), icon: const Icon(Icons.drive_file_move_outlined)),
               onTap: () async {
-                await Navigator.push(context, MaterialPageRoute(builder: (_) => NoteEditorPage(note: n)));
+                await Navigator.push(context, MaterialPageRoute(builder: (_) => EditorV2Page(note: n)));
                 await _load();
               },
             ),

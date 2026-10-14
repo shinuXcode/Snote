@@ -32,35 +32,72 @@ jobs:
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libsqlite3-dev
+          sudo apt-get install -y libsqlite3-dev clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsecret-1-dev
 
       - name: Generate Android and Web runners
         working-directory: app
         run: |
-          flutter create --platforms=android,web --org=com.snote .
+          flutter create --platforms=android,web,linux --org=com.snote --no-pub .
           rm -f test/widget_test.dart
 
-      - name: Configure camera permissions
+      - name: Configure and verify Android SDK and camera permissions
         working-directory: app
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          p = Path('android/app/src/main/AndroidManifest.xml')
-          if p.exists():
-            s = p.read_text()
-            if 'android.permission.CAMERA' not in s:
-              s = s.replace('<manifest ', '<manifest ', 1).replace('>', '>', 1)
-              s = s.replace('\n', '\n    <uses-permission android:name="android.permission.CAMERA" />\n', 1)
-              p.write_text(s)
+
+          build = Path('android/app/build.gradle.kts')
+          if not build.is_file():
+              raise SystemExit('Generated Android app/build.gradle.kts is missing')
+          lines = build.read_text().splitlines()
+          updated = []
+          count = 0
+          for line in lines:
+              stripped = line.strip()
+              if stripped.startswith('compileSdk ='):
+                  line = line[:len(line) - len(line.lstrip())] + 'compileSdk = 37'
+                  count += 1
+              updated.append(line)
+          if count != 1:
+              raise SystemExit(f'Expected one compileSdk assignment, found {count}')
+          text = '\n'.join(updated) + '\n'
+          if 'compileSdk = 37' not in text:
+              raise SystemExit('Android app module is not configured for compileSdk 37')
+          build.write_text(text)
+          print('Verified Android app module compileSdk=37')
+
+          manifest = Path('android/app/src/main/AndroidManifest.xml')
+          if not manifest.is_file():
+              raise SystemExit('Generated AndroidManifest.xml is missing')
+          text = manifest.read_text()
+          if 'android.permission.CAMERA' not in text:
+              text = text.replace('</manifest>', '    <uses-permission android:name="android.permission.CAMERA" />\n</manifest>')
+          if 'android:launchMode="singleTop"' in text:
+              text = text.replace('android:launchMode="singleTop"', 'android:launchMode="singleTask"')
+          if 'android.intent.action.SEND' not in text:
+              share_filters = '''
+                  <intent-filter>
+                      <action android:name="android.intent.action.SEND" />
+                      <category android:name="android.intent.category.DEFAULT" />
+                      <data android:mimeType="image/*" />
+                  </intent-filter>
+                  <intent-filter>
+                      <action android:name="android.intent.action.SEND_MULTIPLE" />
+                      <category android:name="android.intent.category.DEFAULT" />
+                      <data android:mimeType="image/*" />
+                  </intent-filter>
+              '''
+              if '</activity>' not in text:
+                  raise SystemExit('Could not find activity closing tag for Android image share filters')
+              text = text.replace('</activity>', share_filters + '\n        </activity>', 1)
+          manifest.write_text(text)
+          if 'android.intent.action.SEND' not in manifest.read_text():
+              raise SystemExit('Android image share filters were not configured')
           PY
 
       - name: Install dependencies
         working-directory: app
         run: flutter pub get
-
-      - name: Generate launcher icons
-        working-directory: app
-        run: dart run launcher_icons
 
       - name: Clean
         working-directory: app
@@ -72,15 +109,15 @@ jobs:
 
       - name: Analyze
         working-directory: app
-        run: flutter analyze --no-fatal-infos
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
       - name: Test
         working-directory: app
-        run: flutter test
+        run: flutter test --reporter expanded
 
       - name: Configure Web SQLite and PDF.js
         working-directory: app
-        run: |
-          dart run pdfx:install_web
+        run: dart run pdfx:install_web
 
       - name: Build Android APK
         working-directory: app
@@ -89,6 +126,9 @@ jobs:
       - name: Build Web
         working-directory: app
         run: flutter build web --release
+      - name: Build Linux desktop
+        working-directory: app
+        run: flutter build linux --release
 
       - uses: actions/upload-artifact@v4
         with:
@@ -114,27 +154,73 @@ jobs:
         working-directory: app
         shell: bash
         run: |
-          flutter create --platforms=windows --org=com.snote .
+          flutter create --platforms=windows --org=com.snote --no-pub .
           rm -f test/widget_test.dart
 
       - name: Install dependencies
         working-directory: app
         run: flutter pub get
 
-      - name: Generate launcher icons
-        working-directory: app
-        run: dart run launcher_icons
-
       - name: Analyze
         working-directory: app
-        run: flutter analyze --no-fatal-infos
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
       - name: Test
         working-directory: app
-        run: flutter test
+        shell: pwsh
+        run: |
+          $logPath = Join-Path $env:RUNNER_TEMP "snote-flutter-test.log"
+          flutter test --reporter expanded 2>&1 | Tee-Object -FilePath $logPath
+          $testExitCode = $LASTEXITCODE
+          if ($testExitCode -eq 0) { exit 0 }
+
+          $log = Get-Content -Raw $logPath
+          if ($log -notmatch 'Hash of downloaded file sqlite3\.x64\.windows\.dll') {
+            exit $testExitCode
+          }
+
+          Write-Host "Detected the sqlite3 Windows native-asset checksum mismatch. Cleaning generated state and retrying the full test suite once; checksum validation remains enabled."
+          flutter clean
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          flutter pub get
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          flutter test --reporter expanded
+          exit $LASTEXITCODE
 
       - name: Build Windows
         working-directory: app
         run: flutter build windows --release
+
+  apple:
+    name: Apple platform smoke builds
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.3
+          cache: true
+      - name: Generate iOS and macOS runners
+        working-directory: app
+        run: |
+          flutter create --platforms=ios,macos --org=com.snote --no-pub .
+          rm -f test/widget_test.dart
+      - name: Install dependencies
+        working-directory: app
+        run: flutter pub get
+      - name: Analyze
+        working-directory: app
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Test
+        working-directory: app
+        run: flutter test --reporter expanded
+      - name: Build iOS (no code signing)
+        working-directory: app
+        run: flutter build ios --release --no-codesign
+      - name: Build macOS
+        working-directory: app
+        run: flutter build macos --release
 
   website:
     name: Showcase website

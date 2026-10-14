@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snote/canvas_engine/algorithms/adaptive_stabilizer.dart';
+import 'package:snote/canvas_engine/algorithms/velocity_calculator.dart';
 import 'package:snote/canvas_engine/input/ink_input_pipeline.dart';
 import 'package:snote/canvas_engine/input/ink_prediction.dart';
 import 'package:snote/canvas_engine/input/stroke_sample_buffer.dart';
@@ -10,6 +11,17 @@ import 'package:snote/canvas_engine/input/viewport_transform.dart';
 import 'package:snote/canvas_engine/models/stroke.dart';
 
 void main() {
+  test('fountain pen width responds to speed and pressure', () {
+    final slowHeavy = fountainWidth(baseWidth: 4, velocity: 2, pressure: .9);
+    final fastHeavy = fountainWidth(baseWidth: 4, velocity: 18, pressure: .9);
+    final slowLight = fountainWidth(baseWidth: 4, velocity: 2, pressure: .15);
+
+    expect(slowHeavy, greaterThan(fastHeavy));
+    expect(slowHeavy, greaterThan(slowLight));
+    expect(slowHeavy, inInclusiveRange(1.2, 5.6));
+  });
+
+
   test('live stroke follows the physical pointer without filtered lag', () {
     final pipeline = InkInputPipeline(smoothing: .72);
     pipeline.begin(
