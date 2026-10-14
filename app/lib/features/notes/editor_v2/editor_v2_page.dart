@@ -1521,32 +1521,45 @@ class _EditorV2PageState extends State<EditorV2Page>
             ),
             itemBuilder: (_, index) {
               final template = PageTemplate.values[index];
+              final isSelected = template.name == _pageData['template']?.toString();
               return InkWell(
                 onTap: () => Navigator.pop(sheetContext, template),
+                borderRadius: BorderRadius.circular(12),
                 child: DecoratedBox(
                   decoration: BoxDecoration(
+                    color: isSelected ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: .35) : Theme.of(context).colorScheme.surface,
                     border: Border.all(
-                      color: Theme.of(context).colorScheme.outlineVariant,
+                      color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outlineVariant,
+                      width: isSelected ? 2 : 1,
                     ),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Column(
                     children: [
                       Expanded(
-                        child: CustomPaint(
-                          painter: PageBackground(
-                            template: template,
-                            paperColor: Color((_pageData['paperColor'] as num?)?.toInt() ?? 0xffffffff),
-                            lineColor: Color((_pageData['lineColor'] as num?)?.toInt() ?? 0xffd8dee8),
-                            spacing: ((_pageData['spacing'] as num?)?.toDouble() ?? 28).clamp(10, 80).toDouble(),
-                            lineOpacity: ((_pageData['lineOpacity'] as num?)?.toDouble() ?? .85).clamp(0, 1).toDouble(),
+                        child: ClipRRect(
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
+                          child: CustomPaint(
+                            painter: PageBackground(
+                              template: template,
+                              paperColor: Color((_pageData['paperColor'] as num?)?.toInt() ?? 0xffffffff),
+                              lineColor: Color((_pageData['lineColor'] as num?)?.toInt() ?? 0xffd8dee8),
+                              spacing: ((_pageData['spacing'] as num?)?.toDouble() ?? 28).clamp(10, 80).toDouble(),
+                              lineOpacity: ((_pageData['lineOpacity'] as num?)?.toDouble() ?? .85).clamp(0, 1).toDouble(),
+                            ),
+                            child: const SizedBox.expand(),
                           ),
-                          child: const SizedBox.expand(),
                         ),
                       ),
                       Padding(
                         padding: const EdgeInsets.all(6),
-                        child: Text(template.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Flexible(child: Text(template.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: isSelected ? FontWeight.w900 : FontWeight.w500))),
+                            if (isSelected) const Padding(padding: EdgeInsets.only(left: 4), child: Icon(Icons.check_circle_rounded, size: 14)),
+                          ],
+                        ),
                       ),
                     ],
                   ),
