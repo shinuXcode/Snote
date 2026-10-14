@@ -53,17 +53,18 @@ class _EditorV2PageState extends State<EditorV2Page>
   static const double _pageHeight = 1152;
   static const int _maxPdfPagesPerImport = 40;
   static const List<Color> _palette = <Color>[
-    Color(0xff17202a),
-    Color(0xff263238),
-    Color(0xff1565c0),
-    Color(0xff00897b),
-    Color(0xff7b1fa2),
-    Color(0xffc62828),
-    Color(0xffef6c00),
-    Color(0xffd4a900),
-    Color(0xff2e7d32),
-    Color(0xffec407a),
-    Color(0xffffffff),
+    Color(0xff111827), Color(0xff263238), Color(0xff546e7a), Color(0xff90a4ae),
+    Color(0xff000000), Color(0xffffffff), Color(0xff37474f), Color(0xff78909c),
+    Color(0xff0d47a1), Color(0xff1565c0), Color(0xff42a5f5), Color(0xff80d8ff),
+    Color(0xff004d40), Color(0xff00897b), Color(0xff4db6ac), Color(0xffa7ffeb),
+    Color(0xff1b5e20), Color(0xff2e7d32), Color(0xff81c784), Color(0xffc5e1a5),
+    Color(0xff4a148c), Color(0xff7b1fa2), Color(0xffba68c8), Color(0xffe1bee7),
+    Color(0xff880e4f), Color(0xffec407a), Color(0xfff48fb1), Color(0xffffcdd2),
+    Color(0xffb71c1c), Color(0xffc62828), Color(0xffef5350), Color(0xffff8a80),
+    Color(0xffe65100), Color(0xffef6c00), Color(0xffffb74d), Color(0xffffe0b2),
+    Color(0xfff57f17), Color(0xffd4a900), Color(0xffffff00), Color(0xfffff59d),
+    Color(0xff3e2723), Color(0xff795548), Color(0xffbcaaa4), Color(0xffd7ccc8),
+    Color(0xff283593), Color(0xff3949ab), Color(0xff7986cb), Color(0xffc5cae9),
   ];
   static const List<CanvasTool> _quickTools = <CanvasTool>[
     CanvasTool.ballpoint,
