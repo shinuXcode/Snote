@@ -482,6 +482,9 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       toggleFill: toggleSelectedFill,
       bringToFront: bringSelectionToFront,
       sendToBack: sendSelectionToBack,
+      selectedStrokes: () => _strokes
+          .where((stroke) => _selected.contains(stroke.id))
+          .toList(growable: false),
     );
   }
 
