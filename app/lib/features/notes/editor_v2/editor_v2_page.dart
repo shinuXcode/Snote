@@ -1012,7 +1012,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('\${targetTool.label} settings', style: Theme.of(context).textTheme.titleLarge),
+                  Text('${targetTool.label} settings', style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 10,
@@ -1035,22 +1035,22 @@ class _EditorV2PageState extends State<EditorV2Page>
                     )).toList(),
                   ),
                   const SizedBox(height: 8),
-                  Text('Stroke size: \${size.toStringAsFixed(1)}'),
+                  Text('Stroke size: ${size.toStringAsFixed(1)}'),
                   Slider(
                     min: .5, max: 40, value: size.clamp(.5, 40),
                     onChanged: (value) => setSheetState(() => size = value),
                   ),
-                  Text('Opacity: \${(opacity * 100).round()}%'),
+                  Text('Opacity: ${(opacity * 100).round()}%'),
                   Slider(
                     min: .05, max: 1, value: opacity.clamp(.05, 1),
                     onChanged: (value) => setSheetState(() => opacity = value),
                   ),
-                  Text('Pressure sensitivity: \${pressure.toStringAsFixed(2)}'),
+                  Text('Pressure sensitivity: ${pressure.toStringAsFixed(2)}'),
                   Slider(
                     min: 0, max: 1, value: pressure,
                     onChanged: (value) => setSheetState(() => pressure = value),
                   ),
-                  Text('Velocity sensitivity: \${velocity.toStringAsFixed(2)}'),
+                  Text('Velocity sensitivity: ${velocity.toStringAsFixed(2)}'),
                   Slider(
                     min: 0, max: 1, value: velocity,
                     onChanged: (value) => setSheetState(() => velocity = value),
@@ -1542,7 +1542,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   }
 
   Future<void> _addFavoritePen() async {
-    final nameController = TextEditingController(text: '\${_tool.label} \${_favoritePens.length + 1}');
+    final nameController = TextEditingController(text: '${_tool.label} ${_favoritePens.length + 1}');
     final name = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -1639,7 +1639,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     await _settings.setBool('palmRejection', enabled);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Palm rejection \${enabled ? 'enabled' : 'disabled'}')),
+        SnackBar(content: Text('Palm rejection ${enabled ? 'enabled' : 'disabled'}')),
       );
     }
   }
@@ -1693,9 +1693,9 @@ class _EditorV2PageState extends State<EditorV2Page>
                     border: Border.all(color: line == candidate ? Theme.of(context).colorScheme.primary : Colors.black26, width: line == candidate ? 3 : 1),
                   )),
                 )).toList()),
-                Text('Grid / dot spacing: \${spacing.round()}'),
+                Text('Grid / dot spacing: ${spacing.round()}'),
                 Slider(min: 10, max: 80, value: spacing, onChanged: (value) => setSheetState(() => spacing = value)),
-                Text('Grid / dot opacity: \${(opacity * 100).round()}%'),
+                Text('Grid / dot opacity: ${(opacity * 100).round()}%'),
                 Slider(min: 0, max: 1, value: opacity, onChanged: (value) => setSheetState(() => opacity = value)),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
@@ -1905,7 +1905,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     final quickButtons = _quickTools.map((tool) => Padding(
       padding: const EdgeInsets.all(1),
       child: Tooltip(
-        message: '\${tool.label}\nDouble-tap for its own settings',
+        message: '${tool.label}\nDouble-tap for its own settings',
         child: GestureDetector(
           onDoubleTap: () => _strokeSettings(tool),
           child: Material(
@@ -1981,7 +1981,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       final color = Color((favorite['color'] as num?)?.toInt() ?? 0xff17202a);
       final active = _tool == favoriteTool && _color.toARGB32() == color.toARGB32() && (_size - ((favorite['size'] as num?)?.toDouble() ?? 3)).abs() < .1;
       return Tooltip(
-        message: '\${favorite['label'] ?? favoriteTool.label}\nTap to select • long-press to remove',
+        message: '${favorite['label'] ?? favoriteTool.label}\nTap to select • long-press to remove',
         child: InkWell(
           borderRadius: BorderRadius.circular(9),
           onTap: () => _applyFavorite(favorite),
@@ -2055,7 +2055,7 @@ class _EditorV2PageState extends State<EditorV2Page>
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               const Icon(Icons.drag_indicator_rounded, size: 16),
               IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 34, height: 30), tooltip: 'Previous page', onPressed: _page > 0 ? () => _goToPage(_page - 1) : null, icon: const Icon(Icons.keyboard_arrow_up_rounded, size: 19)),
-              InkWell(onTap: _showPagePicker, child: Padding(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3), child: Text('\${_page + 1}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900)))),
+              InkWell(onTap: _showPagePicker, child: Padding(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3), child: Text('${_page + 1}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900)))),
               IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 34, height: 30), tooltip: 'Next page', onPressed: _page + 1 < _pages.length ? () => _goToPage(_page + 1) : _addPage, icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 19)),
             ]),
           ),
