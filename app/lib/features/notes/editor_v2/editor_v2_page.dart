@@ -800,7 +800,8 @@ class _EditorV2PageState extends State<EditorV2Page>
       final wasPressureErase = _pressureEraseActive;
       final restoreTool = _toolBeforePressureErase;
       if (wasPressureErase) {
-        _eraseAt(event.localPosition, math.max(18, _size * 2).toDouble());
+        final erasePosition = _pressureEraseUsed ? event.localPosition : (_gestureStart ?? event.localPosition);
+        _eraseAt(erasePosition, math.max(18, _size * 2).toDouble());
       }
       setState(() {
         _activePointer = null;
@@ -868,6 +869,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     final restoreTool = _pressureEraseActive ? _toolBeforePressureErase : null;
     _toolBeforePressureErase = null;
     _pressureEraseActive = false;
+    _pressureEraseUsed = false;
     _longPressTriggered = false;
     _ignoredPointers.remove(event.pointer);
     if (_activePointer == event.pointer) {
@@ -1142,13 +1144,18 @@ class _EditorV2PageState extends State<EditorV2Page>
   }
 
   Future<void> _openToolPicker() async {
-    final selected = await showModalBottomSheet<CanvasTool>(
+    final choice = await showModalBottomSheet<_ToolPickerChoice>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (_) => _EditorV2ToolPicker(selected: _tool),
     );
-    if (selected != null && mounted) _selectTool(selected);
+    if (choice == null || !mounted) return;
+    if (choice.configure) {
+      await _strokeSettings(choice.tool);
+    } else {
+      _selectTool(choice.tool);
+    }
   }
 
   Future<void> _chooseColor() async {
@@ -3489,7 +3496,8 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
                   final selected = tool == widget.selected;
                   return InkWell(
                     borderRadius: BorderRadius.circular(12),
-                    onTap: () => Navigator.pop(context, tool),
+                    onTap: () => Navigator.pop(context, _ToolPickerChoice(tool)),
+                    onDoubleTap: () => Navigator.pop(context, _ToolPickerChoice(tool, configure: true)),
                     child: Ink(
                       decoration: BoxDecoration(
                         color: selected ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -3754,6 +3762,12 @@ class _ScientificExpressionParser {
     _index += match.group(0)!.length;
     return double.parse(match.group(0)!);
   }
+}
+
+class _ToolPickerChoice {
+  final CanvasTool tool;
+  final bool configure;
+  const _ToolPickerChoice(this.tool, {this.configure = false});
 }
 
 class _EditorV2ToolPicker extends StatefulWidget {
