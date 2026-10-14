@@ -1542,21 +1542,15 @@ class _EditorV2PageState extends State<EditorV2Page>
   }
 
   Future<void> _addFavoritePen() async {
-    if (!_tool.isPen) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Choose a pen first. Shapes cannot be saved to the pen showcase.')),
-      );
-      return;
-    }
-    final nameController = TextEditingController(text: '${_tool.label} ${_favoritePens.length + 1}');
+    final nameController = TextEditingController(text: '\${_tool.label} \${_favoritePens.length + 1}');
     final name = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Save favorite pen'),
-        content: TextField(controller: nameController, autofocus: true, decoration: const InputDecoration(labelText: 'Pen name')),
+        title: const Text('Save to pen case'),
+        content: TextField(controller: nameController, autofocus: true, decoration: const InputDecoration(labelText: 'Preset name')),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, nameController.text), child: const Text('Save')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, nameController.text), child: const Text('Save preset')),
         ],
       ),
     );
@@ -1568,11 +1562,18 @@ class _EditorV2PageState extends State<EditorV2Page>
         'color': _color.toARGB32(),
         'size': _size,
         'opacity': _opacity,
+        'pressureSensitivity': _pressureSensitivity,
+        'velocitySensitivity': _velocitySensitivity,
+        'pressureCurve': _pressureCurve.name,
         'label': name.trim().isEmpty ? _tool.label : name.trim(),
       });
-      if (_favoritePens.length > 12) _favoritePens.removeAt(0);
+      if (_favoritePens.length > 200) _favoritePens.removeAt(0);
     });
     await _saveFavoritePens();
+    if (!_showFavoritesShowcase) {
+      setState(() => _showFavoritesShowcase = true);
+      await _settings.setString('editorV2ShowFavoritesShowcase', 'true');
+    }
   }
 
   void _applyFavorite(Map<String, Object?> favorite) {
@@ -1584,7 +1585,14 @@ class _EditorV2PageState extends State<EditorV2Page>
       _color = Color((favorite['color'] as num?)?.toInt() ?? 0xff17202a);
       _size = (favorite['size'] as num?)?.toDouble() ?? 3;
       _opacity = (favorite['opacity'] as num?)?.toDouble() ?? 1;
+      _pressureSensitivity = (favorite['pressureSensitivity'] as num?)?.toDouble() ?? .55;
+      _velocitySensitivity = (favorite['velocitySensitivity'] as num?)?.toDouble() ?? .65;
+      _pressureCurve = PressureCurve.values.firstWhere(
+        (candidate) => candidate.name == favorite['pressureCurve'],
+        orElse: () => PressureCurve.linear,
+      );
     });
+    _rememberCurrentToolProfile();
   }
 
   Future<void> _removeFavorite(Map<String, Object?> favorite) async {
@@ -1609,6 +1617,124 @@ class _EditorV2PageState extends State<EditorV2Page>
   Future<void> _toggleFavoritesOrientation() async {
     setState(() => _favoritesVertical = !_favoritesVertical);
     await _settings.setBool('editorV2FavoritesVertical', _favoritesVertical);
+  }
+
+  Future<void> _toggleFavoritesShowcase() async {
+    setState(() => _showFavoritesShowcase = !_showFavoritesShowcase);
+    await _settings.setString('editorV2ShowFavoritesShowcase', _showFavoritesShowcase ? 'true' : 'false');
+  }
+
+  Future<void> _togglePageNavigation() async {
+    setState(() => _showPageNavigation = !_showPageNavigation);
+    await _settings.setBool('showPageNavigation', _showPageNavigation);
+  }
+
+  Future<void> _toggleFloatingPageNavigation() async {
+    setState(() => _floatingPageNavigation = !_floatingPageNavigation);
+    await _settings.setBool('editorV2FloatingPageNavigation', _floatingPageNavigation);
+  }
+
+  Future<void> _togglePalmRejection() async {
+    final enabled = !_settings.getBool('palmRejection');
+    await _settings.setBool('palmRejection', enabled);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Palm rejection \${enabled ? 'enabled' : 'disabled'}')),
+      );
+    }
+  }
+
+  Future<void> _showPageAndEditorSettings() async {
+    var template = PageTemplate.values.firstWhere(
+      (value) => value.name == _pageData['template']?.toString(),
+      orElse: () => PageTemplate.dotted,
+    );
+    var spacing = ((_pageData['spacing'] as num?)?.toDouble() ?? 28).clamp(10.0, 80.0).toDouble();
+    var opacity = ((_pageData['lineOpacity'] as num?)?.toDouble() ?? .85).clamp(0.0, 1.0).toDouble();
+    var paper = Color((_pageData['paperColor'] as num?)?.toInt() ?? 0xffffffff);
+    var line = Color((_pageData['lineColor'] as num?)?.toInt() ?? 0xffd8dee8);
+    var palm = _settings.getBool('palmRejection');
+    var showNavigation = _showPageNavigation;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => SafeArea(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(16, 8, 16, 16 + MediaQuery.viewInsetsOf(context).bottom),
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Note page & editor settings', style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<PageTemplate>(
+                  initialValue: template,
+                  decoration: const InputDecoration(labelText: 'Page template'),
+                  items: PageTemplate.values.map((value) => DropdownMenuItem(value: value, child: Text(value.name))).toList(),
+                  onChanged: (value) { if (value != null) setSheetState(() => template = value); },
+                ),
+                const SizedBox(height: 12),
+                const Text('Paper color'),
+                const SizedBox(height: 6),
+                Wrap(spacing: 9, runSpacing: 8, children: _palette.map((candidate) => InkWell(
+                  onTap: () => setSheetState(() => paper = candidate),
+                  child: Container(width: 27, height: 27, decoration: BoxDecoration(
+                    color: candidate, shape: BoxShape.circle,
+                    border: Border.all(color: paper == candidate ? Theme.of(context).colorScheme.primary : Colors.black26, width: paper == candidate ? 3 : 1),
+                  )),
+                )).toList()),
+                const SizedBox(height: 12),
+                const Text('Line / dot color'),
+                const SizedBox(height: 6),
+                Wrap(spacing: 9, children: _palette.where((candidate) => candidate != Colors.white).map((candidate) => InkWell(
+                  onTap: () => setSheetState(() => line = candidate),
+                  child: Container(width: 27, height: 27, decoration: BoxDecoration(
+                    color: candidate, shape: BoxShape.circle,
+                    border: Border.all(color: line == candidate ? Theme.of(context).colorScheme.primary : Colors.black26, width: line == candidate ? 3 : 1),
+                  )),
+                )).toList()),
+                Text('Grid / dot spacing: \${spacing.round()}'),
+                Slider(min: 10, max: 80, value: spacing, onChanged: (value) => setSheetState(() => spacing = value)),
+                Text('Grid / dot opacity: \${(opacity * 100).round()}%'),
+                Slider(min: 0, max: 1, value: opacity, onChanged: (value) => setSheetState(() => opacity = value)),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Palm rejection'),
+                  subtitle: const Text('Ignore finger touches while the stylus is active'),
+                  value: palm,
+                  onChanged: (value) => setSheetState(() => palm = value),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Show page navigation'),
+                  value: showNavigation,
+                  onChanged: (value) => setSheetState(() => showNavigation = value),
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton(
+                    onPressed: () async {
+                      _pushUndo();
+                      _pageData['template'] = template.name;
+                      _pageData['spacing'] = spacing;
+                      _pageData['lineOpacity'] = opacity;
+                      _pageData['paperColor'] = paper.toARGB32();
+                      _pageData['lineColor'] = line.toARGB32();
+                      setState(() => _showPageNavigation = showNavigation);
+                      await _settings.setBool('palmRejection', palm);
+                      await _settings.setBool('showPageNavigation', showNavigation);
+                      _scheduleSave();
+                      if (sheetContext.mounted) Navigator.pop(sheetContext);
+                    },
+                    child: const Text('Save settings'),
+                  ),
+                ),
+              ]),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   void _zoom(double factor) {
@@ -1701,6 +1827,16 @@ class _EditorV2PageState extends State<EditorV2Page>
         unawaited(_toggleFloatingToolbar());
       case 'favoritesOrientation':
         unawaited(_toggleFavoritesOrientation());
+      case 'favoritesShowcase':
+        unawaited(_toggleFavoritesShowcase());
+      case 'pageNavigation':
+        unawaited(_togglePageNavigation());
+      case 'floatingPageNavigation':
+        unawaited(_toggleFloatingPageNavigation());
+      case 'palmRejection':
+        unawaited(_togglePalmRejection());
+      case 'pageSettings':
+        unawaited(_showPageAndEditorSettings());
       case 'pan':
         setState(() => _panMode = !_panMode);
       case 'zoomIn':
@@ -1710,6 +1846,8 @@ class _EditorV2PageState extends State<EditorV2Page>
       case 'fit':
         final scale = (MediaQuery.sizeOf(context).width - 30).clamp(260, 816) / _pageWidth;
         _transform.value = Matrix4.identity()..scale(scale);
+      case 'fullscreen':
+        setState(() => _fullScreenMode = !_fullScreenMode);
       case 'save':
         unawaited(_save(force: true));
     }
