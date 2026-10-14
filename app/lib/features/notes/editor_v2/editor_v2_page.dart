@@ -2574,6 +2574,32 @@ class _EditorV2PageState extends State<EditorV2Page>
                   ),
                 ),
               ),
+            if (_lassoRect != null && _selectedStrokeIds.isNotEmpty && _selectionBounds() != null)
+              Positioned(
+                left: math.min(_pageWidth - 38, math.max(4, _selectionBounds()!.right + 7)),
+                top: _selectionBounds()!.top.clamp(4, _pageHeight - 340).toDouble(),
+                child: Material(
+                  elevation: 8,
+                  color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 2),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Copy selection', onPressed: _copySelection, icon: const Icon(Icons.copy_rounded, size: 16)),
+                      IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Cut selection', onPressed: _cutSelection, icon: const Icon(Icons.content_cut_rounded, size: 16)),
+                      IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Paste copied strokes', onPressed: _strokeClipboard.isEmpty ? null : () => _pasteStrokes(), icon: const Icon(Icons.content_paste_rounded, size: 16)),
+                      IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Duplicate selection', onPressed: () => _pasteStrokes(duplicate: true), icon: const Icon(Icons.control_point_duplicate_rounded, size: 16)),
+                      IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Increase selection size', onPressed: () => _scaleSelection(1.12), icon: const Icon(Icons.zoom_in_rounded, size: 16)),
+                      IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Decrease selection size', onPressed: () => _scaleSelection(.88), icon: const Icon(Icons.zoom_out_rounded, size: 16)),
+                      IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Move selection left', onPressed: () => _moveSelection(const Offset(-8, 0)), icon: const Icon(Icons.arrow_left_rounded, size: 16)),
+                      IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Move selection right', onPressed: () => _moveSelection(const Offset(8, 0)), icon: const Icon(Icons.arrow_right_rounded, size: 16)),
+                      IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Move selection up', onPressed: () => _moveSelection(const Offset(0, -8)), icon: const Icon(Icons.arrow_upward_rounded, size: 16)),
+                      IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Move selection down', onPressed: () => _moveSelection(const Offset(0, 8)), icon: const Icon(Icons.arrow_downward_rounded, size: 16)),
+                      IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Delete selection', onPressed: _deleteSelection, icon: const Icon(Icons.delete_outline_rounded, size: 16, color: Colors.redAccent)),
+                    ]),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
