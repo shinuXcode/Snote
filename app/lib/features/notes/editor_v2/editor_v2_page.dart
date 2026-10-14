@@ -4282,7 +4282,7 @@ class _EditorV2PageState extends State<EditorV2Page>
 
   Future<Uint8List> _rasterizeSvg(Uint8List sourceBytes) async {
     final source = utf8.decode(sourceBytes, allowMalformed: false);
-    final pictureInfo = await vg.loadPicture(vg.SvgStringLoader(source), null);
+    final pictureInfo = await vg.vg.loadPicture(vg.SvgStringLoader(source), null);
     try {
       final logicalSize = pictureInfo.size;
       if (!logicalSize.width.isFinite ||
@@ -5602,7 +5602,7 @@ class _EditorV2PageState extends State<EditorV2Page>
         icon: Icons.palette_outlined,
         color: _color,
         captureAnchor: true,
-        onPressed: () => unawaited(_strokeSettings(globalAnchor: _toolSettingsAnchor)),
+        onPressed: () => unawaited(_strokeSettings(null, _toolSettingsAnchor)),
       ),
       action(tooltip: 'Text box', icon: Icons.text_fields_rounded, onPressed: _addTextBox),
       action(tooltip: 'Capture screen to canvas', icon: Icons.screenshot_monitor_rounded, onPressed: () => unawaited(_captureScreenToCanvas())),
