@@ -153,6 +153,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   Duration? _lastEraseTimestamp;
   Offset? _lastErasePosition;
   bool _eraseUndoCaptured = false;
+  List<Stroke>? _eraseWorkingStrokes;
   Timer? _holdTimer;
   Offset? _holdStartPosition;
   Offset? _pageSwipeStart;
@@ -1569,6 +1570,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     _lastEraseTimestamp = null;
     _lastErasePosition = event.localPosition;
     _eraseUndoCaptured = false;
+    _eraseWorkingStrokes = null;
     _activePointers.add(event.pointer);
     if (event.kind == PointerDeviceKind.stylus ||
         event.kind == PointerDeviceKind.invertedStylus) {
@@ -1947,8 +1949,15 @@ class _EditorV2PageState extends State<EditorV2Page>
 
   void _eraseAt(Offset position, double radius) {
     final raw = _pageData['strokes'];
-    if (raw is! List || raw.isEmpty) return;
-    final decoded = StrokeCodec.documentToStrokes(<String, Object?>{'strokes': raw});
+    if (raw is! List || raw.isEmpty) {
+      _eraseWorkingStrokes = null;
+      return;
+    }
+    // Keep one decoded working set for the whole pointer gesture. Re-decoding
+    // every vector stroke at 60 Hz made large pages expensive to erase.
+    final decoded = _eraseWorkingStrokes ??
+        StrokeCodec.documentToStrokes(<String, Object?>{'strokes': raw});
+    _eraseWorkingStrokes = decoded;
     final retained = <Stroke>[];
     var removed = false;
     for (final stroke in decoded) {
@@ -1977,6 +1986,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       }
     }
     if (!removed) return;
+    _eraseWorkingStrokes = retained;
     // Capturing a complete document snapshot for every pointer sample can
     // freeze large notes. One undo checkpoint covers a whole erase gesture.
     if (!_eraseUndoCaptured) {
