@@ -4834,25 +4834,26 @@ class _EditorV2PageState extends State<EditorV2Page>
                                       thumbnail: true,
                                     ),
                                   ),
-                                  Align(
-                                    alignment: Alignment.bottomRight,
-                                    child: Container(
-                                      margin: const EdgeInsets.all(2),
-                                      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white.withValues(alpha: .88),
-                                        borderRadius: BorderRadius.circular(3),
-                                      ),
-                                      child: Text(
-                                        (index + 1).toString(),
-                                        style: const TextStyle(
-                                          fontSize: 9,
-                                          fontWeight: FontWeight.w900,
-                                          color: Colors.black,
+                                  if (_settings.getBool('showPageNumbers'))
+                                    Align(
+                                      alignment: Alignment.bottomRight,
+                                      child: Container(
+                                        margin: const EdgeInsets.all(2),
+                                        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withValues(alpha: .88),
+                                          borderRadius: BorderRadius.circular(3),
+                                        ),
+                                        child: Text(
+                                          (index + 1).toString(),
+                                          style: const TextStyle(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w900,
+                                            color: Colors.black,
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
                                   if (isPdf)
                                     const Align(
                                       alignment: Alignment.topLeft,
