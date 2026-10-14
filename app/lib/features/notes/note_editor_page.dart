@@ -4946,7 +4946,16 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     final rawBoxes = page['textBoxes'];
     final boxRevision = rawBoxes is List
         ? rawBoxes.map((item) => item is Map
-            ? "${item['id']}:${item['text']}"
+            ? [
+                item['id'],
+                item['text'],
+                item['x'],
+                item['y'],
+                item['width'],
+                item['height'],
+                item['fontSize'],
+                item['color'],
+              ].join(',')
             : '').join('|')
         : '';
     final rawImages = page['images'];
@@ -6223,7 +6232,7 @@ class _PageThumbnailPainter extends CustomPainter {
             textDirection: TextDirection.ltr,
             maxLines: math.max(1, (height * sourceSize.height / math.max(8.0, fontSize)).floor()).toInt(),
             ellipsis: '…',
-          )..layout(maxWidth: math.max(1, width * sourceSize.width));
+          )..layout(maxWidth: math.max(1.0, width * sourceSize.width).toDouble());
           painter.paint(canvas, Offset(x * sourceSize.width, y * sourceSize.height));
         }
       }
