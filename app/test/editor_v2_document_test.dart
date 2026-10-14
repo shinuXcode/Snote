@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snote/features/notes/editor_v2/editor_v2_document.dart';
 
@@ -60,6 +61,36 @@ void main() {
     test('rejects malformed page envelopes rather than making a blank page', () {
       final root = EditorV2DocumentCodec.decodeRoot('{"pages":"not-a-list"}');
       expect(() => EditorV2DocumentCodec.decodePages(root), throwsFormatException);
+    });
+
+    test('lazy PDF page references persist without embedding page rasters', () {
+      final page = EditorV2DocumentCodec.normalizePage(<String, Object?>{
+        'id': 'pdf-source-page-500',
+        'template': 'blank',
+        'pdfLazyRender': true,
+        'pdfSourceAssetId': 'asset-pdf-001',
+        'pdfSourceName': 'textbook.pdf',
+        'pdfSourceHash': 'sha256-placeholder',
+        'pdfSourcePage': 500,
+        'strokes': <Object?>[],
+        'images': <Object?>[],
+        'textBoxes': <Object?>[],
+      });
+      final payload = EditorV2DocumentCodec.savePayload(
+        previousContent: <String, Object?>{},
+        pages: <Map<String, Object?>>[page],
+        editorMode: 'handwriting',
+        bookmarkedPages: <int>[],
+        currentPageIndex: 0,
+      );
+      final restored = EditorV2DocumentCodec.decodePages(
+        EditorV2DocumentCodec.decodeRoot(jsonEncode(payload)),
+      ).single;
+
+      expect(restored['pdfLazyRender'], isTrue);
+      expect(restored['pdfSourceAssetId'], 'asset-pdf-001');
+      expect(restored['pdfSourcePage'], 500);
+      expect(restored.containsKey('backgroundImage'), isFalse);
     });
 
     test('page indices are safely clamped after insertions/deletions', () {
