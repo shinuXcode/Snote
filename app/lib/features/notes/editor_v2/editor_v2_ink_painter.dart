@@ -996,6 +996,292 @@ class EditorV2InkPainter extends CustomPainter {
           Offset(safeRect.right - safeRect.width * .22, safeRect.center.dy),
         ]), base);
         line(Offset(safeRect.right - safeRect.width * .22, safeRect.top + safeRect.height * .12), Offset(safeRect.right - safeRect.width * .22, safeRect.bottom - safeRect.height * .12));
+      case 'matrixGrid':
+        canvas.drawRect(safeRect, base);
+        for (var i = 1; i < 3; i++) {
+          final x = safeRect.left + safeRect.width * i / 3;
+          final y = safeRect.top + safeRect.height * i / 3;
+          line(Offset(x, safeRect.top), Offset(x, safeRect.bottom));
+          line(Offset(safeRect.left, y), Offset(safeRect.right, y));
+        }
+      case 'derivativeSymbol':
+        label('d/dx');
+      case 'lineChart':
+      case 'areaChart':
+      case 'stackedBarChart':
+        line(Offset(safeRect.left + safeRect.width * .12, safeRect.top), Offset(safeRect.left + safeRect.width * .12, safeRect.bottom));
+        line(Offset(safeRect.left + safeRect.width * .12, safeRect.bottom), safeRect.bottomRight);
+        if (shape == 'stackedBarChart') {
+          for (var i = 0; i < 4; i++) {
+            final w = safeRect.width * .13;
+            final x = safeRect.left + safeRect.width * (.2 + i * .18);
+            final h1 = safeRect.height * (.25 + (i % 3) * .08);
+            final h2 = safeRect.height * (.18 + ((i + 1) % 3) * .07);
+            canvas.drawRect(Rect.fromLTWH(x, safeRect.bottom - h1, w, h1), base);
+            canvas.drawRect(Rect.fromLTWH(x, safeRect.bottom - h1 - h2, w, h2), base);
+          }
+        } else {
+          final pts = <Offset>[
+            Offset(safeRect.left + safeRect.width * .16, safeRect.bottom - safeRect.height * .2),
+            Offset(safeRect.left + safeRect.width * .34, safeRect.top + safeRect.height * .42),
+            Offset(safeRect.left + safeRect.width * .52, safeRect.top + safeRect.height * .58),
+            Offset(safeRect.left + safeRect.width * .72, safeRect.top + safeRect.height * .2),
+            Offset(safeRect.right - safeRect.width * .08, safeRect.top + safeRect.height * .3),
+          ];
+          final graph = polygon(pts, close: shape == 'areaChart');
+          if (shape == 'areaChart') {
+            canvas.drawPath(graph, fill..color = stroke.pen.color.withValues(alpha: .12));
+          }
+          canvas.drawPath(graph, base);
+          for (final point in pts) {
+            canvas.drawCircle(point, math.max(2, base.strokeWidth * 1.3).toDouble(), fill..color = stroke.pen.color);
+          }
+        }
+      case 'donutChart':
+        canvas.drawOval(safeRect, base);
+        canvas.drawArc(safeRect, -math.pi / 2, math.pi * .78, false, base..strokeWidth = base.strokeWidth * 2);
+        canvas.drawOval(
+          Rect.fromCenter(center: safeRect.center, width: safeRect.width * .42, height: safeRect.height * .42),
+          Paint()..color = stroke.pen.color.withValues(alpha: .15)..style = PaintingStyle.fill,
+        );
+      case 'networkGraph':
+        final nodes = <Offset>[
+          Offset(safeRect.left + safeRect.width * .18, safeRect.top + safeRect.height * .3),
+          Offset(safeRect.left + safeRect.width * .5, safeRect.top + safeRect.height * .12),
+          Offset(safeRect.right - safeRect.width * .15, safeRect.top + safeRect.height * .35),
+          Offset(safeRect.left + safeRect.width * .28, safeRect.bottom - safeRect.height * .16),
+          Offset(safeRect.right - safeRect.width * .22, safeRect.bottom - safeRect.height * .2),
+        ];
+        for (final pair in const [(0, 1), (1, 2), (0, 3), (1, 3), (1, 4), (2, 4), (3, 4)]) {
+          line(nodes[pair.$1], nodes[pair.$2]);
+        }
+        for (final node in nodes) {
+          canvas.drawCircle(node, math.max(3, base.strokeWidth * 1.8).toDouble(), fill..color = stroke.pen.color);
+        }
+      case 'vennDiagram':
+        canvas.drawCircle(Offset(safeRect.left + safeRect.width * .38, safeRect.center.dy), safeRect.width * .28, base);
+        canvas.drawCircle(Offset(safeRect.left + safeRect.width * .62, safeRect.center.dy), safeRect.width * .28, base);
+        canvas.drawCircle(Offset(safeRect.center.dx, safeRect.top + safeRect.height * .34), safeRect.width * .28, base);
+      case 'cloudSymbol':
+        final cloud = Path()
+          ..moveTo(safeRect.left + safeRect.width * .15, safeRect.center.dy + safeRect.height * .2)
+          ..cubicTo(safeRect.left - safeRect.width * .02, safeRect.center.dy, safeRect.left + safeRect.width * .12, safeRect.top + safeRect.height * .28, safeRect.left + safeRect.width * .34, safeRect.top + safeRect.height * .34)
+          ..cubicTo(safeRect.left + safeRect.width * .38, safeRect.top - safeRect.height * .02, safeRect.right - safeRect.width * .16, safeRect.top + safeRect.height * .02, safeRect.right - safeRect.width * .18, safeRect.center.dy + safeRect.height * .04)
+          ..cubicTo(safeRect.right + safeRect.width * .02, safeRect.center.dy + safeRect.height * .08, safeRect.right - safeRect.width * .02, safeRect.bottom - safeRect.height * .06, safeRect.right - safeRect.width * .25, safeRect.bottom - safeRect.height * .1)
+          ..lineTo(safeRect.left + safeRect.width * .18, safeRect.bottom - safeRect.height * .1)
+          ..close();
+        canvas.drawPath(cloud, base);
+      case 'networkLink':
+        line(Offset(safeRect.left + safeRect.width * .16, safeRect.center.dy), Offset(safeRect.right - safeRect.width * .16, safeRect.center.dy));
+        canvas.drawCircle(Offset(safeRect.left + safeRect.width * .16, safeRect.center.dy), math.max(3, base.strokeWidth * 2).toDouble(), base);
+        canvas.drawCircle(Offset(safeRect.right - safeRect.width * .16, safeRect.center.dy), math.max(3, base.strokeWidth * 2).toDouble(), base);
+      case 'wifiSymbol':
+        canvas.drawArc(safeRect, -math.pi * .78, math.pi * .56, false, base);
+        canvas.drawArc(safeRect.deflate(safeRect.width * .18), -math.pi * .75, math.pi * .5, false, base);
+        canvas.drawArc(safeRect.deflate(safeRect.width * .36), -math.pi * .7, math.pi * .4, false, base);
+        canvas.drawCircle(Offset(safeRect.center.dx, safeRect.bottom - safeRect.height * .12), math.max(2, base.strokeWidth).toDouble(), fill..color = stroke.pen.color);
+      case 'transistorSymbol':
+        canvas.drawCircle(safeRect.center, math.min(safeRect.width, safeRect.height) * .32, base);
+        line(Offset(safeRect.left, safeRect.center.dy), Offset(safeRect.center.dx - safeRect.width * .12, safeRect.center.dy));
+        line(Offset(safeRect.center.dx, safeRect.top), Offset(safeRect.center.dx, safeRect.center.dy - safeRect.height * .32));
+        arrow(Offset(safeRect.center.dx - safeRect.width * .1, safeRect.center.dy + safeRect.height * .1), Offset(safeRect.center.dx + safeRect.width * .3, safeRect.bottom));
+      case 'logicAnd':
+      case 'logicOr':
+      case 'logicNot':
+      case 'logicXor':
+        if (shape == 'logicNot') {
+          canvas.drawPath(polygon([safeRect.topLeft, safeRect.bottomLeft, safeRect.centerRight]), base);
+          canvas.drawCircle(Offset(safeRect.right - safeRect.width * .07, safeRect.center.dy), safeRect.width * .06, base);
+        } else {
+          final gate = Path()..moveTo(safeRect.left, safeRect.top)..lineTo(safeRect.center.dx, safeRect.top);
+          if (shape == 'logicOr' || shape == 'logicXor') {
+            gate.quadraticBezierTo(safeRect.right, safeRect.top + safeRect.height * .2, safeRect.right, safeRect.center.dy);
+            gate.quadraticBezierTo(safeRect.right, safeRect.bottom - safeRect.height * .2, safeRect.center.dx, safeRect.bottom);
+          } else {
+            gate.lineTo(safeRect.right - safeRect.width * .15, safeRect.top);
+            gate.quadraticBezierTo(safeRect.right + safeRect.width * .2, safeRect.center.dy, safeRect.right - safeRect.width * .15, safeRect.bottom);
+            gate.lineTo(safeRect.left, safeRect.bottom);
+          }
+          gate.close();
+          canvas.drawPath(gate, base);
+          line(Offset(safeRect.left, safeRect.top + safeRect.height * .3), Offset(safeRect.left + safeRect.width * .12, safeRect.top + safeRect.height * .3));
+          line(Offset(safeRect.left, safeRect.bottom - safeRect.height * .3), Offset(safeRect.left + safeRect.width * .12, safeRect.bottom - safeRect.height * .3));
+        }
+      case 'gearTrain':
+        canvas.drawCircle(Offset(safeRect.left + safeRect.width * .33, safeRect.center.dy), safeRect.height * .22, base);
+        canvas.drawCircle(Offset(safeRect.left + safeRect.width * .67, safeRect.center.dy), safeRect.height * .22, base);
+        canvas.drawCircle(Offset(safeRect.left + safeRect.width * .33, safeRect.center.dy), safeRect.height * .07, base);
+        canvas.drawCircle(Offset(safeRect.left + safeRect.width * .67, safeRect.center.dy), safeRect.height * .07, base);
+      case 'pendulum':
+        line(Offset(safeRect.center.dx, safeRect.top), Offset(safeRect.right - safeRect.width * .18, safeRect.bottom - safeRect.height * .15));
+        canvas.drawCircle(Offset(safeRect.right - safeRect.width * .18, safeRect.bottom - safeRect.height * .15), math.min(safeRect.width, safeRect.height) * .12, base);
+      case 'weightSymbol':
+        line(Offset(safeRect.center.dx, safeRect.top), Offset(safeRect.center.dx, safeRect.bottom - safeRect.height * .16));
+        arrow(Offset(safeRect.center.dx, safeRect.bottom - safeRect.height * .22), Offset(safeRect.center.dx, safeRect.bottom));
+      case 'electricField':
+      case 'magneticField':
+        for (var i = 1; i <= 3; i++) {
+          final r = Rect.fromCenter(center: safeRect.center, width: safeRect.width * i / 3, height: safeRect.height * i / 3);
+          canvas.drawOval(r, base);
+        }
+        if (shape == 'electricField') {
+          arrow(Offset(safeRect.center.dx, safeRect.top + 4), Offset(safeRect.center.dx, safeRect.top + safeRect.height * .18));
+          arrow(Offset(safeRect.right - 4, safeRect.center.dy), Offset(safeRect.right - safeRect.width * .18, safeRect.center.dy));
+        }
+      case 'waveFront':
+        for (var i = 0; i < 4; i++) {
+          final r = safeRect.deflate(i * safeRect.width * .1);
+          canvas.drawArc(r, -math.pi / 2, math.pi, false, base);
+        }
+      case 'photonSymbol':
+        final photon = Path()..moveTo(safeRect.left, safeRect.center.dy);
+        for (var i = 1; i <= 8; i++) {
+          photon.lineTo(safeRect.left + safeRect.width * i / 8, safeRect.center.dy + (i.isEven ? -1 : 1) * safeRect.height * .22);
+        }
+        canvas.drawPath(photon, base);
+      case 'atomNucleus':
+      case 'electronOrbit':
+        canvas.drawOval(safeRect, base);
+        canvas.drawOval(Rect.fromCenter(center: safeRect.center, width: safeRect.width * .48, height: safeRect.height), base);
+        canvas.drawCircle(Offset(safeRect.center.dx + safeRect.width * .3, safeRect.center.dy), math.max(2.5, base.strokeWidth * 1.6).toDouble(), fill..color = stroke.pen.color);
+        if (shape == 'atomNucleus') {
+          for (var i = 0; i < 5; i++) {
+            final point = Offset(safeRect.center.dx + (i - 2) * safeRect.width * .045, safeRect.center.dy + (i.isEven ? -1 : 1) * safeRect.height * .045);
+            canvas.drawCircle(point, math.max(2, base.strokeWidth * 1.3).toDouble(), base);
+          }
+        }
+      case 'ionSymbol':
+        canvas.drawCircle(safeRect.center, math.min(safeRect.width, safeRect.height) * .38, base);
+        label('±');
+      case 'ionicBond':
+      case 'covalentBond':
+        canvas.drawCircle(Offset(safeRect.left + safeRect.width * .3, safeRect.center.dy), safeRect.height * .18, base);
+        canvas.drawCircle(Offset(safeRect.left + safeRect.width * .7, safeRect.center.dy), safeRect.height * .18, base);
+        if (shape == 'ionicBond') {
+          label('+   −');
+        } else {
+          for (var i = -1; i <= 1; i++) {
+            canvas.drawCircle(Offset(safeRect.center.dx + i * safeRect.width * .045, safeRect.center.dy), math.max(1.2, base.strokeWidth * .7).toDouble(), fill..color = stroke.pen.color);
+          }
+        }
+      case 'moleculeChain':
+      case 'organicChain':
+        final points = <Offset>[
+          Offset(safeRect.left + safeRect.width * .1, safeRect.center.dy),
+          Offset(safeRect.left + safeRect.width * .28, safeRect.top + safeRect.height * .24),
+          Offset(safeRect.left + safeRect.width * .48, safeRect.center.dy),
+          Offset(safeRect.left + safeRect.width * .68, safeRect.top + safeRect.height * .24),
+          Offset(safeRect.right - safeRect.width * .1, safeRect.center.dy),
+        ];
+        for (var i = 0; i < points.length - 1; i++) line(points[i], points[i + 1]);
+        if (shape == 'moleculeChain') {
+          for (final point in points) canvas.drawCircle(point, math.max(2.2, base.strokeWidth * 1.4).toDouble(), fill..color = stroke.pen.color);
+        } else {
+          label('C');
+        }
+      case 'crystalLattice':
+        for (var row = 0; row < 3; row++) {
+          for (var col = 0; col < 4; col++) {
+            final point = Offset(safeRect.left + safeRect.width * (.12 + col * .25), safeRect.top + safeRect.height * (.2 + row * .3));
+            canvas.drawCircle(point, math.max(2, base.strokeWidth * 1.2).toDouble(), fill..color = stroke.pen.color);
+            if (col > 0) line(point, Offset(point.dx - safeRect.width * .25, point.dy));
+            if (row > 0) line(point, Offset(point.dx, point.dy - safeRect.height * .3));
+          }
+        }
+      case 'aminoAcid':
+        canvas.drawCircle(Offset(safeRect.center.dx, safeRect.center.dy), math.min(safeRect.width, safeRect.height) * .12, base);
+        line(safeRect.centerLeft, Offset(safeRect.center.dx - safeRect.width * .12, safeRect.center.dy));
+        line(Offset(safeRect.center.dx + safeRect.width * .12, safeRect.center.dy), safeRect.centerRight);
+        line(safeRect.center, Offset(safeRect.center.dx, safeRect.top));
+        line(safeRect.center, Offset(safeRect.center.dx, safeRect.bottom));
+        label('NH₂');
+      case 'proteinSymbol':
+        final protein = Path()..moveTo(safeRect.left, safeRect.center.dy);
+        for (var i = 1; i <= 20; i++) {
+          final t = i / 20;
+          protein.lineTo(safeRect.left + safeRect.width * t, safeRect.center.dy + math.sin(t * math.pi * 5) * safeRect.height * .24);
+        }
+        canvas.drawPath(protein, base);
+      case 'cellMembrane':
+      case 'bloodCell':
+        canvas.drawOval(safeRect, base);
+        if (shape == 'cellMembrane') {
+          canvas.drawOval(safeRect.deflate(math.min(safeRect.width, safeRect.height) * .12), base);
+        } else {
+          canvas.drawOval(safeRect.deflate(math.min(safeRect.width, safeRect.height) * .25), base..color = stroke.pen.color.withValues(alpha: .28));
+        }
+      case 'chloroplast':
+        canvas.drawOval(safeRect, base);
+        for (var i = 0; i < 4; i++) {
+          final y = safeRect.top + safeRect.height * (.2 + i * .2);
+          canvas.drawOval(Rect.fromCenter(center: Offset(safeRect.center.dx, y), width: safeRect.width * .72, height: safeRect.height * .12), base);
+        }
+      case 'mitochondrion':
+        canvas.drawOval(safeRect, base);
+        final inner = Path()..moveTo(safeRect.left + safeRect.width * .12, safeRect.center.dy);
+        for (var i = 1; i <= 12; i++) {
+          inner.lineTo(safeRect.left + safeRect.width * (.12 + i * .065), safeRect.center.dy + (i.isEven ? -1 : 1) * safeRect.height * .2);
+        }
+        canvas.drawPath(inner, base);
+      case 'ribosome':
+        canvas.drawCircle(Offset(safeRect.center.dx - safeRect.width * .16, safeRect.center.dy), safeRect.height * .22, base);
+        canvas.drawCircle(Offset(safeRect.center.dx + safeRect.width * .13, safeRect.center.dy - safeRect.height * .08), safeRect.height * .3, base);
+        canvas.drawCircle(Offset(safeRect.center.dx + safeRect.width * .23, safeRect.center.dy + safeRect.height * .18), safeRect.height * .14, fill..color = stroke.pen.color);
+      case 'brainIcon':
+        for (var i = 0; i < 4; i++) {
+          final cx = safeRect.left + safeRect.width * (.24 + i * .17);
+          final cy = safeRect.center.dy + (i.isEven ? -1 : 1) * safeRect.height * .05;
+          canvas.drawCircle(Offset(cx, cy), safeRect.height * .22, base);
+        }
+        line(Offset(safeRect.center.dx, safeRect.top + safeRect.height * .12), Offset(safeRect.center.dx, safeRect.bottom - safeRect.height * .12));
+      case 'heartOrgan':
+        final heart = Path()
+          ..moveTo(safeRect.center.dx, safeRect.bottom)
+          ..cubicTo(safeRect.left - safeRect.width * .02, safeRect.center.dy, safeRect.left + safeRect.width * .22, safeRect.top - safeRect.height * .05, safeRect.center.dx, safeRect.top + safeRect.height * .3)
+          ..cubicTo(safeRect.right - safeRect.width * .22, safeRect.top - safeRect.height * .05, safeRect.right + safeRect.width * .02, safeRect.center.dy, safeRect.center.dx, safeRect.bottom)
+          ..close();
+        canvas.drawPath(heart, base);
+      case 'lungIcon':
+        line(Offset(safeRect.center.dx, safeRect.top), Offset(safeRect.center.dx, safeRect.center.dy));
+        canvas.drawOval(Rect.fromLTWH(safeRect.left + safeRect.width * .08, safeRect.center.dy - safeRect.height * .12, safeRect.width * .38, safeRect.height * .52), base);
+        canvas.drawOval(Rect.fromLTWH(safeRect.left + safeRect.width * .54, safeRect.center.dy - safeRect.height * .12, safeRect.width * .38, safeRect.height * .52), base);
+        line(Offset(safeRect.center.dx, safeRect.center.dy), Offset(safeRect.left + safeRect.width * .28, safeRect.center.dy + safeRect.height * .08));
+        line(Offset(safeRect.center.dx, safeRect.center.dy), Offset(safeRect.left + safeRect.width * .72, safeRect.center.dy + safeRect.height * .08));
+      case 'bacteriaIcon':
+        canvas.drawOval(safeRect.deflate(safeRect.width * .15), base);
+        for (var i = 0; i < 6; i++) {
+          final x = safeRect.left + safeRect.width * (.12 + i * .15);
+          final y = safeRect.center.dy + (i.isEven ? -1 : 1) * safeRect.height * .24;
+          line(Offset(x, y), Offset(x + safeRect.width * .04, y + (i.isEven ? -1 : 1) * safeRect.height * .12));
+        }
+      case 'virusIcon':
+        canvas.drawCircle(safeRect.center, math.min(safeRect.width, safeRect.height) * .28, base);
+        for (var i = 0; i < 12; i++) {
+          final angle = i * math.pi / 6;
+          final start = Offset(safeRect.center.dx + math.cos(angle) * safeRect.width * .28, safeRect.center.dy + math.sin(angle) * safeRect.height * .28);
+          final end = Offset(safeRect.center.dx + math.cos(angle) * safeRect.width * .42, safeRect.center.dy + math.sin(angle) * safeRect.height * .42);
+          line(start, end);
+          canvas.drawCircle(end, math.max(1.5, base.strokeWidth).toDouble(), base);
+        }
+      case 'flowerIcon':
+        for (var i = 0; i < 8; i++) {
+          final angle = i * math.pi / 4;
+          canvas.drawCircle(Offset(safeRect.center.dx + math.cos(angle) * safeRect.width * .17, safeRect.center.dy + math.sin(angle) * safeRect.height * .17), math.min(safeRect.width, safeRect.height) * .13, base);
+        }
+        canvas.drawCircle(safeRect.center, math.min(safeRect.width, safeRect.height) * .1, fill..color = stroke.pen.color);
+        line(Offset(safeRect.center.dx, safeRect.center.dy + safeRect.height * .25), Offset(safeRect.center.dx, safeRect.bottom));
+      case 'treeIcon':
+        canvas.drawPath(polygon([
+          Offset(safeRect.center.dx, safeRect.top),
+          Offset(safeRect.right, safeRect.top + safeRect.height * .48),
+          Offset(safeRect.left, safeRect.top + safeRect.height * .48),
+        ]), base);
+        canvas.drawPath(polygon([
+          Offset(safeRect.center.dx, safeRect.top + safeRect.height * .25),
+          Offset(safeRect.right, safeRect.top + safeRect.height * .75),
+          Offset(safeRect.left, safeRect.top + safeRect.height * .75),
+        ]), base);
+        canvas.drawRect(Rect.fromLTWH(safeRect.center.dx - safeRect.width * .07, safeRect.bottom - safeRect.height * .25, safeRect.width * .14, safeRect.height * .25), base);
       default:
         canvas.drawRRect(
           RRect.fromRectAndRadius(safeRect, const Radius.circular(5)),
