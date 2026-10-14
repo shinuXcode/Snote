@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -101,6 +102,12 @@ class _EditorV2PageState extends State<EditorV2Page>
       <String, TextEditingController>{};
   final Map<String, Uint8List> _backgroundBytesCache = <String, Uint8List>{};
   final Map<String, Uint8List> _imageBytesCache = <String, Uint8List>{};
+  final Map<String, DocumentAsset> _pdfSourceAssets = <String, DocumentAsset>{};
+  final Map<String, Uint8List> _pdfSourceBytesCache = <String, Uint8List>{};
+  final Map<String, Future<Uint8List>> _pdfSourceBytesFutures = <String, Future<Uint8List>>{};
+  final Map<String, Future<PdfDocument>> _pdfDocumentFutures = <String, Future<PdfDocument>>{};
+  final Map<String, Future<Uint8List?>> _pdfRasterPending = <String, Future<Uint8List?>>{};
+  final LinkedHashMap<String, Uint8List> _pdfRasterCache = LinkedHashMap<String, Uint8List>();
   final Set<int> _activePointers = <int>{};
   final Set<int> _ignoredPointers = <int>{};
   final Set<int> _stylusPointers = <int>{};
@@ -322,6 +329,13 @@ class _EditorV2PageState extends State<EditorV2Page>
     String? pdfName = widget.initialPdfName;
     DocumentAsset? sourcePdf;
     final assets = await _documents.listForNote(widget.note.id);
+    for (final asset in assets) {
+      final type = asset.type.toLowerCase();
+      final name = asset.name.toLowerCase();
+      if (type == 'pdf' || type == 'application/pdf' || name.endsWith('.pdf')) {
+        _pdfSourceAssets[asset.id] = asset;
+      }
+    }
     for (final asset in assets.reversed) {
       final type = asset.type.toLowerCase();
       final name = asset.name.toLowerCase();
@@ -330,14 +344,28 @@ class _EditorV2PageState extends State<EditorV2Page>
         break;
       }
     }
+    if (pdfBytes != null && pdfBytes.isNotEmpty && sourcePdf == null) {
+      sourcePdf = await _documents.saveBytes(
+        noteId: widget.note.id,
+        name: pdfName ?? '${saved.title}.pdf',
+        type: 'pdf',
+        bytes: pdfBytes,
+        metadata: const <String, dynamic>{'source': 'editor-v2-pdf-background'},
+      );
+      _pdfSourceAssets[sourcePdf.id] = sourcePdf;
+    }
+    if (sourcePdf != null) {
+      _pdfSourceAssets[sourcePdf.id] = sourcePdf;
+      if (pdfBytes != null && pdfBytes.isNotEmpty) {
+        _pdfSourceBytesCache[sourcePdf.id] = pdfBytes;
+      }
+    }
     final hasPdfAttachment = sourcePdf != null;
     if ((pdfBytes == null || pdfBytes.isEmpty) && sourcePdf != null) {
-      pdfBytes = await _documents.readBytes(sourcePdf);
+      pdfBytes = await _pdfBytesForSource(sourcePdf.id);
       pdfName = sourcePdf.name;
       if (pdfBytes.isEmpty) {
-        throw StateError(
-          'The original PDF attachment is empty. It has been preserved.',
-        );
+        throw StateError('The original PDF attachment is empty. It has been preserved.');
       }
     }
 
@@ -349,6 +377,7 @@ class _EditorV2PageState extends State<EditorV2Page>
         final result = await _renderPdfPages(
           pdfBytes,
           pdfName ?? '${saved.title}.pdf',
+          sourceAssetId: sourcePdf?.id,
         );
         if (result.pages.isEmpty) {
           throw StateError('The PDF renderer returned no pages.');
@@ -413,36 +442,93 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
   }
 
+  Future<Uint8List> _pdfBytesForSource(String assetId) {
+    final cached = _pdfSourceBytesCache[assetId];
+    if (cached != null) return Future<Uint8List>.value(cached);
+    return _pdfSourceBytesFutures.putIfAbsent(assetId, () async {
+      final asset = _pdfSourceAssets[assetId];
+      if (asset == null) throw StateError('The original PDF attachment for this page is missing.');
+      final bytes = await _documents.readBytes(asset);
+      if (bytes.isEmpty) throw StateError('The original PDF attachment is empty.');
+      _pdfSourceBytesCache[assetId] = bytes;
+      return bytes;
+    });
+  }
+
+  Future<PdfDocument> _pdfDocumentForSource(String assetId) =>
+      _pdfDocumentFutures.putIfAbsent(assetId, () async {
+        final bytes = await _pdfBytesForSource(assetId);
+        return PdfDocument.openData(bytes);
+      });
+
+  Future<Uint8List?> _renderPdfPageRaster(String assetId, int pageNumber, {required bool thumbnail}) async {
+    final document = await _pdfDocumentForSource(assetId);
+    if (pageNumber < 1 || pageNumber > document.pagesCount) {
+      throw RangeError('PDF page $pageNumber is outside 1..${document.pagesCount}.');
+    }
+    final page = await document.getPage(pageNumber);
+    try {
+      final maxDimension = thumbnail ? 320.0 : 1600.0;
+      final scale = math.min(maxDimension / page.width, maxDimension / page.height);
+      final rendered = await page.render(
+        width: (page.width * scale).clamp(1.0, maxDimension).toDouble(),
+        height: (page.height * scale).clamp(1.0, maxDimension).toDouble(),
+        format: PdfPageImageFormat.png,
+        backgroundColor: '#ffffff',
+      );
+      if (rendered == null || rendered.bytes.isEmpty) return null;
+      return rendered.bytes;
+    } finally {
+      await page.close();
+    }
+  }
+
+  Future<Uint8List?> _lazyPdfPageRaster(String assetId, int pageNumber, {bool thumbnail = false}) async {
+    final key = '$assetId:$pageNumber:${thumbnail ? 'thumb' : 'full'}';
+    final cached = _pdfRasterCache.remove(key);
+    if (cached != null) {
+      _pdfRasterCache[key] = cached;
+      return cached;
+    }
+    final pending = _pdfRasterPending[key];
+    if (pending != null) return pending;
+    final future = _renderPdfPageRaster(assetId, pageNumber, thumbnail: thumbnail);
+    _pdfRasterPending[key] = future;
+    try {
+      final bytes = await future;
+      if (bytes != null && bytes.isNotEmpty) {
+        _pdfRasterCache[key] = bytes;
+        while (_pdfRasterCache.length > 12) {
+          _pdfRasterCache.remove(_pdfRasterCache.keys.first);
+        }
+      }
+      return bytes;
+    } finally {
+      _pdfRasterPending.remove(key);
+    }
+  }
+
   Future<({List<Map<String, Object?>> pages, int totalPages})> _renderPdfPages(
     Uint8List sourceBytes,
-    String sourceName,
-  ) async {
+    String sourceName, {
+    String? sourceAssetId,
+  }) async {
     if (sourceBytes.isEmpty) throw StateError('The selected PDF is empty.');
     final sourceHash = sha256.convert(sourceBytes).toString();
     final document = await PdfDocument.openData(sourceBytes);
     final totalPages = document.pagesCount;
-    final importCount = math.min(totalPages, _maxPdfPagesPerImport);
     final imported = <Map<String, Object?>>[];
+    final pageIdPrefix = 'pdf-${DateTime.now().microsecondsSinceEpoch}';
     try {
-      for (var index = 1; index <= importCount; index++) {
-        final pdfPage = await document.getPage(index);
-        try {
-          const maxDimension = 1500.0;
-          final scale = math.min(
-            maxDimension / pdfPage.width,
-            maxDimension / pdfPage.height,
-          );
-          final rendered = await pdfPage.render(
-            width: (pdfPage.width * scale).roundToDouble(),
-            height: (pdfPage.height * scale).roundToDouble(),
-            format: PdfPageImageFormat.png,
-            backgroundColor: '#ffffff',
-          );
-          if (rendered == null || rendered.bytes.isEmpty) {
-            throw StateError('Could not render PDF page ${index}.');
-          }
+      // Large textbooks become lightweight page records; rasters are produced
+      // only for visible pages and retained in a bounded cache.
+      if (totalPages > _maxPdfPagesPerImport) {
+        if (sourceAssetId == null || sourceAssetId.isEmpty) {
+          throw StateError('Large PDF imports require a saved source attachment.');
+        }
+        for (var index = 1; index <= totalPages; index++) {
           imported.add(<String, Object?>{
-            'id': 'pdf-${DateTime.now().microsecondsSinceEpoch}-$index',
+            'id': '$pageIdPrefix-$index',
             'template': PageTemplate.blank.name,
             'paperColor': 0xffffffff,
             'lineColor': 0xffd8dee8,
@@ -450,11 +536,49 @@ class _EditorV2PageState extends State<EditorV2Page>
             'spacing': 28.0,
             'lineWidth': .7,
             'pageSize': 'A4',
-            'pageAspectRatio': math.min(pdfPage.width, pdfPage.height) /
-                math.max(pdfPage.width, pdfPage.height),
+            'pageAspectRatio': .707,
+            'cornellAssist': false,
+            'orientation': 'vertical',
+            'pdfLazyRender': true,
+            'pdfSourceAssetId': sourceAssetId,
+            'pdfSourceName': sourceName,
+            'pdfSourceHash': sourceHash,
+            'pdfSourcePage': index,
+            'strokes': <Object?>[],
+            'images': <Object?>[],
+            'textBoxes': <Object?>[],
+          });
+        }
+        return (pages: imported, totalPages: totalPages);
+      }
+      for (var index = 1; index <= totalPages; index++) {
+        final pdfPage = await document.getPage(index);
+        try {
+          const maxDimension = 1500.0;
+          final scale = math.min(maxDimension / pdfPage.width, maxDimension / pdfPage.height);
+          final rendered = await pdfPage.render(
+            width: (pdfPage.width * scale).roundToDouble(),
+            height: (pdfPage.height * scale).roundToDouble(),
+            format: PdfPageImageFormat.png,
+            backgroundColor: '#ffffff',
+          );
+          if (rendered == null || rendered.bytes.isEmpty) {
+            throw StateError('Could not render PDF page $index.');
+          }
+          imported.add(<String, Object?>{
+            'id': '$pageIdPrefix-$index',
+            'template': PageTemplate.blank.name,
+            'paperColor': 0xffffffff,
+            'lineColor': 0xffd8dee8,
+            'lineOpacity': .85,
+            'spacing': 28.0,
+            'lineWidth': .7,
+            'pageSize': 'A4',
+            'pageAspectRatio': math.min(pdfPage.width, pdfPage.height) / math.max(pdfPage.width, pdfPage.height),
             'cornellAssist': false,
             'orientation': pdfPage.width > pdfPage.height ? 'horizontal' : 'vertical',
             'backgroundImage': base64Encode(rendered.bytes),
+            'pdfSourceAssetId': sourceAssetId,
             'pdfSourceName': sourceName,
             'pdfSourceHash': sourceHash,
             'pdfBackgroundHash': sha256.convert(rendered.bytes).toString(),
@@ -2988,20 +3112,19 @@ class _EditorV2PageState extends State<EditorV2Page>
       if (file == null) return;
       final sourceBytes = await file.readAsBytes();
       if (sourceBytes.isEmpty) throw StateError('The selected PDF file is empty.');
-      final existing = await _documents.listForNote(widget.note.id);
-      final attached = existing.any((asset) =>
-          asset.type.toLowerCase().contains('pdf') ||
-          asset.name.toLowerCase().endsWith('.pdf'));
-      if (!attached) {
-        await _documents.saveBytes(
-          noteId: widget.note.id,
-          name: file.name,
-          type: 'pdf',
-          bytes: sourceBytes,
-          metadata: const <String, dynamic>{'source': 'editor-v2-import'},
-        );
-      }
-      final result = await _renderPdfPages(sourceBytes, file.name);
+      final asset = await _documents.saveBytes(
+        noteId: widget.note.id,
+        name: file.name,
+        type: 'pdf',
+        bytes: sourceBytes,
+        metadata: <String, dynamic>{
+          'source': 'editor-v2-import',
+          'sha256': sha256.convert(sourceBytes).toString(),
+        },
+      );
+      _pdfSourceAssets[asset.id] = asset;
+      _pdfSourceBytesCache[asset.id] = sourceBytes;
+      final result = await _renderPdfPages(sourceBytes, file.name, sourceAssetId: asset.id);
       if (!mounted || result.pages.isEmpty) return;
       _pushUndo();
       final insertion = (_page + 1).clamp(0, _pages.length).toInt();
@@ -3172,6 +3295,15 @@ class _EditorV2PageState extends State<EditorV2Page>
       await _flushSave();
       for (var index = 0; index < _pages.length; index++) {
         if (!mounted) return;
+        final pageRecord = _pages[index];
+        if (pageRecord['pdfLazyRender'] == true) {
+          final assetId = pageRecord['pdfSourceAssetId']?.toString();
+          final sourcePage = (pageRecord['pdfSourcePage'] as num?)?.toInt();
+          if (assetId == null || sourcePage == null ||
+              await _lazyPdfPageRaster(assetId, sourcePage) == null) {
+            throw StateError('Could not prepare PDF page ${index + 1} for export.');
+          }
+        }
         setState(() => _page = index);
         await WidgetsBinding.instance.endOfFrame;
         await Future<void>.delayed(const Duration(milliseconds: 80));
@@ -4020,7 +4152,41 @@ class _EditorV2PageState extends State<EditorV2Page>
     );
   }
 
-  Widget _buildPageBackground(Map<String, Object?> page, {bool showPdf = true}) {
+  Widget _buildPageBackground(Map<String, Object?> page, {bool showPdf = true, bool thumbnail = false}) {
+    if (showPdf && page['pdfLazyRender'] == true) {
+      final assetId = page['pdfSourceAssetId']?.toString();
+      final sourcePage = (page['pdfSourcePage'] as num?)?.toInt();
+      if (assetId == null || assetId.isEmpty || sourcePage == null) {
+        return const ColoredBox(color: Color(0xfffff8e7), child: Center(child: Icon(Icons.picture_as_pdf_rounded, color: Colors.redAccent)));
+      }
+      return FutureBuilder<Uint8List?>(
+        future: _lazyPdfPageRaster(assetId, sourcePage, thumbnail: thumbnail),
+        builder: (context, snapshot) {
+          final bytes = snapshot.data;
+          if (bytes != null && bytes.isNotEmpty) {
+            return Image.memory(bytes, fit: BoxFit.fill,
+              filterQuality: thumbnail ? FilterQuality.low : FilterQuality.medium,
+              errorBuilder: (_, error, stackTrace) => const ColoredBox(color: Color(0xfffff8e7), child: Center(child: Icon(Icons.broken_image_outlined))),
+            );
+          }
+          if (snapshot.hasError) {
+            return ColoredBox(color: const Color(0xfffff8e7),
+              child: Center(child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: Text('PDF page $sourcePage could not be rendered.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: thumbnail ? 8 : 12)),
+              )),
+            );
+          }
+          return ColoredBox(color: Colors.white,
+            child: Center(child: thumbnail
+              ? const Icon(Icons.picture_as_pdf_rounded, size: 13, color: Colors.redAccent)
+              : const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))),
+          );
+        },
+      );
+    }
     final source = page['backgroundImage'];
     if (showPdf && source is String && source.isNotEmpty) {
       try {
@@ -4185,7 +4351,7 @@ class _EditorV2PageState extends State<EditorV2Page>
         child: Stack(
           fit: StackFit.expand,
           children: [
-            Positioned.fill(child: _buildPageBackground(page, showPdf: _pdfBackgroundVisible)),
+            Positioned.fill(child: _buildPageBackground(page, showPdf: _pdfBackgroundVisible, thumbnail: false)),
             if (_textMode)
               Positioned.fill(
                 child: IgnorePointer(
@@ -4542,7 +4708,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                 itemBuilder: (_, index) {
                   final page = _pages[index];
                   final template = page['template']?.toString() ?? 'PDF';
-                  final isPdf = page['backgroundImage'] is String && (page['backgroundImage'] as String).isNotEmpty;
+                  final isPdf = page['pdfLazyRender'] == true || (page['backgroundImage'] is String && (page['backgroundImage'] as String).isNotEmpty);
                   return Card(
                     key: ValueKey(page['id']?.toString() ?? 'page-$index'),
                     color: index == _page ? Theme.of(context).colorScheme.primaryContainer : null,
@@ -4765,17 +4931,18 @@ class _EditorV2PageState extends State<EditorV2Page>
           preferredSize: const Size.fromHeight(50),
           child: SizedBox(
             height: 50,
-            child: ListView(
+            child: ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               scrollDirection: Axis.horizontal,
-              children: List<Widget>.generate(_pages.length, (index) {
+              itemCount: _pages.length,
+              itemBuilder: (_, index) {
                 final page = _pages[index];
                 final template = PageTemplate.values.firstWhere(
                   (value) => value.name == page['template']?.toString(),
                   orElse: () => PageTemplate.blank,
                 );
                 final selected = index == _page;
-                final pdfPage = page['backgroundImage'] is String && (page['backgroundImage'] as String).isNotEmpty;
+                final pdfPage = page['pdfLazyRender'] == true || (page['backgroundImage'] is String && (page['backgroundImage'] as String).isNotEmpty);
                 return Padding(
                   padding: const EdgeInsets.only(right: 6),
                   child: Tooltip(
@@ -4800,7 +4967,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                             children: [
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(7),
-                                child: _buildPageBackground(page, showPdf: true),
+                                child: _buildPageBackground(page, showPdf: true, thumbnail: true),
                               ),
                               Align(
                                 alignment: Alignment.bottomRight,
@@ -4826,7 +4993,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                     ),
                   ),
                 );
-              }),
+              },
             ),
           ),
         ),
@@ -5038,6 +5205,11 @@ class _EditorV2PageState extends State<EditorV2Page>
     _transform.dispose();
     for (final controller in _textControllers.values) {
       controller.dispose();
+    }
+    for (final documentFuture in _pdfDocumentFutures.values) {
+      unawaited(documentFuture.then<void>((document) => document.close()).catchError((Object error) {
+        debugPrint('[Snote][EditorV2] PDF document cache cleanup failed: $error');
+      }));
     }
     unawaited(WakelockPlus.disable().catchError((Object error) {
       debugPrint('[Snote][EditorV2] wakelock release failed: $error');
