@@ -16,6 +16,7 @@ enum CanvasTool {
   eraser,
   pixelEraser,
   lasso,
+  fill,
   line,
   arrow,
   rectangle,
@@ -79,6 +80,7 @@ extension CanvasToolX on CanvasTool {
       case CanvasTool.eraser: return 'Eraser';
       case CanvasTool.pixelEraser: return 'Pixel eraser';
       case CanvasTool.lasso: return 'Lasso';
+      case CanvasTool.fill: return 'Smart fill';
       case CanvasTool.line: return 'Line';
       case CanvasTool.arrow: return 'Arrow';
       case CanvasTool.rectangle: return 'Rectangle';
