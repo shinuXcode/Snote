@@ -66,7 +66,14 @@ class SnoteCanvasPainter extends CustomPainter {
         ..color = const Color(0xff4f6df6).withValues(alpha: .55)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.4;
-      canvas.drawCircle(eraserPoint!, eraserRadius, eraserPaint);
+      canvas.drawRect(
+        Rect.fromCenter(
+          center: eraserPoint!,
+          width: eraserRadius * 2,
+          height: eraserRadius * 1.4,
+        ),
+        eraserPaint,
+      );
     }
 
     if (drawActive && lassoPath.length > 1) {
@@ -150,6 +157,30 @@ class SnoteCanvasPainter extends CustomPainter {
     if (stroke.shape != null) {
       _drawShape(canvas, stroke, paint);
       return;
+    }
+
+    // A tap-fill keeps the original freehand vector intact and adds a closed
+    // fill beneath its ink outline. The closure tolerance handles hand-drawn
+    // loops whose first and last stylus samples do not perfectly overlap.
+    if (stroke.fill &&
+        points.length >= 3 &&
+        (points.last.position - points.first.position).distance <=
+            math.max(16.0, stroke.pen.size * 4)) {
+      final fillPath = Path()
+        ..moveTo(points.first.position.dx, points.first.position.dy);
+      for (final point in points.skip(1)) {
+        fillPath.lineTo(point.position.dx, point.position.dy);
+      }
+      fillPath.close();
+      canvas.drawPath(
+        fillPath,
+        Paint()
+          ..color = (stroke.fillColor ?? stroke.pen.color).withValues(
+            alpha: stroke.fillOpacity.clamp(0.0, 1.0).toDouble(),
+          )
+          ..style = PaintingStyle.fill
+          ..isAntiAlias = true,
+      );
     }
 
     // Freehand live and committed strokes share exactly one geometry and
