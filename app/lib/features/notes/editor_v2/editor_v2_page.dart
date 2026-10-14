@@ -733,6 +733,10 @@ class _EditorV2PageState extends State<EditorV2Page>
     for (final tool in _quickTools) {
       if (!_toolbarOrder.contains(tool.name)) _toolbarOrder.add(tool.name);
     }
+    // Include utility tools in the same persistent order as drawing tools.
+    for (final key in const <String>['calculator', 'screenshot']) {
+      if (!_toolbarOrder.contains(key)) _toolbarOrder.add(key);
+    }
   }
 
   Future<void> _saveToolPlacements() => _settings.setString(
@@ -749,25 +753,68 @@ class _EditorV2PageState extends State<EditorV2Page>
   bool _toolInLocation(CanvasTool tool, String location) =>
       _placementsFor(tool).contains(location);
 
-  List<CanvasTool> get _toolbarTools {
-    final result = <CanvasTool>[];
-    for (final name in _toolbarOrder) {
-      final tool = CanvasTool.values.where((candidate) => candidate.name == name).firstOrNull;
-      if (tool != null && tool != CanvasTool.pixelEraser && _toolInLocation(tool, 'toolbar') && !result.contains(tool)) {
-        result.add(tool);
+  bool _isSpecialToolKey(String key) =>
+      const <String>{'calculator', 'screenshot'}.contains(key);
+
+  Set<String> _locationsForToolKey(String key) {
+    final tool = CanvasTool.values.where((candidate) => candidate.name == key).firstOrNull;
+    if (tool != null) return Set<String>.from(_placementsFor(tool));
+    if (_isSpecialToolKey(key)) return _specialToolLocations(key);
+    return <String>{};
+  }
+
+  List<String> _toolKeysForLocation(String location) {
+    final ordered = <String>[];
+    final seen = <String>{};
+    for (final key in _toolbarOrder) {
+      if (seen.add(key) && _locationsForToolKey(key).contains(location)) {
+        ordered.add(key);
       }
     }
     for (final tool in CanvasTool.values) {
-      if (tool != CanvasTool.pixelEraser && _toolInLocation(tool, 'toolbar') && !result.contains(tool)) result.add(tool);
+      if (tool != CanvasTool.pixelEraser &&
+          seen.add(tool.name) &&
+          _toolInLocation(tool, location)) {
+        ordered.add(tool.name);
+      }
     }
-    return result;
+    for (final key in const <String>['calculator', 'screenshot']) {
+      if (seen.add(key) && _specialToolLocations(key).contains(location)) {
+        ordered.add(key);
+      }
+    }
+    return ordered;
   }
 
-  List<CanvasTool> get _titleBarTools =>
-      CanvasTool.values.where((tool) => _toolInLocation(tool, 'titleBar')).toList();
+  Widget _buildPlacedToolButton(String key, String location) {
+    if (_isSpecialToolKey(key)) return _specialToolButton(key, location);
+    final tool = CanvasTool.values.where((candidate) => candidate.name == key).firstOrNull;
+    if (tool == null || tool == CanvasTool.pixelEraser) return const SizedBox.shrink();
+    switch (location) {
+      case 'titleBar':
+        return _buildTitleBarToolButton(tool);
+      case 'pencase':
+        return _buildPencaseToolButton(tool);
+      default:
+        return _buildToolbarToolButton(tool);
+    }
+  }
 
-  List<CanvasTool> get _pencaseTools =>
-      CanvasTool.values.where((tool) => _toolInLocation(tool, 'pencase')).toList();
+  List<CanvasTool> get _toolbarTools => _toolKeysForLocation('toolbar')
+      .map((key) => CanvasTool.values.where((tool) => tool.name == key).firstOrNull)
+      .whereType<CanvasTool>()
+      .where((tool) => tool != CanvasTool.pixelEraser)
+      .toList();
+
+  List<CanvasTool> get _titleBarTools => _toolKeysForLocation('titleBar')
+      .map((key) => CanvasTool.values.where((tool) => tool.name == key).firstOrNull)
+      .whereType<CanvasTool>()
+      .toList();
+
+  List<CanvasTool> get _pencaseTools => _toolKeysForLocation('pencase')
+      .map((key) => CanvasTool.values.where((tool) => tool.name == key).firstOrNull)
+      .whereType<CanvasTool>()
+      .toList();
 
   void _reorderToolbarTool(CanvasTool source, CanvasTool target) {
     unawaited(_moveDroppedTool(source, 'toolbar', target: target));
@@ -778,34 +825,42 @@ class _EditorV2PageState extends State<EditorV2Page>
     String targetLocation, {
     Object? target,
   }) async {
-    if (dragged is CanvasTool) {
-      final source = dragged;
-      if (target == source) return;
-      final sourceAlreadyThere = _toolInLocation(source, targetLocation);
-      final targetTool = target is CanvasTool ? target : null;
-      final targetAlreadyThere = targetTool != null &&
-          _toolInLocation(targetTool, targetLocation);
-      final order = List<String>.from(_toolbarOrder)..remove(source.name);
-      final targetIndex =
-          targetTool == null ? -1 : order.indexOf(targetTool.name);
-      order.insert(targetIndex < 0 ? order.length : targetIndex, source.name);
+    final sourceKey = dragged is CanvasTool
+        ? dragged.name
+        : dragged is String && _isSpecialToolKey(dragged)
+            ? dragged
+            : null;
+    if (sourceKey == null) return;
 
-      setState(() {
-        if (!(sourceAlreadyThere && targetAlreadyThere)) {
-          _toolPlacements[source.name] = <String>{targetLocation};
-        }
-        _toolbarOrder = order;
-      });
-      await _saveToolPlacements();
-      await _settings.setString('editorV2ToolbarOrder', jsonEncode(order));
-      return;
-    }
+    final targetKey = target is CanvasTool
+        ? target.name
+        : target is String && _isSpecialToolKey(target)
+            ? target
+            : null;
+    if (sourceKey == targetKey) return;
 
-    if (dragged is String &&
-        const {'calculator', 'screenshot'}.contains(dragged)) {
-      setState(() => _toolPlacements[dragged] = <String>{targetLocation});
-      await _saveToolPlacements();
-    }
+    final sourceLocations = _locationsForToolKey(sourceKey);
+    final targetLocations =
+        targetKey == null ? <String>{} : _locationsForToolKey(targetKey);
+    final sourceAlreadyThere = sourceLocations.contains(targetLocation);
+    final targetAlreadyThere = targetLocations.contains(targetLocation);
+
+    // One stable order is used by toolbar, title bar and dock. Moving onto a
+    // tool inserts before that tool; dropping on empty space appends.
+    final order = List<String>.from(_toolbarOrder)..remove(sourceKey);
+    final targetIndex = targetKey == null ? -1 : order.indexOf(targetKey);
+    order.insert(targetIndex < 0 ? order.length : targetIndex, sourceKey);
+
+    setState(() {
+      // Dropping among tools already sharing the same location only reorders.
+      // Dropping into a different location moves the tool there.
+      if (!(sourceAlreadyThere && targetAlreadyThere)) {
+        _toolPlacements[sourceKey] = <String>{targetLocation};
+      }
+      _toolbarOrder = order;
+    });
+    await _saveToolPlacements();
+    await _settings.setString('editorV2ToolbarOrder', jsonEncode(order));
   }
 
   Set<String> _specialToolLocations(String key) =>
@@ -1009,7 +1064,6 @@ class _EditorV2PageState extends State<EditorV2Page>
             borderRadius: BorderRadius.circular(8),
             onTap: () => _selectTool(tool),
             onDoubleTap: () => _strokeSettings(tool),
-            onLongPress: () => _strokeSettings(tool),
             child: Container(
               width: _favoritesVertical ? 34 : 38,
               height: _favoritesVertical ? 38 : 34,
@@ -4302,18 +4356,16 @@ class _EditorV2PageState extends State<EditorV2Page>
       action(tooltip: 'Sticker library', icon: Icons.emoji_emotions_outlined, onPressed: () => unawaited(_addSticker())),
       action(tooltip: 'All tools / categories', icon: Icons.apps_rounded, onPressed: _openToolPicker),
     ];
-    final quickButtons = _toolbarTools.map((tool) => Padding(
-      padding: const EdgeInsets.all(1),
-      child: _buildToolbarToolButton(tool),
-    )).toList();
+    final quickButtons = _toolKeysForLocation('toolbar')
+        .map((key) => Padding(
+              padding: const EdgeInsets.all(1),
+              child: _buildPlacedToolButton(key, 'toolbar'),
+            ))
+        .toList();
     final children = <Widget>[
       ...actions,
       if (!vertical) const VerticalDivider(width: 5, indent: 6, endIndent: 6),
       ...quickButtons,
-      if (_specialToolLocations('calculator').contains('toolbar'))
-        _specialToolButton('calculator', 'toolbar'),
-      if (_specialToolLocations('screenshot').contains('toolbar'))
-        _specialToolButton('screenshot', 'toolbar'),
       action(tooltip: 'Insert page', icon: Icons.note_add_outlined, onPressed: _addPage),
       PopupMenuButton<String>(
         tooltip: 'Workspace options',
@@ -4370,7 +4422,9 @@ class _EditorV2PageState extends State<EditorV2Page>
   }
 
   Widget _buildFavoriteShowcase() {
-    final placedToolChips = _pencaseTools.map(_buildPencaseToolButton).toList();
+    final placedToolChips = _toolKeysForLocation('pencase')
+        .map((key) => _buildPlacedToolButton(key, 'pencase'))
+        .toList();
     final favoriteChips = (_showFavoritesShowcase ? _favoritePens : const <Map<String, Object?>>[]).map((favorite) {
       final favoriteTool = CanvasTool.values.where((tool) => tool.name == favorite['tool']?.toString()).firstOrNull ?? CanvasTool.ballpoint;
       final color = Color((favorite['color'] as num?)?.toInt() ?? 0xff17202a);
@@ -4404,10 +4458,6 @@ class _EditorV2PageState extends State<EditorV2Page>
     final chips = <Widget>[
       ...placedToolChips,
       ...favoriteChips,
-      if (_specialToolLocations('calculator').contains('pencase'))
-        _specialToolButton('calculator', 'pencase'),
-      if (_specialToolLocations('screenshot').contains('pencase'))
-        _specialToolButton('screenshot', 'pencase'),
     ];
     final screen = MediaQuery.sizeOf(context);
     return Positioned(
@@ -5365,6 +5415,10 @@ class _EditorV2PageState extends State<EditorV2Page>
 
   @override
   Widget build(BuildContext context) {
+    final titleBarToolKeys = _toolKeysForLocation('titleBar');
+    final titleBarToolButtons = titleBarToolKeys
+        .map((key) => _buildPlacedToolButton(key, 'titleBar'))
+        .toList();
     return Scaffold(
       appBar: _fullScreenMode ? null : AppBar(
         leading: BackButton(
@@ -5472,11 +5526,17 @@ class _EditorV2PageState extends State<EditorV2Page>
               onPressed: _chooseTemplate,
               icon: const Icon(Icons.grid_on_rounded),
             ),
-          if (_specialToolLocations('calculator').contains('titleBar'))
-            _specialToolButton('calculator', 'titleBar'),
-          if (_specialToolLocations('screenshot').contains('titleBar'))
-            _specialToolButton('screenshot', 'titleBar'),
-          ..._titleBarTools.map(_buildTitleBarToolButton),
+          if (titleBarToolButtons.isNotEmpty)
+            SizedBox(
+              width: math.min(
+                MediaQuery.sizeOf(context).width * .32,
+                titleBarToolButtons.length * 30.0,
+              ).toDouble(),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(mainAxisSize: MainAxisSize.min, children: titleBarToolButtons),
+              ),
+            ),
           if (_hasPdfBackgroundPages && MediaQuery.sizeOf(context).width < 640)
             IconButton(
               visualDensity: VisualDensity.compact,
