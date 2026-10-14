@@ -3732,7 +3732,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                 return Padding(
                   padding: const EdgeInsets.only(right: 6),
                   child: Tooltip(
-                    message: 'Page ${index + 1}\nLong-press for page actions',
+                    message: 'Page ${index + 1} • ${pdfPage ? 'PDF' : template.name}\nLong-press for page actions',
                     child: GestureDetector(
                       onLongPress: _showPagePicker,
                       child: InkWell(
