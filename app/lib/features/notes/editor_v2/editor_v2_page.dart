@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:pdf/pdf.dart' as pdfcore;
 import 'package:pdf/widgets.dart' as pw;
@@ -31,6 +32,7 @@ import '../note_content_compatibility.dart';
 import 'editor_v2_document.dart';
 import 'editor_v2_ink_painter.dart';
 import 'selection_text_recognizer.dart';
+import '../../tools/screen_capture.dart';
 
 /// Replacement note editor surface. It shares only Snote's persistence and
 /// stroke-format contracts; pointer handling, selection, drawing, and painting
@@ -115,6 +117,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   final Set<int> _activePointers = <int>{};
   final Set<int> _ignoredPointers = <int>{};
   final Set<int> _stylusPointers = <int>{};
+  final Set<int> _navigationOnlyPointers = <int>{};
   Timer? _holdTimer;
   Offset? _holdStartPosition;
   Offset? _pageSwipeStart;
@@ -180,6 +183,9 @@ class _EditorV2PageState extends State<EditorV2Page>
   bool _showPagePreview = true;
   bool _floatingPageNavigation = false;
   bool _fullScreenMode = false;
+  bool _showViewportHud = false;
+  bool _viewportLocked = false;
+  Timer? _viewportHudTimer;
   bool _pdfBackgroundVisible = true;
   bool _pressureEraseActive = false;
   CanvasTool? _toolBeforePressureErase;
@@ -971,7 +977,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     if (key == 'calculator') {
       _openCalculator();
     } else if (key == 'screenshot') {
-      unawaited(_pasteClipboardImage());
+      unawaited(_captureScreenToCanvas());
     }
   }
 
@@ -980,7 +986,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     final icon = calculator
         ? Icons.calculate_outlined
         : Icons.screenshot_monitor_rounded;
-    final title = calculator ? 'Calculator' : 'Paste screenshot';
+    final title = calculator ? 'Calculator' : 'Capture screen to canvas';
     return DragTarget<Object>(
       onAcceptWithDetails: (details) => unawaited(
         _moveDroppedTool(details.data, location, target: key),
@@ -1522,13 +1528,29 @@ class _EditorV2PageState extends State<EditorV2Page>
       return;
     }
     if (_activePointers.length > 1) {
-      if (_activePointer != null) _ignoredPointers.add(_activePointer!);
+      if (_activePointer != null) {
+        _ignoredPointers.add(_activePointer!);
+        _navigationOnlyPointers.remove(_activePointer!);
+      }
       _ignoredPointers.add(event.pointer);
       _activePointer = null;
       _livePoints = <StrokePoint>[];
       _liveStroke = null;
       _gestureStart = null;
       if (mounted) setState(() {});
+      return;
+    }
+    if (event.kind == PointerDeviceKind.touch && _settings.getBool('fingerWritingProtection')) {
+      _navigationOnlyPointers.add(event.pointer);
+      _activePointer = event.pointer;
+      _gestureStart = event.localPosition;
+      _holdStartPosition = null;
+      _pageSwipeStart = _settings.getBool('pageSwipe') ? event.localPosition : null;
+      _pageSwipeTriggered = false;
+      _longPressTriggered = false;
+      _livePoints = <StrokePoint>[];
+      _liveStroke = null;
+      setState(() {});
       return;
     }
     if (_ignoredPointers.contains(event.pointer) ||
@@ -1609,6 +1631,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       }
     }
     if (_activePointer == event.pointer && _pageSwipeTriggered) return;
+    if (_navigationOnlyPointers.contains(event.pointer)) return;
     // A locked page may participate in edge swipes, but must never render a
     // transient ink preview from an unfinished navigation gesture.
     if (_pageData['locked'] == true) return;
@@ -1651,12 +1674,33 @@ class _EditorV2PageState extends State<EditorV2Page>
     _holdTimer?.cancel();
     _holdTimer = null;
     _holdStartPosition = null;
-    if (_ignoredPointers.remove(event.pointer)) return;
-    if (_activePointer != event.pointer) return;
+    if (_ignoredPointers.remove(event.pointer)) {
+      _navigationOnlyPointers.remove(event.pointer);
+      return;
+    }
+    if (_navigationOnlyPointers.contains(event.pointer) && !_pageSwipeTriggered) {
+      _navigationOnlyPointers.remove(event.pointer);
+      if (_activePointer == event.pointer) {
+        setState(() {
+          _activePointer = null;
+          _gestureStart = null;
+          _pageSwipeStart = null;
+          _livePoints.clear();
+          _liveStroke = null;
+          _eraserCursor = null;
+        });
+      }
+      return;
+    }
+    if (_activePointer != event.pointer) {
+      _navigationOnlyPointers.remove(event.pointer);
+      return;
+    }
     if (_pageSwipeTriggered && _pageSwipeStart != null) {
+      _navigationOnlyPointers.remove(event.pointer);
       final swipe = event.localPosition - _pageSwipeStart!;
       final horizontalSwipe = swipe.dx.abs() > swipe.dy.abs() * 1.25;
-      final forward = horizontalSwipe ? swipe.dx < 0 : swipe.dy < 0;
+      final forward = horizontalSwipe ? swipe.dx > 0 : swipe.dy < 0;
       setState(() {
         _activePointer = null;
         _gestureStart = null;
@@ -3375,6 +3419,67 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
   }
 
+  Future<void> _captureScreenToCanvas() async {
+    if (_pageData['locked'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unlock this page before inserting a screenshot.')),
+      );
+      return;
+    }
+    try {
+      Uint8List? bytes;
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        // Android MediaProjection requires user consent; PNG bytes return
+        // directly from native code, with no MediaStore/gallery write.
+        bytes = await SnoteScreenCapture.captureDisplay();
+        if (!mounted || bytes == null) return;
+      } else {
+        // iOS/desktop captures the active Snote canvas. iOS does not allow
+        // third-party apps to capture another app's screen.
+        await WidgetsBinding.instance.endOfFrame;
+        final object = _pageCaptureKey.currentContext?.findRenderObject();
+        if (object is! RenderRepaintBoundary) {
+          throw StateError('The note canvas is not ready for capture.');
+        }
+        final image = await object.toImage(pixelRatio: 1.25);
+        try {
+          final data = await image.toByteData(format: ui.ImageByteFormat.png);
+          bytes = data?.buffer.asUint8List();
+        } finally {
+          image.dispose();
+        }
+        if (defaultTargetPlatform == TargetPlatform.iOS && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Captured the Snote canvas. iOS cannot capture another app from inside Snote.')),
+          );
+        }
+      }
+      if (bytes == null || bytes.isEmpty) throw StateError('No screenshot image was returned.');
+      await _insertImageBytes(
+        bytes,
+        name: 'Snote screen capture ${DateTime.now().toIso8601String().replaceAll(':', '-')}.png',
+        x: .10, y: .25, width: .80, height: .50,
+      );
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Screenshot inserted into the current page.')),
+      );
+    } on MissingPluginException {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Screen capture is not available in this build yet.')),
+      );
+    } on PlatformException catch (error) {
+      debugPrint('[Snote][EditorV2] screenshot capture failed: ${error.code} ${error.message}');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not capture the screen: ${error.message ?? error.code}')),
+      );
+    } catch (error, stackTrace) {
+      debugPrint('[Snote][EditorV2] screenshot capture failed: $error\n$stackTrace');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not capture the screen: $error')),
+      );
+    }
+  }
+
   Future<void> _pasteClipboardImage() async {
     if (_pageData['locked'] == true) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -3407,7 +3512,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
   }
 
-  Future<void> _insertImageBytes(Uint8List bytes, {required String name}) async {
+  Future<void> _insertImageBytes(Uint8List bytes, {required String name, double x = .12, double y = .16, double width = .68, double height = .42}) async {
     if (_pageData['locked'] == true) return;
     if (bytes.isEmpty) throw StateError('The selected image is empty.');
     if (bytes.length > 25 * 1024 * 1024) {
@@ -3419,10 +3524,10 @@ class _EditorV2PageState extends State<EditorV2Page>
       'id': id,
       'name': name,
       'data': base64Encode(bytes),
-      'x': .12,
-      'y': .16,
-      'width': .68,
-      'height': .42,
+      'x': x,
+      'y': y,
+      'width': width,
+      'height': height,
     };
     final images = _pageData['images'];
     if (images is List<Object?>) {
@@ -3440,10 +3545,10 @@ class _EditorV2PageState extends State<EditorV2Page>
         ..clear()
         ..add(id);
       _lassoRect = Rect.fromLTWH(
-        .12 * _pageWidth,
-        .16 * _pageHeight,
-        .68 * _pageWidth,
-        .42 * _pageHeight,
+        x * _pageWidth,
+        y * _pageHeight,
+        width * _pageWidth,
+        height * _pageHeight,
       );
     });
     _scheduleSave();
@@ -3734,6 +3839,143 @@ class _EditorV2PageState extends State<EditorV2Page>
         );
       }
     }
+  }
+
+
+  Future<void> _showPageSearch() async {
+    final controller = TextEditingController();
+    var query = '';
+    final chosen = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final q = query.trim().toLowerCase();
+          final indexes = List<int>.generate(_pages.length, (index) => index).where((index) {
+            if (q.isEmpty) return true;
+            final page = _pages[index];
+            final template = page['template']?.toString() ?? '';
+            final name = page['pdfSourceName']?.toString() ?? '';
+            final text = page['textBoxes'] is List
+                ? (page['textBoxes'] as List).whereType<Map>().map((box) => box['text']?.toString() ?? '').join(' ')
+                : '';
+            return '${index + 1}'.contains(q) || template.toLowerCase().contains(q) ||
+                name.toLowerCase().contains(q) || text.toLowerCase().contains(q);
+          }).toList();
+          return AlertDialog(
+            title: const Text('Search / jump to page'),
+            content: SizedBox(
+              width: 420,
+              height: 430,
+              child: Column(children: [
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.search_rounded),
+                    hintText: 'Page number, text, or PDF name',
+                    isDense: true,
+                  ),
+                  onChanged: (value) => setDialogState(() => query = value),
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: indexes.isEmpty
+                      ? const Center(child: Text('No matching pages'))
+                      : ListView.builder(
+                          itemCount: indexes.length,
+                          itemBuilder: (_, itemIndex) {
+                            final index = indexes[itemIndex];
+                            final page = _pages[index];
+                            return ListTile(
+                              dense: true,
+                              selected: index == _page,
+                              leading: CircleAvatar(
+                                radius: 14,
+                                child: Text('${index + 1}', style: const TextStyle(fontSize: 10)),
+                              ),
+                              title: Text('Page ${index + 1}'),
+                              subtitle: Text(
+                                page['pdfSourceName']?.toString() ?? page['template']?.toString() ?? 'Notebook page',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              onTap: () => Navigator.pop(dialogContext, index),
+                            );
+                          },
+                        ),
+                ),
+              ]),
+            ),
+            actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel'))],
+          );
+        },
+      ),
+    );
+    controller.dispose();
+    if (chosen != null && mounted) _goToPage(chosen);
+  }
+
+  Future<void> _insertBlankPageAfter(int index) async {
+    if (index < 0 || index >= _pages.length) return;
+    final targetId = _pages[index]['id']?.toString();
+    if (_pages[index]['pdfLazyRender'] == true) {
+      final sourceId = _pages[index]['pdfSourceAssetId']?.toString();
+      final sourcePage = (_pages[index]['pdfSourcePage'] as num?)?.toInt();
+      if (sourceId != null && sourcePage != null) {
+        try {
+          await _lazyPdfPageRaster(sourceId, sourcePage);
+        } catch (error) {
+          debugPrint('[Snote][EditorV2] target PDF page rendering failed: $error');
+        }
+      }
+    }
+    if (!mounted) return;
+    final currentIndex = _pages.indexWhere((page) => page['id']?.toString() == targetId);
+    if (currentIndex >= 0) _addPage(insertAfter: currentIndex);
+  }
+
+  Future<void> _choosePageBackground(int index) async {
+    if (index < 0 || index >= _pages.length) return;
+    final page = _pages[index];
+    if (page['locked'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unlock this page before changing its background.')),
+      );
+      return;
+    }
+    final current = Color((page['paperColor'] as num?)?.toInt() ?? 0xffffffff);
+    final chosen = await showDialog<Color>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Page ${index + 1} background'),
+        content: Wrap(
+          spacing: 9,
+          runSpacing: 9,
+          children: _palette.map((color) => InkWell(
+            onTap: () => Navigator.pop(dialogContext, color),
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: color.toARGB32() == current.toARGB32()
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).colorScheme.outlineVariant,
+                  width: color.toARGB32() == current.toARGB32() ? 3 : 1,
+                ),
+              ),
+            ),
+          )).toList(),
+        ),
+      ),
+    );
+    if (chosen == null || !mounted) return;
+    _pushUndo();
+    setState(() => page['paperColor'] = chosen.toARGB32());
+    _scheduleSave();
   }
 
   void _copyPage(int index) {
@@ -4302,9 +4544,48 @@ class _EditorV2PageState extends State<EditorV2Page>
     );
   }
 
+
+  void _showCanvasHud() {
+    _viewportHudTimer?.cancel();
+    if (!_showViewportHud && mounted) setState(() => _showViewportHud = true);
+    _viewportHudTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (mounted && !_viewportLocked) setState(() => _showViewportHud = false);
+    });
+  }
+
+  void _toggleCanvasLock() {
+    setState(() {
+      _viewportLocked = !_viewportLocked;
+      _showViewportHud = true;
+    });
+    _showCanvasHud();
+  }
+
+  void _resetCanvasView() {
+    final availableWidth = MediaQuery.sizeOf(context).width -
+        (_showPagePreview && !_fullScreenMode ? 220 : 12);
+    final scale = (availableWidth.clamp(260.0, 816.0) / 816.0).clamp(.25, 1.0).toDouble();
+    _transform.value = Matrix4.identity()..scale(scale);
+    setState(() {
+      _viewportLocked = false;
+      _panMode = false;
+      _showViewportHud = true;
+    });
+    _showCanvasHud();
+  }
+
+  void _toggleFullScreen() {
+    setState(() => _fullScreenMode = !_fullScreenMode);
+    unawaited(SystemChrome.setEnabledSystemUIMode(
+      _fullScreenMode ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+    ));
+  }
+
   void _zoom(double factor) {
+    if (_viewportLocked) return;
     final next = _transform.value.clone()..scale(factor);
     _transform.value = next;
+    _showCanvasHud();
   }
 
   Future<void> _startStudyTimer() async {
@@ -4442,7 +4723,7 @@ class _EditorV2PageState extends State<EditorV2Page>
         final scale = (MediaQuery.sizeOf(context).width - 30).clamp(260, 816) / _pageWidth;
         _transform.value = Matrix4.identity()..scale(scale);
       case 'fullscreen':
-        setState(() => _fullScreenMode = !_fullScreenMode);
+        _toggleFullScreen();
       case 'save':
         unawaited(_save(force: true));
     }
@@ -4530,6 +4811,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       action(tooltip: _textMode ? 'Handwriting mode' : 'Rich text mode', icon: _textMode ? Icons.draw_rounded : Icons.text_fields_rounded, onPressed: () => setState(() { _textMode = !_textMode; _scheduleSave(); })),
       action(tooltip: 'Color palette', icon: Icons.palette_outlined, color: _color, onPressed: _chooseColor),
       action(tooltip: 'Text box', icon: Icons.text_fields_rounded, onPressed: _addTextBox),
+      action(tooltip: 'Capture screen to canvas', icon: Icons.screenshot_monitor_rounded, onPressed: () => unawaited(_captureScreenToCanvas())),
 
       action(tooltip: 'Selection clipboard history', icon: Icons.content_paste_go_rounded, onPressed: () => unawaited(_showClipboardHistory())),
       action(tooltip: 'Shape box', icon: Icons.category_outlined, onPressed: () => _openToolPicker(initialCategory: 'Shapes & diagrams')),
@@ -4925,7 +5207,6 @@ class _EditorV2PageState extends State<EditorV2Page>
   Widget _buildPagePreviewSidebar() {
     final sidebarWidth = MediaQuery.sizeOf(context).width >= 900 ? 216.0 : 172.0;
     final cardWidth = sidebarWidth - 20;
-    final cardHeight = cardWidth * (_pageHeight / _pageWidth);
     return Material(
       color: Theme.of(context).colorScheme.surfaceContainerLow,
       elevation: 2,
@@ -4947,6 +5228,13 @@ class _EditorV2PageState extends State<EditorV2Page>
                       ),
                     ),
                   ),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+                    tooltip: 'Search pages / jump to page',
+                    onPressed: _showPageSearch,
+                    icon: const Icon(Icons.search_rounded, size: 18),
+                  ),
                   Text(
                     _pages.length.toString(),
                     style: Theme.of(context).textTheme.labelMedium?.copyWith(
@@ -4959,13 +5247,20 @@ class _EditorV2PageState extends State<EditorV2Page>
             ),
             const Divider(height: 1),
             Expanded(
-              child: ListView.builder(
-                // ListView.builder virtualizes off-screen page cards. PDF page
+              child: ReorderableListView.builder(
+                onReorder: (oldIndex, newIndex) {
+                  if (newIndex > oldIndex) newIndex--;
+                  _movePage(oldIndex, newIndex);
+                },
+                // ReorderableListView.builder virtualizes page cards. PDF page
                 // rasters are independently lazy-loaded and byte-bounded.
                 padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
                 itemCount: _pages.length,
                 itemBuilder: (context, index) {
                   final page = _pages[index];
+                  final pageWidth = _pageWidth;
+                  final pageHeight = _pageHeight;
+                  final cardHeight = cardWidth * pageHeight / pageWidth;
                   final selected = index == _page;
                   final isPdf = page['pdfLazyRender'] == true ||
                       (page['backgroundImage'] is String &&
@@ -4975,6 +5270,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                       ? (page['textBoxes'] as List).whereType<Map>().toList()
                       : const <Map>[];
                   return Padding(
+                    key: ValueKey(page['id']?.toString() ?? 'sidebar-page-$index'),
                     padding: const EdgeInsets.only(bottom: 12),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -5096,6 +5392,10 @@ class _EditorV2PageState extends State<EditorV2Page>
                                       iconSize: 18,
                                       onSelected: (action) {
                                         switch (action) {
+                                          case 'blank':
+                                            unawaited(_insertBlankPageAfter(index));
+                                          case 'background':
+                                            unawaited(_choosePageBackground(index));
                                           case 'up':
                                             _movePage(index, index - 1);
                                           case 'down':
@@ -5113,6 +5413,8 @@ class _EditorV2PageState extends State<EditorV2Page>
                                         }
                                       },
                                       itemBuilder: (_) => <PopupMenuEntry<String>>[
+                                        const PopupMenuItem(value: 'blank', child: ListTile(dense: true, leading: Icon(Icons.note_add_outlined), title: Text('Insert blank page'))),
+                                        const PopupMenuItem(value: 'background', child: ListTile(dense: true, leading: Icon(Icons.format_color_fill_rounded), title: Text('Change background'))),
                                         PopupMenuItem(value: 'up', enabled: index > 0, child: const ListTile(dense: true, leading: Icon(Icons.arrow_upward_rounded), title: Text('Move up'))),
                                         PopupMenuItem(value: 'down', enabled: index < _pages.length - 1, child: const ListTile(dense: true, leading: Icon(Icons.arrow_downward_rounded), title: Text('Move down'))),
                                         const PopupMenuDivider(),
@@ -5181,10 +5483,9 @@ class _EditorV2PageState extends State<EditorV2Page>
           fit: StackFit.expand,
           children: [
             Positioned.fill(child: _buildPageBackground(page, showPdf: _pdfBackgroundVisible, thumbnail: false)),
-            if (_textMode)
-              Positioned.fill(
+            Positioned.fill(
                 child: IgnorePointer(
-                  ignoring: page['locked'] == true,
+                  ignoring: !_textMode || page['locked'] == true,
                   child: Padding(
                     padding: const EdgeInsets.all(42),
                     child: QuillEditor(
@@ -5198,9 +5499,10 @@ class _EditorV2PageState extends State<EditorV2Page>
                   ),
                 ),
               ),
-            if (!_textMode)
-              Positioned.fill(
-                child: Listener(
+            Positioned.fill(
+                child: IgnorePointer(
+                  ignoring: _textMode || page['locked'] == true,
+                  child: Listener(
                 behavior: HitTestBehavior.opaque,
                 onPointerDown: _onPointerDown,
                 onPointerMove: _onPointerMove,
@@ -5220,8 +5522,9 @@ class _EditorV2PageState extends State<EditorV2Page>
                     eraserCursor: _tool == CanvasTool.eraser || _tool == CanvasTool.pixelEraser ? _eraserCursor : null,
                     eraserRadius: _tool == CanvasTool.pixelEraser ? 7 : math.max(18, _size * 2).toDouble(),
                   ),
-                  size: const Size(_pageWidth, _pageHeight),
+                  size: Size(_pageWidth, _pageHeight),
                 ),
+                  ),
               ),
             ),
             Positioned.fill(child: _buildImages(page)),
@@ -5353,8 +5656,8 @@ class _EditorV2PageState extends State<EditorV2Page>
             transformationController: _transform,
             constrained: false,
             alignment: Alignment.topLeft,
-            panEnabled: _panMode,
-            scaleEnabled: true,
+            panEnabled: _panMode && !_viewportLocked,
+            scaleEnabled: !_viewportLocked,
             minScale: .25,
             maxScale: 4,
             boundaryMargin: const EdgeInsets.all(220),
@@ -5368,6 +5671,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                 setState(() {});
               }
             },
+            onInteractionUpdate: (_) => _showCanvasHud(),
             child: _buildPageSurface(),
           ),
         ),
@@ -5833,7 +6137,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           if (_showNoteSwitcherInTitleBar)
             IconButton(
               visualDensity: VisualDensity.compact,
-              tooltip: 'Switch note',
+              tooltip: 'Show tabs / switch open notes',
               onPressed: _openNoteSwitcher,
               icon: const Icon(Icons.tab_rounded),
             ),
@@ -5862,6 +6166,18 @@ class _EditorV2PageState extends State<EditorV2Page>
               onPressed: () => _setPdfBackgroundVisible(!_pdfBackgroundVisible),
               icon: Icon(_pdfBackgroundVisible ? Icons.edit_note_rounded : Icons.picture_as_pdf_rounded),
             ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Capture screenshot to canvas',
+            onPressed: () => unawaited(_captureScreenToCanvas()),
+            icon: const Icon(Icons.screenshot_monitor_rounded, size: 18),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: _fullScreenMode ? 'Exit full screen' : 'Enter full screen',
+            onPressed: _toggleFullScreen,
+            icon: Icon(_fullScreenMode ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded, size: 19),
+          ),
           PopupMenuButton<String>(
             tooltip: 'Note and application controls',
             onSelected: _onMenuSelected,
@@ -5960,6 +6276,47 @@ class _EditorV2PageState extends State<EditorV2Page>
           if (_showFavoritesShowcase || _pencaseTools.isNotEmpty) _buildFavoriteShowcase(),
           // Page navigation is now handled by the expanded page-preview sidebar.
           if (_calculatorVisible) _buildFloatingCalculator(),
+          if (_showViewportHud || _viewportLocked)
+            Positioned(
+              top: 8,
+              left: _showPagePreview && !_fullScreenMode ? sidebarWidth + 8 : 8,
+              right: _fullScreenMode ? 54 : 8,
+              child: Center(
+                child: Material(
+                  color: const Color(0xe91b2430),
+                  elevation: 8,
+                  borderRadius: BorderRadius.circular(28),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(_viewportLocked ? Icons.lock_rounded : Icons.lock_open_rounded,
+                        size: 15, color: Colors.white),
+                      const SizedBox(width: 4),
+                      Text(
+                        _viewportLocked ? 'Canvas locked' : 'Canvas • ${(_transform.value.getMaxScaleOnAxis() * 100).round()}%',
+                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(width: 3),
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+                        tooltip: _viewportLocked ? 'Unlock canvas' : 'Lock canvas',
+                        onPressed: _toggleCanvasLock,
+                        icon: Icon(_viewportLocked ? Icons.lock_open_rounded : Icons.lock_rounded,
+                          color: Colors.white, size: 17),
+                      ),
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+                        tooltip: 'Reset location / fit page',
+                        onPressed: _resetCanvasView,
+                        icon: const Icon(Icons.center_focus_strong_rounded, color: Colors.white, size: 17),
+                      ),
+                    ]),
+                  ),
+                ),
+              ),
+            ),
           if (_fullScreenMode)
             Positioned(
               right: 8,
@@ -5970,7 +6327,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                 elevation: 5,
                 child: IconButton(
                   tooltip: 'Exit full screen',
-                  onPressed: () => setState(() => _fullScreenMode = false),
+                  onPressed: _toggleFullScreen,
                   icon: const Icon(Icons.fullscreen_exit_rounded),
                 ),
               ),
@@ -6030,6 +6387,8 @@ class _EditorV2PageState extends State<EditorV2Page>
     WidgetsBinding.instance.removeObserver(this);
     _saveTimer?.cancel();
     _studyTimer?.cancel();
+    _viewportHudTimer?.cancel();
+    unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
     if (!_loading && _pages.isNotEmpty) unawaited(_flushSave());
     _title.dispose();
     _quill.removeListener(_scheduleSave);

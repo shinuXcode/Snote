@@ -56,6 +56,9 @@ jobs:
         working-directory: app
         run: |
           flutter create --platforms=android --org=com.snote --no-pub .
+          mkdir -p android/app/src/main/kotlin/com/snote/snote
+          cp native_android/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+          cp native_android/*.kt android/app/src/main/kotlin/com/snote/snote/
           rm -f test/widget_test.dart
 
       - name: Configure and verify Android beta identity

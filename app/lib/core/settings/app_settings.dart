@@ -9,7 +9,7 @@ class SnoteSettings extends ChangeNotifier {
   final Map<String, dynamic> _values = {};
 
   static const boolDefaults = <String, bool>{
-    'autoRecognition': true, 'independentGraphColor': true, 'longPressMenu': true, 'palmRejection': true,
+    'autoRecognition': true, 'independentGraphColor': true, 'longPressMenu': true, 'palmRejection': true, 'fingerWritingProtection': true,
     'selectionMenuOnTouch': true, 'eraseClickSwitch': true, 'stylusDoubleTapUndo': true,
     'fingerLongPressSelection': true, 'showAuxiliaryLine': true, 'autoAuxiliaryPoint': true,
     'pressureErase': true, 'pressureEraseArea': true, 'stylusHoldActions': true, 'autoSave': true, 'volumeKeyTurnPage': false,
