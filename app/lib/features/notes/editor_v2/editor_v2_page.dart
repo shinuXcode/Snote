@@ -2599,6 +2599,12 @@ class _EditorV2PageState extends State<EditorV2Page>
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
+  String get _elapsedClock {
+    final minutes = _studySeconds ~/ 60;
+    final seconds = _studySeconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
   void _onMenuSelected(String value) {
     switch (value) {
       case 'addPage':
@@ -3325,6 +3331,21 @@ class _EditorV2PageState extends State<EditorV2Page>
                   ),
                 ),
               ),
+              if (_studyRemaining > 0 && MediaQuery.sizeOf(context).width >= 340)
+                Tooltip(
+                  message: 'Timer active • elapsed $_elapsedClock',
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.timer_outlined, size: 15),
+                        const SizedBox(width: 3),
+                        Text(_clock, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, fontFeatures: [ui.FontFeature.tabularFigures()])),
+                      ],
+                    ),
+                  ),
+                ),
               IconButton(
                 visualDensity: VisualDensity.compact,
                 padding: EdgeInsets.zero,
@@ -3715,6 +3736,13 @@ class _EditorV2PageState extends State<EditorV2Page>
           ),
         ),
         actions: [
+          if (_saveError != null)
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Save failed. Tap to retry. ${_saveError}',
+              onPressed: () => _save(force: true),
+              icon: Icon(Icons.cloud_off_rounded, color: Theme.of(context).colorScheme.error),
+            ),
           IconButton(
             visualDensity: VisualDensity.compact,
             tooltip: 'Undo',
