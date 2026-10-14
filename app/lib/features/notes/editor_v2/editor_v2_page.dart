@@ -2883,7 +2883,21 @@ class _EditorV2PageState extends State<EditorV2Page>
       _pageData['images'] = <Object?>[image];
     }
     _imageBytesCache[id] = bytes;
-    setState(() {});
+    setState(() {
+      // Newly inserted screenshots and photos immediately expose the same
+      // lasso move/resize handles as any existing image on the note.
+      _selectedStrokeIds.clear();
+      _selectedTextBoxIds.clear();
+      _selectedImageIds
+        ..clear()
+        ..add(id);
+      _lassoRect = Rect.fromLTWH(
+        .12 * _pageWidth,
+        .16 * _pageHeight,
+        .68 * _pageWidth,
+        .42 * _pageHeight,
+      );
+    });
     _scheduleSave();
   }
 
