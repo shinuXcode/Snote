@@ -14,6 +14,7 @@ import 'package:flutter_quill/flutter_quill.dart';
 import 'package:pdf/pdf.dart' as pdfcore;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdfx/pdfx.dart';
+import 'package:pasteboard/pasteboard.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../../canvas_engine/models/pen_config.dart';
@@ -1500,29 +1501,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       final file = await FilePicker.pickFile(type: FileType.image);
       if (file == null) return;
       final bytes = await file.readAsBytes();
-      if (bytes.isEmpty) throw StateError('The selected image is empty.');
-      if (bytes.length > 25 * 1024 * 1024) {
-        throw StateError('Images larger than 25 MB are not supported.');
-      }
-      _pushUndo();
-      final image = <String, Object?>{
-        'id': DateTime.now().microsecondsSinceEpoch.toString(),
-        'name': file.name,
-        'data': base64Encode(bytes),
-        'x': .12,
-        'y': .16,
-        'width': .68,
-        'height': .42,
-      };
-      final images = _pageData['images'];
-      if (images is List<Object?>) {
-        images.add(image);
-      } else {
-        _pageData['images'] = <Object?>[image];
-      }
-      _imageBytesCache[image['id']! as String] = bytes;
-      setState(() {});
-      _scheduleSave();
+      await _insertImageBytes(bytes, name: file.name);
     } catch (error, stackTrace) {
       debugPrint('[Snote][EditorV2] image import failed: $error\n$stackTrace');
       if (mounted) {
@@ -1531,6 +1510,66 @@ class _EditorV2PageState extends State<EditorV2Page>
         );
       }
     }
+  }
+
+  Future<void> _pasteClipboardImage() async {
+    if (_pageData['locked'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unlock this page before inserting an image.')),
+      );
+      return;
+    }
+    try {
+      final bytes = await Pasteboard.image;
+      if (!mounted) return;
+      if (bytes == null || bytes.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No image found in clipboard. Take a screenshot with your system tool, copy it, then paste here.'),
+          ),
+        );
+        return;
+      }
+      await _insertImageBytes(
+        bytes,
+        name: 'Clipboard screenshot ${DateTime.now().toIso8601String().replaceAll(':', '-')}.png',
+      );
+    } catch (error, stackTrace) {
+      debugPrint('[Snote][EditorV2] clipboard screenshot import failed: $error\n$stackTrace');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not paste clipboard image: $error')),
+        );
+      }
+    }
+  }
+
+  Future<void> _insertImageBytes(Uint8List bytes, {required String name}) async {
+    if (_pageData['locked'] == true) return;
+    if (bytes.isEmpty) throw StateError('The selected image is empty.');
+    if (bytes.length > 25 * 1024 * 1024) {
+      throw StateError('Images larger than 25 MB are not supported.');
+    }
+    _pushUndo();
+    final id = DateTime.now().microsecondsSinceEpoch.toString();
+    final image = <String, Object?>{
+      'id': id,
+      'name': name,
+      'data': base64Encode(bytes),
+      'x': .12,
+      'y': .16,
+      'width': .68,
+      'height': .42,
+    };
+    final images = _pageData['images'];
+    if (images is List<Object?>) {
+      images.add(image);
+    } else {
+      _pageData['images'] = <Object?>[image];
+    }
+    _imageBytesCache[id] = bytes;
+    setState(() {});
+    _scheduleSave();
   }
 
   Future<void> _addSticker() async {
