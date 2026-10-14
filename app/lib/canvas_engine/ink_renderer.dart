@@ -229,8 +229,8 @@ class InkRenderer {
       final velocity = (b.position - a.position).distance / dt;
       width = fountainWidth(
         baseWidth: width,
-        velocity: velocity * 16 * (.55 + pen.velocitySensitivity.clamp(0, 1) * 1.45),
-        pressure: (.15 + pressure * (.65 + pen.pressureSensitivity.clamp(0, 1) * .20))
+        velocity: velocity * 16 * (.55 + pen.velocitySensitivity.clamp(0.0, 1.0).toDouble() * 1.45),
+        pressure: (.15 + pressure * (.65 + pen.pressureSensitivity.clamp(0.0, 1.0).toDouble() * .20))
             .clamp(0.0, 1.0)
             .toDouble(),
       );
