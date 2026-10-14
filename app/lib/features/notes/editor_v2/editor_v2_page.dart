@@ -712,6 +712,23 @@ class _EditorV2PageState extends State<EditorV2Page>
     );
   }
 
+  bool _pressureEraseAllowed(PointerEvent event) {
+    final pressure = _pointFrom(event).pressure;
+    final threshold = _settings.getDouble('pressureEraseThreshold').clamp(0.0, 1.0).toDouble();
+    return pressure >= threshold;
+  }
+
+  double _pressureEraseRadius(PointerEvent event) {
+    final baseRadius = math.max(18, _size * 2).toDouble();
+    if (!_settings.getBool('pressureEraseArea')) return baseRadius;
+    final pressure = _pointFrom(event).pressure.clamp(0.0, 1.0).toDouble();
+    final threshold = _settings.getDouble('pressureEraseThreshold').clamp(0.0, 1.0).toDouble();
+    final effectivePressure = threshold >= 1
+        ? (pressure >= 1 ? 1.0 : 0.0)
+        : ((pressure - threshold) / (1 - threshold)).clamp(0.0, 1.0).toDouble();
+    return baseRadius * (0.5 + effectivePressure * 1.5);
+  }
+
   void _onPointerDown(PointerDownEvent event) {
     _activePointers.add(event.pointer);
     if (event.kind == PointerDeviceKind.stylus ||
@@ -819,7 +836,9 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
     if (_activePointer == event.pointer && _pressureEraseActive) {
       _eraserCursor = event.localPosition;
-      _eraseAt(event.localPosition, math.max(18, _size * 2).toDouble());
+      if (_pressureEraseAllowed(event)) {
+        _eraseAt(event.localPosition, _pressureEraseRadius(event));
+      }
       setState(() {});
       return;
     }
@@ -863,7 +882,11 @@ class _EditorV2PageState extends State<EditorV2Page>
         _eraserCursor = null;
       });
       if (forward) {
-        if (_page + 1 < _pages.length) _goToPage(_page + 1);
+        if (_page + 1 < _pages.length) {
+          _goToPage(_page + 1);
+        } else if (_settings.getBool('autoAddPage')) {
+          _addPage();
+        }
       } else if (_page > 0) {
         _goToPage(_page - 1);
       }
@@ -874,8 +897,8 @@ class _EditorV2PageState extends State<EditorV2Page>
     if (_longPressTriggered) {
       final wasPressureErase = _pressureEraseActive;
       final restoreTool = _toolBeforePressureErase;
-      if (wasPressureErase) {
-        _eraseAt(event.localPosition, math.max(18, _size * 2).toDouble());
+      if (wasPressureErase && _pressureEraseAllowed(event)) {
+        _eraseAt(event.localPosition, _pressureEraseRadius(event));
       }
       setState(() {
         _activePointer = null;
