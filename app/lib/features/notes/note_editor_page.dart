@@ -81,6 +81,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   final Map<String, TextEditingController> _textBoxControllers = <String, TextEditingController>{};
   final Map<String, List<Stroke>> _thumbnailStrokeCache = <String, List<Stroke>>{};
   final Map<String, Object?> _thumbnailStrokeSources = <String, Object?>{};
+  final Map<String, Uint8List> _thumbnailRasterCache = <String, Uint8List>{};
   Map<String, Object?>? _pageClipboard;
   final _lock = const NoteLockService();
   final _settings = SnoteSettings.instance;
@@ -1015,6 +1016,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     _canvas.dispose();
     _toolbarOffset.dispose();
     _viewportTransform.dispose();
+    _thumbnailRasterCache.clear();
+    _thumbnailStrokeCache.clear();
+    _thumbnailStrokeSources.clear();
     for (final controller in _textBoxControllers.values) {
       controller.dispose();
     }
@@ -4919,6 +4923,25 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     return strokes;
   }
 
+  Uint8List? _thumbnailBytes(String? encoded) {
+    if (encoded == null || encoded.isEmpty) return null;
+    final cacheKey = '${encoded.length}:${encoded.hashCode}';
+    final cached = _thumbnailRasterCache[cacheKey];
+    if (cached != null) return cached;
+    try {
+      final bytes = base64Decode(encoded);
+      if (bytes.isEmpty) return null;
+      _thumbnailRasterCache[cacheKey] = bytes;
+      while (_thumbnailRasterCache.length > 6) {
+        _thumbnailRasterCache.remove(_thumbnailRasterCache.keys.first);
+      }
+      return bytes;
+    } catch (error) {
+      debugPrint('Snote thumbnail image decode failed: $error');
+      return null;
+    }
+  }
+
   String _thumbnailRevisionKey(Map<String, Object?> page) {
     final rawBoxes = page['textBoxes'];
     final boxRevision = rawBoxes is List
@@ -4927,11 +4950,23 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
             : '').join('|')
         : '';
     final rawImages = page['images'];
+    final imageRevision = rawImages is List
+        ? rawImages.whereType<Map>().map((item) => [
+              item['id'],
+              item['data'] is String ? (item['data'] as String).hashCode : 0,
+              item['x'],
+              item['y'],
+              item['width'],
+              item['height'],
+            ].join(',')).join('|')
+        : '';
+    final background = page['backgroundImage']?.toString() ?? '';
     return [
       page['id'],
       identityHashCode(page['strokes']),
       boxRevision,
-      rawImages is List ? rawImages.length : 0,
+      imageRevision,
+      background.isEmpty ? 0 : '${background.length}:${background.hashCode}',
       page['template'],
       page['paperColor'],
       page['lineColor'],
@@ -5021,6 +5056,13 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   final aspectRatio = _thumbnailAspectRatio(page);
                   final thumbnailHeight = math.min(320.0, math.max(150.0, previewWidth / aspectRatio));
                   final secure = _settings.getBool('securePagePreviews');
+                  final backgroundBytes = _thumbnailBytes(page['backgroundImage']?.toString());
+                  final pageImages = page['images'] is List
+                      ? (page['images'] as List)
+                          .whereType<Map>()
+                          .map((item) => item.cast<String, Object?>())
+                          .toList()
+                      : <Map<String, Object?>>[];
                   return Padding(
                     key: ValueKey(page['id'].toString()),
                     padding: const EdgeInsets.only(bottom: 9),
@@ -5045,6 +5087,16 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
+                              if (backgroundBytes != null)
+                                Positioned.fill(
+                                  child: Image.memory(
+                                    backgroundBytes,
+                                    fit: BoxFit.fill,
+                                    filterQuality: FilterQuality.low,
+                                    gaplessPlayback: true,
+                                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                                  ),
+                                ),
                               RepaintBoundary(
                                 child: CustomPaint(
                                   painter: _PageThumbnailPainter(
@@ -5052,11 +5104,34 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                                     strokes: strokes,
                                     sourceSize: sourceSize,
                                     secure: secure,
+                                    paintBackground: backgroundBytes == null,
                                     revisionKey: revision,
                                   ),
                                   child: const SizedBox.expand(),
                                 ),
                               ),
+                              if (!secure)
+                                ...pageImages.map((image) {
+                                  final bytes = _thumbnailBytes(image['data']?.toString());
+                                  if (bytes == null) return const SizedBox.shrink();
+                                  final x = ((image['x'] as num?)?.toDouble() ?? .12).clamp(0.0, .95).toDouble();
+                                  final y = ((image['y'] as num?)?.toDouble() ?? .16).clamp(0.0, .95).toDouble();
+                                  final w = ((image['width'] as num?)?.toDouble() ?? .22).clamp(.05, 1.0 - x).toDouble();
+                                  final h = ((image['height'] as num?)?.toDouble() ?? .12).clamp(.05, 1.0 - y).toDouble();
+                                  return Positioned(
+                                    left: x * previewWidth,
+                                    top: y * thumbnailHeight,
+                                    width: w * previewWidth,
+                                    height: h * thumbnailHeight,
+                                    child: Image.memory(
+                                      bytes,
+                                      fit: BoxFit.contain,
+                                      filterQuality: FilterQuality.low,
+                                      gaplessPlayback: true,
+                                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                                    ),
+                                  );
+                                }),
                               Positioned(
                                 left: 7,
                                 top: 7,
@@ -6072,6 +6147,7 @@ class _PageThumbnailPainter extends CustomPainter {
   final List<Stroke> strokes;
   final Size sourceSize;
   final bool secure;
+  final bool paintBackground;
   final String revisionKey;
 
   const _PageThumbnailPainter({
@@ -6079,6 +6155,7 @@ class _PageThumbnailPainter extends CustomPainter {
     required this.strokes,
     required this.sourceSize,
     required this.secure,
+    this.paintBackground = true,
     required this.revisionKey,
   });
 
@@ -6100,16 +6177,18 @@ class _PageThumbnailPainter extends CustomPainter {
 
     canvas.save();
     canvas.scale(size.width / sourceSize.width, size.height / sourceSize.height);
-    canvas.drawRect(Offset.zero & sourceSize, Paint()..color = paperColor);
-    PageBackground(
-      template: template,
-      paperColor: paperColor,
-      lineColor: lineColor,
-      spacing: spacing,
-      lineOpacity: lineOpacity,
-      cornellAssist: page['cornellAssist'] == true,
-      lineWidth: page['lineWidth'] is num ? (page['lineWidth'] as num).toDouble() : .7,
-    ).paint(canvas, sourceSize);
+    if (paintBackground) {
+      canvas.drawRect(Offset.zero & sourceSize, Paint()..color = paperColor);
+      PageBackground(
+        template: template,
+        paperColor: paperColor,
+        lineColor: lineColor,
+        spacing: spacing,
+        lineOpacity: lineOpacity,
+        cornellAssist: page['cornellAssist'] == true,
+        lineWidth: page['lineWidth'] is num ? (page['lineWidth'] as num).toDouble() : .7,
+      ).paint(canvas, sourceSize);
+    }
 
     if (!secure) {
       SnoteCanvasPainter(
@@ -6149,23 +6228,6 @@ class _PageThumbnailPainter extends CustomPainter {
         }
       }
 
-      final rawImages = page['images'];
-      if (rawImages is List && rawImages.isNotEmpty) {
-        final markerPaint = Paint()
-          ..color = const Color(0xff64748b).withValues(alpha: .35)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2;
-        for (final item in rawImages.whereType<Map>()) {
-          final x = ((item['x'] as num?)?.toDouble() ?? .12) * sourceSize.width;
-          final y = ((item['y'] as num?)?.toDouble() ?? .16) * sourceSize.height;
-          final width = ((item['width'] as num?)?.toDouble() ?? .22) * sourceSize.width;
-          final height = ((item['height'] as num?)?.toDouble() ?? .12) * sourceSize.height;
-          final rect = Rect.fromLTWH(x, y, width.clamp(8.0, sourceSize.width).toDouble(), height.clamp(8.0, sourceSize.height).toDouble());
-          canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(3)), markerPaint);
-          canvas.drawLine(rect.topLeft, rect.bottomRight, markerPaint);
-          canvas.drawLine(rect.topRight, rect.bottomLeft, markerPaint);
-        }
-      }
     }
     canvas.restore();
   }
@@ -6174,7 +6236,8 @@ class _PageThumbnailPainter extends CustomPainter {
   bool shouldRepaint(covariant _PageThumbnailPainter oldDelegate) =>
       oldDelegate.revisionKey != revisionKey ||
       oldDelegate.sourceSize != sourceSize ||
-      oldDelegate.secure != secure;
+      oldDelegate.secure != secure ||
+      oldDelegate.paintBackground != paintBackground;
 }
 
 class _StudyTimerFloating extends StatefulWidget {
