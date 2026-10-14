@@ -3279,7 +3279,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       final id = DateTime.now().microsecondsSinceEpoch.toString();
       final boxX = (bounds.left / _pageWidth).clamp(0.0, .95).toDouble();
       final boxY = (bounds.top / _pageHeight).clamp(0.0, .95).toDouble();
-      final boxWidth = (bounds.width / _pageWidth).clamp(.12, 1 - boxX).toDouble();
+      final boxWidth = (bounds.width / _pageWidth).clamp(.04, math.max(.04, 1 - boxX)).toDouble();
       final boxHeight = (math.max(bounds.height * 1.8, 48) / _pageHeight)
           .clamp(.045, 1 - boxY)
           .toDouble();
@@ -5026,10 +5026,10 @@ class _EditorV2PageState extends State<EditorV2Page>
                                               ),
                                               for (final box in rawTextBoxes)
                                                 Positioned(
-                                                  left: (((box['x'] as num?)?.toDouble() ?? .1) * _pageWidth).clamp(0.0, _pageWidth - 1),
-                                                  top: (((box['y'] as num?)?.toDouble() ?? .1) * _pageHeight).clamp(0.0, _pageHeight - 1),
-                                                  width: (((box['width'] as num?)?.toDouble() ?? .68) * _pageWidth).clamp(1.0, _pageWidth),
-                                                  height: (((box['height'] as num?)?.toDouble() ?? .16) * _pageHeight).clamp(1.0, _pageHeight),
+                                                  left: (((box['x'] as num?)?.toDouble() ?? .1) * _pageWidth).clamp(0.0, _pageWidth - 1).toDouble(),
+                                                  top: (((box['y'] as num?)?.toDouble() ?? .1) * _pageHeight).clamp(0.0, _pageHeight - 1).toDouble(),
+                                                  width: (((box['width'] as num?)?.toDouble() ?? .68) * _pageWidth).clamp(1.0, _pageWidth).toDouble(),
+                                                  height: (((box['height'] as num?)?.toDouble() ?? .16) * _pageHeight).clamp(1.0, _pageHeight).toDouble(),
                                                   child: IgnorePointer(
                                                     child: Text(
                                                       box['text']?.toString() ?? '',
@@ -5037,7 +5037,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                                                       overflow: TextOverflow.clip,
                                                       style: TextStyle(
                                                         color: Color((box['color'] as num?)?.toInt() ?? 0xff17202a),
-                                                        fontSize: (((box['fontSize'] as num?)?.toDouble() ?? 22) * .75).clamp(8.0, 24.0),
+                                                        fontSize: (((box['fontSize'] as num?)?.toDouble() ?? 22) * .75).clamp(8.0, 24.0).toDouble(),
                                                       ),
                                                     ),
                                                   ),
