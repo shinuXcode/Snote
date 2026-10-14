@@ -7,6 +7,7 @@ on:
       - feat/snote-editor-engine-rebuild
       - feat/snote-beta79-nextgen
       - feat/snote-beta80-workspace-tools
+      - feat/snote-beta81-tool-layout-fill
     paths:
       - "app/**"
       - ".github/workflows/beta.yml"
