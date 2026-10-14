@@ -101,6 +101,9 @@ class _EditorV2PageState extends State<EditorV2Page>
   final Set<int> _activePointers = <int>{};
   final Set<int> _ignoredPointers = <int>{};
   final Set<int> _stylusPointers = <int>{};
+  Timer? _holdTimer;
+  Offset? _holdStartPosition;
+  bool _longPressTriggered = false;
   final List<List<Map<String, Object?>>> _undoStack =
       <List<Map<String, Object?>>>[];
   final List<List<Map<String, Object?>>> _redoStack =
@@ -700,14 +703,58 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
     _activePointer = event.pointer;
     _gestureStart = event.localPosition;
+    _holdStartPosition = event.localPosition;
+    _longPressTriggered = false;
     _livePoints = <StrokePoint>[_pointFrom(event)];
     _eraserCursor = event.localPosition;
     _liveStroke = _buildLiveStroke();
+    _holdTimer?.cancel();
+    if ((event.kind == PointerDeviceKind.stylus || event.kind == PointerDeviceKind.invertedStylus) &&
+        _settings.getBool('stylusHoldActions')) {
+      _holdTimer = Timer(const Duration(milliseconds: 480), () {
+        if (!mounted || _activePointer != event.pointer || _holdStartPosition == null) return;
+        final position = _holdStartPosition!;
+        if (_selectStrokeAt(position, radius: math.max(14, _size * 2))) {
+          _longPressTriggered = true;
+          _livePoints.clear();
+          _liveStroke = null;
+          setState(() {});
+          return;
+        }
+        if (_settings.getBool('pressureErase')) {
+          _longPressTriggered = true;
+          _pressureEraseActive = true;
+          _pressureEraseUsed = false;
+          _toolBeforePressureErase = _tool;
+          setState(() {
+            _tool = CanvasTool.eraser;
+            _size = 24;
+            _livePoints.clear();
+            _liveStroke = null;
+            _eraserCursor = position;
+          });
+        }
+      });
+    }
     setState(() {});
   }
 
   void _onPointerMove(PointerMoveEvent event) {
     if (_ignoredPointers.contains(event.pointer)) return;
+    if (_activePointer == event.pointer && _holdStartPosition != null &&
+        (event.localPosition - _holdStartPosition!).distance > 11 &&
+        !_pressureEraseActive && !_longPressTriggered) {
+      _holdTimer?.cancel();
+      _holdTimer = null;
+      _holdStartPosition = null;
+    }
+    if (_activePointer == event.pointer && _pressureEraseActive) {
+      _pressureEraseUsed = true;
+      _eraserCursor = event.localPosition;
+      _eraseAt(event.localPosition, math.max(18, _size * 2).toDouble());
+      setState(() {});
+      return;
+    }
     if (_activePointer != event.pointer) {
       if (_tool == CanvasTool.eraser || _tool == CanvasTool.pixelEraser) {
         _eraserCursor = event.localPosition;
@@ -729,8 +776,31 @@ class _EditorV2PageState extends State<EditorV2Page>
   void _onPointerUp(PointerEvent event) {
     _activePointers.remove(event.pointer);
     _stylusPointers.remove(event.pointer);
+    _holdTimer?.cancel();
+    _holdTimer = null;
+    _holdStartPosition = null;
     if (_ignoredPointers.remove(event.pointer)) return;
     if (_activePointer != event.pointer) return;
+    if (_longPressTriggered) {
+      if (_pressureEraseActive) {
+        _eraseAt(event.localPosition, math.max(18, _size * 2).toDouble());
+      }
+      setState(() {
+        _activePointer = null;
+        _gestureStart = null;
+        _livePoints = <StrokePoint>[];
+        _liveStroke = null;
+        _pressureEraseActive = false;
+        if (_toolBeforePressureErase != null) {
+          _tool = _toolBeforePressureErase!;
+          _toolBeforePressureErase = null;
+          _selectTool(_tool);
+        }
+        _longPressTriggered = false;
+        _eraserCursor = null;
+      });
+      return;
+    }
     final point = _pointFrom(event);
     if (_livePoints.isEmpty ||
         (_livePoints.last.position - point.position).distance > .2) {
@@ -778,6 +848,15 @@ class _EditorV2PageState extends State<EditorV2Page>
   void _onPointerCancel(PointerCancelEvent event) {
     _activePointers.remove(event.pointer);
     _stylusPointers.remove(event.pointer);
+    _holdTimer?.cancel();
+    _holdTimer = null;
+    _holdStartPosition = null;
+    if (_pressureEraseActive && _toolBeforePressureErase != null) {
+      _tool = _toolBeforePressureErase!;
+      _toolBeforePressureErase = null;
+    }
+    _pressureEraseActive = false;
+    _longPressTriggered = false;
     _ignoredPointers.remove(event.pointer);
     if (_activePointer == event.pointer) {
       _activePointer = null;
