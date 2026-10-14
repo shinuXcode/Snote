@@ -162,6 +162,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   bool _pressureEraseActive = false;
   CanvasTool? _toolBeforePressureErase;
   Offset _favoriteOffset = const Offset(16, 220);
+  Offset _toolSettingsAnchor = const Offset(20, 120);
   Offset _pageNavOffset = const Offset(8, 280);
   double _calculatorWidth = 330;
   double _calculatorHeight = 465;
@@ -1216,7 +1217,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     );
     if (choice == null || !mounted) return;
     if (choice.configure) {
-      await _strokeSettings(choice.tool);
+      await _strokeSettings(choice.tool, choice.anchor ?? _toolSettingsAnchor);
     } else {
       _selectTool(choice.tool);
     }
@@ -1369,7 +1370,7 @@ class _EditorV2PageState extends State<EditorV2Page>
             children: [
               Expanded(
                 child: Text(
-                  '\${targetTool.label} settings',
+                  '${targetTool.label} settings',
                   style: Theme.of(panelContext).textTheme.titleMedium,
                 ),
               ),
@@ -1405,28 +1406,28 @@ class _EditorV2PageState extends State<EditorV2Page>
             )).toList(),
           ),
           const SizedBox(height: 8),
-          Text('Stroke size: \${size.toStringAsFixed(1)}'),
+          Text('Stroke size: ${size.toStringAsFixed(1)}'),
           Slider(
             min: .5,
             max: 40,
             value: size.clamp(.5, 40),
             onChanged: (value) => setPanelState(() => size = value),
           ),
-          Text('Opacity: \${(opacity * 100).round()}%'),
+          Text('Opacity: ${(opacity * 100).round()}%'),
           Slider(
             min: .05,
             max: 1,
             value: opacity.clamp(.05, 1),
             onChanged: (value) => setPanelState(() => opacity = value),
           ),
-          Text('Pressure sensitivity: \${pressure.toStringAsFixed(2)}'),
+          Text('Pressure sensitivity: ${pressure.toStringAsFixed(2)}'),
           Slider(
             min: 0,
             max: 1,
             value: pressure,
             onChanged: (value) => setPanelState(() => pressure = value),
           ),
-          Text('Velocity sensitivity: \${velocity.toStringAsFixed(2)}'),
+          Text('Velocity sensitivity: ${velocity.toStringAsFixed(2)}'),
           Slider(
             min: 0,
             max: 1,
@@ -1499,7 +1500,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     await showGeneralDialog<void>(
       context: context,
       barrierDismissible: true,
-      barrierLabel: 'Close \${targetTool.label} settings',
+      barrierLabel: 'Close ${targetTool.label} settings',
       barrierColor: Colors.black12,
       transitionDuration: Duration.zero,
       pageBuilder: (dialogContext, _, __) {
@@ -2608,7 +2609,8 @@ class _EditorV2PageState extends State<EditorV2Page>
       child: Tooltip(
         message: '${tool.label}\nDouble-tap for its own settings',
         child: GestureDetector(
-          onDoubleTap: () => _strokeSettings(tool),
+          onDoubleTapDown: (details) => _toolSettingsAnchor = details.globalPosition,
+          onDoubleTap: () => _strokeSettings(tool, _toolSettingsAnchor),
           child: Material(
             color: _tool == tool ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surface,
             shape: RoundedRectangleBorder(
@@ -4105,7 +4107,8 @@ class _ScientificExpressionParser {
 class _ToolPickerChoice {
   final CanvasTool tool;
   final bool configure;
-  const _ToolPickerChoice(this.tool, {this.configure = false});
+  final Offset? anchor;
+  const _ToolPickerChoice(this.tool, {this.configure = false, this.anchor});
 }
 
 class _EditorV2ToolPicker extends StatefulWidget {
@@ -4119,6 +4122,7 @@ class _EditorV2ToolPicker extends StatefulWidget {
 class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
   final TextEditingController _search = TextEditingController();
   String _category = 'All tools';
+  Offset _lastGlobalPointer = Offset.zero;
 
   static const Set<String> _mathTools = <String>{
     'unitCircle', 'cubicGraph', 'exponentialGraph', 'logarithmicGraph',
@@ -4257,7 +4261,11 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
                   final tool = items[index];
                   final selected = tool == widget.selected;
                   return GestureDetector(
-                    onDoubleTap: () => Navigator.pop(context, _ToolPickerChoice(tool, configure: true)),
+                    onDoubleTapDown: (details) => _lastGlobalPointer = details.globalPosition,
+                    onDoubleTap: () => Navigator.pop(
+                      context,
+                      _ToolPickerChoice(tool, configure: true, anchor: _lastGlobalPointer),
+                    ),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(10),
                       onTap: () => Navigator.pop(context, _ToolPickerChoice(tool)),
