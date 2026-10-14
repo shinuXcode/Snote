@@ -1006,6 +1006,29 @@ class EditorV2InkPainter extends CustomPainter {
         }
       case 'derivativeSymbol':
         label('d/dx');
+      case 'angle':
+        final vertex = Offset(
+          safeRect.left + safeRect.width * .18,
+          safeRect.bottom - safeRect.height * .12,
+        );
+        final rayEndA = Offset(
+          safeRect.left + safeRect.width * .18,
+          safeRect.top + safeRect.height * .15,
+        );
+        final rayEndB = Offset(
+          safeRect.right - safeRect.width * .12,
+          safeRect.top + safeRect.height * .15,
+        );
+        line(vertex, rayEndA);
+        line(vertex, rayEndB);
+        final radius = math.min(safeRect.width, safeRect.height) * .28;
+        canvas.drawArc(
+          Rect.fromCircle(center: vertex, radius: radius),
+          -math.pi * .75,
+          math.pi * .5,
+          false,
+          base,
+        );
       case 'lineChart':
       case 'areaChart':
       case 'stackedBarChart':
