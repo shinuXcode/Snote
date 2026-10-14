@@ -910,9 +910,10 @@ class _EditorV2PageState extends State<EditorV2Page>
   }
 
   void _selectTool(CanvasTool tool) {
+    final profile = _toolProfiles[tool.name];
     setState(() {
       _tool = tool;
-      _size = switch (tool) {
+      _size = (profile?['size'] as num?)?.toDouble() ?? switch (tool) {
         CanvasTool.eraser => 24,
         CanvasTool.pixelEraser => 8,
         CanvasTool.highlighter => 8,
@@ -921,13 +922,21 @@ class _EditorV2PageState extends State<EditorV2Page>
         _ when tool.isShape => 2.2,
         _ => 3,
       };
-      if (tool == CanvasTool.highlighter) {
+      _opacity = (profile?['opacity'] as num?)?.toDouble() ??
+          (tool == CanvasTool.highlighter ? .35 : tool == CanvasTool.marker ? .85 : 1);
+      _pressureSensitivity = (profile?['pressureSensitivity'] as num?)?.toDouble() ?? .55;
+      _velocitySensitivity = (profile?['velocitySensitivity'] as num?)?.toDouble() ?? .65;
+      if (profile?['color'] is num) {
+        _color = Color((profile!['color'] as num).toInt());
+      } else if (tool == CanvasTool.highlighter) {
         _color = const Color(0xffffd54f);
-        _opacity = .35;
       } else if (tool == CanvasTool.marker) {
         _color = const Color(0xff1565c0);
-        _opacity = .85;
       }
+      _pressureCurve = PressureCurve.values.firstWhere(
+        (curve) => curve.name == profile?['pressureCurve'],
+        orElse: () => _pressureCurve,
+      );
     });
     if (tool != CanvasTool.lasso) {
       _selectedStrokeIds.clear();
@@ -981,12 +990,15 @@ class _EditorV2PageState extends State<EditorV2Page>
     setState(() => _color = chosen);
   }
 
-  Future<void> _strokeSettings() async {
+  Future<void> _strokeSettings([CanvasTool? requestedTool]) async {
+    final targetTool = requestedTool ?? _tool;
+    if (targetTool != _tool) _selectTool(targetTool);
     var size = _size;
     var opacity = _opacity;
     var pressure = _pressureSensitivity;
     var velocity = _velocitySensitivity;
     var curve = _pressureCurve;
+    var color = _color;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -994,72 +1006,121 @@ class _EditorV2PageState extends State<EditorV2Page>
       builder: (sheetContext) => StatefulBuilder(
         builder: (context, setSheetState) => SafeArea(
           child: Padding(
-            padding: EdgeInsets.fromLTRB(20, 8, 20, 24 + MediaQuery.viewInsetsOf(context).bottom),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('${_tool.label} settings', style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 12),
-                Text('Stroke size: ${size.toStringAsFixed(1)}'),
-                Slider(
-                  min: .5,
-                  max: 40,
-                  value: size.clamp(.5, 40),
-                  onChanged: (value) => setSheetState(() => size = value),
-                ),
-                Text('Opacity: ${(opacity * 100).round()}%'),
-                Slider(
-                  min: .05,
-                  max: 1,
-                  value: opacity.clamp(.05, 1),
-                  onChanged: (value) => setSheetState(() => opacity = value),
-                ),
-                Text('Pressure sensitivity: ${pressure.toStringAsFixed(2)}'),
-                Slider(
-                  min: 0,
-                  max: 1,
-                  value: pressure,
-                  onChanged: (value) => setSheetState(() => pressure = value),
-                ),
-                Text('Velocity sensitivity: ${velocity.toStringAsFixed(2)}'),
-                Slider(
-                  min: 0,
-                  max: 1,
-                  value: velocity,
-                  onChanged: (value) => setSheetState(() => velocity = value),
-                ),
-                DropdownButtonFormField<PressureCurve>(
-                  initialValue: curve,
-                  decoration: const InputDecoration(labelText: 'Pressure curve'),
-                  items: PressureCurve.values
-                      .map((value) => DropdownMenuItem(
-                            value: value,
-                            child: Text(value.name),
-                          ))
-                      .toList(),
-                  onChanged: (value) {
-                    if (value != null) setSheetState(() => curve = value);
-                  },
-                ),
-                const SizedBox(height: 14),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: FilledButton(
-                    onPressed: () {
-                      setState(() {
-                        _size = size;
-                        _opacity = opacity;
-                        _pressureSensitivity = pressure;
-                        _velocitySensitivity = velocity;
-                        _pressureCurve = curve;
-                      });
-                      Navigator.pop(sheetContext);
-                    },
-                    child: const Text('Done'),
+            padding: EdgeInsets.fromLTRB(18, 8, 18, 22 + MediaQuery.viewInsetsOf(context).bottom),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('\${targetTool.label} settings', style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 8,
+                    children: _palette.map((candidate) => InkWell(
+                      onTap: () => setSheetState(() => color = candidate),
+                      borderRadius: BorderRadius.circular(24),
+                      child: Container(
+                        width: 30,
+                        height: 30,
+                        decoration: BoxDecoration(
+                          color: candidate,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: candidate == color ? Theme.of(context).colorScheme.primary : Colors.black26,
+                            width: candidate == color ? 3 : 1,
+                          ),
+                        ),
+                      ),
+                    )).toList(),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 8),
+                  Text('Stroke size: \${size.toStringAsFixed(1)}'),
+                  Slider(
+                    min: .5, max: 40, value: size.clamp(.5, 40),
+                    onChanged: (value) => setSheetState(() => size = value),
+                  ),
+                  Text('Opacity: \${(opacity * 100).round()}%'),
+                  Slider(
+                    min: .05, max: 1, value: opacity.clamp(.05, 1),
+                    onChanged: (value) => setSheetState(() => opacity = value),
+                  ),
+                  Text('Pressure sensitivity: \${pressure.toStringAsFixed(2)}'),
+                  Slider(
+                    min: 0, max: 1, value: pressure,
+                    onChanged: (value) => setSheetState(() => pressure = value),
+                  ),
+                  Text('Velocity sensitivity: \${velocity.toStringAsFixed(2)}'),
+                  Slider(
+                    min: 0, max: 1, value: velocity,
+                    onChanged: (value) => setSheetState(() => velocity = value),
+                  ),
+                  DropdownButtonFormField<PressureCurve>(
+                    initialValue: curve,
+                    decoration: const InputDecoration(labelText: 'Pressure curve'),
+                    items: PressureCurve.values.map((value) => DropdownMenuItem(
+                      value: value, child: Text(value.name),
+                    )).toList(),
+                    onChanged: (value) {
+                      if (value != null) setSheetState(() => curve = value);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      TextButton(
+                        onPressed: () {
+                          setState(() {
+                            _tool = targetTool;
+                            _size = size;
+                            _opacity = opacity;
+                            _pressureSensitivity = pressure;
+                            _velocitySensitivity = velocity;
+                            _pressureCurve = curve;
+                            _color = color;
+                          });
+                          _toolProfiles[targetTool.name] = <String, Object?>{
+                            'size': size,
+                            'color': color.toARGB32(),
+                            'opacity': opacity,
+                            'pressureSensitivity': pressure,
+                            'velocitySensitivity': velocity,
+                            'pressureCurve': curve.name,
+                          };
+                          unawaited(_saveToolProfiles());
+                          Navigator.pop(sheetContext);
+                        },
+                        child: const Text('Save to this tool'),
+                      ),
+                      const Spacer(),
+                      FilledButton(
+                        onPressed: () {
+                          setState(() {
+                            _tool = targetTool;
+                            _size = size;
+                            _opacity = opacity;
+                            _pressureSensitivity = pressure;
+                            _velocitySensitivity = velocity;
+                            _pressureCurve = curve;
+                            _color = color;
+                          });
+                          _toolProfiles[targetTool.name] = <String, Object?>{
+                            'size': size,
+                            'color': color.toARGB32(),
+                            'opacity': opacity,
+                            'pressureSensitivity': pressure,
+                            'velocitySensitivity': velocity,
+                            'pressureCurve': curve.name,
+                          };
+                          unawaited(_saveToolProfiles());
+                          Navigator.pop(sheetContext);
+                        },
+                        child: const Text('Done'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
