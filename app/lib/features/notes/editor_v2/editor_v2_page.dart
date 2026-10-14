@@ -3004,6 +3004,8 @@ class _EditorV2PageState extends State<EditorV2Page>
         unawaited(_addImage());
       case 'clipboardImage':
         unawaited(_pasteClipboardImage());
+      case 'pasteSelection':
+        _pasteStrokes();
       case 'sticker':
         unawaited(_addSticker());
       case 'pdf':
@@ -3149,6 +3151,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           PopupMenuItem(value: 'text', child: Text('Insert text box')),
           PopupMenuItem(value: 'image', child: Text('Insert image from file')),
           PopupMenuItem(value: 'clipboardImage', child: Text('Paste screenshot from clipboard')),
+          PopupMenuItem(value: 'pasteSelection', enabled: _selectionClipboard != null, child: Text('Paste copied selection')),
           PopupMenuItem(value: 'sticker', child: Text('Sticker library')),
           PopupMenuItem(value: 'pdf', child: Text('Import / annotate PDF')),
           PopupMenuItem(value: 'export', child: Text('Export pages to PDF')),
@@ -4169,6 +4172,7 @@ class _EditorV2PageState extends State<EditorV2Page>
               const PopupMenuItem(value: 'text', child: Text('Toggle rich text / handwriting')),
               const PopupMenuItem(value: 'image', child: Text('Insert image from file')),
               const PopupMenuItem(value: 'clipboardImage', child: Text('Paste screenshot from clipboard')),
+              PopupMenuItem(value: 'pasteSelection', enabled: _selectionClipboard != null, child: const Text('Paste copied selection')),
               const PopupMenuItem(value: 'pageSettings', child: Text('Note page settings')),
               const PopupMenuItem(value: 'appSettings', child: Text('App settings')),
               if (_hasPdfBackgroundPages) ...[
