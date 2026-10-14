@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snote/canvas_engine/models/pen_config.dart';
 import 'package:snote/canvas_engine/widgets/page_background.dart';
