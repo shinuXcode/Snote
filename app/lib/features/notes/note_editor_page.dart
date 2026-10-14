@@ -4914,7 +4914,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     if (id.isNotEmpty) {
       _thumbnailStrokeSources[id] = raw;
       _thumbnailStrokeCache[id] = strokes;
-      while (_thumbnailStrokeCache.length > 24) {
+      while (_thumbnailStrokeCache.length > 12) {
         final oldest = _thumbnailStrokeCache.keys.first;
         _thumbnailStrokeCache.remove(oldest);
         _thumbnailStrokeSources.remove(oldest);
@@ -4925,7 +4925,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
 
   Uint8List? _thumbnailBytes(String? encoded) {
     if (encoded == null || encoded.isEmpty) return null;
-    final cacheKey = '${encoded.length}:${encoded.hashCode}';
+    final cacheKey = '${encoded.length}:${identityHashCode(encoded)}';
     final cached = _thumbnailRasterCache[cacheKey];
     if (cached != null) return cached;
     try {
@@ -4962,7 +4962,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     final imageRevision = rawImages is List
         ? rawImages.whereType<Map>().map((item) => [
               item['id'],
-              item['data'] is String ? (item['data'] as String).hashCode : 0,
+              item['data'] is String ? identityHashCode(item['data']) : 0,
               item['x'],
               item['y'],
               item['width'],
@@ -4975,7 +4975,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       identityHashCode(page['strokes']),
       boxRevision,
       imageRevision,
-      background.isEmpty ? 0 : '${background.length}:${background.hashCode}',
+      background.isEmpty ? 0 : '${background.length}:${identityHashCode(background)}',
       page['template'],
       page['paperColor'],
       page['lineColor'],
