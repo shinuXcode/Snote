@@ -186,9 +186,12 @@ class _LiveInkPainter extends CustomPainter {
     }
 
     if (showEraser && eraserPoint != null && eraserRadius > 0) {
-      canvas.drawCircle(
-        eraserPoint,
-        eraserRadius,
+      canvas.drawRect(
+        Rect.fromCenter(
+          center: eraserPoint,
+          width: eraserRadius * 2,
+          height: eraserRadius * 1.4,
+        ),
         Paint()
           ..color = const Color(0xff4f6df6).withValues(alpha: .55)
           ..style = PaintingStyle.stroke
