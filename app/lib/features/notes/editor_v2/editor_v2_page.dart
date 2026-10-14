@@ -1199,7 +1199,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                 const SizedBox(height: 12),
                 Row(children: [
                   const Expanded(child: Text('Opacity')),
-                  Text('\${(selectedOpacity * 100).round()}%'),
+                  Text('${(selectedOpacity * 100).round()}%'),
                 ]),
                 Slider(
                   min: .05,
