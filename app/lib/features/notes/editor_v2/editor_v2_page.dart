@@ -2750,11 +2750,27 @@ class _EditorV2PageState extends State<EditorV2Page>
   }
 
   Future<void> _openToolPicker({String? initialCategory}) async {
+    Set<String> favoriteShapes = <String>{};
+    try {
+      final stored = jsonDecode(_settings.getString('editorV2FavoriteShapes'));
+      if (stored is List) {
+        favoriteShapes = stored.whereType<String>().toSet();
+      }
+    } catch (_) {
+      // Empty favorites are used if a previous beta saved malformed settings.
+    }
     final choice = await showModalBottomSheet<_ToolPickerChoice>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (_) => _EditorV2ToolPicker(selected: _tool, initialCategory: initialCategory),
+      builder: (_) => _EditorV2ToolPicker(
+        selected: _tool,
+        initialCategory: initialCategory,
+        favoriteShapes: favoriteShapes,
+        onFavoriteShapesChanged: (items) => unawaited(
+          _settings.setString('editorV2FavoriteShapes', jsonEncode(items.toList())),
+        ),
+      ),
     );
     if (choice == null || !mounted) return;
     if (choice.configure) {
