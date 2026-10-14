@@ -3149,7 +3149,7 @@ class _EditorV2PageState extends State<EditorV2Page>
         padding: EdgeInsets.zero,
         constraints: const BoxConstraints.tightFor(width: 32, height: 32),
         onSelected: _onMenuSelected,
-        itemBuilder: (_) => const <PopupMenuEntry<String>>[
+        itemBuilder: (_) => <PopupMenuEntry<String>>[
           PopupMenuItem(value: 'text', child: Text('Insert text box')),
           PopupMenuItem(value: 'image', child: Text('Insert image from file')),
           PopupMenuItem(value: 'clipboardImage', child: Text('Paste screenshot from clipboard')),
