@@ -1567,6 +1567,78 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
   }
 
+  void _copyPage(int index) {
+    if (index < 0 || index >= _pages.length) return;
+    _pageClipboard = EditorV2DocumentCodec.clonePages(<Map<String, Object?>>[_pages[index]]).single;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Page copied. Use Paste as page to insert it.')));
+  }
+
+  void _cutPage(int index) {
+    if (index < 0 || index >= _pages.length) return;
+    _copyPage(index);
+    _deletePage(index);
+  }
+
+  void _pastePage() {
+    final source = _pageClipboard;
+    if (source == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copy a page first.')));
+      return;
+    }
+    _pushUndo();
+    final copy = EditorV2DocumentCodec.clonePages(<Map<String, Object?>>[source]).single;
+    copy['id'] = DateTime.now().microsecondsSinceEpoch.toString();
+    setState(() {
+      final insertion = (_page + 1).clamp(0, _pages.length).toInt();
+      _pages.insert(insertion, EditorV2DocumentCodec.normalizePage(copy));
+      _page = insertion;
+    });
+    _scheduleSave();
+  }
+
+  void _duplicatePage(int index) {
+    if (index < 0 || index >= _pages.length) return;
+    _pageClipboard = EditorV2DocumentCodec.clonePages(<Map<String, Object?>>[_pages[index]]).single;
+    _pastePage();
+  }
+
+  void _deletePage(int index) {
+    if (index < 0 || index >= _pages.length) return;
+    _pushUndo();
+    setState(() {
+      if (_pages.length == 1) {
+        _pages[0]['strokes'] = <Object?>[];
+        _pages[0]['images'] = <Object?>[];
+        _pages[0]['textBoxes'] = <Object?>[];
+        _pages[0].remove('backgroundImage');
+      } else {
+        _pages.removeAt(index);
+      }
+      _page = EditorV2DocumentCodec.clampPage(_page >= index ? _page - 1 : _page, _pages.length);
+      _selectedStrokeIds.clear();
+      _lassoRect = null;
+      _initializeTextControllers();
+    });
+    _scheduleSave();
+  }
+
+  void _movePage(int from, int to) {
+    if (from < 0 || from >= _pages.length || to < 0 || to >= _pages.length || from == to) return;
+    _pushUndo();
+    setState(() {
+      final moved = _pages.removeAt(from);
+      _pages.insert(to, moved);
+      if (_page == from) {
+        _page = to;
+      } else if (from < _page && to >= _page) {
+        _page--;
+      } else if (from > _page && to <= _page) {
+        _page++;
+      }
+    });
+    _scheduleSave();
+  }
+
   void _goToPage(int index) {
     if (index < 0 || index >= _pages.length || index == _page) return;
     setState(() {
