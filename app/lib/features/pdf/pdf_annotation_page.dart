@@ -14,7 +14,7 @@ import '../../core/settings/app_settings.dart';
 import '../../data/local/file_document_repository.dart';
 import '../../data/local/folder_repository.dart';
 import '../../data/local/note_repository.dart';
-import '../notes/note_editor_page.dart';
+import '../notes/nextgen_editor_route.dart';
 
 class PdfAnnotationPage extends StatefulWidget {
   final String? folderId;
@@ -105,7 +105,7 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
       await Navigator.of(context).pushReplacement<void, void>(
         MaterialPageRoute<void>(
           settings: RouteSettings(name: '/pdf-annotation/editor/${note.id}'),
-          builder: (_) => NoteEditorPage(
+          builder: (_) => SnoteNextEditorRoute(
             note: note,
             initialPdfBytes: bytes,
             initialPdfName: file.name,
