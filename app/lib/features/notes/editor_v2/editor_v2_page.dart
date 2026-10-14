@@ -2901,6 +2901,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           if (targetTool == CanvasTool.eraser)
             SwitchListTile(
               dense: true,
+              secondary: const Icon(Icons.crop_16_9_rounded),
               contentPadding: EdgeInsets.zero,
               title: const Text('Precision erase radius'),
               subtitle: const Text('Use a narrow hit area instead of the standard eraser radius'),
@@ -2913,6 +2914,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           CheckboxListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
+            secondary: const Icon(Icons.title_rounded),
             title: const Text('Show in Title Bar'),
             value: places.contains('titleBar'),
             onChanged: (value) => setPanelState(() {
@@ -2926,6 +2928,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           CheckboxListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
+            secondary: const Icon(Icons.widgets_outlined),
             title: const Text('Show in Main Toolbar'),
             value: places.contains('toolbar'),
             onChanged: (value) => setPanelState(() {
@@ -2939,6 +2942,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           CheckboxListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
+            secondary: const Icon(Icons.inventory_2_outlined),
             title: const Text('Show in Pencase'),
             value: places.contains('pencase'),
             onChanged: (value) => setPanelState(() {
@@ -2952,6 +2956,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           SwitchListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
+            secondary: const Icon(Icons.visibility_off_outlined),
             title: const Text('Hidden / nowhere'),
             subtitle: const Text('Hide this tool from all three locations'),
             value: places.isEmpty,
@@ -2979,6 +2984,13 @@ class _EditorV2PageState extends State<EditorV2Page>
                   velocity: velocity,
                   curve: curve,
                 );
+                setState(() {
+                  _toolPlacements[targetTool.name] = <String>{
+                    ..._placementsFor(targetTool),
+                    'pencase',
+                  };
+                });
+                await _saveToolPlacements();
                 close();
               },
             ),
