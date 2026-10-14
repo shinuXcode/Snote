@@ -76,7 +76,6 @@ class _EditorV2PageState extends State<EditorV2Page>
     CanvasTool.marker,
     CanvasTool.brush,
     CanvasTool.eraser,
-    CanvasTool.pixelEraser,
     CanvasTool.lasso,
     CanvasTool.fill,
     CanvasTool.line,
@@ -569,12 +568,12 @@ class _EditorV2PageState extends State<EditorV2Page>
     final result = <CanvasTool>[];
     for (final name in _toolbarOrder) {
       final tool = CanvasTool.values.where((candidate) => candidate.name == name).firstOrNull;
-      if (tool != null && _toolInLocation(tool, 'toolbar') && !result.contains(tool)) {
+      if (tool != null && tool != CanvasTool.pixelEraser && _toolInLocation(tool, 'toolbar') && !result.contains(tool)) {
         result.add(tool);
       }
     }
     for (final tool in CanvasTool.values) {
-      if (_toolInLocation(tool, 'toolbar') && !result.contains(tool)) result.add(tool);
+      if (tool != CanvasTool.pixelEraser && _toolInLocation(tool, 'toolbar') && !result.contains(tool)) result.add(tool);
     }
     return result;
   }
@@ -1183,7 +1182,8 @@ class _EditorV2PageState extends State<EditorV2Page>
     _liveStroke = null;
 
     if (_tool == CanvasTool.eraser || _tool == CanvasTool.pixelEraser) {
-      _eraseAt(end, _tool == CanvasTool.pixelEraser ? 7 : math.max(18, _size * 2));
+      final precisionRadius = _tool == CanvasTool.pixelEraser || _settings.getString('eraserMode') == 'pixel';
+      _eraseAt(end, precisionRadius ? 7 : math.max(18, _size * 2));
     } else if (_tool == CanvasTool.lasso) {
       _selectInPolygon(completedPoints.map((sample) => sample.position).toList());
     } else if (_tool == CanvasTool.fill) {
@@ -2315,6 +2315,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     var curve = _pressureCurve;
     var color = _color;
     var places = Set<String>.from(_placementsFor(targetTool));
+    var precisionErase = _settings.getString('eraserMode') == 'pixel';
 
     void saveProfile() {
       setState(() {
@@ -2328,6 +2329,9 @@ class _EditorV2PageState extends State<EditorV2Page>
       });
       _toolPlacements[targetTool.name] = Set<String>.from(places);
       unawaited(_saveToolPlacements());
+      if (targetTool == CanvasTool.eraser) {
+        unawaited(_settings.setString('eraserMode', precisionErase ? 'pixel' : 'stroke'));
+      }
       _toolProfiles[targetTool.name] = <String, Object?>{
         'size': size,
         'color': color.toARGB32(),
@@ -2428,6 +2432,15 @@ class _EditorV2PageState extends State<EditorV2Page>
               if (value != null) setPanelState(() => curve = value);
             },
           ),
+          if (targetTool == CanvasTool.eraser)
+            SwitchListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Precision erase radius'),
+              subtitle: const Text('Use a narrow hit area instead of the standard eraser radius'),
+              value: precisionErase,
+              onChanged: (value) => setPanelState(() => precisionErase = value),
+            ),
           const SizedBox(height: 8),
           const Divider(),
           const Text('Tool placement', style: TextStyle(fontWeight: FontWeight.w800)),
@@ -5543,7 +5556,7 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
       final matchesQuery = query.isEmpty ||
           tool.label.toLowerCase().contains(query) ||
           tool.name.toLowerCase().contains(query);
-      return matchesQuery && (_category == 'All tools' || _categoryOf(tool) == _category);
+      return tool != CanvasTool.pixelEraser && matchesQuery && (_category == 'All tools' || _categoryOf(tool) == _category);
     }).toList();
     return SafeArea(
       child: Padding(
