@@ -16,11 +16,16 @@ import 'package:pdfx/pdfx.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../app/theme_controller.dart';
+import '../../canvas_engine/ink_renderer.dart';
 import '../../canvas_engine/models/pen_config.dart';
+import '../../canvas_engine/models/stroke.dart';
+import '../../canvas_engine/models/stroke_codec.dart';
+import '../../canvas_engine/painters/canvas_painter.dart';
 import '../../canvas_engine/widgets/page_background.dart';
 import '../../canvas_engine/input/viewport_transform.dart';
 import '../../canvas_engine/widgets/notebook_viewport.dart';
@@ -74,6 +79,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   final _scroll = ScrollController();
   final _title = TextEditingController();
   final Map<String, TextEditingController> _textBoxControllers = <String, TextEditingController>{};
+  final Map<String, List<Stroke>> _thumbnailStrokeCache = <String, List<Stroke>>{};
+  final Map<String, Object?> _thumbnailStrokeSources = <String, Object?>{};
+  Map<String, Object?>? _pageClipboard;
   final _lock = const NoteLockService();
   final _settings = SnoteSettings.instance;
   final GlobalKey _pageCaptureKey = GlobalKey();
@@ -1137,7 +1145,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
               ),
               if (!_full) _header(),
               if (!_full && _tabsVisible) _openNotesTabsBar(),
-              if (!_full && !_readingMode && _settings.getBool('showPageNavigation')) _movablePageChanger(),
               if (_preview && !_full && !_readingMode) _previewRail(),
               if (_toolbar && _draw && !_readingMode) _toolbarWidget(),
               if (!_full && _draw && !_readingMode) _toolPencaseWidget(),
@@ -2483,18 +2490,27 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   ],
                 ),
               ),
-              Expanded(
-                child: TextField(
-                  controller: _title,
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                    border: InputBorder.none,
-                    hintText: 'Name this note',
+              Flexible(
+                fit: FlexFit.loose,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minWidth: compact ? 92 : 140,
+                    maxWidth: compact ? 132 : 220,
                   ),
-                  onChanged: (_) => _refreshCurrentOpenTab(),
-                  onSubmitted: (_) => _save(force: true),
+                  child: TextField(
+                    controller: _title,
+                    maxLines: 1,
+                    textAlignVertical: TextAlignVertical.center,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                      border: InputBorder.none,
+                      hintText: 'Name this note',
+                    ),
+                    onChanged: (_) => _refreshCurrentOpenTab(),
+                    onSubmitted: (_) => _save(force: true),
+                  ),
                 ),
               ),
               if (titleTools.isNotEmpty)
@@ -2733,13 +2749,13 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   Widget _toolbarWidget() {
     final screen = MediaQuery.sizeOf(context);
     final axis = _docked
-        ? (_dockSide == 'left' || _dockSide == 'right'
+        ? (_dockSide == 'left' || _dockSide == 'right' || _dockSide == 'bottom'
             ? Axis.vertical
             : Axis.horizontal)
         : _floatingAxis;
     final constraints = axis == Axis.vertical
         ? BoxConstraints(
-            maxWidth: 128,
+            maxWidth: 84,
             maxHeight: math.max(160, screen.height - 76),
           )
         : BoxConstraints(
@@ -2764,10 +2780,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       builder: (_, offset, child) {
         if (_docked) {
           return Positioned(
-            left: _dockSide == 'left' ? 0 : null,
+            left: (_dockSide == 'left' || _dockSide == 'bottom') ? 0 : null,
             right: _dockSide == 'right' ? 0 : null,
-            top: _dockSide == 'top' ? (_full ? 0 : 46) : null,
-            bottom: _dockSide == 'bottom' ? 0 : null,
+            top: _dockSide == 'top'
+                ? (_full ? 0 : 46)
+                : (_dockSide == 'bottom' ? (_full ? 4 : 54) : null),
             child: child!,
           );
         }
@@ -2789,12 +2806,12 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     final blur = SnoteThemeController.instance.eInk ? 0.0 : 12.0;
     return ClipRRect(
       key: key,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(14),
       child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+        filter: ui.ImageFilter.blur(sigmaX: math.min(5, blur), sigmaY: math.min(5, blur)),
         child: Material(
-          elevation: SnoteThemeController.instance.eInk ? 0 : 8,
-          color: Theme.of(context).colorScheme.surface.withValues(alpha: .70),
+          elevation: SnoteThemeController.instance.eInk ? 0 : 4,
+          color: Theme.of(context).colorScheme.surface.withValues(alpha: .88),
           child: child,
         ),
       ),
@@ -2860,8 +2877,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         onPanEnd: (_) => _snapToolbar(MediaQuery.sizeOf(context)),
         onPanCancel: () => _snapToolbar(MediaQuery.sizeOf(context)),
         child: Padding(
-          padding: const EdgeInsets.all(7),
-          child: Icon(Icons.drag_indicator_rounded, size: 19, color: Theme.of(context).colorScheme.onSurfaceVariant),
+          padding: const EdgeInsets.all(3),
+          child: Icon(Icons.drag_indicator_rounded, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
       ),
       ...pencaseTools.map((tool) => _placedToolButton(tool.name, 'toolbar')),
@@ -2955,11 +2972,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     return SingleChildScrollView(
       scrollDirection: axis == Axis.horizontal ? Axis.horizontal : Axis.vertical,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
         child: IconButtonTheme(
           data: IconButtonThemeData(
             style: IconButton.styleFrom(
-              fixedSize: const Size(34, 34),
+              fixedSize: const Size(32, 34),
               padding: EdgeInsets.zero,
               visualDensity: VisualDensity.compact,
             ),
@@ -3847,7 +3864,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         .clamp(0.0, math.max(0.0, size.width - 50))
         .toDouble();
     final top = _toolPencaseY.clamp(50.0, math.max(50.0, size.height - 100)).toDouble();
-    final vertical = _toolPencaseDock == 'left' || _toolPencaseDock == 'right';
+    final vertical = _toolPencaseDock == 'left' || _toolPencaseDock == 'right' || _toolPencaseDock == 'bottom';
     final children = <Widget>[
       GestureDetector(
         onPanUpdate: (details) {
@@ -3904,7 +3921,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     if (_toolPencaseDock == 'left') return Positioned(left: 0, top: top, child: panel);
     if (_toolPencaseDock == 'right') return Positioned(right: 0, top: top, child: panel);
     if (_toolPencaseDock == 'top') return Positioned(left: left, top: 46, child: panel);
-    if (_toolPencaseDock == 'bottom') return Positioned(left: left, bottom: 0, child: panel);
+    if (_toolPencaseDock == 'bottom') return Positioned(left: 0, top: top, child: panel);
     return Positioned(left: left, top: top, child: panel);
   }
 
@@ -4585,7 +4602,42 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     _scheduleSave();
   }
 
+  void _copyPage(int index) {
+    if (index < 0 || index >= _pages.length) return;
+    _pageClipboard = _clonePage(_pages[index]);
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Page copied. Use a page menu to paste it.')),
+    );
+  }
+
+  void _cutPage(int index) {
+    if (index < 0 || index >= _pages.length) return;
+    _pageClipboard = _clonePage(_pages[index]);
+    _deletePage(index);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Page cut. Use a page menu to paste it.')),
+    );
+  }
+
+  void _pastePage(int index) {
+    final clipboard = _pageClipboard;
+    if (clipboard == null) return;
+    final pasted = _clonePage(clipboard);
+    pasted['id'] = DateTime.now().microsecondsSinceEpoch.toString();
+    final target = (index + 1).clamp(0, _pages.length).toInt();
+    _pages.insert(target, pasted);
+    setState(() => _page = target);
+    _scheduleSave();
+  }
+
   void _deletePage(int index) {
+    if (index < 0 || index >= _pages.length) return;
+    final removedId = _pages[index]['id']?.toString();
+    if (removedId != null) {
+      _thumbnailStrokeCache.remove(removedId);
+      _thumbnailStrokeSources.remove(removedId);
+    }
     if (_pages.length <= 1) {
       _pages[0] = _newPage();
       setState(() => _page = 0);
@@ -4664,123 +4716,298 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     if (cut) _deletePage(index);
   }
 
-  Widget _previewRail() => Positioned(
-        left: 0,
-        top: 0,
-        bottom: 0,
-        width: 156,
-        child: Material(
-          elevation: SnoteThemeController.instance.eInk ? 0 : 12,
-          color: Theme.of(context).colorScheme.surface.withValues(alpha: .94),
-          child: SafeArea(
-            child: Column(children: [
-              Row(children: [
-                const Expanded(child: Padding(padding: EdgeInsets.only(left: 12), child: Text('Pages', style: TextStyle(fontWeight: FontWeight.w900)))),
-                IconButton(onPressed: () => setState(() => _preview = false), icon: const Icon(Icons.close_rounded)),
+  List<Stroke> _thumbnailStrokesFor(Map<String, Object?> page) {
+    final id = page['id']?.toString() ?? '';
+    final raw = page['strokes'];
+    if (id.isNotEmpty &&
+        _thumbnailStrokeCache.containsKey(id) &&
+        identical(_thumbnailStrokeSources[id], raw)) {
+      return _thumbnailStrokeCache[id]!;
+    }
+    final strokes = StrokeCodec.documentToStrokes({'strokes': raw});
+    if (id.isNotEmpty) {
+      _thumbnailStrokeSources[id] = raw;
+      _thumbnailStrokeCache[id] = strokes;
+      while (_thumbnailStrokeCache.length > 24) {
+        final oldest = _thumbnailStrokeCache.keys.first;
+        _thumbnailStrokeCache.remove(oldest);
+        _thumbnailStrokeSources.remove(oldest);
+      }
+    }
+    return strokes;
+  }
+
+  String _thumbnailRevisionKey(Map<String, Object?> page) {
+    final rawBoxes = page['textBoxes'];
+    final boxRevision = rawBoxes is List
+        ? rawBoxes.map((item) => item is Map
+            ? "${item['id']}:${item['text']}"
+            : '').join('|')
+        : '';
+    final rawImages = page['images'];
+    return [
+      page['id'],
+      identityHashCode(page['strokes']),
+      boxRevision,
+      rawImages is List ? rawImages.length : 0,
+      page['template'],
+      page['paperColor'],
+      page['lineColor'],
+      page['lineOpacity'],
+      page['spacing'],
+      page['orientation'],
+    ].join(':');
+  }
+
+  double _thumbnailAspectRatio(Map<String, Object?> page) {
+    final ratio = switch (page['pageSize']?.toString() ?? 'A4') {
+      'A3' => 297 / 420,
+      'A5' => 148 / 210,
+      'Letter' => 215.9 / 279.4,
+      'Legal' => 215.9 / 355.6,
+      'Infinite' => 1.0,
+      _ => 210 / 297,
+    };
+    return page['orientation']?.toString() == 'horizontal' ? 1 / ratio : ratio;
+  }
+
+  Size _thumbnailSourceSize() {
+    final object = _canvasRenderKey.currentContext?.findRenderObject();
+    if (object is RenderBox &&
+        object.size.width.isFinite &&
+        object.size.height.isFinite &&
+        object.size.width > 1 &&
+        object.size.height > 1) {
+      return object.size;
+    }
+    return const Size(700, 990);
+  }
+
+  Widget _previewRail() {
+    final screen = MediaQuery.sizeOf(context);
+    final railWidth = math.min(264.0, math.max(190.0, screen.width * .28));
+    final previewWidth = railWidth - 20;
+    final sourceSize = _thumbnailSourceSize();
+    return Positioned(
+      left: 0,
+      top: 0,
+      bottom: 0,
+      width: railWidth,
+      child: Material(
+        elevation: SnoteThemeController.instance.eInk ? 0 : 8,
+        color: Theme.of(context).colorScheme.surface,
+        child: SafeArea(
+          child: Column(children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 2, 4, 4),
+              child: Row(children: [
+                const Icon(Icons.auto_stories_rounded, size: 18),
+                const SizedBox(width: 8),
+                const Expanded(child: Text('Pages', style: TextStyle(fontWeight: FontWeight.w900))),
+                if (_pageClipboard != null)
+                  IconButton(
+                    tooltip: 'Paste copied page',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => _pastePage(_pages.length - 1),
+                    icon: const Icon(Icons.content_paste_rounded),
+                  ),
+                IconButton(
+                  tooltip: 'Close pages',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => setState(() => _preview = false),
+                  icon: const Icon(Icons.close_rounded),
+                ),
               ]),
-              Expanded(
-                child: ReorderableListView.builder(
-                  padding: const EdgeInsets.all(8),
-                  itemCount: _pages.length,
-                  onReorder: (oldIndex, newIndex) {
-                    if (newIndex > oldIndex) newIndex--;
-                    final item = _pages.removeAt(oldIndex);
-                    _pages.insert(newIndex, item);
-                    setState(() => _page = newIndex);
-                    _scheduleSave();
-                  },
-                  itemBuilder: (_, index) {
-                    final page = _pages[index];
-                    final templateName = page['template']?.toString();
-                    final template = PageTemplate.values.firstWhere(
-                      (t) => t.name == templateName,
-                      orElse: () => PageTemplate.dotted,
-                    );
-                    return Padding(
-                      key: ValueKey(page['id'].toString()),
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Stack(
-                        children: [
-                          InkWell(
-                            borderRadius: BorderRadius.circular(11),
-                            onTap: () => _selectPage(index),
-                            child: Container(
-                              height: 160,
-                              decoration: BoxDecoration(
-                                color: _pageColorAt(index),
-                                borderRadius: BorderRadius.circular(11),
-                                border: Border.all(
-                                  color: index == _page ? Theme.of(context).colorScheme.primary : Colors.black12,
-                                  width: index == _page ? 2 : 1,
+            ),
+            Expanded(
+              child: ReorderableListView.builder(
+                padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+                cacheExtent: 260,
+                itemCount: _pages.length,
+                onReorder: (oldIndex, newIndex) {
+                  if (newIndex > oldIndex) newIndex--;
+                  final item = _pages.removeAt(oldIndex);
+                  _pages.insert(newIndex, item);
+                  setState(() => _page = newIndex);
+                  _scheduleSave();
+                },
+                itemBuilder: (_, index) {
+                  final page = _pages[index];
+                  final pageColor = _pageColorAt(index);
+                  final strokes = _thumbnailStrokesFor(page);
+                  final revision = _thumbnailRevisionKey(page);
+                  final aspectRatio = _thumbnailAspectRatio(page);
+                  final thumbnailHeight = math.min(320.0, math.max(150.0, previewWidth / aspectRatio));
+                  final secure = _settings.getBool('securePagePreviews');
+                  return Padding(
+                    key: ValueKey(page['id'].toString()),
+                    padding: const EdgeInsets.only(bottom: 9),
+                    child: Material(
+                      elevation: index == _page ? 2 : 0,
+                      color: pageColor,
+                      borderRadius: BorderRadius.circular(10),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: () => _selectPage(index),
+                        child: Container(
+                          height: thumbnailHeight,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: index == _page
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Theme.of(context).colorScheme.outlineVariant,
+                              width: index == _page ? 2 : 1,
+                            ),
+                          ),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              RepaintBoundary(
+                                child: CustomPaint(
+                                  painter: _PageThumbnailPainter(
+                                    page: page,
+                                    strokes: strokes,
+                                    sourceSize: sourceSize,
+                                    secure: secure,
+                                    revisionKey: revision,
+                                  ),
+                                  child: const SizedBox.expand(),
                                 ),
                               ),
-                              child: _settings.getBool('securePagePreviews')
-                                  ? const Center(child: Icon(Icons.lock_outline_rounded, size: 27))
-                                  : CustomPaint(
-                                      painter: PageBackground(
-                                        template: template,
-                                        paperColor: _pageColorAt(index),
-                                        lineColor: page['lineColor'] is num ? Color((page['lineColor'] as num).toInt()) : const Color(0xffaab2bd),
-                                        spacing: page['spacing'] is num ? (page['spacing'] as num).toDouble() : 20,
-                                        lineOpacity: page['lineOpacity'] is num ? (page['lineOpacity'] as num).toDouble() : .8,
+                              Positioned(
+                                left: 7,
+                                top: 7,
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context).colorScheme.surface.withValues(alpha: .92),
+                                    borderRadius: BorderRadius.circular(7),
+                                    border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    child: Text(
+                                      'Page ${index + 1}',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w800,
+                                        color: Theme.of(context).colorScheme.onSurface,
                                       ),
                                     ),
-                            ),
-                          ),
-                          Positioned(
-                            right: 4,
-                            bottom: 4,
-                            child: Material(
-                              color: Theme.of(context).colorScheme.surface.withValues(alpha: .84),
-                              borderRadius: BorderRadius.circular(9),
-                              child: PopupMenuButton<String>(
-                                tooltip: 'Page actions',
-                                onSelected: (action) {
-                                  switch (action) {
-                                    case 'blank': _insertBlankPage(index); break;
-                                    case 'duplicate': _duplicatePage(index); break;
-                                    case 'background': _changePageBackground(index); break;
-                                    case 'up': _movePageBy(index, -1); break;
-                                    case 'down': _movePageBy(index, 1); break;
-                                    case 'copy': _addPageToAnotherNote(index); break;
-                                    case 'cut': _addPageToAnotherNote(index, cut: true); break;
-                                    case 'delete': _deletePage(index); break;
-                                  }
-                                },
-                                itemBuilder: (_) => const [
-                                  PopupMenuItem(value: 'blank', child: Text('Insert blank page')),
-                                  PopupMenuItem(value: 'duplicate', child: Text('Duplicate page')),
-                                  PopupMenuItem(value: 'background', child: Text('Change background')),
-                                  PopupMenuItem(value: 'up', child: Text('Move up')),
-                                  PopupMenuItem(value: 'down', child: Text('Move down')),
-                                  PopupMenuItem(value: 'copy', child: Text('Add to another note')),
-                                  PopupMenuItem(value: 'cut', child: Text('Cut to another note')),
-                                  PopupMenuItem(value: 'delete', child: Text('Delete page')),
-                                ],
-                                icon: const Icon(Icons.more_horiz_rounded, size: 18),
+                                  ),
+                                ),
                               ),
-                            ),
+                              Positioned(
+                                right: 4,
+                                top: 4,
+                                child: Material(
+                                  color: Theme.of(context).colorScheme.surface.withValues(alpha: .94),
+                                  borderRadius: BorderRadius.circular(9),
+                                  child: PopupMenuButton<String>(
+                                    tooltip: 'Page actions',
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                                    icon: const Icon(Icons.more_vert_rounded, size: 20),
+                                    onSelected: (action) {
+                                      switch (action) {
+                                        case 'blank': _insertBlankPage(index); break;
+                                        case 'duplicate': _duplicatePage(index); break;
+                                        case 'background': unawaited(_changePageBackground(index)); break;
+                                        case 'up': _movePageBy(index, -1); break;
+                                        case 'down': _movePageBy(index, 1); break;
+                                        case 'copy': _copyPage(index); break;
+                                        case 'cut': _cutPage(index); break;
+                                        case 'paste': _pastePage(index); break;
+                                        case 'copyToNote': unawaited(_addPageToAnotherNote(index)); break;
+                                        case 'cutToNote': unawaited(_addPageToAnotherNote(index, cut: true)); break;
+                                        case 'delete': _deletePage(index); break;
+                                      }
+                                    },
+                                    itemBuilder: (_) => <PopupMenuEntry<String>>[
+                                      const PopupMenuItem<String>(
+                                        value: 'blank',
+                                        child: ListTile(dense: true, leading: Icon(Icons.note_add_outlined), title: Text('Insert blank page')),
+                                      ),
+                                      const PopupMenuItem<String>(
+                                        value: 'duplicate',
+                                        child: ListTile(dense: true, leading: Icon(Icons.control_point_duplicate_rounded), title: Text('Duplicate page')),
+                                      ),
+                                      const PopupMenuItem<String>(
+                                        value: 'up',
+                                        child: ListTile(dense: true, leading: Icon(Icons.keyboard_arrow_up_rounded), title: Text('Move up')),
+                                      ),
+                                      const PopupMenuItem<String>(
+                                        value: 'down',
+                                        child: ListTile(dense: true, leading: Icon(Icons.keyboard_arrow_down_rounded), title: Text('Move down')),
+                                      ),
+                                      const PopupMenuItem<String>(
+                                        value: 'copy',
+                                        child: ListTile(dense: true, leading: Icon(Icons.copy_rounded), title: Text('Copy page')),
+                                      ),
+                                      const PopupMenuItem<String>(
+                                        value: 'cut',
+                                        child: ListTile(dense: true, leading: Icon(Icons.content_cut_rounded), title: Text('Cut page')),
+                                      ),
+                                      if (_pageClipboard != null)
+                                        const PopupMenuItem<String>(
+                                          value: 'paste',
+                                          child: ListTile(dense: true, leading: Icon(Icons.content_paste_rounded), title: Text('Paste page after this')),
+                                        ),
+                                      const PopupMenuItem<String>(
+                                        value: 'background',
+                                        child: ListTile(dense: true, leading: Icon(Icons.palette_outlined), title: Text('Change background')),
+                                      ),
+                                      const PopupMenuItem<String>(
+                                        value: 'copyToNote',
+                                        child: ListTile(dense: true, leading: Icon(Icons.note_add_outlined), title: Text('Add to another note')),
+                                      ),
+                                      const PopupMenuItem<String>(
+                                        value: 'cutToNote',
+                                        child: ListTile(dense: true, leading: Icon(Icons.drive_file_move_outline_rounded), title: Text('Move to another note')),
+                                      ),
+                                      const PopupMenuItem<String>(
+                                        value: 'delete',
+                                        child: ListTile(dense: true, leading: Icon(Icons.delete_outline_rounded), title: Text('Delete page')),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              if (secure)
+                                Positioned.fill(
+                                  child: IgnorePointer(
+                                    child: ColoredBox(
+                                      color: pageColor.withValues(alpha: .28),
+                                      child: const Center(child: Icon(Icons.lock_outline_rounded, size: 26)),
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
-                          Positioned(
-                            left: 7,
-                            bottom: 7,
-                            child: Text((index + 1).toString(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800)),
-                          ),
-                        ],
+                        ),
                       ),
-                    );
-                  },
+                    ),
+                  );
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+              child: SizedBox(
+                width: double.infinity,
+                height: 42,
+                child: FilledButton.tonalIcon(
+                  onPressed: _pages.isEmpty ? null : () => _insertBlankPage(_pages.length - 1),
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Add Page'),
                 ),
               ),
-              IconButton.filledTonal(
-                onPressed: () => _insertBlankPage(_pages.length - 1),
-                icon: const Icon(Icons.add_rounded),
-                tooltip: 'Insert blank page',
-              ),
-            ]),
-          ),
+            ),
+          ]),
         ),
-      );
+      ),
+    );
+  }
 
   Color _pageColorAt(int index) {
     final v = _pages[index]['paperColor'];
@@ -5617,6 +5844,116 @@ class _AuxiliaryGuidePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _AuxiliaryGuidePainter oldDelegate) =>
       color != oldDelegate.color;
+}
+
+class _PageThumbnailPainter extends CustomPainter {
+  final Map<String, Object?> page;
+  final List<Stroke> strokes;
+  final Size sourceSize;
+  final bool secure;
+  final String revisionKey;
+
+  const _PageThumbnailPainter({
+    required this.page,
+    required this.strokes,
+    required this.sourceSize,
+    required this.secure,
+    required this.revisionKey,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty || sourceSize.isEmpty) return;
+    final paperColor = page['paperColor'] is num
+        ? Color((page['paperColor'] as num).toInt())
+        : const Color(0xffffffff);
+    final template = PageTemplate.values.firstWhere(
+      (value) => value.name == page['template']?.toString(),
+      orElse: () => PageTemplate.dotted,
+    );
+    final lineColor = page['lineColor'] is num
+        ? Color((page['lineColor'] as num).toInt())
+        : const Color(0xffaab2bd);
+    final spacing = page['spacing'] is num ? (page['spacing'] as num).toDouble() : 20.0;
+    final lineOpacity = page['lineOpacity'] is num ? (page['lineOpacity'] as num).toDouble() : .8;
+
+    canvas.save();
+    canvas.scale(size.width / sourceSize.width, size.height / sourceSize.height);
+    canvas.drawRect(Offset.zero & sourceSize, Paint()..color = paperColor);
+    PageBackground(
+      template: template,
+      paperColor: paperColor,
+      lineColor: lineColor,
+      spacing: spacing,
+      lineOpacity: lineOpacity,
+      cornellAssist: page['cornellAssist'] == true,
+      lineWidth: page['lineWidth'] is num ? (page['lineWidth'] as num).toDouble() : .7,
+    ).paint(canvas, sourceSize);
+
+    if (!secure) {
+      SnoteCanvasPainter(
+        strokes: strokes,
+        activeStroke: null,
+        activePoints: const <StrokePoint>[],
+        activePen: null,
+        activeTool: null,
+        activeFill: false,
+        activeCustomSides: 6,
+        activeStickerText: null,
+        selectedIds: const <String>{},
+        lassoPath: const <Offset>[],
+        drawActive: false,
+      ).paint(canvas, sourceSize);
+
+      final rawBoxes = page['textBoxes'];
+      if (rawBoxes is List) {
+        for (final item in rawBoxes.whereType<Map>()) {
+          final text = item['text']?.toString() ?? '';
+          if (text.trim().isEmpty) continue;
+          final x = (item['x'] as num?)?.toDouble() ?? .16;
+          final y = (item['y'] as num?)?.toDouble() ?? .14;
+          final width = (item['width'] as num?)?.toDouble() ?? .66;
+          final height = (item['height'] as num?)?.toDouble() ?? .18;
+          final fontSize = ((item['fontSize'] as num?)?.toDouble() ?? 18).clamp(7.0, 24.0).toDouble();
+          final textColor = item['color'] is num
+              ? Color((item['color'] as num).toInt())
+              : const Color(0xff263238);
+          final painter = TextPainter(
+            text: TextSpan(text: text, style: TextStyle(color: textColor, fontSize: fontSize, height: 1.12)),
+            textDirection: TextDirection.ltr,
+            maxLines: math.max(1, (height * sourceSize.height / math.max(8, fontSize)).floor()),
+            ellipsis: '…',
+          )..layout(maxWidth: math.max(1, width * sourceSize.width));
+          painter.paint(canvas, Offset(x * sourceSize.width, y * sourceSize.height));
+        }
+      }
+
+      final rawImages = page['images'];
+      if (rawImages is List && rawImages.isNotEmpty) {
+        final markerPaint = Paint()
+          ..color = const Color(0xff64748b).withValues(alpha: .35)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2;
+        for (final item in rawImages.whereType<Map>()) {
+          final x = ((item['x'] as num?)?.toDouble() ?? .12) * sourceSize.width;
+          final y = ((item['y'] as num?)?.toDouble() ?? .16) * sourceSize.height;
+          final width = ((item['width'] as num?)?.toDouble() ?? .22) * sourceSize.width;
+          final height = ((item['height'] as num?)?.toDouble() ?? .12) * sourceSize.height;
+          final rect = Rect.fromLTWH(x, y, width.clamp(8.0, sourceSize.width), height.clamp(8.0, sourceSize.height));
+          canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(3)), markerPaint);
+          canvas.drawLine(rect.topLeft, rect.bottomRight, markerPaint);
+          canvas.drawLine(rect.topRight, rect.bottomLeft, markerPaint);
+        }
+      }
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _PageThumbnailPainter oldDelegate) =>
+      oldDelegate.revisionKey != revisionKey ||
+      oldDelegate.sourceSize != sourceSize ||
+      oldDelegate.secure != secure;
 }
 
 class _StudyTimerFloating extends StatefulWidget {
