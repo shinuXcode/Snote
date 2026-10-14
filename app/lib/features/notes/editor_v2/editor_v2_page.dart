@@ -152,6 +152,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   final Set<int> _navigationOnlyPointers = <int>{};
   Duration? _lastEraseTimestamp;
   Offset? _lastErasePosition;
+  bool _eraseUndoCaptured = false;
   Timer? _holdTimer;
   Offset? _holdStartPosition;
   Offset? _pageSwipeStart;
@@ -1567,6 +1568,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   void _onPointerDown(PointerDownEvent event) {
     _lastEraseTimestamp = null;
     _lastErasePosition = event.localPosition;
+    _eraseUndoCaptured = false;
     _activePointers.add(event.pointer);
     if (event.kind == PointerDeviceKind.stylus ||
         event.kind == PointerDeviceKind.invertedStylus) {
@@ -1975,7 +1977,12 @@ class _EditorV2PageState extends State<EditorV2Page>
       }
     }
     if (!removed) return;
-    _pushUndo();
+    // Capturing a complete document snapshot for every pointer sample can
+    // freeze large notes. One undo checkpoint covers a whole erase gesture.
+    if (!_eraseUndoCaptured) {
+      _pushUndo();
+      _eraseUndoCaptured = true;
+    }
     _pageData['strokes'] = retained.map(StrokeCodec.strokeToJson).toList();
     setState(() {
       _clearSelectionIds();
