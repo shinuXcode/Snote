@@ -162,7 +162,9 @@ class _EditorV2PageState extends State<EditorV2Page>
   Offset _favoriteOffset = const Offset(16, 220);
   Offset _pageNavOffset = const Offset(8, 280);
   double _calculatorWidth = 330;
-  double _calculatorHeight = 470;
+  double _calculatorHeight = 465;
+  bool _calculatorVisible = false;
+  Offset _calculatorOffset = const Offset(24, 125);
 
   bool get _hasPdfBackgroundPages => _pages.any((page) {
         final source = page['backgroundImage'];
@@ -2530,17 +2532,26 @@ class _EditorV2PageState extends State<EditorV2Page>
     );
   }
 
-  Future<void> _openCalculator() async {
-    await showDialog<void>(
-      context: context,
-      barrierColor: Colors.black38,
-      builder: (_) => _ScientificCalculatorDialog(
-        initialWidth: _calculatorWidth,
-        initialHeight: _calculatorHeight,
-        onResize: (width, height) {
-          _calculatorWidth = width;
-          _calculatorHeight = height;
-        },
+  void _openCalculator() {
+    setState(() => _calculatorVisible = !_calculatorVisible);
+  }
+
+  Widget _buildFloatingCalculator() {
+    final screen = MediaQuery.sizeOf(context);
+    final width = _calculatorWidth.clamp(270.0, math.max(270.0, screen.width - 16)).toDouble();
+    final height = _calculatorHeight.clamp(360.0, math.max(360.0, screen.height - 32)).toDouble();
+    return Positioned(
+      left: _calculatorOffset.dx.clamp(0, math.max(0, screen.width - width)).toDouble(),
+      top: _calculatorOffset.dy.clamp(0, math.max(0, screen.height - height)).toDouble(),
+      child: _ScientificCalculatorDialog(
+        initialWidth: width,
+        initialHeight: height,
+        onResize: (size) => setState(() {
+          _calculatorWidth = size.width;
+          _calculatorHeight = size.height;
+        }),
+        onMove: (delta) => setState(() => _calculatorOffset += delta),
+        onClose: () => setState(() => _calculatorVisible = false),
       ),
     );
   }
@@ -3183,6 +3194,84 @@ class _EditorV2PageState extends State<EditorV2Page>
               ),
           ],
         ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(50),
+          child: SizedBox(
+            height: 50,
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              scrollDirection: Axis.horizontal,
+              children: List<Widget>.generate(_pages.length, (index) {
+                final page = _pages[index];
+                final template = PageTemplate.values.firstWhere(
+                  (value) => value.name == page['template']?.toString(),
+                  orElse: () => PageTemplate.blank,
+                );
+                final selected = index == _page;
+                final pdfPage = page['backgroundImage'] is String && (page['backgroundImage'] as String).isNotEmpty;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: Tooltip(
+                    message: 'Page ${index + 1}\nLong-press for page actions',
+                    child: GestureDetector(
+                      onLongPress: _showPagePicker,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: () => _goToPage(index),
+                        child: Container(
+                          width: 54,
+                          decoration: BoxDecoration(
+                            color: selected ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surfaceContainerHigh,
+                            border: Border.all(
+                              color: selected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outlineVariant,
+                              width: selected ? 2 : 1,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(7),
+                                child: CustomPaint(
+                                  painter: PageBackground(
+                                    template: template,
+                                    paperColor: Color((page['paperColor'] as num?)?.toInt() ?? 0xffffffff),
+                                    lineColor: Color((page['lineColor'] as num?)?.toInt() ?? 0xffd8dee8),
+                                    spacing: 8,
+                                    lineOpacity: ((page['lineOpacity'] as num?)?.toDouble() ?? .85).clamp(0, 1).toDouble(),
+                                  ),
+                                  child: const SizedBox.expand(),
+                                ),
+                              ),
+                              Align(
+                                alignment: Alignment.bottomRight,
+                                child: Container(
+                                  margin: const EdgeInsets.all(2),
+                                  padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: .85), borderRadius: BorderRadius.circular(4)),
+                                  child: Text('${index + 1}', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.black)),
+                                ),
+                              ),
+                              if (pdfPage)
+                                const Align(
+                                  alignment: Alignment.topLeft,
+                                  child: Padding(
+                                    padding: EdgeInsets.all(2),
+                                    child: Icon(Icons.picture_as_pdf_rounded, size: 10, color: Colors.redAccent),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ),
+          ),
+        ),
         actions: [
           IconButton(
             visualDensity: VisualDensity.compact,
@@ -3272,6 +3361,7 @@ class _EditorV2PageState extends State<EditorV2Page>
             ),
           if (_showFavoritesShowcase) _buildFavoriteShowcase(),
           if (_showPageNavigation && _floatingPageNavigation) _buildFloatingPageNavigation(),
+          if (_calculatorVisible) _buildFloatingCalculator(),
           if (_fullScreenMode)
             Positioned(
               right: 8,
