@@ -172,6 +172,7 @@ class SnoteScreenCaptureService : Service() {
                 ?: throw IllegalStateException("Android did not create a screen capture session.")
 
             val metrics = DisplayMetrics()
+            val windowManager = getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager
             @Suppress("DEPRECATION")
             windowManager.defaultDisplay.getRealMetrics(metrics)
             val width = metrics.widthPixels.coerceAtLeast(1)
@@ -244,6 +245,7 @@ class SnoteScreenCaptureService : Service() {
         }
     }
 
+    @Suppress("DEPRECATION")
     private fun startCaptureNotification() {
         val channelId = "snote_screen_capture"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -253,7 +255,6 @@ class SnoteScreenCaptureService : Service() {
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, channelId)
         } else {
-            @Suppress("DEPRECATION")
             Notification.Builder(this)
         }
         val notification = builder
