@@ -108,12 +108,13 @@ bool shouldRestorePdfPageBackgrounds(
 
   final pdfPages = pages.where(hasPdfMetadata).toList(growable: false);
   if (pdfPages.isNotEmpty) {
-    // Preserve behavior for callers without the source bytes. The editor
-    // supplies sourceHash whenever the original PDF attachment is available.
-    if (sourceHash == null) {
-      return pdfPages.any((page) => !hasBackground(page));
-    }
-    return pdfPages.any((page) => !hasVerifiedBackground(page));
+    // A note can contain pages from multiple imported PDFs. Verify only pages
+    // belonging to the current source; never replace another PDF's page set.
+    final scopedPages = sourceHash == null
+        ? pdfPages
+        : pdfPages.where((page) => page['pdfSourceHash'] == sourceHash).toList(growable: false);
+    if (scopedPages.isEmpty) return false;
+    return scopedPages.any((page) => !hasVerifiedBackground(page));
   }
 
   bool emptyList(Object? value) => value is! List || value.isEmpty;
