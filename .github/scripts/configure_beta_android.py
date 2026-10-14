@@ -276,6 +276,7 @@ class SnoteScreenCaptureService : Service() {
         releaseCapture()
     }
 
+    @Suppress("DEPRECATION")
     private fun releaseCapture() {
         if (released) return
         released = true
@@ -287,7 +288,7 @@ class SnoteScreenCaptureService : Service() {
         try { captureThread?.quitSafely() } catch (_: Exception) {}
         captureThread = null
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
-        else @Suppress("DEPRECATION") stopForeground(true)
+        else stopForeground(true)
         stopSelf()
     }
 
