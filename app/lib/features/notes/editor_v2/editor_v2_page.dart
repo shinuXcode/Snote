@@ -1904,6 +1904,12 @@ class _EditorV2PageState extends State<EditorV2Page>
   }
 
   Future<void> _chooseTemplate() async {
+    if (_pageData['locked'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unlock this page before changing its template.')),
+      );
+      return;
+    }
     final selected = await showModalBottomSheet<PageTemplate>(
       context: context,
       isScrollControlled: true,
@@ -1979,7 +1985,6 @@ class _EditorV2PageState extends State<EditorV2Page>
   }
 
   void _addPage({int? insertAfter}) {
-    if (_pageData['locked'] == true) return;
     _pushUndo();
     final previous = _pageData;
     final page = EditorV2DocumentCodec.normalizePage(<String, Object?>{
@@ -2065,12 +2070,17 @@ class _EditorV2PageState extends State<EditorV2Page>
 
   void _cutPage(int index) {
     if (index < 0 || index >= _pages.length) return;
+    if (_pages[index]['locked'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unlock this page before cutting it.')),
+      );
+      return;
+    }
     _copyPage(index);
     _deletePage(index);
   }
 
   void _pastePage({int? insertAfter}) {
-    if (_pageData['locked'] == true) return;
     final source = _pageClipboard;
     if (source == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copy a page first.')));
@@ -2095,6 +2105,12 @@ class _EditorV2PageState extends State<EditorV2Page>
 
   void _deletePage(int index) {
     if (index < 0 || index >= _pages.length) return;
+    if (_pages[index]['locked'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unlock this page before deleting it.')),
+      );
+      return;
+    }
     _pushUndo();
     setState(() {
       if (_pages.length == 1) {
