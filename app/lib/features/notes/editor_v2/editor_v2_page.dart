@@ -3972,8 +3972,13 @@ class _EditorV2PageState extends State<EditorV2Page>
       'A4': Size(816, 1152),
       'A5': Size(576, 816),
       'A6': Size(408, 576),
+      'B0': Size(3264, 4615),
+      'B1': Size(2306, 3264),
+      'B2': Size(1632, 2306),
+      'B3': Size(1152, 1632),
       'B4': Size(960, 1358),
       'B5': Size(680, 960),
+      'B6': Size(408, 574),
       'Letter': Size(816, 1056),
       'Legal': Size(816, 1344),
       'Tabloid': Size(1056, 1632),
@@ -4105,24 +4110,34 @@ class _EditorV2PageState extends State<EditorV2Page>
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: _palette.map((color) => InkWell(
-                        onTap: () => setDialogState(() => paperColor = color),
-                        borderRadius: BorderRadius.circular(20),
-                        child: Container(
-                          width: 25,
-                          height: 25,
-                          decoration: BoxDecoration(
-                            color: color,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: color.toARGB32() == paperColor.toARGB32()
-                                  ? Theme.of(context).colorScheme.primary
-                                  : Theme.of(context).colorScheme.outlineVariant,
-                              width: color.toARGB32() == paperColor.toARGB32() ? 3 : 1,
+                      children: [
+                        ..._palette.map((color) => InkWell(
+                          onTap: () => setDialogState(() => paperColor = color),
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            width: 25,
+                            height: 25,
+                            decoration: BoxDecoration(
+                              color: color,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: color.toARGB32() == paperColor.toARGB32()
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Theme.of(context).colorScheme.outlineVariant,
+                                width: color.toARGB32() == paperColor.toARGB32() ? 3 : 1,
+                              ),
                             ),
                           ),
+                        )),
+                        ActionChip(
+                          avatar: const Icon(Icons.colorize_rounded, size: 16),
+                          label: const Text('Custom…'),
+                          onPressed: () async {
+                            final candidate = await _pickCustomColor(initial: paperColor, title: 'Custom paper background');
+                            if (candidate != null) setDialogState(() => paperColor = candidate);
+                          },
                         ),
-                      )).toList(),
+                      ],
                     ),
                   ],
                 ),
