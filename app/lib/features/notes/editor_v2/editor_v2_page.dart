@@ -1173,7 +1173,6 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
 
     setState(() {
-      _lassoRect = normalized;
       _selectedStrokeIds
         ..clear()
         ..addAll(selectedStrokes);
@@ -1183,7 +1182,10 @@ class _EditorV2PageState extends State<EditorV2Page>
       _selectedTextBoxIds
         ..clear()
         ..addAll(selectedTextBoxes);
+      _lassoRect = normalized;
     });
+    final contentBounds = _selectionBounds();
+    setState(() => _lassoRect = contentBounds);
   }
 
   void _deleteSelection() {
@@ -3583,7 +3585,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                 left: _selectionBounds()!.center.dx - 11,
                 top: _selectionBounds()!.top - 12,
                 child: Tooltip(
-                  message: 'Drag to move selected strokes',
+                  message: 'Drag to move selected content',
                   child: GestureDetector(
                     onPanStart: (_) => _startSelectionTransform(resize: false),
                     onPanUpdate: (details) => _updateSelectionTransform(details.delta),
