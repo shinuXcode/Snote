@@ -153,9 +153,14 @@ class _EditorV2PageState extends State<EditorV2Page>
   Stroke? _liveStroke;
   Rect? _lassoRect;
   final Set<String> _selectedStrokeIds = <String>{};
+  final Set<String> _selectedImageIds = <String>{};
+  final Set<String> _selectedTextBoxIds = <String>{};
   final Map<String, Map<String, Object?>> _toolProfiles = <String, Map<String, Object?>>{};
   List<Map<String, Object?>> _strokeClipboard = <Map<String, Object?>>[];
   Map<String, Object?>? _pageClipboard;
+  Map<String, Object?>? _selectionClipboard;
+  List<Map<String, Object?>>? _selectionTransformImageSnapshot;
+  List<Map<String, Object?>>? _selectionTransformTextSnapshot;
   bool _showFavoritesShowcase = true;
   bool _showPageNavigation = true;
   bool _floatingPageNavigation = false;
@@ -1108,6 +1113,15 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
     return tMin <= tMax;
   }
+
+  void _clearSelectionIds() {
+    _selectedStrokeIds.clear();
+    _selectedImageIds.clear();
+    _selectedTextBoxIds.clear();
+  }
+
+  int get _selectionCount =>
+      _selectedStrokeIds.length + _selectedImageIds.length + _selectedTextBoxIds.length;
 
   void _selectInRect(Rect rect) {
     final normalized = Rect.fromLTRB(
