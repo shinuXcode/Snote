@@ -260,7 +260,7 @@ class InkHitTesting {
     }
 
     if (enter > exit) return null;
-    return <double>[enter.clamp(0.0, 1.0), exit.clamp(0.0, 1.0)];
+    return <double>[enter.clamp(0.0, 1.0).toDouble(), exit.clamp(0.0, 1.0).toDouble()];
   }
 
   /// Public point-in-polygon test shared by selection and smart fill.
