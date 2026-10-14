@@ -4979,8 +4979,9 @@ class _EditorV2PageState extends State<EditorV2Page>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Container(
-                          height: cardHeight,
+                        RepaintBoundary(
+                          child: Container(
+                            height: cardHeight,
                           decoration: BoxDecoration(
                             color: Theme.of(context).colorScheme.surface,
                             borderRadius: BorderRadius.circular(9),
@@ -5128,6 +5129,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                               ],
                             ),
                           ),
+                        ),
                         ),
                       ],
                     ),
