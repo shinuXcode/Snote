@@ -106,6 +106,8 @@ class _EditorV2PageState extends State<EditorV2Page>
   final Set<int> _stylusPointers = <int>{};
   Timer? _holdTimer;
   Offset? _holdStartPosition;
+  Offset? _pageSwipeStart;
+  bool _pageSwipeTriggered = false;
   bool _longPressTriggered = false;
   final List<List<Map<String, Object?>>> _undoStack =
       <List<Map<String, Object?>>>[];
@@ -739,6 +741,17 @@ class _EditorV2PageState extends State<EditorV2Page>
     _activePointer = event.pointer;
     _gestureStart = event.localPosition;
     _holdStartPosition = event.localPosition;
+    final touchPosition = event.localPosition;
+    final atPageEdge = touchPosition.dx < 30 ||
+        touchPosition.dx > _pageWidth - 30 ||
+        touchPosition.dy < 30 ||
+        touchPosition.dy > _pageHeight - 30;
+    _pageSwipeStart = event.kind == PointerDeviceKind.touch &&
+            _settings.getBool('pageSwipe') &&
+            atPageEdge
+        ? touchPosition
+        : null;
+    _pageSwipeTriggered = false;
     _longPressTriggered = false;
     _livePoints = <StrokePoint>[_pointFrom(event)];
     _eraserCursor = event.localPosition;
@@ -776,6 +789,27 @@ class _EditorV2PageState extends State<EditorV2Page>
 
   void _onPointerMove(PointerMoveEvent event) {
     if (_ignoredPointers.contains(event.pointer)) return;
+    if (_activePointer == event.pointer &&
+        _pageSwipeStart != null &&
+        !_pageSwipeTriggered &&
+        !_pressureEraseActive &&
+        !_longPressTriggered) {
+      final swipe = event.localPosition - _pageSwipeStart!;
+      final horizontalSwipe = swipe.dx.abs() > swipe.dy.abs() * 1.25;
+      final verticalSwipe = swipe.dy.abs() > swipe.dx.abs() * 1.25;
+      if (swipe.distance >= 56 && (horizontalSwipe || verticalSwipe)) {
+        _pageSwipeTriggered = true;
+        _holdTimer?.cancel();
+        _holdTimer = null;
+        _holdStartPosition = null;
+        _livePoints.clear();
+        _liveStroke = null;
+        _eraserCursor = null;
+        setState(() {});
+        return;
+      }
+    }
+    if (_activePointer == event.pointer && _pageSwipeTriggered) return;
     if (_activePointer == event.pointer && _holdStartPosition != null &&
         (event.localPosition - _holdStartPosition!).distance > 11 &&
         !_pressureEraseActive && !_longPressTriggered) {
@@ -815,6 +849,28 @@ class _EditorV2PageState extends State<EditorV2Page>
     _holdStartPosition = null;
     if (_ignoredPointers.remove(event.pointer)) return;
     if (_activePointer != event.pointer) return;
+    if (_pageSwipeTriggered && _pageSwipeStart != null) {
+      final swipe = event.localPosition - _pageSwipeStart!;
+      final horizontalSwipe = swipe.dx.abs() > swipe.dy.abs() * 1.25;
+      final forward = horizontalSwipe ? swipe.dx < 0 : swipe.dy < 0;
+      setState(() {
+        _activePointer = null;
+        _gestureStart = null;
+        _pageSwipeStart = null;
+        _pageSwipeTriggered = false;
+        _livePoints.clear();
+        _liveStroke = null;
+        _eraserCursor = null;
+      });
+      if (forward) {
+        if (_page + 1 < _pages.length) _goToPage(_page + 1);
+      } else if (_page > 0) {
+        _goToPage(_page - 1);
+      }
+      return;
+    }
+    _pageSwipeStart = null;
+    _pageSwipeTriggered = false;
     if (_longPressTriggered) {
       final wasPressureErase = _pressureEraseActive;
       final restoreTool = _toolBeforePressureErase;
@@ -884,6 +940,8 @@ class _EditorV2PageState extends State<EditorV2Page>
     _holdTimer?.cancel();
     _holdTimer = null;
     _holdStartPosition = null;
+    _pageSwipeStart = null;
+    _pageSwipeTriggered = false;
     final restoreTool = _pressureEraseActive ? _toolBeforePressureErase : null;
     _toolBeforePressureErase = null;
     _pressureEraseActive = false;
