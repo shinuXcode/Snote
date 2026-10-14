@@ -7323,7 +7323,14 @@ class _EditorV2ShapePreviewPainter extends CustomPainter {
 class _EditorV2ToolPicker extends StatefulWidget {
   final CanvasTool selected;
   final String? initialCategory;
-  const _EditorV2ToolPicker({required this.selected, this.initialCategory});
+  final Set<String> favoriteShapes;
+  final ValueChanged<Set<String>> onFavoriteShapesChanged;
+  const _EditorV2ToolPicker({
+    required this.selected,
+    this.initialCategory,
+    required this.favoriteShapes,
+    required this.onFavoriteShapesChanged,
+  });
 
   @override
   State<_EditorV2ToolPicker> createState() => _EditorV2ToolPickerState();
@@ -7331,12 +7338,24 @@ class _EditorV2ToolPicker extends StatefulWidget {
 
 class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
   final TextEditingController _search = TextEditingController();
+  final Set<String> _favoriteShapes = <String>{};
   String _category = 'All tools';
 
   @override
   void initState() {
     super.initState();
+    _favoriteShapes.addAll(widget.favoriteShapes);
     if (widget.initialCategory != null) _category = widget.initialCategory!;
+  }
+
+  void _toggleShapeFavorite(CanvasTool tool) {
+    if (!tool.isShape) return;
+    setState(() {
+      if (!_favoriteShapes.add(tool.name)) {
+        _favoriteShapes.remove(tool.name);
+      }
+    });
+    widget.onFavoriteShapesChanged(Set<String>.from(_favoriteShapes));
   }
   Offset _lastGlobalPointer = Offset.zero;
 
@@ -7465,7 +7484,7 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
   @override
   Widget build(BuildContext context) {
     final categories = <String>[
-      'All tools', 'Pens', 'Editing', 'Shapes & diagrams', 'Geometry & symbols',
+      'All tools', 'Favorites', 'Pens', 'Editing', 'Shapes & diagrams', 'Geometry & symbols',
       'Rulers & measuring', 'Math & graphs', 'Charts & flowcharts',
       'Physics & mechanics', 'Electrical circuits', 'Chemistry', 'Biology', 'Stickers',
     ];
@@ -7474,7 +7493,11 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
       final matchesQuery = query.isEmpty ||
           tool.label.toLowerCase().contains(query) ||
           tool.name.toLowerCase().contains(query);
-      return tool != CanvasTool.pixelEraser && matchesQuery && (_category == 'All tools' || _categoryOf(tool) == _category);
+      final matchesCategory = _category == 'All tools' ||
+          (_category == 'Favorites'
+              ? tool.isShape && _favoriteShapes.contains(tool.name)
+              : _categoryOf(tool) == _category);
+      return tool != CanvasTool.pixelEraser && matchesQuery && matchesCategory;
     }).toList();
     return SafeArea(
       child: Padding(
@@ -7538,25 +7561,54 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: selected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outlineVariant),
                       ),
-                      child: Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(5),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _toolPreview(tool),
-                              const SizedBox(height: 4),
-                              Text(
-                                tool.label,
-                                textAlign: TextAlign.center,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(5),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _toolPreview(tool),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    tool.label,
+                                    textAlign: TextAlign.center,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
+                                  ),
+                                ],
                               ),
-                            ],
+                            ),
                           ),
-                        ),
+                          if (tool.isShape)
+                            Positioned(
+                              top: 0,
+                              right: 0,
+                              width: 28,
+                              height: 28,
+                              child: IconButton(
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                tooltip: _favoriteShapes.contains(tool.name)
+                                    ? 'Remove shape from favorites'
+                                    : 'Add shape to favorites',
+                                onPressed: () => _toggleShapeFavorite(tool),
+                                icon: Icon(
+                                  _favoriteShapes.contains(tool.name)
+                                      ? Icons.star_rounded
+                                      : Icons.star_border_rounded,
+                                  size: 16,
+                                  color: _favoriteShapes.contains(tool.name)
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Theme.of(context).colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   );
