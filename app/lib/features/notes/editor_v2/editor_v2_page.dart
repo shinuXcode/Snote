@@ -2893,7 +2893,6 @@ class _EditorV2PageState extends State<EditorV2Page>
                       scrollController: _quillScroll,
                       controller: _quill,
                       config: QuillEditorConfig(
-                        readOnly: page['locked'] == true,
                         placeholder: 'Start writing rich text…',
                       ),
                     ),
