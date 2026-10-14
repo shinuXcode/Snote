@@ -230,7 +230,7 @@ class _SettingsPageState extends State<SettingsPage> {
         _toggle('writingPostureRightHand', 'Writing posture — right hand', 'Optimize floating controls for right-handed writing.'),
         _toggle('disableBackGesture', 'Disable back gesture', 'Use the visible editor back button.'),
         _toggle('turnOffPush', 'Turn off push', 'Disable non-essential push surfaces.'),
-        _toggle('pageSwipe', 'Page swipe navigation', 'Swipe left/right to navigate pages.'),
+        _toggle('pageSwipe', 'Page swipe navigation', 'Swipe from page edges horizontally or vertically to turn pages.'),
         _toggle('autoAddPage', 'Auto add page', 'Create the next numbered page when swiping past the end.'),
         _toggle('securePagePreviews', 'Preview lock / privacy', 'Hide handwritten content in the page preview rail.'),
       ]),
