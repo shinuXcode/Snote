@@ -2491,6 +2491,475 @@ class _EditorV2PageState extends State<EditorV2Page>
   }
 }
 
+class _ScientificCalculatorDialog extends StatefulWidget {
+  final double initialWidth;
+  final double initialHeight;
+  final void Function(double width, double height) onResize;
+
+  const _ScientificCalculatorDialog({
+    required this.initialWidth,
+    required this.initialHeight,
+    required this.onResize,
+  });
+
+  @override
+  State<_ScientificCalculatorDialog> createState() => _ScientificCalculatorDialogState();
+}
+
+class _ScientificCalculatorDialogState extends State<_ScientificCalculatorDialog> {
+  final TextEditingController _expression = TextEditingController();
+  String _answer = '0';
+  String? _error;
+  bool _degrees = true;
+  double _width = 330;
+  double _height = 470;
+
+  static const List<String> _keys = <String>[
+    'sin', 'cos', 'tan', '√', '(', ')', '⌫',
+    'C', 'ln', 'log', 'π', '^', '÷', '×',
+    '7', '8', '9', 'AC', '4', '5', '6', '−',
+    '1', '2', '3', '+', '0', '.', 'e', '=',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _width = widget.initialWidth;
+    _height = widget.initialHeight;
+  }
+
+  void _press(String key) {
+    setState(() {
+      _error = null;
+      if (key == 'C' || key == 'AC') {
+        _expression.clear();
+        _answer = '0';
+        return;
+      }
+      if (key == '⌫') {
+        final text = _expression.text;
+        if (text.isNotEmpty) {
+          _expression.text = text.substring(0, text.length - 1);
+          _expression.selection = TextSelection.collapsed(offset: _expression.text.length);
+        }
+        return;
+      }
+      if (key == '=') {
+        try {
+          final value = _ScientificExpressionParser(_expression.text, degrees: _degrees).parse();
+          if (!value.isFinite) throw const FormatException('Result is not finite');
+          _answer = value.abs() < 1e-12 ? '0' : _format(value);
+        } catch (error) {
+          _error = 'Invalid expression';
+        }
+        return;
+      }
+      final insert = switch (key) {
+        '√' => 'sqrt(',
+        'π' => 'pi',
+        '÷' => '/',
+        '×' => '*',
+        '−' => '-',
+        'sin' || 'cos' || 'tan' || 'ln' || 'log' => '$key(',
+        _ => key,
+      };
+      _expression.text += insert;
+      _expression.selection = TextSelection.collapsed(offset: _expression.text.length);
+    });
+  }
+
+  String _format(double value) {
+    final fixed = value.toStringAsPrecision(10);
+    return fixed.contains('.') ? fixed.replaceFirst(RegExp(r'\.?0+
+  final CanvasTool selected;
+  const _EditorV2ToolPicker({required this.selected});
+
+  @override
+  State<_EditorV2ToolPicker> createState() => _EditorV2ToolPickerState();
+}
+
+class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
+  final TextEditingController _search = TextEditingController();
+  String _category = 'All tools';
+
+  static const Set<String> _mathTools = <String>{
+    'unitCircle', 'cubicGraph', 'exponentialGraph', 'logarithmicGraph',
+    'tangentGraph', 'ellipseAxes', 'vectorField', 'polarGraph',
+    'cartesianPlane', 'coordinateAxes', 'parabola', 'sineWave', 'angle',
+    'vectorArrow', 'projectilePath', 'numberLine',
+  };
+  static const Set<String> _chartTools = <String>{
+    'histogram', 'barChart', 'pieChart', 'flowchartTerminator',
+    'flowchartProcess', 'flowchartDecision', 'flowchartInputOutput',
+    'flowchartDocument', 'flowchartDatabase', 'flowchartConnector',
+    'timeline', 'tableGrid', 'checklist',
+  };
+  static const Set<String> _physicsTools = <String>{
+    'rayDiagram', 'convexLens', 'concaveLens', 'planeMirror',
+    'forceDiagram', 'pulley', 'spring', 'lever', 'inclinedPlane',
+    'gear', 'magnet', 'thermometer', 'stopwatch', 'waveform',
+  };
+  static const Set<String> _circuitTools = <String>{
+    'circuitResistor', 'circuitBattery', 'capacitor', 'circuitSwitch', 'circuitLamp',
+  };
+  static const Set<String> _chemistryTools = <String>{
+    'atom', 'molecule', 'benzeneRing', 'beaker', 'testTube',
+    'conicalFlask', 'orbital',
+  };
+  static const Set<String> _biologyTools = <String>{
+    'animalCell', 'plantCell', 'dnaHelix', 'neuron', 'leaf', 'microscope',
+  };
+  static const Set<String> _instrumentTools = <String>{
+    'ruler', 'compass', 'protractor', 'divider', 'dashedLine', 'dottedLine',
+  };
+
+  String _categoryOf(CanvasTool tool) {
+    if (tool.isPen) return 'Pens';
+    if (const {'eraser', 'pixelEraser', 'lasso'}.contains(tool.name)) return 'Editing';
+    if (_mathTools.contains(tool.name)) return 'Math & graphs';
+    if (_chartTools.contains(tool.name)) return 'Charts & flowcharts';
+    if (_physicsTools.contains(tool.name)) return 'Physics & mechanics';
+    if (_circuitTools.contains(tool.name)) return 'Electrical circuits';
+    if (_chemistryTools.contains(tool.name)) return 'Chemistry';
+    if (_biologyTools.contains(tool.name)) return 'Biology';
+    if (_instrumentTools.contains(tool.name)) return 'Rulers & measuring';
+    return 'Shapes & diagrams';
+  }
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final categories = <String>[
+      'All tools', 'Pens', 'Editing', 'Shapes & diagrams', 'Rulers & measuring',
+      'Math & graphs', 'Charts & flowcharts', 'Physics & mechanics',
+      'Electrical circuits', 'Chemistry', 'Biology',
+    ];
+    final query = _search.text.trim().toLowerCase();
+    final items = CanvasTool.values.where((tool) {
+      final matchesQuery = query.isEmpty ||
+          tool.label.toLowerCase().contains(query) ||
+          tool.name.toLowerCase().contains(query);
+      return matchesQuery &&
+          (_category == 'All tools' || _categoryOf(tool) == _category);
+    }).toList();
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(16, 4, 16, 16 + MediaQuery.viewInsetsOf(context).bottom),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _search,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.search_rounded),
+                hintText: 'Search pens, shapes, graphs or science tools',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 40,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: categories.map((category) => Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: ChoiceChip(
+                    label: Text(category, style: const TextStyle(fontSize: 11)),
+                    selected: _category == category,
+                    onSelected: (_) => setState(() => _category = category),
+                  ),
+                )).toList(),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: MediaQuery.sizeOf(context).height * .52,
+              child: GridView.builder(
+                itemCount: items.length,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  childAspectRatio: 1.3,
+                ),
+                itemBuilder: (_, index) {
+                  final tool = items[index];
+                  final selected = tool == widget.selected;
+                  return InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () => Navigator.pop(context, tool),
+                    child: Ink(
+                      decoration: BoxDecoration(
+                        color: selected ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: selected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outlineVariant),
+                      ),
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(6),
+                          child: Text(tool.label, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+), '') : fixed;
+  }
+
+  @override
+  void dispose() {
+    _expression.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final screen = MediaQuery.sizeOf(context);
+    final width = _width.clamp(290.0, math.max(290.0, screen.width - 24)).toDouble();
+    final height = _height.clamp(380.0, math.max(380.0, screen.height - 40)).toDouble();
+    final scheme = Theme.of(context).colorScheme;
+    return Dialog(
+      insetPadding: const EdgeInsets.all(12),
+      backgroundColor: scheme.surface,
+      clipBehavior: Clip.antiAlias,
+      child: SizedBox(
+        width: width,
+        height: height,
+        child: Column(
+          children: [
+            GestureDetector(
+              onPanUpdate: (details) {
+                setState(() {
+                  _width = (_width + details.delta.dx).clamp(290.0, math.max(290.0, screen.width - 24)).toDouble();
+                  _height = (_height + details.delta.dy).clamp(380.0, math.max(380.0, screen.height - 40)).toDouble();
+                  widget.onResize(_width, _height);
+                });
+              },
+              child: Container(
+                color: scheme.primaryContainer,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.calculate_rounded, size: 19),
+                    const SizedBox(width: 8),
+                    const Expanded(child: Text('Scientific calculator', style: TextStyle(fontWeight: FontWeight.w800))),
+                    TextButton(
+                      onPressed: () => setState(() => _degrees = !_degrees),
+                      child: Text(_degrees ? 'DEG' : 'RAD'),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    controller: _expression,
+                    textAlign: TextAlign.end,
+                    style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w600, fontFeatures: [ui.FontFeature.tabularFigures()]),
+                    decoration: const InputDecoration(
+                      hintText: '0',
+                      border: InputBorder.none,
+                      isDense: true,
+                    ),
+                    onSubmitted: (_) => _press('='),
+                  ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(_error ?? _answer, style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: _error == null ? scheme.primary : scheme.error, fontFeatures: const [ui.FontFeature.tabularFigures()])),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: GridView.builder(
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _keys.length,
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 4,
+                    crossAxisSpacing: 6,
+                    mainAxisSpacing: 6,
+                    childAspectRatio: 1.35,
+                  ),
+                  itemBuilder: (_, index) {
+                    final key = _keys[index];
+                    final isOperator = const {'÷', '×', '−', '+', '^', '='}.contains(key);
+                    final isUtility = const {'C', 'AC', '⌫'}.contains(key);
+                    return FilledButton.tonal(
+                      style: FilledButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        backgroundColor: isOperator
+                            ? scheme.primaryContainer
+                            : isUtility
+                                ? scheme.secondaryContainer
+                                : scheme.surfaceContainerHigh,
+                        foregroundColor: scheme.onSurface,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      onPressed: () => _press(key),
+                      child: Text(key, style: TextStyle(fontSize: key.length > 2 ? 14 : 19, fontWeight: FontWeight.w700)),
+                    );
+                  },
+                ),
+              ),
+            ),
+            GestureDetector(
+              onPanUpdate: (details) {
+                setState(() {
+                  _width = (_width + details.delta.dx).clamp(290.0, math.max(290.0, screen.width - 24)).toDouble();
+                  _height = (_height + details.delta.dy).clamp(380.0, math.max(380.0, screen.height - 40)).toDouble();
+                  widget.onResize(_width, _height);
+                });
+              },
+              child: Container(
+                height: 18,
+                alignment: Alignment.bottomRight,
+                padding: const EdgeInsets.only(right: 4, bottom: 2),
+                child: Icon(Icons.drag_handle_rounded, size: 18, color: scheme.outline),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ScientificExpressionParser {
+  final String source;
+  final bool degrees;
+  int _index = 0;
+
+  _ScientificExpressionParser(String input, {required this.degrees})
+      : source = input.replaceAll('×', '*').replaceAll('÷', '/').replaceAll('−', '-').replaceAll('π', 'pi');
+
+  double parse() {
+    final value = _expression();
+    _space();
+    if (_index != source.length) throw const FormatException('Unexpected token');
+    return value;
+  }
+
+  void _space() {
+    while (_index < source.length && source[_index].trim().isEmpty) {
+      _index++;
+    }
+  }
+
+  bool _eat(String token) {
+    _space();
+    if (source.startsWith(token, _index)) {
+      _index += token.length;
+      return true;
+    }
+    return false;
+  }
+
+  double _expression() {
+    var value = _term();
+    while (true) {
+      if (_eat('+')) {
+        value += _term();
+      } else if (_eat('-')) {
+        value -= _term();
+      } else {
+        return value;
+      }
+    }
+  }
+
+  double _term() {
+    var value = _power();
+    while (true) {
+      if (_eat('*')) {
+        value *= _power();
+      } else if (_eat('/')) {
+        final divisor = _power();
+        if (divisor == 0) throw const FormatException('Division by zero');
+        value /= divisor;
+      } else {
+        return value;
+      }
+    }
+  }
+
+  double _power() {
+    final base = _unary();
+    if (_eat('^')) return math.pow(base, _power()).toDouble();
+    return base;
+  }
+
+  double _unary() {
+    if (_eat('+')) return _unary();
+    if (_eat('-')) return -_unary();
+    return _primary();
+  }
+
+  double _primary() {
+    _space();
+    if (_eat('(')) {
+      final value = _expression();
+      if (!_eat(')')) throw const FormatException('Missing closing parenthesis');
+      return value;
+    }
+    if (_index >= source.length) throw const FormatException('Missing value');
+    final char = source[_index];
+    if (RegExp(r'[a-zA-Z]').hasMatch(char)) {
+      final start = _index;
+      while (_index < source.length && RegExp(r'[a-zA-Z]').hasMatch(source[_index])) {
+        _index++;
+      }
+      final name = source.substring(start, _index).toLowerCase();
+      if (name == 'pi') return math.pi;
+      if (name == 'e') return math.e;
+      if (!_eat('(')) throw const FormatException('Function needs parentheses');
+      final argument = _expression();
+      if (!_eat(')')) throw const FormatException('Missing function parenthesis');
+      final angle = degrees ? argument * math.pi / 180 : argument;
+      return switch (name) {
+        'sin' => math.sin(angle),
+        'cos' => math.cos(angle),
+        'tan' => math.tan(angle),
+        'sqrt' => argument < 0 ? throw const FormatException('Negative square root') : math.sqrt(argument),
+        'ln' => argument <= 0 ? throw const FormatException('Invalid logarithm') : math.log(argument),
+        'log' => argument <= 0 ? throw const FormatException('Invalid logarithm') : math.log(argument) / math.ln10,
+        'abs' => argument.abs(),
+        _ => throw FormatException('Unknown function: $name'),
+      };
+    }
+    final rest = source.substring(_index);
+    final match = RegExp(r'^(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?').firstMatch(rest);
+    if (match == null) throw const FormatException('Expected a number');
+    _index += match.group(0)!.length;
+    return double.parse(match.group(0)!);
+  }
+}
+
 class _EditorV2ToolPicker extends StatefulWidget {
   final CanvasTool selected;
   const _EditorV2ToolPicker({required this.selected});
