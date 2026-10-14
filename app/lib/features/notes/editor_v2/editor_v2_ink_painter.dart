@@ -177,6 +177,17 @@ class EditorV2InkPainter extends CustomPainter {
       final velocitySensitivity =
           stroke.pen.velocitySensitivity.clamp(0.0, 1.0).toDouble();
       final lastIndex = stroke.points.length - 1;
+      // Reuse the segment paints instead of allocating two objects per point.
+      final edgePaint = Paint()
+        ..blendMode = paint.blendMode
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..isAntiAlias = true;
+      final inkPaint = Paint()
+        ..blendMode = paint.blendMode
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..isAntiAlias = true;
       for (var i = 1; i < stroke.points.length; i++) {
         final a = stroke.points[i - 1];
         final b = stroke.points[i];
@@ -199,20 +210,12 @@ class EditorV2InkPainter extends CustomPainter {
                 (1 - speedResponse * .08))
             .clamp(.04, 1.0)
             .toDouble();
-        final edgePaint = Paint()
+        edgePaint
           ..color = stroke.pen.color.withValues(alpha: flowAlpha * .13)
-          ..blendMode = paint.blendMode
-          ..strokeWidth = width + math.max(.45, baseWidth * .12)
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round
-          ..isAntiAlias = true;
-        final inkPaint = Paint()
+          ..strokeWidth = width + math.max(.45, baseWidth * .12);
+        inkPaint
           ..color = stroke.pen.color.withValues(alpha: flowAlpha)
-          ..blendMode = paint.blendMode
-          ..strokeWidth = width
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round
-          ..isAntiAlias = true;
+          ..strokeWidth = width;
         canvas.drawLine(a.position, b.position, edgePaint);
         canvas.drawLine(a.position, b.position, inkPaint);
       }
