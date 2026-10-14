@@ -1321,7 +1321,10 @@ class _EditorV2PageState extends State<EditorV2Page>
     _rememberCurrentToolProfile();
   }
 
-  Future<void> _strokeSettings([CanvasTool? requestedTool]) async {
+  Future<void> _strokeSettings([
+    CanvasTool? requestedTool,
+    Offset? globalAnchor,
+  ]) async {
     final targetTool = requestedTool ?? _tool;
     if (targetTool != _tool) _selectTool(targetTool);
     var size = _size;
@@ -1330,132 +1333,226 @@ class _EditorV2PageState extends State<EditorV2Page>
     var velocity = _velocitySensitivity;
     var curve = _pressureCurve;
     var color = _color;
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (context, setSheetState) => SafeArea(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(18, 8, 18, 22 + MediaQuery.viewInsetsOf(context).bottom),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('${targetTool.label} settings', style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 8,
-                    children: _palette.map((candidate) => InkWell(
-                      onTap: () => setSheetState(() => color = candidate),
-                      borderRadius: BorderRadius.circular(24),
-                      child: Container(
-                        width: 30,
-                        height: 30,
-                        decoration: BoxDecoration(
-                          color: candidate,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: candidate == color ? Theme.of(context).colorScheme.primary : Colors.black26,
-                            width: candidate == color ? 3 : 1,
-                          ),
-                        ),
-                      ),
-                    )).toList(),
-                  ),
-                  const SizedBox(height: 8),
-                  Text('Stroke size: ${size.toStringAsFixed(1)}'),
-                  Slider(
-                    min: .5, max: 40, value: size.clamp(.5, 40),
-                    onChanged: (value) => setSheetState(() => size = value),
-                  ),
-                  Text('Opacity: ${(opacity * 100).round()}%'),
-                  Slider(
-                    min: .05, max: 1, value: opacity.clamp(.05, 1),
-                    onChanged: (value) => setSheetState(() => opacity = value),
-                  ),
-                  Text('Pressure sensitivity: ${pressure.toStringAsFixed(2)}'),
-                  Slider(
-                    min: 0, max: 1, value: pressure,
-                    onChanged: (value) => setSheetState(() => pressure = value),
-                  ),
-                  Text('Velocity sensitivity: ${velocity.toStringAsFixed(2)}'),
-                  Slider(
-                    min: 0, max: 1, value: velocity,
-                    onChanged: (value) => setSheetState(() => velocity = value),
-                  ),
-                  DropdownButtonFormField<PressureCurve>(
-                    initialValue: curve,
-                    decoration: const InputDecoration(labelText: 'Pressure curve'),
-                    items: PressureCurve.values.map((value) => DropdownMenuItem(
-                      value: value, child: Text(value.name),
-                    )).toList(),
-                    onChanged: (value) {
-                      if (value != null) setSheetState(() => curve = value);
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      TextButton(
-                        onPressed: () {
-                          setState(() {
-                            _tool = targetTool;
-                            _size = size;
-                            _opacity = opacity;
-                            _pressureSensitivity = pressure;
-                            _velocitySensitivity = velocity;
-                            _pressureCurve = curve;
-                            _color = color;
-                          });
-                          _toolProfiles[targetTool.name] = <String, Object?>{
-                            'size': size,
-                            'color': color.toARGB32(),
-                            'opacity': opacity,
-                            'pressureSensitivity': pressure,
-                            'velocitySensitivity': velocity,
-                            'pressureCurve': curve.name,
-                          };
-                          unawaited(_saveToolProfiles());
-                          Navigator.pop(sheetContext);
-                        },
-                        child: const Text('Save to this tool'),
-                      ),
-                      const Spacer(),
-                      FilledButton(
-                        onPressed: () {
-                          setState(() {
-                            _tool = targetTool;
-                            _size = size;
-                            _opacity = opacity;
-                            _pressureSensitivity = pressure;
-                            _velocitySensitivity = velocity;
-                            _pressureCurve = curve;
-                            _color = color;
-                          });
-                          _toolProfiles[targetTool.name] = <String, Object?>{
-                            'size': size,
-                            'color': color.toARGB32(),
-                            'opacity': opacity,
-                            'pressureSensitivity': pressure,
-                            'velocitySensitivity': velocity,
-                            'pressureCurve': curve.name,
-                          };
-                          unawaited(_saveToolProfiles());
-                          Navigator.pop(sheetContext);
-                        },
-                        child: const Text('Done'),
-                      ),
-                    ],
-                  ),
-                ],
+
+    void saveProfile() {
+      setState(() {
+        _tool = targetTool;
+        _size = size;
+        _opacity = opacity;
+        _pressureSensitivity = pressure;
+        _velocitySensitivity = velocity;
+        _pressureCurve = curve;
+        _color = color;
+      });
+      _toolProfiles[targetTool.name] = <String, Object?>{
+        'size': size,
+        'color': color.toARGB32(),
+        'opacity': opacity,
+        'pressureSensitivity': pressure,
+        'velocitySensitivity': velocity,
+        'pressureCurve': curve.name,
+      };
+      unawaited(_saveToolProfiles());
+    }
+
+    Widget panel(
+      BuildContext panelContext,
+      StateSetter setPanelState,
+      VoidCallback close,
+    ) {
+      final isPopover = globalAnchor != null;
+      final controls = Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '\${targetTool.label} settings',
+                  style: Theme.of(panelContext).textTheme.titleMedium,
+                ),
               ),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                tooltip: 'Close tool settings',
+                onPressed: close,
+                icon: const Icon(Icons.close_rounded, size: 18),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _palette.map((candidate) => InkWell(
+              onTap: () => setPanelState(() => color = candidate),
+              borderRadius: BorderRadius.circular(24),
+              child: Container(
+                width: isPopover ? 25 : 30,
+                height: isPopover ? 25 : 30,
+                decoration: BoxDecoration(
+                  color: candidate,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: candidate == color
+                        ? Theme.of(panelContext).colorScheme.primary
+                        : Colors.black26,
+                    width: candidate == color ? 3 : 1,
+                  ),
+                ),
+              ),
+            )).toList(),
+          ),
+          const SizedBox(height: 8),
+          Text('Stroke size: \${size.toStringAsFixed(1)}'),
+          Slider(
+            min: .5,
+            max: 40,
+            value: size.clamp(.5, 40),
+            onChanged: (value) => setPanelState(() => size = value),
+          ),
+          Text('Opacity: \${(opacity * 100).round()}%'),
+          Slider(
+            min: .05,
+            max: 1,
+            value: opacity.clamp(.05, 1),
+            onChanged: (value) => setPanelState(() => opacity = value),
+          ),
+          Text('Pressure sensitivity: \${pressure.toStringAsFixed(2)}'),
+          Slider(
+            min: 0,
+            max: 1,
+            value: pressure,
+            onChanged: (value) => setPanelState(() => pressure = value),
+          ),
+          Text('Velocity sensitivity: \${velocity.toStringAsFixed(2)}'),
+          Slider(
+            min: 0,
+            max: 1,
+            value: velocity,
+            onChanged: (value) => setPanelState(() => velocity = value),
+          ),
+          DropdownButtonFormField<PressureCurve>(
+            initialValue: curve,
+            decoration: const InputDecoration(labelText: 'Pressure curve'),
+            items: PressureCurve.values.map((value) => DropdownMenuItem(
+              value: value,
+              child: Text(value.name),
+            )).toList(),
+            onChanged: (value) {
+              if (value != null) setPanelState(() => curve = value);
+            },
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              if (!isPopover)
+                TextButton(
+                  onPressed: () {
+                    saveProfile();
+                    close();
+                  },
+                  child: const Text('Save to this tool'),
+                ),
+              const Spacer(),
+              FilledButton(
+                onPressed: () {
+                  saveProfile();
+                  close();
+                },
+                child: const Text('Done'),
+              ),
+            ],
+          ),
+        ],
+      );
+      return Padding(
+        padding: EdgeInsets.fromLTRB(
+          isPopover ? 12 : 18,
+          4,
+          isPopover ? 12 : 18,
+          isPopover ? 10 : 22 + MediaQuery.viewInsetsOf(panelContext).bottom,
+        ),
+        child: SingleChildScrollView(child: controls),
+      );
+    }
+
+    if (globalAnchor == null) {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (sheetContext) => StatefulBuilder(
+          builder: (panelContext, setPanelState) => SafeArea(
+            child: panel(
+              panelContext,
+              setPanelState,
+              () => Navigator.pop(sheetContext),
             ),
           ),
         ),
-      ),
+      );
+      return;
+    }
+
+    await showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Close \${targetTool.label} settings',
+      barrierColor: Colors.black12,
+      transitionDuration: Duration.zero,
+      pageBuilder: (dialogContext, _, __) {
+        final screen = MediaQuery.sizeOf(dialogContext);
+        final width = math.min(350.0, screen.width - 16);
+        final anchor = globalAnchor;
+        final left = (anchor.dx > screen.width * .56
+                ? anchor.dx - width - 12
+                : anchor.dx + 12)
+            .clamp(8.0, math.max(8.0, screen.width - width - 8))
+            .toDouble();
+        final desiredTop = anchor.dy > screen.height * .68
+            ? anchor.dy - 350
+            : anchor.dy - 36;
+        final top = desiredTop
+            .clamp(8.0, math.max(8.0, screen.height - 420))
+            .toDouble();
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => Navigator.pop(dialogContext),
+              ),
+            ),
+            Positioned(
+              left: left,
+              top: top,
+              width: width,
+              child: Material(
+                color: Theme.of(dialogContext).colorScheme.surfaceContainerHigh,
+                elevation: 12,
+                borderRadius: BorderRadius.circular(14),
+                clipBehavior: Clip.antiAlias,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: math.min(440.0, screen.height - 24),
+                  ),
+                  child: StatefulBuilder(
+                    builder: (panelContext, setPanelState) => SafeArea(
+                      child: panel(
+                        panelContext,
+                        setPanelState,
+                        () => Navigator.pop(dialogContext),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
