@@ -57,16 +57,28 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
     if (_busy) return;
     final file = await FilePicker.pickFile(
       type: FileType.custom,
-      allowedExtensions: ['pdf'],
+      allowedExtensions: <String>['pdf'],
     );
-    if (file == null) return;
+    if (file == null || !mounted) return;
 
     setState(() => _busy = true);
     try {
       final bytes = await file.readAsBytes();
-      final note = await _notes.create(
-        title: file.name.replaceFirst(
-          RegExp(r'\.pdf
+      _annotationSaveTimer?.cancel();
+      await _persistPdfAnnotations();
+
+      final title = file.name.replaceFirst(
+        RegExp(r'\.pdf$', caseSensitive: false),
+        '',
+      );
+      final note = await _notes.create(title: title, folderId: widget.folderId);
+      final noteDocument = <String, Object?>{
+        'version': 5,
+        'pages': <Object?>[],
+        'pdf_annotations': <String, Object?>{},
+      };
+      await _notes.saveContent(note.id, noteDocument);
+
       final asset = await _documents.saveBytes(
         noteId: note.id,
         name: file.name,
@@ -74,8 +86,8 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
         bytes: bytes,
         metadata: <String, dynamic>{'source': 'pdf-import', 'isCover': true},
       );
-
       final controller = PdfControllerPinch(document: PdfDocument.openData(bytes));
+
       if (!mounted) {
         controller.dispose();
         await _documents.delete(asset);
@@ -84,13 +96,8 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
       }
 
       _controller?.dispose();
-      _annotationSaveTimer?.cancel();
       _pdfAnnotationDocuments.clear();
-      _pdfNoteDocument = <String, Object?>{
-        'version': 5,
-        'pages': <Object?>[],
-        'pdf_annotations': <String, Object?>{},
-      };
+      _pdfNoteDocument = noteDocument;
       _currentPageValue.value = 1;
       _pageCountValue.value = controller.pagesCount ?? 0;
       setState(() {
