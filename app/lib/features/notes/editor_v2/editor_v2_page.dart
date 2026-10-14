@@ -4576,8 +4576,6 @@ class _EditorV2PageState extends State<EditorV2Page>
           PopupMenuItem(value: 'float', child: Text('Toggle floating toolbar')),
           PopupMenuItem(value: 'favoritesShowcase', child: Text('Show / hide favorite pen case')),
           PopupMenuItem(value: 'favoritesOrientation', child: Text('Rotate pen case')),
-          PopupMenuItem(value: 'pageNavigation', child: Text('Show / hide page navigation')),
-          PopupMenuItem(value: 'floatingPageNavigation', child: Text('Toggle movable vertical page bar')),
           PopupMenuItem(value: 'pageSettings', child: Text('Note page and editor settings')),
           PopupMenuItem(value: 'zoomIn', child: Text('Zoom in')),
           PopupMenuItem(value: 'zoomOut', child: Text('Zoom out')),
@@ -5958,7 +5956,7 @@ class _EditorV2PageState extends State<EditorV2Page>
               ),
             ),
           if (_showFavoritesShowcase || _pencaseTools.isNotEmpty) _buildFavoriteShowcase(),
-          if (_showPageNavigation && _floatingPageNavigation) _buildFloatingPageNavigation(),
+          // Page navigation is now handled by the expanded page-preview sidebar.
           if (_calculatorVisible) _buildFloatingCalculator(),
           if (_fullScreenMode)
             Positioned(
