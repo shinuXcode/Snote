@@ -2394,6 +2394,8 @@ class _EditorV2PageState extends State<EditorV2Page>
         _addTextBox();
       case 'image':
         unawaited(_addImage());
+      case 'clipboardImage':
+        unawaited(_pasteClipboardImage());
       case 'sticker':
         unawaited(_addSticker());
       case 'pdf':
@@ -2499,6 +2501,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       action(tooltip: 'Color palette', icon: Icons.palette_outlined, color: _color, onPressed: _chooseColor),
       action(tooltip: 'Tool settings', icon: Icons.tune_rounded, onPressed: () => _strokeSettings()),
       action(tooltip: 'Text box', icon: Icons.text_fields_rounded, onPressed: _addTextBox),
+      action(tooltip: 'Paste screenshot from clipboard', icon: Icons.content_paste_rounded, onPressed: () => unawaited(_pasteClipboardImage())),
       action(tooltip: 'Scientific calculator', icon: Icons.calculate_outlined, onPressed: _openCalculator),
       action(tooltip: 'All tools / categories', icon: Icons.apps_rounded, onPressed: _openToolPicker),
       action(tooltip: 'Save current tool to pen case', icon: Icons.add_circle_outline_rounded, onPressed: _addFavoritePen),
@@ -2537,7 +2540,8 @@ class _EditorV2PageState extends State<EditorV2Page>
         onSelected: _onMenuSelected,
         itemBuilder: (_) => const <PopupMenuEntry<String>>[
           PopupMenuItem(value: 'text', child: Text('Insert text box')),
-          PopupMenuItem(value: 'image', child: Text('Insert image')),
+          PopupMenuItem(value: 'image', child: Text('Insert image from file')),
+          PopupMenuItem(value: 'clipboardImage', child: Text('Paste screenshot from clipboard')),
           PopupMenuItem(value: 'sticker', child: Text('Sticker library')),
           PopupMenuItem(value: 'pdf', child: Text('Import / annotate PDF')),
           PopupMenuItem(value: 'export', child: Text('Export pages to PDF')),
@@ -3516,7 +3520,8 @@ class _EditorV2PageState extends State<EditorV2Page>
               const PopupMenuItem(value: 'fit', child: Text('Fit page to width')),
               const PopupMenuItem(value: 'fullscreen', child: Text('Toggle full screen')),
               const PopupMenuItem(value: 'text', child: Text('Toggle rich text / handwriting')),
-              const PopupMenuItem(value: 'image', child: Text('Insert screenshot or image')),
+              const PopupMenuItem(value: 'image', child: Text('Insert image from file')),
+              const PopupMenuItem(value: 'clipboardImage', child: Text('Paste screenshot from clipboard')),
               const PopupMenuItem(value: 'pageSettings', child: Text('Note page settings')),
               const PopupMenuItem(value: 'appSettings', child: Text('App settings')),
               if (_hasPdfBackgroundPages) ...[
