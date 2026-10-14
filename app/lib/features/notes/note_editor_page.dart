@@ -1555,7 +1555,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     final keys = _toolKeysForLocation('pencase');
     if (keys.isEmpty) return const SizedBox.shrink();
     final size = MediaQuery.sizeOf(context);
-    final left = _pencaseX < 0 ? math.max(0.0, size.width - 54) : _pencaseX;
+    final left = (_pencaseX < 0 ? math.max(0.0, size.width - 54) : _pencaseX).toDouble();
     final top = _pencaseY.clamp(56.0, math.max(56.0, size.height - 100)).toDouble();
     final vertical = _pencaseSide == 'left' || _pencaseSide == 'right';
     final tools = <Widget>[
@@ -1572,10 +1572,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
             _pencaseDragging = false;
             if (xDistance <= yDistance) {
               _pencaseSide = left < size.width / 2 ? 'left' : 'right';
-              _pencaseX = _pencaseSide == 'left' ? 0 : math.max(0.0, size.width - 54);
+              _pencaseX = _pencaseSide == 'left' ? 0.0 : math.max(0.0, size.width - 54).toDouble();
             } else {
               _pencaseSide = top < size.height / 2 ? 'top' : 'bottom';
-              _pencaseY = _pencaseSide == 'top' ? 54 : math.max(56.0, size.height - 150);
+              _pencaseY = _pencaseSide == 'top' ? 54.0 : math.max(56.0, size.height - 150).toDouble();
             }
           });
         },
