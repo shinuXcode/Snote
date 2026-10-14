@@ -223,7 +223,14 @@ class EditorV2InkPainter extends CustomPainter {
       canvas.drawPath(path, paint);
     } else {
       // Use variable-width segments only: a full-width base path would hide
-      // the pressure effect beneath those segments.
+      // the pressure effect beneath those segments. Reuse one Paint for the
+      // whole stroke to avoid allocating an object for every pointer sample.
+      final segmentPaint = Paint()
+        ..color = paint.color
+        ..blendMode = paint.blendMode
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..isAntiAlias = true;
       for (var i = 1; i < stroke.points.length; i++) {
         final a = stroke.points[i - 1];
         final b = stroke.points[i];
@@ -231,17 +238,8 @@ class EditorV2InkPainter extends CustomPainter {
         final width = inkBaseWidth *
             (1 - stroke.pen.pressureSensitivity * .52 +
                 stroke.pen.pressureSensitivity * pressure);
-        canvas.drawLine(
-          a.position,
-          b.position,
-          Paint()
-            ..color = paint.color
-            ..blendMode = paint.blendMode
-            ..strokeWidth = width.clamp(.5, 60).toDouble()
-            ..strokeCap = StrokeCap.round
-            ..strokeJoin = StrokeJoin.round
-            ..isAntiAlias = true,
-        );
+        segmentPaint.strokeWidth = width.clamp(.5, 60).toDouble();
+        canvas.drawLine(a.position, b.position, segmentPaint);
       }
     }
   }
