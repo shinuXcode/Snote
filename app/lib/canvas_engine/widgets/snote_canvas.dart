@@ -132,7 +132,14 @@ class _LiveInkPainter extends CustomPainter {
         ..color = const Color(0xff4f6df6).withValues(alpha: .55)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.4;
-      canvas.drawCircle(eraserPoint!, eraserRadius, p);
+      canvas.drawRect(
+        Rect.fromCenter(
+          center: eraserPoint!,
+          width: eraserRadius * 2,
+          height: eraserRadius * 1.4,
+        ),
+        p,
+      );
     }
   }
 
@@ -606,6 +613,13 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     }
 
     _activePointer = event.pointer;
+    if (widget.tool == CanvasTool.fill) {
+      // A bucket tap is a discrete edit, not the start of an ink stroke.
+      _ignorePointer = true;
+      _fillAt(event.localPosition);
+      _repaint.repaint();
+      return;
+    }
     _temporaryEraser = widget.eraseWithStylusButton &&
         (event.kind == PointerDeviceKind.invertedStylus ||
             (event.kind == PointerDeviceKind.stylus &&
@@ -924,11 +938,15 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     for (final index in candidates) {
       if (index < 0 || index >= _strokes.length) continue;
       final stroke = _strokes[index];
-      final hitRadius = radius + stroke.pen.size / 2;
-      if (InkHitTesting.polylineTouchesCircle(
+      final footprint = Rect.fromCenter(
+        center: point,
+        width: radius * 2,
+        height: radius * 1.4,
+      );
+      if (InkHitTesting.polylineTouchesRect(
         stroke.points,
-        point,
-        hitRadius,
+        footprint,
+        padding: stroke.pen.size / 2,
       )) {
         if (!snapshotAlreadyTaken && !_eraseSnapshotTaken) {
           _snapshot();
@@ -962,10 +980,14 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
       final stroke = _strokes[index];
       final hitRadius = radius + stroke.pen.size / 2;
       if (stroke.shape != null || stroke.stickerText != null) {
-        if (InkHitTesting.polylineTouchesCircle(
+        if (InkHitTesting.polylineTouchesRect(
           stroke.points,
-          point,
-          hitRadius,
+          Rect.fromCenter(
+            center: point,
+            width: radius * 2,
+            height: radius * 1.4,
+          ),
+          padding: stroke.pen.size / 2,
         )) {
           if (!snapshotAlreadyTaken && !_eraseSnapshotTaken) {
             _snapshot();
@@ -978,18 +1000,21 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
         continue;
       }
 
-      if (!InkHitTesting.polylineTouchesCircle(
+      final footprint = Rect.fromCenter(
+        center: point,
+        width: radius * 2,
+        height: radius * 1.4,
+      ).inflate(stroke.pen.size / 2);
+      if (!InkHitTesting.polylineTouchesRect(
         stroke.points,
-        point,
-        hitRadius,
+        footprint,
       )) {
         continue;
       }
 
-      final pieces = InkHitTesting.subtractCircle(
+      final pieces = InkHitTesting.subtractRect(
         stroke.points,
-        point,
-        hitRadius,
+        footprint,
       );
 
       if (!snapshotAlreadyTaken && !_eraseSnapshotTaken) {
@@ -1016,6 +1041,56 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     widget.onEraserMiss?.call();
   }
 
+  bool _pointIsInsideStrokeFill(Stroke stroke, Offset point) {
+    if (stroke.points.length < 2 || stroke.stickerText != null) return false;
+    final shape = stroke.shape;
+    if (shape == 'line' || shape == 'arrow') return false;
+
+    if (shape != null) {
+      final bounds = _bounds(stroke.points);
+      if (shape == 'ellipse' || shape == 'circle') {
+        final rx = (shape == 'circle'
+                ? math.min(bounds.width, bounds.height)
+                : bounds.width) /
+            2;
+        final ry = (shape == 'circle'
+                ? math.min(bounds.width, bounds.height)
+                : bounds.height) /
+            2;
+        if (rx <= 0 || ry <= 0) return false;
+        final dx = (point.dx - bounds.center.dx) / rx;
+        final dy = (point.dy - bounds.center.dy) / ry;
+        return dx * dx + dy * dy <= 1;
+      }
+      return bounds.contains(point);
+    }
+
+    final positions = stroke.points.map((sample) => sample.position).toList();
+    final closedTolerance = math.max(14.0, stroke.pen.size * 4);
+    if ((positions.last - positions.first).distance > closedTolerance) {
+      return false;
+    }
+    return InkHitTesting.pointInPolygon(point, positions);
+  }
+
+  void _fillAt(Offset point) {
+    // Walk from front to back so a tap fills only the topmost enclosed shape.
+    for (var index = _strokes.length - 1; index >= 0; index--) {
+      final stroke = _strokes[index];
+      if (!_pointIsInsideStrokeFill(stroke, point)) continue;
+      if (stroke.fill) return;
+
+      _snapshot();
+      _strokes[index] = stroke.copyWith(
+        fill: true,
+        fillColor: widget.fillColor ?? widget.pen.color,
+        fillOpacity: .38,
+      );
+      _finishDocumentMutation();
+      return;
+    }
+  }
+
   void _finishLasso() {
     if (_lasso.length < 3) {
       _clearActiveState();
@@ -1024,7 +1099,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
 
     _selected.clear();
     for (final stroke in _strokes) {
-      if (InkHitTesting.polylineIntersectsPolygon(stroke.points, _lasso)) {
+      if (InkHitTesting.polylineMostlyInsidePolygon(stroke.points, _lasso)) {
         _selected.add(stroke.id);
       }
     }
