@@ -21,7 +21,7 @@ class SnoteSettings extends ChangeNotifier {
     'autoBackupLocal': true, 'writingPostureRightHand': true, 'disableBackGesture': false,
     'turnOffPush': false, 'pageSwipe': true, 'autoAddPage': true,
     'securePagePreviews': true, 'eInk': false, 'grayscaleEInk': true, 'reduceMotion': false,
-    'welcomeGuideSeen': false,
+    'welcomeGuideSeen': false, 'editorV2FloatingToolbar': false, 'editorV2FavoritesVertical': false, 'editorV2FloatingPageNavigation': false, 'editorV2ShowFavoritesShowcase': true,
   };
 
   static const doubleDefaults = <String, double>{
@@ -44,7 +44,7 @@ class SnoteSettings extends ChangeNotifier {
     'pencasePresets': '[]',
     'coverLibrary': '[]',
     'folderSort': 'nameAsc',
-    'pressureCurve': 'linear',
+    'pressureCurve': 'linear', 'editorV2ToolbarDock': 'top', 'editorV2FavoritePens': '[]', 'editorV2ToolProfiles': '{}',
     'toolSizes': '{}',
     'toolColors': '{}',
     'toolDashed': '{}',
