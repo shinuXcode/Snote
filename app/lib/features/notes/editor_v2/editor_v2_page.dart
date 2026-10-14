@@ -1185,7 +1185,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     if (_tool == CanvasTool.eraser || _tool == CanvasTool.pixelEraser) {
       _eraseAt(end, _tool == CanvasTool.pixelEraser ? 7 : math.max(18, _size * 2));
     } else if (_tool == CanvasTool.lasso) {
-      _selectInRect(Rect.fromPoints(start, end));
+      _selectInPolygon(completedPoints.map((sample) => sample.position).toList());
     } else if (_tool == CanvasTool.fill) {
       _fillShapeAt(end);
     } else if (completedPoints.isNotEmpty) {
@@ -1345,6 +1345,50 @@ class _EditorV2PageState extends State<EditorV2Page>
   int get _selectionCount =>
       _selectedStrokeIds.length + _selectedImageIds.length + _selectedTextBoxIds.length;
 
+  double _orientation(Offset a, Offset b, Offset c) =>
+      (b.dx - a.dx) * (c.dy - a.dy) - (b.dy - a.dy) * (c.dx - a.dx);
+
+  bool _pointOnSegment(Offset point, Offset a, Offset b) {
+    const epsilon = 1e-7;
+    if (_orientation(a, b, point).abs() > epsilon) return false;
+    return point.dx >= math.min(a.dx, b.dx) - epsilon &&
+        point.dx <= math.max(a.dx, b.dx) + epsilon &&
+        point.dy >= math.min(a.dy, b.dy) - epsilon &&
+        point.dy <= math.max(a.dy, b.dy) + epsilon;
+  }
+
+  bool _segmentsIntersect(Offset a, Offset b, Offset c, Offset d) {
+    final o1 = _orientation(a, b, c);
+    final o2 = _orientation(a, b, d);
+    final o3 = _orientation(c, d, a);
+    final o4 = _orientation(c, d, b);
+    const epsilon = 1e-7;
+    if (((o1 > epsilon && o2 < -epsilon) || (o1 < -epsilon && o2 > epsilon)) &&
+        ((o3 > epsilon && o4 < -epsilon) || (o3 < -epsilon && o4 > epsilon))) {
+      return true;
+    }
+    return (o1.abs() <= epsilon && _pointOnSegment(c, a, b)) ||
+        (o2.abs() <= epsilon && _pointOnSegment(d, a, b)) ||
+        (o3.abs() <= epsilon && _pointOnSegment(a, c, d)) ||
+        (o4.abs() <= epsilon && _pointOnSegment(b, c, d));
+  }
+
+  bool _polygonIntersectsRect(List<Offset> polygon, Rect rect) {
+    if (polygon.any(rect.contains)) return true;
+    final corners = <Offset>[rect.topLeft, rect.topRight, rect.bottomRight, rect.bottomLeft];
+    if (corners.any((corner) => _pointInPolygon(corner, polygon))) return true;
+    for (var i = 0; i < polygon.length; i++) {
+      final a = polygon[i];
+      final b = polygon[(i + 1) % polygon.length];
+      for (var j = 0; j < corners.length; j++) {
+        if (_segmentsIntersect(a, b, corners[j], corners[(j + 1) % corners.length])) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   void _selectInRect(Rect rect) {
     final normalized = Rect.fromLTRB(
       math.min(rect.left, rect.right),
@@ -1352,13 +1396,51 @@ class _EditorV2PageState extends State<EditorV2Page>
       math.max(rect.left, rect.right),
       math.max(rect.top, rect.bottom),
     );
-    final hitRect = normalized.inflate(2);
+    _selectInPolygon(<Offset>[
+      normalized.topLeft,
+      normalized.topRight,
+      normalized.bottomRight,
+      normalized.bottomLeft,
+    ]);
+  }
+
+  void _selectInPolygon(List<Offset> sourcePolygon) {
+    if (sourcePolygon.length < 3) {
+      if (sourcePolygon.isNotEmpty) _selectInRect(Rect.fromPoints(sourcePolygon.first, sourcePolygon.last));
+      return;
+    }
+    final polygon = List<Offset>.unmodifiable(sourcePolygon);
+    final xs = polygon.map((point) => point.dx);
+    final ys = polygon.map((point) => point.dy);
+    final left = xs.reduce((a, b) => math.min(a, b).toDouble());
+    final right = xs.reduce((a, b) => math.max(a, b).toDouble());
+    final top = ys.reduce((a, b) => math.min(a, b).toDouble());
+    final bottom = ys.reduce((a, b) => math.max(a, b).toDouble());
+    final polygonBounds = Rect.fromLTRB(left, top, right, bottom);
     final selectedStrokes = <String>{};
+
     for (final stroke in _strokesFor(_pageData)) {
-      final points = stroke.points.map((point) => point.position).toList();
-      var intersects = points.any(hitRect.contains);
+      final points = stroke.points.map((sample) => sample.position).toList();
+      if (points.isEmpty) continue;
+      var intersects = points.any((point) => _pointInPolygon(point, polygon));
       for (var i = 1; !intersects && i < points.length; i++) {
-        intersects = _segmentIntersectsRect(points[i - 1], points[i], hitRect);
+        for (var j = 0; j < polygon.length; j++) {
+          if (_segmentsIntersect(points[i - 1], points[i], polygon[j], polygon[(j + 1) % polygon.length])) {
+            intersects = true;
+            break;
+          }
+        }
+      }
+      if (!intersects && points.length >= 2) {
+        final tolerance = math.max(1.5, stroke.pen.size * .5);
+        for (var i = 0; !intersects && i < points.length; i++) {
+          for (var j = 0; j < polygon.length; j++) {
+            if (_distanceToSegment(points[i], polygon[j], polygon[(j + 1) % polygon.length]) <= tolerance) {
+              intersects = true;
+              break;
+            }
+          }
+        }
       }
       if (intersects) selectedStrokes.add(stroke.id);
     }
@@ -1375,7 +1457,7 @@ class _EditorV2PageState extends State<EditorV2Page>
         final width = (image['width'] as num?)?.toDouble() ?? .4;
         final height = (image['height'] as num?)?.toDouble() ?? .3;
         final bounds = Rect.fromLTWH(x * _pageWidth, y * _pageHeight, width * _pageWidth, height * _pageHeight);
-        if (hitRect.overlaps(bounds) || hitRect.contains(bounds.center)) selectedImages.add(id);
+        if (_polygonIntersectsRect(polygon, bounds)) selectedImages.add(id);
       }
     }
 
@@ -1391,7 +1473,7 @@ class _EditorV2PageState extends State<EditorV2Page>
         final width = (box['width'] as num?)?.toDouble() ?? .68;
         final height = (box['height'] as num?)?.toDouble() ?? .16;
         final bounds = Rect.fromLTWH(x * _pageWidth, y * _pageHeight, width * _pageWidth, height * _pageHeight);
-        if (hitRect.overlaps(bounds) || hitRect.contains(bounds.center)) selectedTextBoxes.add(id);
+        if (_polygonIntersectsRect(polygon, bounds)) selectedTextBoxes.add(id);
       }
     }
 
@@ -1405,7 +1487,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       _selectedTextBoxIds
         ..clear()
         ..addAll(selectedTextBoxes);
-      _lassoRect = normalized;
+      _lassoRect = polygonBounds;
     });
     final contentBounds = _selectionBounds();
     setState(() => _lassoRect = contentBounds);
@@ -3770,6 +3852,7 @@ class _EditorV2PageState extends State<EditorV2Page>
         child: InkWell(
           borderRadius: BorderRadius.circular(8),
           onTap: () => _selectTool(tool),
+          onDoubleTap: () => _strokeSettings(tool),
           onLongPress: () => _strokeSettings(tool),
           child: Container(
             width: _favoritesVertical ? 34 : 38,
@@ -4174,6 +4257,16 @@ class _EditorV2PageState extends State<EditorV2Page>
                 ),
               ),
             if (_lassoRect != null && _selectionCount > 0 && _selectionBounds() != null) ...[
+              Positioned.fromRect(
+                rect: _selectionBounds()!,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onPanStart: (_) => _startSelectionTransform(resize: false),
+                  onPanUpdate: (details) => _updateSelectionTransform(details.delta),
+                  onPanEnd: (_) => _finishSelectionTransform(),
+                  child: Container(color: Colors.transparent),
+                ),
+              ),
               Positioned(
                 left: _selectionBounds()!.center.dx - 11,
                 top: _selectionBounds()!.top - 12,
@@ -4231,12 +4324,6 @@ class _EditorV2PageState extends State<EditorV2Page>
                       IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Duplicate selection', onPressed: () => _pasteStrokes(duplicate: true), icon: const Icon(Icons.control_point_duplicate_rounded, size: 16)),
                       IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Bring selection to front', onPressed: () => _changeSelectionLayer(bringToFront: true), icon: const Icon(Icons.flip_to_front_rounded, size: 16)),
                       IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Send selection to back', onPressed: () => _changeSelectionLayer(bringToFront: false), icon: const Icon(Icons.flip_to_back_rounded, size: 16)),
-                      IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Increase selection size', onPressed: () => _scaleSelection(1.12), icon: const Icon(Icons.zoom_in_rounded, size: 16)),
-                      IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Decrease selection size', onPressed: () => _scaleSelection(.88), icon: const Icon(Icons.zoom_out_rounded, size: 16)),
-                      IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Move selection left', onPressed: () => _moveSelection(const Offset(-8, 0)), icon: const Icon(Icons.arrow_left_rounded, size: 16)),
-                      IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Move selection right', onPressed: () => _moveSelection(const Offset(8, 0)), icon: const Icon(Icons.arrow_right_rounded, size: 16)),
-                      IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Move selection up', onPressed: () => _moveSelection(const Offset(0, -8)), icon: const Icon(Icons.arrow_upward_rounded, size: 16)),
-                      IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Move selection down', onPressed: () => _moveSelection(const Offset(0, 8)), icon: const Icon(Icons.arrow_downward_rounded, size: 16)),
                       IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Delete selection', onPressed: _deleteSelection, icon: const Icon(Icons.delete_outline_rounded, size: 16, color: Colors.redAccent)),
                     ]),
                   ),
@@ -4281,127 +4368,115 @@ class _EditorV2PageState extends State<EditorV2Page>
 
   Widget _buildPageFooter() {
     final isBookmarked = _bookmarkedPages.contains(_page + 1);
-    return GestureDetector(
-      onHorizontalDragEnd: (details) {
-        final velocity = details.primaryVelocity ?? 0;
-        if (velocity < -120 && _page + 1 < _pages.length) {
-          _goToPage(_page + 1);
-        } else if (velocity > 120 && _page > 0) {
-          _goToPage(_page - 1);
-        }
-      },
-      onVerticalDragEnd: (details) {
-        final velocity = details.primaryVelocity ?? 0;
-        if (velocity < -120 && _page + 1 < _pages.length) {
-          _goToPage(_page + 1);
-        } else if (velocity > 120 && _page > 0) {
-          _goToPage(_page - 1);
-        }
-      },
-      child: Material(
-        color: Theme.of(context).colorScheme.surface,
-        child: SizedBox(
-          height: 36,
-          child: Row(
-            children: [
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints.tightFor(width: 32, height: 30),
-                tooltip: 'Previous page',
-                onPressed: _page > 0 ? () => _goToPage(_page - 1) : null,
-                icon: const Icon(Icons.chevron_left_rounded, size: 20),
-              ),
-              InkWell(
-                borderRadius: BorderRadius.circular(8),
-                onTap: _showPagePicker,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
-                  child: Text(
-                    '${_page + 1}/${_pages.length}',
-                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
-                  ),
+    return Align(
+      alignment: Alignment.centerRight,
+      heightFactor: 1,
+      child: Padding(
+        padding: const EdgeInsets.only(right: 8, bottom: 4),
+        child: Material(
+          color: Theme.of(context).colorScheme.surface,
+          elevation: 2,
+          borderRadius: BorderRadius.circular(20),
+          child: SizedBox(
+            width: 38,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(width: 30, height: 28),
+                  tooltip: 'Previous page',
+                  onPressed: _page > 0 ? () => _goToPage(_page - 1) : null,
+                  icon: const Icon(Icons.keyboard_arrow_up_rounded, size: 20),
                 ),
-              ),
-              if (_studyRemaining > 0 && MediaQuery.sizeOf(context).width >= 340)
-                Tooltip(
-                  message: 'Timer active • elapsed $_elapsedClock',
+                InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: _showPagePicker,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.timer_outlined, size: 15),
-                        const SizedBox(width: 3),
-                        Text(_clock, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, fontFeatures: [ui.FontFeature.tabularFigures()])),
-                      ],
+                    padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
+                    child: Text(
+                      '${_page + 1}\n/${_pages.length}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w900, height: 1.1),
                     ),
                   ),
                 ),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints.tightFor(width: 30, height: 30),
-                tooltip: isBookmarked ? 'Remove bookmark' : 'Bookmark page',
-                onPressed: _toggleBookmark,
-                icon: Icon(isBookmarked ? Icons.bookmark_rounded : Icons.bookmark_border_rounded, size: 17),
-              ),
-              if (_selectionCount > 0)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 3),
-                  child: Text('$_selectionCount selected', style: const TextStyle(fontSize: 10)),
+                if (_studyRemaining > 0)
+                  Tooltip(
+                    message: 'Timer active • elapsed $_elapsedClock',
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 3),
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        const Icon(Icons.timer_outlined, size: 13),
+                        Text(_clock, style: const TextStyle(fontSize: 8, fontWeight: FontWeight.w800, fontFeatures: [ui.FontFeature.tabularFigures()])),
+                      ]),
+                    ),
+                  ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(width: 30, height: 28),
+                  tooltip: isBookmarked ? 'Remove bookmark' : 'Bookmark page',
+                  onPressed: _toggleBookmark,
+                  icon: Icon(isBookmarked ? Icons.bookmark_rounded : Icons.bookmark_border_rounded, size: 15),
                 ),
-              const Spacer(),
-              if (_saving || _savePending)
-                const SizedBox(width: 13, height: 13, child: CircularProgressIndicator(strokeWidth: 2))
-              else
-                const Icon(Icons.cloud_done_outlined, size: 15),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints.tightFor(width: 32, height: 30),
-                tooltip: 'Next page',
-                onPressed: _page + 1 < _pages.length ? () => _goToPage(_page + 1) : _addPage,
-                icon: const Icon(Icons.chevron_right_rounded, size: 20),
-              ),
-              PopupMenuButton<String>(
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints.tightFor(width: 30, height: 30),
-                tooltip: 'Page actions',
-                onSelected: (action) {
-                  switch (action) {
-                    case 'add':
-                      _addPage();
-                    case 'copy':
-                      _copyPage(_page);
-                    case 'cut':
-                      _cutPage(_page);
-                    case 'duplicate':
-                      _duplicatePage(_page);
-                    case 'paste':
-                      _pastePage();
-                    case 'background':
-                      unawaited(_chooseTemplate());
-                    case 'delete':
-                      _deletePage(_page);
-                    case 'preview':
-                      unawaited(_showPagePicker());
-                  }
-                },
-                itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'add', child: Text('Insert blank page')),
-                  PopupMenuItem(value: 'copy', child: Text('Copy page')),
-                  PopupMenuItem(value: 'cut', child: Text('Cut page')),
-                  PopupMenuItem(value: 'paste', child: Text('Paste as page')),
-                  PopupMenuItem(value: 'duplicate', child: Text('Duplicate page')),
-                  PopupMenuItem(value: 'background', child: Text('Change background')),
-                  PopupMenuItem(value: 'preview', child: Text('Page preview / reorder')),
-                  PopupMenuDivider(),
-                  PopupMenuItem(value: 'delete', child: Text('Delete page')),
-                ],
-                icon: const Icon(Icons.more_vert_rounded, size: 18),
-              ),
-            ],
+                Tooltip(
+                  message: _saving || _savePending ? 'Saving note' : 'Note saved locally',
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: _saving || _savePending
+                        ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.7))
+                        : const Icon(Icons.cloud_done_outlined, size: 13),
+                  ),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(width: 30, height: 28),
+                  tooltip: _page + 1 < _pages.length ? 'Next page' : 'Add next page',
+                  onPressed: _page + 1 < _pages.length ? () => _goToPage(_page + 1) : _addPage,
+                  icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 20),
+                ),
+                PopupMenuButton<String>(
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(width: 30, height: 28),
+                  tooltip: 'Page actions',
+                  onSelected: (action) {
+                    switch (action) {
+                      case 'add':
+                        _addPage();
+                      case 'copy':
+                        _copyPage(_page);
+                      case 'cut':
+                        _cutPage(_page);
+                      case 'duplicate':
+                        _duplicatePage(_page);
+                      case 'paste':
+                        _pastePage();
+                      case 'background':
+                        unawaited(_chooseTemplate());
+                      case 'delete':
+                        _deletePage(_page);
+                      case 'preview':
+                        unawaited(_showPagePicker());
+                    }
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'add', child: Text('Insert blank page')),
+                    PopupMenuItem(value: 'copy', child: Text('Copy page')),
+                    PopupMenuItem(value: 'cut', child: Text('Cut page')),
+                    PopupMenuItem(value: 'paste', child: Text('Paste as page')),
+                    PopupMenuItem(value: 'duplicate', child: Text('Duplicate page')),
+                    PopupMenuItem(value: 'background', child: Text('Change background')),
+                    PopupMenuItem(value: 'preview', child: Text('Page preview / reorder')),
+                    PopupMenuDivider(),
+                    PopupMenuItem(value: 'delete', child: Text('Delete page')),
+                  ],
+                  icon: const Icon(Icons.more_vert_rounded, size: 16),
+                ),
+              ],
+            ),
           ),
         ),
       ),
