@@ -5220,7 +5220,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                                       ),
                                       const PopupMenuItem<String>(
                                         value: 'cutToNote',
-                                        child: ListTile(dense: true, leading: Icon(Icons.drive_file_move_outline_rounded), title: Text('Move to another note')),
+                                        child: ListTile(dense: true, leading: Icon(Icons.folder_open_rounded), title: Text('Move to another note')),
                                       ),
                                       const PopupMenuItem<String>(
                                         value: 'delete',
