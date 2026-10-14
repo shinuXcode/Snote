@@ -191,6 +191,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   bool _selectionTransformIsResize = false;
 
   bool get _hasPdfBackgroundPages => _pages.any((page) {
+        if (page['pdfLazyRender'] == true) return true;
         final source = page['backgroundImage'];
         return source is String && source.isNotEmpty;
       });
