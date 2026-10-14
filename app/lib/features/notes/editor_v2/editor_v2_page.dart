@@ -4440,6 +4440,66 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
     return 'Shapes & diagrams';
   }
 
+  IconData _pickerIcon(CanvasTool tool) {
+    return switch (tool) {
+      CanvasTool.ballpoint => Icons.edit_rounded,
+      CanvasTool.fountain => Icons.draw_rounded,
+      CanvasTool.pencil => Icons.create_rounded,
+      CanvasTool.highlighter => Icons.brush_rounded,
+      CanvasTool.marker => Icons.border_color_rounded,
+      CanvasTool.brush => Icons.format_paint_rounded,
+      CanvasTool.eraser => Icons.cleaning_services_rounded,
+      CanvasTool.pixelEraser => Icons.auto_fix_normal_rounded,
+      CanvasTool.lasso => Icons.gesture_rounded,
+      CanvasTool.sticker => Icons.emoji_emotions_outlined,
+      CanvasTool.ruler => Icons.straighten_rounded,
+      CanvasTool.compass || CanvasTool.protractor => Icons.architecture_rounded,
+      CanvasTool.divider => Icons.vertical_distribute_rounded,
+      _ when tool.name.toLowerCase().contains('chart') ||
+          tool.name == 'histogram' ||
+          tool.name == 'pieChart' => Icons.bar_chart_rounded,
+      _ when tool.name.toLowerCase().contains('cell') ||
+          tool.name.toLowerCase().contains('dna') ||
+          tool.name.toLowerCase().contains('neuron') => Icons.biotech_rounded,
+      _ when tool.name.toLowerCase().contains('circuit') ||
+          tool.name.toLowerCase().contains('voltage') ||
+          tool.name.toLowerCase().contains('transistor') => Icons.electrical_services_rounded,
+      _ when tool.name.toLowerCase().contains('flowchart') => Icons.account_tree_rounded,
+      _ => Icons.category_outlined,
+    };
+  }
+
+  Widget _toolPreview(CanvasTool tool) {
+    final scheme = Theme.of(context).colorScheme;
+    if (tool.isShape) {
+      return SizedBox(
+        width: 48,
+        height: 30,
+        child: CustomPaint(
+          painter: EditorV2InkPainter(
+            strokes: <Stroke>[
+              Stroke(
+                id: 'picker-preview-' + tool.name,
+                points: const <StrokePoint>[
+                  StrokePoint(position: Offset(4, 4)),
+                  StrokePoint(position: Offset(44, 26)),
+                ],
+                pen: PenConfig(
+                  type: PenType.ballpoint,
+                  color: scheme.primary,
+                  size: 1.5,
+                ),
+                shape: tool.name,
+                dashed: tool == CanvasTool.dashedLine || tool == CanvasTool.dottedLine,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    return Icon(_pickerIcon(tool), size: 26, color: scheme.primary);
+  }
+
   @override
   void dispose() {
     _search.dispose();
@@ -4521,7 +4581,21 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
                       child: Center(
                         child: Padding(
                           padding: const EdgeInsets.all(5),
-                          child: Text(tool.label, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _toolPreview(tool),
+                              const SizedBox(height: 4),
+                              Text(
+                                tool.label,
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
