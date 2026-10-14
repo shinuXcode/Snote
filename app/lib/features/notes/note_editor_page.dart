@@ -5065,7 +5065,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   final aspectRatio = _thumbnailAspectRatio(page);
                   final thumbnailHeight = math.min(320.0, math.max(150.0, previewWidth / aspectRatio));
                   final secure = _settings.getBool('securePagePreviews');
-                  final backgroundBytes = _thumbnailBytes(page['backgroundImage']?.toString());
+                  final backgroundBytes = secure
+                      ? null
+                      : _thumbnailBytes(page['backgroundImage']?.toString());
                   final pageImages = page['images'] is List
                       ? (page['images'] as List)
                           .whereType<Map>()
