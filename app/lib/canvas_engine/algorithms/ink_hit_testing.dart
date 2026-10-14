@@ -146,7 +146,7 @@ class InkHitTesting {
     Rect rect, {
     double padding = 0,
   }) {
-    if (points.isEmpty || !rect.isFinite) return false;
+    if (points.isEmpty || !rect.left.isFinite || !rect.top.isFinite || !rect.right.isFinite || !rect.bottom.isFinite) return false;
     final target = padding > 0 ? rect.inflate(padding) : rect;
     if (points.length == 1) return target.contains(points.first.position);
     for (var i = 1; i < points.length; i++) {
@@ -169,7 +169,7 @@ class InkHitTesting {
     Rect rect,
   ) {
     if (points.isEmpty) return <List<StrokePoint>>[];
-    if (!rect.isFinite) return <List<StrokePoint>>[List<StrokePoint>.of(points)];
+    if (!rect.left.isFinite || !rect.top.isFinite || !rect.right.isFinite || !rect.bottom.isFinite) return <List<StrokePoint>>[List<StrokePoint>.of(points)];
     if (points.length == 1) {
       return rect.contains(points.first.position)
           ? <List<StrokePoint>>[]
