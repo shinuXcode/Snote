@@ -978,8 +978,8 @@ class _EditorV2PageState extends State<EditorV2Page>
     });
   }
 
-    if (_pageData['locked'] == true) return;
   void _deleteSelection() {
+    if (_pageData['locked'] == true) return;
     if (_selectedStrokeIds.isEmpty) return;
     _pushUndo();
     final raw = _pageData['strokes'] as List<Object?>;
@@ -995,8 +995,8 @@ class _EditorV2PageState extends State<EditorV2Page>
     _scheduleSave();
   }
 
-    if (_pageData['locked'] == true) return;
   void _moveSelection(Offset delta) {
+    if (_pageData['locked'] == true) return;
     if (_selectedStrokeIds.isEmpty) return;
     _pushUndo();
     final raw = _pageData['strokes'] as List<Object?>;
@@ -1113,8 +1113,8 @@ class _EditorV2PageState extends State<EditorV2Page>
     _scheduleSave();
   }
 
-    if (_pageData['locked'] == true) return;
   void _scaleSelection(double factor) {
+    if (_pageData['locked'] == true) return;
     if (_selectedStrokeIds.isEmpty) return;
     final bounds = _selectionBounds();
     if (bounds == null) return;
@@ -1423,8 +1423,8 @@ class _EditorV2PageState extends State<EditorV2Page>
     );
   }
 
-    if (_pageData['locked'] == true) return;
   void _addTextBox() {
+    if (_pageData['locked'] == true) return;
     _pushUndo();
     final id = DateTime.now().microsecondsSinceEpoch.toString();
     final box = <String, Object?>{
@@ -1459,8 +1459,8 @@ class _EditorV2PageState extends State<EditorV2Page>
     _scheduleSave();
   }
 
-    if (_pageData['locked'] == true) return;
   Future<void> _addImage() async {
+    if (_pageData['locked'] == true) return;
     try {
       final file = await FilePicker.pickFile(type: FileType.image);
       if (file == null) return;
@@ -1498,8 +1498,8 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
   }
 
-    if (_pageData['locked'] == true) return;
   Future<void> _addSticker() async {
+    if (_pageData['locked'] == true) return;
     const stickerCategories = <String, List<String>>{
       'Study': ['✅','❌','⭐','📌','📖','🧠','🎯','💯','📝','✍️','📚','🔖','📎','🖊️','🗒️','📄','🗃️','🏆','💡','📍'],
       'Math': ['➕','➖','✖️','➗','＝','≠','≈','∞','√','∑','∫','π','Δ','θ','α','β','γ','λ','μ','Ω'],
