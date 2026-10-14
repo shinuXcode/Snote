@@ -46,7 +46,14 @@ class EditorV2InkPainter extends CustomPainter {
         ..color = const Color(0xff3979e8).withValues(alpha: .65)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.4;
-      canvas.drawCircle(eraserCursor!, eraserRadius, cursor);
+      canvas.drawRect(
+        Rect.fromCenter(
+          center: eraserCursor!,
+          width: eraserRadius * 2,
+          height: eraserRadius * 1.4,
+        ),
+        cursor,
+      );
     }
   }
 

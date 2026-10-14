@@ -764,14 +764,267 @@ class _EditorV2PageState extends State<EditorV2Page>
       CanvasTool.values.where((tool) => _toolInLocation(tool, 'pencase')).toList();
 
   void _reorderToolbarTool(CanvasTool source, CanvasTool target) {
-    final order = _toolbarTools.map((tool) => tool.name).toList();
-    final from = order.indexOf(source.name);
-    final to = order.indexOf(target.name);
-    if (from < 0 || to < 0 || from == to) return;
-    order.removeAt(from);
-    order.insert(to, source.name);
-    setState(() => _toolbarOrder = order);
-    unawaited(_settings.setString('editorV2ToolbarOrder', jsonEncode(order)));
+    unawaited(_moveDroppedTool(source, 'toolbar', target: target));
+  }
+
+  Future<void> _moveDroppedTool(
+    Object dragged,
+    String targetLocation, {
+    Object? target,
+  }) async {
+    if (dragged is CanvasTool) {
+      final source = dragged;
+      if (target == source) return;
+      final sourceAlreadyThere = _toolInLocation(source, targetLocation);
+      final targetTool = target is CanvasTool ? target : null;
+      final targetAlreadyThere = targetTool != null &&
+          _toolInLocation(targetTool, targetLocation);
+      final order = List<String>.from(_toolbarOrder)..remove(source.name);
+      final targetIndex =
+          targetTool == null ? -1 : order.indexOf(targetTool.name);
+      order.insert(targetIndex < 0 ? order.length : targetIndex, source.name);
+
+      setState(() {
+        if (!(sourceAlreadyThere && targetAlreadyThere)) {
+          _toolPlacements[source.name] = <String>{targetLocation};
+        }
+        _toolbarOrder = order;
+      });
+      await _saveToolPlacements();
+      await _settings.setString('editorV2ToolbarOrder', jsonEncode(order));
+      return;
+    }
+
+    if (dragged is String &&
+        const {'calculator', 'screenshot'}.contains(dragged)) {
+      setState(() => _toolPlacements[dragged] = <String>{targetLocation});
+      await _saveToolPlacements();
+    }
+  }
+
+  Set<String> _specialToolLocations(String key) =>
+      Set<String>.from(_toolPlacements[key] ?? <String>{'toolbar'});
+
+  Future<void> _specialToolSettingsSheet(String key) async {
+    final selected = _specialToolLocations(key);
+    const locations = <({String key, String label, IconData icon})>[
+      (key: 'titleBar', label: 'Title Bar', icon: Icons.title_rounded),
+      (key: 'toolbar', label: 'Toolbar', icon: Icons.widgets_outlined),
+      (key: 'pencase', label: 'Pencase', icon: Icons.inventory_2_outlined),
+    ];
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    Icon(key == 'calculator'
+                        ? Icons.calculate_outlined
+                        : Icons.screenshot_monitor_rounded),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Text(
+                        key == 'calculator'
+                            ? 'Calculator settings'
+                            : 'Screenshot tool settings',
+                        style: const TextStyle(
+                          fontSize: 19,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Choose where this tool appears. Long-press its icon to move it.',
+                  ),
+                  ...locations.map((location) => CheckboxListTile(
+                    secondary: Icon(location.icon),
+                    title: Text(location.label),
+                    value: selected.contains(location.key),
+                    onChanged: (value) => setSheetState(() {
+                      if (value == true) {
+                        selected.add(location.key);
+                      } else {
+                        selected.remove(location.key);
+                      }
+                    }),
+                  )),
+                  CheckboxListTile(
+                    secondary: const Icon(Icons.visibility_off_outlined),
+                    title: const Text('Hidden'),
+                    value: selected.isEmpty,
+                    onChanged: (value) => setSheetState(() {
+                      if (value == true) {
+                        selected.clear();
+                      } else {
+                        selected.add('toolbar');
+                      }
+                    }),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(spacing: 8, children: [
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        setState(() {
+                          _toolPlacements[key] = <String>{'pencase'};
+                        });
+                        await _saveToolPlacements();
+                        if (sheetContext.mounted) Navigator.pop(sheetContext);
+                      },
+                      icon: const Icon(Icons.inventory_2_outlined),
+                      label: const Text('Collect to Pencase'),
+                    ),
+                    FilledButton.icon(
+                      onPressed: () async {
+                        setState(() {
+                          _toolPlacements[key] = Set<String>.from(selected);
+                        });
+                        await _saveToolPlacements();
+                        if (sheetContext.mounted) Navigator.pop(sheetContext);
+                      },
+                      icon: const Icon(Icons.save_outlined),
+                      label: const Text('Save locations'),
+                    ),
+                  ]),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _activateSpecialTool(String key) {
+    if (key == 'calculator') {
+      _openCalculator();
+    } else if (key == 'screenshot') {
+      unawaited(_pasteClipboardImage());
+    }
+  }
+
+  Widget _specialToolButton(String key, String location) {
+    final calculator = key == 'calculator';
+    final icon = calculator
+        ? Icons.calculate_outlined
+        : Icons.screenshot_monitor_rounded;
+    final title = calculator ? 'Calculator' : 'Paste screenshot';
+    return DragTarget<Object>(
+      onAcceptWithDetails: (details) => unawaited(
+        _moveDroppedTool(details.data, location, target: key),
+      ),
+      builder: (context, candidates, rejected) => LongPressDraggable<Object>(
+        data: key,
+        maxSimultaneousDrags: 1,
+        feedback: Material(
+          elevation: 8,
+          borderRadius: BorderRadius.circular(8),
+          child: SizedBox(
+            width: 34,
+            height: 34,
+            child: Icon(icon, color: Theme.of(context).colorScheme.primary),
+          ),
+        ),
+        child: GestureDetector(
+          onDoubleTap: () => unawaited(_specialToolSettingsSheet(key)),
+          child: Tooltip(
+            message: '${title} • double-tap for settings',
+            child: IconButton(
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+              onPressed: () => _activateSpecialTool(key),
+              icon: Icon(icon, size: 17),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTitleBarToolButton(CanvasTool tool) => DragTarget<Object>(
+        onAcceptWithDetails: (details) => unawaited(
+          _moveDroppedTool(details.data, 'titleBar', target: tool),
+        ),
+        builder: (context, candidates, rejected) => LongPressDraggable<Object>(
+          data: tool,
+          maxSimultaneousDrags: 1,
+          feedback: Material(
+            elevation: 8,
+            borderRadius: BorderRadius.circular(8),
+            child: SizedBox(
+              width: 34,
+              height: 34,
+              child: Icon(_toolIcon(tool), color: Theme.of(context).colorScheme.primary),
+            ),
+          ),
+          child: GestureDetector(
+            onDoubleTap: () => _strokeSettings(tool),
+            child: IconButton(
+              visualDensity: VisualDensity.compact,
+              tooltip: '${tool.label} • double-tap for settings',
+              onPressed: () => _selectTool(tool),
+              icon: Icon(_toolIcon(tool), size: 19),
+            ),
+          ),
+        ),
+      );
+
+  Widget _buildPencaseToolButton(CanvasTool tool) {
+    final active = _tool == tool;
+    return DragTarget<Object>(
+      onAcceptWithDetails: (details) => unawaited(
+        _moveDroppedTool(details.data, 'pencase', target: tool),
+      ),
+      builder: (context, candidates, rejected) => LongPressDraggable<Object>(
+        data: tool,
+        maxSimultaneousDrags: 1,
+        feedback: Material(
+          elevation: 8,
+          borderRadius: BorderRadius.circular(8),
+          child: SizedBox(
+            width: 36,
+            height: 36,
+            child: Icon(_toolIcon(tool), color: Theme.of(context).colorScheme.primary),
+          ),
+        ),
+        child: Tooltip(
+          message: '${tool.label} • tap to choose, double-tap for settings',
+          child: InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: () => _selectTool(tool),
+            onDoubleTap: () => _strokeSettings(tool),
+            onLongPress: () => _strokeSettings(tool),
+            child: Container(
+              width: _favoritesVertical ? 34 : 38,
+              height: _favoritesVertical ? 38 : 34,
+              margin: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: active
+                    ? Theme.of(context).colorScheme.primaryContainer
+                    : Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: active
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).colorScheme.outlineVariant,
+                ),
+              ),
+              child: Icon(_toolIcon(tool), size: 16),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   void _rememberCurrentToolProfile() {
@@ -979,6 +1232,37 @@ class _EditorV2PageState extends State<EditorV2Page>
       shape: shapeTool ? _tool.name : null,
       dashed: _tool == CanvasTool.dashedLine || _tool == CanvasTool.dottedLine,
     );
+  }
+
+  bool _strokeMostlyInsidePolygon(
+    List<Offset> points,
+    List<Offset> polygon, {
+    double minimumInsideFraction = .65,
+  }) {
+    if (points.isEmpty || polygon.length < 3) return false;
+    if (points.length == 1) return _pointInPolygon(points.first, polygon);
+
+    var totalLength = 0.0;
+    for (var i = 1; i < points.length; i++) {
+      totalLength += (points[i] - points[i - 1]).distance;
+    }
+    if (totalLength <= 1e-6) return _pointInPolygon(points.first, polygon);
+
+    var insideLength = 0.0;
+    for (var i = 1; i < points.length; i++) {
+      final a = points[i - 1];
+      final b = points[i];
+      final length = (b - a).distance;
+      if (length <= 1e-8) continue;
+      final samples = math.max(1, math.min(512, (length / 2).ceil()));
+      final sampleLength = length / samples;
+      for (var sample = 0; sample < samples; sample++) {
+        final point = Offset.lerp(a, b, (sample + .5) / samples)!;
+        if (_pointInPolygon(point, polygon)) insideLength += sampleLength;
+      }
+    }
+    return insideLength / totalLength >=
+        minimumInsideFraction.clamp(0.0, 1.0).toDouble();
   }
 
   bool _pointInPolygon(Offset point, List<Offset> polygon) {
@@ -1441,22 +1725,23 @@ class _EditorV2PageState extends State<EditorV2Page>
     final retained = <Stroke>[];
     var removed = false;
     for (final stroke in decoded) {
-      var hit = false;
-      for (var i = 0; i < stroke.points.length; i++) {
-        if ((stroke.points[i].position - position).distance <= radius) {
-          hit = true;
-          break;
-        }
-        if (i > 0 &&
-            _distanceToSegment(
-                  position,
-                  stroke.points[i - 1].position,
-                  stroke.points[i].position,
-                ) <=
-                radius) {
-          hit = true;
-          break;
-        }
+      if (stroke.points.isEmpty) {
+        retained.add(stroke);
+        continue;
+      }
+      final footprint = Rect.fromCenter(
+        center: position,
+        width: radius * 2,
+        height: radius * 1.4,
+      ).inflate(stroke.pen.size / 2);
+      var hit = footprint.contains(stroke.points.first.position);
+      for (var i = 1; !hit && i < stroke.points.length; i++) {
+        hit = footprint.contains(stroke.points[i].position) ||
+            _segmentIntersectsRect(
+              stroke.points[i - 1].position,
+              stroke.points[i].position,
+              footprint,
+            );
       }
       if (hit) {
         removed = true;
@@ -1601,27 +1886,9 @@ class _EditorV2PageState extends State<EditorV2Page>
     for (final stroke in _strokesFor(_pageData)) {
       final points = stroke.points.map((sample) => sample.position).toList();
       if (points.isEmpty) continue;
-      var intersects = points.any((point) => _pointInPolygon(point, polygon));
-      for (var i = 1; !intersects && i < points.length; i++) {
-        for (var j = 0; j < polygon.length; j++) {
-          if (_segmentsIntersect(points[i - 1], points[i], polygon[j], polygon[(j + 1) % polygon.length])) {
-            intersects = true;
-            break;
-          }
-        }
+      if (_strokeMostlyInsidePolygon(points, polygon)) {
+        selectedStrokes.add(stroke.id);
       }
-      if (!intersects && points.length >= 2) {
-        final tolerance = math.max(1.5, stroke.pen.size * .5);
-        for (var i = 0; !intersects && i < points.length; i++) {
-          for (var j = 0; j < polygon.length; j++) {
-            if (_distanceToSegment(points[i], polygon[j], polygon[(j + 1) % polygon.length]) <= tolerance) {
-              intersects = true;
-              break;
-            }
-          }
-        }
-      }
-      if (intersects) selectedStrokes.add(stroke.id);
     }
 
     final selectedImages = <String>{};
@@ -3851,6 +4118,10 @@ class _EditorV2PageState extends State<EditorV2Page>
         unawaited(_toggleNoteSwitcher());
       case 'calculator':
         _openCalculator();
+      case 'calculatorSettings':
+        unawaited(_specialToolSettingsSheet('calculator'));
+      case 'screenshotSettings':
+        unawaited(_specialToolSettingsSheet('screenshot'));
       case 'sticker':
         unawaited(_addSticker());
       case 'pdf':
@@ -3961,10 +4232,10 @@ class _EditorV2PageState extends State<EditorV2Page>
           ),
         );
 
-    return DragTarget<CanvasTool>(
+    return DragTarget<Object>(
       onWillAcceptWithDetails: (details) => details.data != tool,
-      onAcceptWithDetails: (details) => _reorderToolbarTool(details.data, tool),
-      builder: (context, candidates, rejected) => LongPressDraggable<CanvasTool>(
+      onAcceptWithDetails: (details) => unawaited(_moveDroppedTool(details.data, 'toolbar', target: tool)),
+      builder: (context, candidates, rejected) => LongPressDraggable<Object>(
         data: tool,
         maxSimultaneousDrags: 1,
         feedback: Material(
@@ -3993,7 +4264,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       action(tooltip: _textMode ? 'Handwriting mode' : 'Rich text mode', icon: _textMode ? Icons.draw_rounded : Icons.text_fields_rounded, onPressed: () => setState(() { _textMode = !_textMode; _scheduleSave(); })),
       action(tooltip: 'Color palette', icon: Icons.palette_outlined, color: _color, onPressed: _chooseColor),
       action(tooltip: 'Text box', icon: Icons.text_fields_rounded, onPressed: _addTextBox),
-      action(tooltip: 'Paste screenshot from clipboard', icon: Icons.content_paste_rounded, onPressed: () => unawaited(_pasteClipboardImage())),
+
       action(tooltip: 'Selection clipboard history', icon: Icons.content_paste_go_rounded, onPressed: () => unawaited(_showClipboardHistory())),
       action(tooltip: 'Shape box', icon: Icons.category_outlined, onPressed: () => _openToolPicker(initialCategory: 'Shapes & diagrams')),
       action(tooltip: 'Sticker library', icon: Icons.emoji_emotions_outlined, onPressed: () => unawaited(_addSticker())),
@@ -4007,6 +4278,10 @@ class _EditorV2PageState extends State<EditorV2Page>
       ...actions,
       if (!vertical) const VerticalDivider(width: 5, indent: 6, endIndent: 6),
       ...quickButtons,
+      if (_specialToolLocations('calculator').contains('toolbar'))
+        _specialToolButton('calculator', 'toolbar'),
+      if (_specialToolLocations('screenshot').contains('toolbar'))
+        _specialToolButton('screenshot', 'toolbar'),
       action(tooltip: 'Insert page', icon: Icons.note_add_outlined, onPressed: _addPage),
       PopupMenuButton<String>(
         tooltip: 'Workspace options',
@@ -4016,10 +4291,14 @@ class _EditorV2PageState extends State<EditorV2Page>
         itemBuilder: (_) => <PopupMenuEntry<String>>[
           PopupMenuItem(value: 'text', child: Text('Insert text box')),
           PopupMenuItem(value: 'image', child: Text('Insert image from file')),
-          PopupMenuItem(value: 'clipboardImage', child: Text('Paste screenshot from clipboard')),
+          if (_specialToolLocations('screenshot').isNotEmpty)
+            PopupMenuItem(value: 'clipboardImage', child: Text('Paste screenshot from clipboard')),
           PopupMenuItem(value: 'pasteSelection', enabled: _selectionClipboard != null, child: Text('Paste copied selection')),
           PopupMenuItem(value: 'clipboardHistory', enabled: _selectionClipboardHistory.isNotEmpty, child: Text('Clipboard history (last 4)')),
-          PopupMenuItem(value: 'calculator', child: Text('Scientific calculator')),
+          if (_specialToolLocations('calculator').isNotEmpty)
+            PopupMenuItem(value: 'calculator', child: Text('Scientific calculator')),
+          const PopupMenuItem(value: 'calculatorSettings', child: Text('Calculator placement / settings')),
+          const PopupMenuItem(value: 'screenshotSettings', child: Text('Screenshot tool placement / settings')),
           PopupMenuItem(value: 'sticker', child: Text('Sticker library')),
 
           PopupMenuItem(value: 'pdf', child: Text('Import / annotate PDF')),
@@ -4059,29 +4338,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   }
 
   Widget _buildFavoriteShowcase() {
-    final placedToolChips = _pencaseTools.map((tool) {
-      final active = _tool == tool;
-      return Tooltip(
-        message: '${tool.label} • tap to choose, long-press to configure',
-        child: InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap: () => _selectTool(tool),
-          onDoubleTap: () => _strokeSettings(tool),
-          onLongPress: () => _strokeSettings(tool),
-          child: Container(
-            width: _favoritesVertical ? 34 : 38,
-            height: _favoritesVertical ? 38 : 34,
-            margin: const EdgeInsets.all(2),
-            decoration: BoxDecoration(
-              color: active ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: active ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outlineVariant),
-            ),
-            child: Icon(_toolIcon(tool), size: 16),
-          ),
-        ),
-      );
-    }).toList();
+    final placedToolChips = _pencaseTools.map(_buildPencaseToolButton).toList();
     final favoriteChips = (_showFavoritesShowcase ? _favoritePens : const <Map<String, Object?>>[]).map((favorite) {
       final favoriteTool = CanvasTool.values.where((tool) => tool.name == favorite['tool']?.toString()).firstOrNull ?? CanvasTool.ballpoint;
       final color = Color((favorite['color'] as num?)?.toInt() ?? 0xff17202a);
@@ -4112,7 +4369,14 @@ class _EditorV2PageState extends State<EditorV2Page>
         ),
       );
     }).toList();
-    final chips = <Widget>[...placedToolChips, ...favoriteChips];
+    final chips = <Widget>[
+      ...placedToolChips,
+      ...favoriteChips,
+      if (_specialToolLocations('calculator').contains('pencase'))
+        _specialToolButton('calculator', 'pencase'),
+      if (_specialToolLocations('screenshot').contains('pencase'))
+        _specialToolButton('screenshot', 'pencase'),
+    ];
     final screen = MediaQuery.sizeOf(context);
     return Positioned(
       left: _favoriteOffset.dx.clamp(0, math.max(0, screen.width - (_favoritesVertical ? 62 : 120))).toDouble(),
@@ -4156,7 +4420,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                 Row(mainAxisSize: MainAxisSize.min, children: [
                   const Icon(Icons.drag_indicator_rounded, size: 14),
                   const SizedBox(width: 3),
-                  const Text('PEN CASE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: .6)),
+                  const Text('TOOLS', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: .6)),
                   const SizedBox(width: 3),
                   InkWell(onTap: _toggleFavoritesOrientation, child: Icon(_favoritesVertical ? Icons.swap_vert_rounded : Icons.swap_horiz_rounded, size: 14)),
                 ]),
@@ -4989,16 +5253,25 @@ class _EditorV2PageState extends State<EditorV2Page>
               icon: const Icon(Icons.redo_rounded, size: 18),
             ),
             Expanded(
-              child: TextField(
-                controller: _title,
-                maxLines: 1,
-                onChanged: (_) => _scheduleSave(),
-                onSubmitted: (_) => _save(force: true),
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
-                decoration: const InputDecoration(
-                  hintText: 'Untitled note',
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(horizontal: 6),
+              child: DragTarget<Object>(
+                onAcceptWithDetails: (details) => unawaited(
+                  _moveDroppedTool(details.data, 'titleBar'),
+                ),
+                builder: (context, candidates, rejected) => TextField(
+                  controller: _title,
+                  maxLines: 1,
+                  onChanged: (_) => _scheduleSave(),
+                  onSubmitted: (_) => _save(force: true),
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                  decoration: InputDecoration(
+                    hintText: 'Untitled note',
+                    border: InputBorder.none,
+                    filled: candidates.isNotEmpty,
+                    fillColor: candidates.isNotEmpty
+                        ? Theme.of(context).colorScheme.primaryContainer
+                        : null,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 6),
+                  ),
                 ),
               ),
             ),
@@ -5114,15 +5387,11 @@ class _EditorV2PageState extends State<EditorV2Page>
               onPressed: _chooseTemplate,
               icon: const Icon(Icons.grid_on_rounded),
             ),
-          ..._titleBarTools.map((tool) => GestureDetector(
-            onDoubleTap: () => _strokeSettings(tool),
-            child: IconButton(
-              visualDensity: VisualDensity.compact,
-              tooltip: '${tool.label} • double-tap for settings',
-              onPressed: () => _selectTool(tool),
-              icon: Icon(_toolIcon(tool), size: 19),
-            ),
-          )),
+          if (_specialToolLocations('calculator').contains('titleBar'))
+            _specialToolButton('calculator', 'titleBar'),
+          if (_specialToolLocations('screenshot').contains('titleBar'))
+            _specialToolButton('screenshot', 'titleBar'),
+          ..._titleBarTools.map(_buildTitleBarToolButton),
           if (_hasPdfBackgroundPages && MediaQuery.sizeOf(context).width < 640)
             IconButton(
               visualDensity: VisualDensity.compact,
