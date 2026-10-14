@@ -8,7 +8,7 @@ import 'dart:ui' as ui;
 import 'package:archive/archive.dart' as zip;
 import 'package:crypto/crypto.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -656,12 +656,10 @@ class _EditorV2PageState extends State<EditorV2Page>
     final imported = <Map<String, Object?>>[];
     final pageIdPrefix = 'pdf-${DateTime.now().microsecondsSinceEpoch}';
     try {
-      // Large textbooks become lightweight page records; rasters are produced
-      // only for visible pages and retained in a bounded cache.
-      if (totalPages > _maxPdfPagesPerImport) {
-        if (sourceAssetId == null || sourceAssetId.isEmpty) {
-          throw StateError('Large PDF imports require a saved source attachment.');
-        }
+      // Every imported PDF with a saved source attachment becomes lightweight
+      // page records. Only requested thumbnails and visible pages are rasterized,
+      // avoiding an upfront render pass for large textbooks.
+      if (sourceAssetId != null && sourceAssetId.isNotEmpty) {
         for (var index = 1; index <= totalPages; index++) {
           imported.add(<String, Object?>{
             'id': '$pageIdPrefix-$index',
@@ -686,6 +684,9 @@ class _EditorV2PageState extends State<EditorV2Page>
           });
         }
         return (pages: imported, totalPages: totalPages);
+      }
+      if (totalPages > _maxPdfPagesPerImport) {
+        throw StateError('Large PDF imports require a saved source attachment.');
       }
       for (var index = 1; index <= totalPages; index++) {
         final pdfPage = await document.getPage(index);
@@ -3636,7 +3637,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
     try {
       Uint8List? bytes;
-      if (defaultTargetPlatform == TargetPlatform.android) {
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
         // Android MediaProjection requires user consent; PNG bytes return
         // directly from native code, with no MediaStore/gallery write.
         bytes = await SnoteScreenCapture.captureDisplay();
@@ -3663,10 +3664,25 @@ class _EditorV2PageState extends State<EditorV2Page>
         }
       }
       if (bytes == null || bytes.isEmpty) throw StateError('No screenshot image was returned.');
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      final sourceAspect = frame.image.width / math.max(1, frame.image.height);
+      frame.image.dispose();
+      codec.dispose();
+      final pageAspect = _pageWidth / math.max(1.0, _pageHeight);
+      var widthRatio = .82;
+      var heightRatio = widthRatio * pageAspect / math.max(.01, sourceAspect);
+      if (heightRatio > .78) {
+        heightRatio = .78;
+        widthRatio = heightRatio * sourceAspect / math.max(.01, pageAspect);
+      }
       await _insertImageBytes(
         bytes,
         name: 'Snote screen capture ${DateTime.now().toIso8601String().replaceAll(':', '-')}.png',
-        x: .10, y: .25, width: .80, height: .50,
+        x: (1 - widthRatio) / 2,
+        y: (1 - heightRatio) / 2,
+        width: widthRatio,
+        height: heightRatio,
       );
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Screenshot inserted into the current page.')),
@@ -4708,6 +4724,57 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
   }
 
+  Future<Color?> _pickCustomColor({
+    required Color initial,
+    required String title,
+  }) async {
+    final controller = TextEditingController(
+      text: '#${initial.toARGB32().toRadixString(16).padLeft(8, '0').toUpperCase()}',
+    );
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.characters,
+          decoration: const InputDecoration(
+            labelText: 'Hex color',
+            hintText: '#FFCC88 or #AARRGGBB',
+            helperText: 'Use #RRGGBB or #AARRGGBB',
+          ),
+          onSubmitted: (value) => Navigator.pop(dialogContext, value.trim()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(dialogContext, controller.text.trim()),
+            icon: const Icon(Icons.colorize_rounded),
+            label: const Text('Use color'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (value == null) return null;
+    final hex = value.trim().replaceFirst('#', '');
+    try {
+      if (hex.length == 6 || hex.length == 8) {
+        final parsed = int.parse(hex, radix: 16);
+        return Color(hex.length == 6 ? (0xff000000 | parsed) : parsed);
+      }
+    } on FormatException {
+      // Report invalid input without changing the page's current color.
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid color such as #FFCC88 or #AARRGGBB.')),
+      );
+    }
+    return null;
+  }
+
   Future<void> _choosePageBackground(int index) async {
     if (index < 0 || index >= _pages.length) return;
     final page = _pages[index];
@@ -4725,7 +4792,16 @@ class _EditorV2PageState extends State<EditorV2Page>
         content: Wrap(
           spacing: 9,
           runSpacing: 9,
-          children: _palette.map((color) => InkWell(
+          children: [
+            ActionChip(
+              avatar: const Icon(Icons.colorize_rounded, size: 17),
+              label: const Text('Custom…'),
+              onPressed: () async {
+                final selectedColor = await _pickCustomColor(initial: current, title: 'Custom page background');
+                if (selectedColor != null && dialogContext.mounted) Navigator.pop(dialogContext, selectedColor);
+              },
+            ),
+            ..._palette.map((color) => InkWell(
             onTap: () => Navigator.pop(dialogContext, color),
             borderRadius: BorderRadius.circular(20),
             child: Container(
@@ -4743,6 +4819,7 @@ class _EditorV2PageState extends State<EditorV2Page>
               ),
             ),
           )).toList(),
+          ],
         ),
       ),
     );
@@ -5188,23 +5265,43 @@ class _EditorV2PageState extends State<EditorV2Page>
                 const SizedBox(height: 12),
                 Row(children: [Icon(Icons.palette_outlined, color: Theme.of(context).colorScheme.primary), const SizedBox(width: 8), const Text('Paper color')]),
                 const SizedBox(height: 6),
-                Wrap(spacing: 9, runSpacing: 8, children: _palette.map((candidate) => InkWell(
-                  onTap: () => setSheetState(() => paper = candidate),
-                  child: Container(width: 27, height: 27, decoration: BoxDecoration(
-                    color: candidate, shape: BoxShape.circle,
-                    border: Border.all(color: paper == candidate ? Theme.of(context).colorScheme.primary : Colors.black26, width: paper == candidate ? 3 : 1),
+                Wrap(spacing: 9, runSpacing: 8, children: [
+                  ..._palette.map((candidate) => InkWell(
+                    onTap: () => setSheetState(() => paper = candidate),
+                    child: Container(width: 27, height: 27, decoration: BoxDecoration(
+                      color: candidate, shape: BoxShape.circle,
+                      border: Border.all(color: paper == candidate ? Theme.of(context).colorScheme.primary : Colors.black26, width: paper == candidate ? 3 : 1),
+                    )),
                   )),
-                )).toList()),
+                  ActionChip(
+                    avatar: const Icon(Icons.colorize_rounded, size: 16),
+                    label: const Text('Custom…'),
+                    onPressed: () async {
+                      final candidate = await _pickCustomColor(initial: paper, title: 'Custom paper color');
+                      if (candidate != null) setSheetState(() => paper = candidate);
+                    },
+                  ),
+                ]),
                 const SizedBox(height: 12),
                 Row(children: [Icon(Icons.color_lens_outlined, color: Theme.of(context).colorScheme.primary), const SizedBox(width: 8), const Text('Line / dot color')]),
                 const SizedBox(height: 6),
-                Wrap(spacing: 9, children: _palette.where((candidate) => candidate != Colors.white).map((candidate) => InkWell(
-                  onTap: () => setSheetState(() => line = candidate),
-                  child: Container(width: 27, height: 27, decoration: BoxDecoration(
-                    color: candidate, shape: BoxShape.circle,
-                    border: Border.all(color: line == candidate ? Theme.of(context).colorScheme.primary : Colors.black26, width: line == candidate ? 3 : 1),
+                Wrap(spacing: 9, runSpacing: 8, children: [
+                  ..._palette.where((candidate) => candidate != Colors.white).map((candidate) => InkWell(
+                    onTap: () => setSheetState(() => line = candidate),
+                    child: Container(width: 27, height: 27, decoration: BoxDecoration(
+                      color: candidate, shape: BoxShape.circle,
+                      border: Border.all(color: line == candidate ? Theme.of(context).colorScheme.primary : Colors.black26, width: line == candidate ? 3 : 1),
+                    )),
                   )),
-                )).toList()),
+                  ActionChip(
+                    avatar: const Icon(Icons.colorize_rounded, size: 16),
+                    label: const Text('Custom…'),
+                    onPressed: () async {
+                      final candidate = await _pickCustomColor(initial: line, title: 'Custom line / dot color');
+                      if (candidate != null) setSheetState(() => line = candidate);
+                    },
+                  ),
+                ]),
                 Row(children: [Icon(Icons.space_dashboard_outlined, color: Theme.of(context).colorScheme.primary), const SizedBox(width: 8), Text('Grid / dot spacing: ${spacing.round()}')]),
                 Slider(min: 10, max: 80, value: spacing, onChanged: (value) => setSheetState(() => spacing = value)),
                 Row(children: [Icon(Icons.opacity_rounded, color: Theme.of(context).colorScheme.primary), const SizedBox(width: 8), Text('Grid / dot opacity: ${(opacity * 100).round()}%')]),

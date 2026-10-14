@@ -9,7 +9,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/rendering.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:snote_screen_capture/snote_screen_capture.dart';
+import '../tools/screen_capture.dart';
 import 'package:pdf/pdf.dart' as pdfcore;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdfx/pdfx.dart';
@@ -1963,7 +1963,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
       // MediaProjection requests visible system consent, then returns bytes
       // over a MethodChannel. The PNG is not written to storage or the gallery.
-      return SnoteScreenCapture.captureScreen();
+      return SnoteScreenCapture.captureDisplay();
     }
     // iOS and desktop capture Snote's own note page only; iOS cannot silently
     // capture the screen contents of another application.
