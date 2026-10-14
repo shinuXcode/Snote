@@ -146,36 +146,91 @@ List<Map<String, Object?>> mergeSavedAnnotationsWithPdfPages({
   required List<Map<String, Object?>> savedPages,
   required List<Map<String, Object?>> renderedPages,
 }) {
-  final merged = <Map<String, Object?>>[];
-  for (var index = 0; index < renderedPages.length; index++) {
-    final rendered = Map<String, Object?>.from(renderedPages[index]);
-    if (index < savedPages.length) {
-      final saved = savedPages[index];
-      rendered.addAll(saved);
-      rendered['backgroundImage'] = renderedPages[index]['backgroundImage'];
-      rendered['pdfSourceName'] = renderedPages[index]['pdfSourceName'];
-      rendered['pdfSourcePage'] = renderedPages[index]['pdfSourcePage'];
-      rendered['pdfSourceHash'] = renderedPages[index]['pdfSourceHash'];
-      rendered['pdfBackgroundHash'] = renderedPages[index]['pdfBackgroundHash'];
-      rendered['pageAspectRatio'] = renderedPages[index]['pageAspectRatio'];
-      rendered['id'] = saved['id'] ?? renderedPages[index]['id'];
-      rendered['strokes'] = saved['strokes'] ?? renderedPages[index]['strokes'];
-      rendered['images'] = saved['images'] ?? renderedPages[index]['images'];
-      rendered['textBoxes'] =
-          saved['textBoxes'] ?? renderedPages[index]['textBoxes'];
-    }
-    merged.add(rendered);
+  if (renderedPages.isEmpty) {
+    return savedPages.map((page) => Map<String, Object?>.from(page)).toList();
   }
 
-  // The renderer intentionally caps PDF snapshots for performance. Preserve
-  // any user-created pages and annotations after the rendered range rather
-  // than dropping them during a recovery pass.
-  if (savedPages.length > renderedPages.length) {
-    merged.addAll(
-      savedPages
-          .skip(renderedPages.length)
-          .map((page) => Map<String, Object?>.from(page)),
-    );
+  final source = renderedPages.first;
+  bool sameSource(Map<String, Object?> saved) {
+    final sourceAsset = source['pdfSourceAssetId']?.toString() ?? '';
+    final savedAsset = saved['pdfSourceAssetId']?.toString() ?? '';
+    if (sourceAsset.isNotEmpty && savedAsset.isNotEmpty) {
+      return sourceAsset == savedAsset;
+    }
+    final sourceHash = source['pdfSourceHash']?.toString() ?? '';
+    final savedHash = saved['pdfSourceHash']?.toString() ?? '';
+    if (sourceHash.isNotEmpty && savedHash.isNotEmpty) {
+      return sourceHash == savedHash;
+    }
+    final sourceName = source['pdfSourceName']?.toString() ?? '';
+    final savedName = saved['pdfSourceName']?.toString() ?? '';
+    return sourceName.isNotEmpty && sourceName == savedName;
+  }
+
+  final matchingIndices = <int>[];
+  final savedByPageNumber = <int, Map<String, Object?>>{};
+  for (var index = 0; index < savedPages.length; index++) {
+    final saved = savedPages[index];
+    final pageNumber = (saved['pdfSourcePage'] as num?)?.toInt();
+    if (!sameSource(saved) || pageNumber == null || pageNumber <= 0) continue;
+    matchingIndices.add(index);
+    savedByPageNumber[pageNumber] = saved;
+  }
+
+  final refreshedPages = <Map<String, Object?>>[];
+  for (final record in renderedPages) {
+    final rendered = Map<String, Object?>.from(record);
+    final pageNumber = (record['pdfSourcePage'] as num?)?.toInt();
+    final saved = pageNumber == null ? null : savedByPageNumber[pageNumber];
+    if (saved != null) {
+      rendered.addAll(saved);
+      rendered['id'] = saved['id'] ?? record['id'];
+      for (final key in const [
+        'pdfLazyRender',
+        'pdfSourceAssetId',
+        'pdfSourceName',
+        'pdfSourcePage',
+        'pdfSourceHash',
+        'pdfBackgroundHash',
+        'pageAspectRatio',
+      ]) {
+        if (record.containsKey(key)) {
+          rendered[key] = record[key];
+        } else {
+          rendered.remove(key);
+        }
+      }
+      // Keep annotations from the saved page but never keep a stale raster
+      // when the refreshed page is represented by a lazy source reference.
+      if (record['pdfLazyRender'] == true) {
+        rendered.remove('backgroundImage');
+        rendered.remove('pdfBackgroundHash');
+      } else {
+        if (record.containsKey('backgroundImage')) {
+          rendered['backgroundImage'] = record['backgroundImage'];
+        } else {
+          rendered.remove('backgroundImage');
+        }
+      }
+    }
+    refreshedPages.add(rendered);
+  }
+
+  if (matchingIndices.isEmpty) {
+    if (savedPages.isEmpty) return refreshedPages;
+    return <Map<String, Object?>>[
+      ...savedPages.map((page) => Map<String, Object?>.from(page)),
+      ...refreshedPages,
+    ];
+  }
+
+  final firstMatch = matchingIndices.first;
+  final matchingSet = matchingIndices.toSet();
+  final merged = <Map<String, Object?>>[];
+  for (var index = 0; index < savedPages.length; index++) {
+    if (index == firstMatch) merged.addAll(refreshedPages);
+    if (matchingSet.contains(index)) continue;
+    merged.add(Map<String, Object?>.from(savedPages[index]));
   }
   return merged;
 }
