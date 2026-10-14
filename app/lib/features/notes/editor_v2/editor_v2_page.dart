@@ -694,7 +694,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
     if (_ignoredPointers.contains(event.pointer) ||
         _panMode ||
-        (_stylusPointers.isNotEmpty && event.kind == PointerDeviceKind.touch)) {
+        (_settings.getBool('palmRejection') && _stylusPointers.isNotEmpty && event.kind == PointerDeviceKind.touch)) {
       _ignoredPointers.add(event.pointer);
       return;
     }
@@ -1572,7 +1572,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     await _saveFavoritePens();
     if (!_showFavoritesShowcase) {
       setState(() => _showFavoritesShowcase = true);
-      await _settings.setString('editorV2ShowFavoritesShowcase', 'true');
+      await _settings.setBool('editorV2ShowFavoritesShowcase', true);
     }
   }
 
@@ -1621,7 +1621,7 @@ class _EditorV2PageState extends State<EditorV2Page>
 
   Future<void> _toggleFavoritesShowcase() async {
     setState(() => _showFavoritesShowcase = !_showFavoritesShowcase);
-    await _settings.setString('editorV2ShowFavoritesShowcase', _showFavoritesShowcase ? 'true' : 'false');
+    await _settings.setBool('editorV2ShowFavoritesShowcase', _showFavoritesShowcase);
   }
 
   Future<void> _togglePageNavigation() async {
