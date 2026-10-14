@@ -55,6 +55,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   static const double _pageWidth = 816;
   static const double _pageHeight = 1152;
   static const int _maxPdfPagesPerImport = 40;
+  static const int _maxPdfRasterCacheBytes = 48 * 1024 * 1024;
   static const List<Color> _palette = <Color>[
     Color(0xff111827), Color(0xff263238), Color(0xff546e7a), Color(0xff90a4ae),
     Color(0xff000000), Color(0xffffffff), Color(0xff37474f), Color(0xff78909c),
@@ -175,6 +176,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   List<Map<String, Object?>>? _selectionTransformTextSnapshot;
   bool _showFavoritesShowcase = true;
   bool _showPageNavigation = true;
+  bool _showPagePreview = true;
   bool _floatingPageNavigation = false;
   bool _fullScreenMode = false;
   bool _pdfBackgroundVisible = true;
@@ -224,6 +226,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     _floatingToolbar = _settings.getBool('editorV2FloatingToolbar');
     _favoritesVertical = _settings.getBool('editorV2FavoritesVertical');
     _showPageNavigation = _settings.getBool('showPageNavigation');
+    _showPagePreview = _settings.getBool('showPagePreview');
     _floatingPageNavigation = _settings.getBool('editorV2FloatingPageNavigation');
     _showFavoritesShowcase = _settings.getBool('editorV2ShowFavoritesShowcase');
     try {
@@ -552,7 +555,10 @@ class _EditorV2PageState extends State<EditorV2Page>
       if (bytes == null || bytes.isEmpty) return;
       _pdfRasterCache.remove(key);
       _pdfRasterCache[key] = bytes;
-      while (_pdfRasterCache.length > 12) {
+      while (_pdfRasterCache.length > 12 ||
+          _pdfRasterCache.values.fold<int>(0, (total, bytes) => total + bytes.length) >
+              _maxPdfRasterCacheBytes) {
+        if (_pdfRasterCache.isEmpty) break;
         _pdfRasterCache.remove(_pdfRasterCache.keys.first);
       }
     }).catchError((Object error) {
@@ -1400,20 +1406,27 @@ class _EditorV2PageState extends State<EditorV2Page>
   }
 
   bool _pressureEraseAllowed(PointerEvent event) {
+    if (!_settings.getBool('pressureErase')) return true;
     final pressure = _pointFrom(event).pressure;
     final threshold = _settings.getDouble('pressureEraseThreshold').clamp(0.0, 1.0).toDouble();
     return pressure >= threshold;
   }
 
-  double _pressureEraseRadius(PointerEvent event) {
-    final baseRadius = math.max(18, _size * 2).toDouble();
-    if (!_settings.getBool('pressureEraseArea')) return baseRadius;
+  double _pressureEraseRadius(
+    PointerEvent event, {
+    double? baseRadius,
+  }) {
+    final radius = baseRadius ?? math.max(18, _size * 2).toDouble();
+    if (!_settings.getBool('pressureErase') ||
+        !_settings.getBool('pressureEraseArea')) {
+      return radius;
+    }
     final pressure = _pointFrom(event).pressure.clamp(0.0, 1.0).toDouble();
     final threshold = _settings.getDouble('pressureEraseThreshold').clamp(0.0, 1.0).toDouble();
     final effectivePressure = threshold >= 1
         ? (pressure >= 1 ? 1.0 : 0.0)
         : ((pressure - threshold) / (1 - threshold)).clamp(0.0, 1.0).toDouble();
-    return baseRadius * (0.5 + effectivePressure * 1.5);
+    return radius * (0.5 + effectivePressure * 1.5);
   }
 
   void _onPointerDown(PointerDownEvent event) {
@@ -1645,8 +1658,15 @@ class _EditorV2PageState extends State<EditorV2Page>
     _liveStroke = null;
 
     if (_tool == CanvasTool.eraser || _tool == CanvasTool.pixelEraser) {
-      final precisionRadius = _tool == CanvasTool.pixelEraser || _settings.getString('eraserMode') == 'pixel';
-      _eraseAt(end, precisionRadius ? 7 : math.max(18, _size * 2));
+      final precisionRadius = _tool == CanvasTool.pixelEraser ||
+          _settings.getString('eraserMode') == 'pixel';
+      final baseRadius = precisionRadius ? 7.0 : math.max(18, _size * 2).toDouble();
+      if (_pressureEraseAllowed(event)) {
+        _eraseAt(
+          end,
+          _pressureEraseRadius(event, baseRadius: baseRadius),
+        );
+      }
     } else if (_tool == CanvasTool.lasso) {
       _selectInPolygon(completedPoints.map((sample) => sample.position).toList());
     } else if (_tool == CanvasTool.fill) {
@@ -4663,6 +4683,122 @@ class _EditorV2PageState extends State<EditorV2Page>
     return Stack(clipBehavior: Clip.none, children: children);
   }
 
+  Widget _buildPagePreviewSidebar() => Material(
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
+        elevation: 2,
+        child: SizedBox(
+          width: 64,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.view_sidebar_outlined, size: 15),
+                    const SizedBox(width: 3),
+                    Text(
+                      _pages.length.toString(),
+                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 6),
+                  itemCount: _pages.length,
+                  itemBuilder: (context, index) {
+                    final page = _pages[index];
+                    final selected = index == _page;
+                    final isPdf = page['pdfLazyRender'] == true ||
+                        (page['backgroundImage'] is String &&
+                            (page['backgroundImage'] as String).isNotEmpty);
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Tooltip(
+                        message: 'Page ${index + 1}${isPdf ? ' • PDF' : ''} • long-press for actions',
+                        child: GestureDetector(
+                          onLongPress: _showPagePicker,
+                          child: InkWell(
+                            onTap: () => _goToPage(index),
+                            borderRadius: BorderRadius.circular(7),
+                            child: Container(
+                              height: 76,
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.surface,
+                                borderRadius: BorderRadius.circular(7),
+                                border: Border.all(
+                                  color: selected
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Theme.of(context).colorScheme.outlineVariant,
+                                  width: selected ? 2 : 1,
+                                ),
+                              ),
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: _buildPageBackground(
+                                      page,
+                                      showPdf: true,
+                                      thumbnail: true,
+                                    ),
+                                  ),
+                                  Align(
+                                    alignment: Alignment.bottomRight,
+                                    child: Container(
+                                      margin: const EdgeInsets.all(2),
+                                      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withValues(alpha: .88),
+                                        borderRadius: BorderRadius.circular(3),
+                                      ),
+                                      child: Text(
+                                        (index + 1).toString(),
+                                        style: const TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w900,
+                                          color: Colors.black,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  if (isPdf)
+                                    const Align(
+                                      alignment: Alignment.topLeft,
+                                      child: Padding(
+                                        padding: EdgeInsets.all(2),
+                                        child: Icon(
+                                          Icons.picture_as_pdf_rounded,
+                                          size: 10,
+                                          color: Colors.redAccent,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                tooltip: 'Add blank page',
+                onPressed: _addPage,
+                icon: const Icon(Icons.note_add_outlined, size: 17),
+              ),
+            ],
+          ),
+        ),
+      );
+
   Widget _buildPageSurface() {
     final page = _pageData;
     final strokes = _strokesFor(page);
@@ -5232,9 +5368,16 @@ class _EditorV2PageState extends State<EditorV2Page>
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints.tightFor(width: 27, height: 30),
-              tooltip: 'Page previews and reorder',
-              onPressed: _showPagePicker,
-              icon: const Icon(Icons.view_carousel_outlined, size: 18),
+              tooltip: _showPagePreview ? 'Hide page sidebar' : 'Show page sidebar',
+              onPressed: () {
+                final next = !_showPagePreview;
+                setState(() => _showPagePreview = next);
+                unawaited(_settings.setBool('showPagePreview', next));
+              },
+              icon: Icon(
+                _showPagePreview ? Icons.view_sidebar_rounded : Icons.view_sidebar_outlined,
+                size: 18,
+              ),
             ),
             IconButton(
               visualDensity: VisualDensity.compact,
@@ -5294,76 +5437,6 @@ class _EditorV2PageState extends State<EditorV2Page>
                 ),
               ),
           ],
-        ),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(50),
-          child: SizedBox(
-            height: 50,
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              scrollDirection: Axis.horizontal,
-              itemCount: _pages.length,
-              itemBuilder: (_, index) {
-                final page = _pages[index];
-                final template = PageTemplate.values.firstWhere(
-                  (value) => value.name == page['template']?.toString(),
-                  orElse: () => PageTemplate.blank,
-                );
-                final selected = index == _page;
-                final pdfPage = page['pdfLazyRender'] == true || (page['backgroundImage'] is String && (page['backgroundImage'] as String).isNotEmpty);
-                return Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: Tooltip(
-                    message: 'Page ${index + 1} • ${pdfPage ? 'PDF' : template.name}\nLong-press for page actions',
-                    child: GestureDetector(
-                      onLongPress: _showPagePicker,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(8),
-                        onTap: () => _goToPage(index),
-                        child: Container(
-                          width: 36,
-                          decoration: BoxDecoration(
-                            color: selected ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surfaceContainerHigh,
-                            border: Border.all(
-                              color: selected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outlineVariant,
-                              width: selected ? 2 : 1,
-                            ),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(7),
-                                child: _buildPageBackground(page, showPdf: true, thumbnail: true),
-                              ),
-                              Align(
-                                alignment: Alignment.bottomRight,
-                                child: Container(
-                                  margin: const EdgeInsets.all(2),
-                                  padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-                                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: .85), borderRadius: BorderRadius.circular(4)),
-                                  child: Text('${index + 1}', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.black)),
-                                ),
-                              ),
-                              if (pdfPage)
-                                const Align(
-                                  alignment: Alignment.topLeft,
-                                  child: Padding(
-                                    padding: EdgeInsets.all(2),
-                                    child: Icon(Icons.picture_as_pdf_rounded, size: 10, color: Colors.redAccent),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
         ),
         actions: [
           if (_saveError != null)
@@ -5447,7 +5520,18 @@ class _EditorV2PageState extends State<EditorV2Page>
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          Positioned.fill(child: _buildCanvas()),
+          Positioned.fill(
+            left: _showPagePreview && !_fullScreenMode ? 66 : 0,
+            child: _buildCanvas(),
+          ),
+          if (_showPagePreview && !_fullScreenMode)
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: 64,
+              child: _buildPagePreviewSidebar(),
+            ),
           if (_floatingToolbar || _fullScreenMode)
             Positioned(
               left: _floatingOffset.dx.clamp(0, math.max(0, MediaQuery.sizeOf(context).width - 160)).toDouble(),
