@@ -35,6 +35,8 @@ class SnoteSettings extends ChangeNotifier {
     'toolbarDock': 'bottom',
     'toolbarToolbox': 'compact',
     'eInkProfile': 'physical',
+    'toolPlacements': '',
+    'toolOrder': '',
     'defaultPageTemplate': 'dotted',
     'defaultPaperPalette': 'paper-white',
     'pencaseTools': 'ballpoint,fountain,calligraphy,pencil,highlighter,marker,brush,eraser,pixelEraser,lasso',
