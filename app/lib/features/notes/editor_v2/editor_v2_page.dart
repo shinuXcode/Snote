@@ -224,6 +224,11 @@ class _EditorV2PageState extends State<EditorV2Page>
   bool _fullScreenMode = false;
   bool _showViewportHud = false;
   bool _viewportLocked = false;
+  bool _watermarkCoverMode = false;
+  CanvasTool? _toolBeforeWatermarkCover;
+  Color? _colorBeforeWatermarkCover;
+  double? _sizeBeforeWatermarkCover;
+  double? _opacityBeforeWatermarkCover;
   Timer? _viewportHudTimer;
   bool _pdfBackgroundVisible = true;
   bool _pressureEraseActive = false;
@@ -4720,22 +4725,60 @@ class _EditorV2PageState extends State<EditorV2Page>
   Future<void> _insertBlankPageAfter(int index) async {
     if (index < 0 || index >= _pages.length) return;
     final targetId = _pages[index]['id']?.toString();
-    if (_pages[index]['pdfLazyRender'] == true) {
-      final sourceId = _pages[index]['pdfSourceAssetId']?.toString();
-      final sourcePage = (_pages[index]['pdfSourcePage'] as num?)?.toInt();
-      if (sourceId != null && sourcePage != null) {
+    final target = _pages[index];
+    final sourceId = target['pdfSourceAssetId']?.toString();
+    final sourcePage = (target['pdfSourcePage'] as num?)?.toInt();
+
+    // Lazy PDF records cannot assume A4/portrait. Read the selected page's
+    // bounds directly, preserving mixed page sizes without rasterizing it.
+    if (target['pdfLazyRender'] == true &&
+        sourceId != null &&
+        sourceId.isNotEmpty &&
+        sourcePage != null) {
+      try {
+        final document = await _pdfDocumentForSource(sourceId);
+        final pdfPage = await document.getPage(sourcePage);
         try {
-          await _lazyPdfPageRaster(sourceId, sourcePage);
-        } catch (error) {
-          debugPrint('[Snote][EditorV2] target PDF page rendering failed: $error');
+          final pointWidth = pdfPage.width;
+          final pointHeight = pdfPage.height;
+          if (pointWidth.isFinite &&
+              pointHeight.isFinite &&
+              pointWidth > 0 &&
+              pointHeight > 0) {
+            final liveTarget = _pages.indexWhere(
+              (page) => page['id']?.toString() == targetId,
+            );
+            if (liveTarget >= 0) {
+              final page = _pages[liveTarget];
+              // Convert PDF points to approximately 96-DPI canvas units.
+              // A1/A3 and landscape pages therefore retain their real size ratio.
+              page['pageWidth'] = (pointWidth * 4 / 3).clamp(360.0, 5000.0);
+              page['pageHeight'] = (pointHeight * 4 / 3).clamp(360.0, 5000.0);
+              page['pageAspectRatio'] = pointWidth / pointHeight;
+              page['orientation'] =
+                  pointWidth > pointHeight ? 'horizontal' : 'vertical';
+              page['pageSize'] = 'Custom';
+            }
+          }
+        } finally {
+          await pdfPage.close();
         }
+      } catch (error, stackTrace) {
+        debugPrint(
+          '[Snote][EditorV2] target PDF page dimensions failed: $error\n$stackTrace',
+        );
       }
     }
+
     if (!mounted) return;
-    final currentIndex = _pages.indexWhere((page) => page['id']?.toString() == targetId);
+    final currentIndex = _pages.indexWhere(
+      (page) => page['id']?.toString() == targetId,
+    );
     if (currentIndex >= 0) {
-      // Match the exact target PDF page's paper size and orientation.
-      _addPage(insertAfter: currentIndex, templateFrom: _pages[currentIndex]);
+      _addPage(
+        insertAfter: currentIndex,
+        templateFrom: _pages[currentIndex],
+      );
     }
   }
 
@@ -5467,6 +5510,53 @@ class _EditorV2PageState extends State<EditorV2Page>
     ));
   }
 
+  void _toggleWatermarkCover() {
+    if (!_hasPdfBackgroundPages) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Watermark cover is available on PDF pages.')),
+      );
+      return;
+    }
+
+    if (_watermarkCoverMode) {
+      setState(() {
+        _watermarkCoverMode = false;
+        _tool = _toolBeforeWatermarkCover ?? CanvasTool.ballpoint;
+        _color = _colorBeforeWatermarkCover ?? const Color(0xff17202a);
+        _size = _sizeBeforeWatermarkCover ?? 3;
+        _opacity = _opacityBeforeWatermarkCover ?? 1;
+        _toolBeforeWatermarkCover = null;
+        _colorBeforeWatermarkCover = null;
+        _sizeBeforeWatermarkCover = null;
+        _opacityBeforeWatermarkCover = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Watermark cover mode off. The original PDF remains unchanged.')),
+      );
+      return;
+    }
+
+    _toolBeforeWatermarkCover = _tool;
+    _colorBeforeWatermarkCover = _color;
+    _sizeBeforeWatermarkCover = _size;
+    _opacityBeforeWatermarkCover = _opacity;
+    setState(() {
+      _watermarkCoverMode = true;
+      _tool = CanvasTool.ballpoint;
+      _color = Colors.white;
+      _size = 40;
+      _opacity = 1;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Whiteout cover enabled. Draw over a watermark to mask it; this does not remove it from the source PDF.',
+        ),
+        duration: Duration(seconds: 5),
+      ),
+    );
+  }
+
   void _zoom(double factor) {
     if (_viewportLocked) return;
     final next = _transform.value.clone()..scale(factor);
@@ -5601,6 +5691,8 @@ class _EditorV2PageState extends State<EditorV2Page>
         _setPdfBackgroundVisible(false);
       case 'pdfLayer':
         _setPdfBackgroundVisible(true);
+      case 'watermarkCover':
+        _toggleWatermarkCover();
       case 'pan':
         setState(() => _panMode = !_panMode);
       case 'zoomIn':
@@ -5718,6 +5810,15 @@ class _EditorV2PageState extends State<EditorV2Page>
       ),
       action(tooltip: 'Text box', icon: Icons.text_fields_rounded, onPressed: _addTextBox),
       action(tooltip: 'Capture screen to canvas', icon: Icons.screenshot_monitor_rounded, onPressed: () => unawaited(_captureScreenToCanvas())),
+      if (_hasPdfBackgroundPages)
+        action(
+          tooltip: _watermarkCoverMode
+              ? 'Exit watermark cover mode'
+              : 'Watermark cover / whiteout (masks only; source PDF unchanged)',
+          icon: Icons.layers_clear_rounded,
+          color: _watermarkCoverMode ? Theme.of(context).colorScheme.primary : null,
+          onPressed: _toggleWatermarkCover,
+        ),
 
       action(tooltip: 'Selection clipboard history', icon: Icons.content_paste_go_rounded, onPressed: () => unawaited(_showClipboardHistory())),
       action(tooltip: 'Shape box', icon: Icons.category_outlined, onPressed: () => _openToolPicker(initialCategory: 'Shapes & diagrams')),
@@ -7134,6 +7235,13 @@ class _EditorV2PageState extends State<EditorV2Page>
               const PopupMenuDivider(),
               const PopupMenuItem(value: 'save', child: Text('Save note now')),
               const PopupMenuItem(value: 'export', child: Text('Export annotated document to PDF')),
+              if (_hasPdfBackgroundPages)
+                PopupMenuItem(
+                  value: 'watermarkCover',
+                  child: Text(_watermarkCoverMode
+                      ? 'Exit watermark cover mode'
+                      : 'Watermark cover / whiteout (source PDF unchanged)'),
+                ),
             ],
             icon: const Icon(Icons.settings_rounded),
           ),
