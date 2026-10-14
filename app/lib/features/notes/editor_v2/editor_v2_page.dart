@@ -165,6 +165,10 @@ class _EditorV2PageState extends State<EditorV2Page>
   double _calculatorHeight = 465;
   bool _calculatorVisible = false;
   Offset _calculatorOffset = const Offset(24, 125);
+  List<Stroke>? _selectionTransformSnapshot;
+  Rect? _selectionTransformBounds;
+  Offset _selectionTransformDelta = Offset.zero;
+  bool _selectionTransformIsResize = false;
 
   bool get _hasPdfBackgroundPages => _pages.any((page) {
         final source = page['backgroundImage'];
@@ -1017,6 +1021,51 @@ class _EditorV2PageState extends State<EditorV2Page>
       bottom = math.max(bottom, point.dy);
     }
     return Rect.fromLTRB(left, top, right, bottom).inflate(3);
+  }
+
+  void _startSelectionTransform({required bool resize}) {
+    final bounds = _selectionBounds();
+    if (bounds == null || _selectedStrokeIds.isEmpty) return;
+    _pushUndo();
+    _selectionTransformSnapshot = _strokesFor(_pageData)
+        .where((stroke) => _selectedStrokeIds.contains(stroke.id))
+        .toList();
+    _selectionTransformBounds = bounds;
+    _selectionTransformDelta = Offset.zero;
+    _selectionTransformIsResize = resize;
+  }
+
+  void _updateSelectionTransform(Offset delta) {
+    final snapshot = _selectionTransformSnapshot;
+    final bounds = _selectionTransformBounds;
+    if (snapshot == null || bounds == null || snapshot.isEmpty) return;
+    final scale = _transform.value.getMaxScaleOnAxis().clamp(.25, 4).toDouble();
+    _selectionTransformDelta += delta / scale;
+    final factor = _selectionTransformIsResize
+        ? (1 + (_selectionTransformDelta.dx + _selectionTransformDelta.dy) / math.max(40, bounds.longestSide)).clamp(.35, 3.0).toDouble()
+        : 1.0;
+    final offset = _selectionTransformIsResize ? Offset.zero : _selectionTransformDelta;
+    final center = bounds.center;
+    final byId = <String, Stroke>{for (final stroke in snapshot) stroke.id: stroke};
+    final current = _strokesFor(_pageData);
+    _pageData['strokes'] = current.map((stroke) {
+      final original = byId[stroke.id];
+      if (original == null) return StrokeCodec.strokeToJson(stroke);
+      return StrokeCodec.strokeToJson(original.copyWith(
+        points: original.points.map((point) => point.copyWith(
+          position: center + (point.position - center) * factor + offset,
+        )).toList(),
+      ));
+    }).toList();
+    setState(() => _lassoRect = _selectionBounds());
+    _scheduleSave();
+  }
+
+  void _finishSelectionTransform() {
+    _selectionTransformSnapshot = null;
+    _selectionTransformBounds = null;
+    _selectionTransformDelta = Offset.zero;
+    _selectionTransformIsResize = false;
   }
 
   void _copySelection() {
@@ -2776,6 +2825,47 @@ class _EditorV2PageState extends State<EditorV2Page>
                   ),
                 ),
               ),
+            if (_lassoRect != null && _selectedStrokeIds.isNotEmpty && _selectionBounds() != null) ...[
+              Positioned(
+                left: _selectionBounds()!.center.dx - 11,
+                top: _selectionBounds()!.top - 12,
+                child: Tooltip(
+                  message: 'Drag to move selected strokes',
+                  child: GestureDetector(
+                    onPanStart: (_) => _startSelectionTransform(resize: false),
+                    onPanUpdate: (details) => _updateSelectionTransform(details.delta),
+                    onPanEnd: (_) => _finishSelectionTransform(),
+                    child: Material(
+                      color: Theme.of(context).colorScheme.primary,
+                      shape: const CircleBorder(),
+                      elevation: 3,
+                      child: const SizedBox(width: 22, height: 22, child: Icon(Icons.open_with_rounded, size: 14, color: Colors.white)),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: (_selectionBounds()!.right - 7).clamp(0, _pageWidth - 18).toDouble(),
+                top: (_selectionBounds()!.bottom - 7).clamp(0, _pageHeight - 18).toDouble(),
+                child: Tooltip(
+                  message: 'Drag corner to resize selection',
+                  child: GestureDetector(
+                    onPanStart: (_) => _startSelectionTransform(resize: true),
+                    onPanUpdate: (details) => _updateSelectionTransform(details.delta),
+                    onPanEnd: (_) => _finishSelectionTransform(),
+                    child: Container(
+                      width: 15,
+                      height: 15,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primary,
+                        border: Border.all(color: Colors.white, width: 1.5),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
             if (_lassoRect != null && _selectedStrokeIds.isNotEmpty && _selectionBounds() != null)
               Positioned(
                 left: math.min(_pageWidth - 38, math.max(4, _selectionBounds()!.right + 7)),
