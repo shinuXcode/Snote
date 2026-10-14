@@ -2027,7 +2027,12 @@ class _EditorV2PageState extends State<EditorV2Page>
     var paper = Color((_pageData['paperColor'] as num?)?.toInt() ?? 0xffffffff);
     var line = Color((_pageData['lineColor'] as num?)?.toInt() ?? 0xffd8dee8);
     var palm = _settings.getBool('palmRejection');
+    var stylusHold = _settings.getBool('stylusHoldActions');
+    var pressureErase = _settings.getBool('pressureErase');
     var showNavigation = _showPageNavigation;
+    var floatingNavigation = _floatingPageNavigation;
+    var floatingToolbar = _floatingToolbar;
+    var showFavorites = _showFavoritesShowcase;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -2083,6 +2088,37 @@ class _EditorV2PageState extends State<EditorV2Page>
                   value: showNavigation,
                   onChanged: (value) => setSheetState(() => showNavigation = value),
                 ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Floating / movable toolbar'),
+                  value: floatingToolbar,
+                  onChanged: (value) => setSheetState(() => floatingToolbar = value),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Favorite pen case'),
+                  value: showFavorites,
+                  onChanged: (value) => setSheetState(() => showFavorites = value),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Floating vertical page navigation'),
+                  value: floatingNavigation,
+                  onChanged: (value) => setSheetState(() => floatingNavigation = value),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Stylus hold actions'),
+                  subtitle: const Text('Hold on a stroke to select it; hold on blank paper for temporary eraser'),
+                  value: stylusHold,
+                  onChanged: (value) => setSheetState(() => stylusHold = value),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Hold-to-erase on blank paper'),
+                  value: pressureErase,
+                  onChanged: (value) => setSheetState(() => pressureErase = value),
+                ),
                 Align(
                   alignment: Alignment.centerRight,
                   child: FilledButton(
@@ -2093,9 +2129,19 @@ class _EditorV2PageState extends State<EditorV2Page>
                       _pageData['lineOpacity'] = opacity;
                       _pageData['paperColor'] = paper.toARGB32();
                       _pageData['lineColor'] = line.toARGB32();
-                      setState(() => _showPageNavigation = showNavigation);
+                      setState(() {
+                        _showPageNavigation = showNavigation;
+                        _floatingPageNavigation = floatingNavigation;
+                        _floatingToolbar = floatingToolbar;
+                        _showFavoritesShowcase = showFavorites;
+                      });
                       await _settings.setBool('palmRejection', palm);
+                      await _settings.setBool('stylusHoldActions', stylusHold);
+                      await _settings.setBool('pressureErase', pressureErase);
                       await _settings.setBool('showPageNavigation', showNavigation);
+                      await _settings.setBool('editorV2FloatingPageNavigation', floatingNavigation);
+                      await _settings.setBool('editorV2FloatingToolbar', floatingToolbar);
+                      await _settings.setBool('editorV2ShowFavoritesShowcase', showFavorites);
                       _scheduleSave();
                       if (sheetContext.mounted) Navigator.pop(sheetContext);
                     },
