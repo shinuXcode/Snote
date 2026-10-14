@@ -1996,7 +1996,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       'textBoxes': <Object?>[],
     });
     setState(() {
-      final insertion = (_page + 1).clamp(0, _pages.length).toInt();
+      final insertion = ((insertAfter ?? _page) + 1).clamp(0, _pages.length).toInt();
       _pages.insert(insertion, page);
       _page = insertion;
       _selectedStrokeIds.clear();
@@ -2068,7 +2068,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     _deletePage(index);
   }
 
-  void _pastePage() {
+  void _pastePage({int? insertAfter}) {
     final source = _pageClipboard;
     if (source == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copy a page first.')));
@@ -2088,7 +2088,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   void _duplicatePage(int index) {
     if (index < 0 || index >= _pages.length) return;
     _pageClipboard = EditorV2DocumentCodec.clonePages(<Map<String, Object?>>[_pages[index]]).single;
-    _pastePage();
+    _pastePage(insertAfter: index);
   }
 
   void _deletePage(int index) {
