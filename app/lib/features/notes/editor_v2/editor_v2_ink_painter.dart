@@ -245,7 +245,6 @@ class EditorV2InkPainter extends CustomPainter {
       case 'arrow':
       case 'vectorArrow':
       case 'rayDiagram':
-      case 'projectilePath':
       case 'forceDiagram':
         arrow(start, end);
         if (shape == 'forceDiagram') {
