@@ -55,8 +55,40 @@ class EditorV2Page extends StatefulWidget {
 
 class _EditorV2PageState extends State<EditorV2Page>
     with WidgetsBindingObserver {
-  static const double _pageWidth = 816;
-  static const double _pageHeight = 1152;
+  static const double _defaultPageHeight = 1152;
+
+  double get _pageHeight {
+    final stored = (_pageData['pageHeight'] as num?)?.toDouble();
+    if (stored != null && stored.isFinite && stored > 0) {
+      return stored.clamp(360.0, 5000.0).toDouble();
+    }
+    return _defaultPageHeight;
+  }
+
+  double get _pageWidth {
+    final stored = (_pageData['pageWidth'] as num?)?.toDouble();
+    if (stored != null && stored.isFinite && stored > 0) {
+      return stored.clamp(360.0, 5000.0).toDouble();
+    }
+    final ratio = ((_pageData['pageAspectRatio'] as num?)?.toDouble() ?? (816 / 1152))
+        .clamp(.2, 1.0).toDouble();
+    final landscape = _pageData['orientation']?.toString() == 'horizontal';
+    return (landscape ? _pageHeight / ratio : _pageHeight * ratio)
+        .clamp(360.0, 5000.0).toDouble();
+  }
+
+  double _pageAspectRatioFor(Map<String, Object?> page) {
+    final width = (page['pageWidth'] as num?)?.toDouble();
+    final height = (page['pageHeight'] as num?)?.toDouble();
+    if (width != null && height != null && width > 0 && height > 0) {
+      return (width / height).clamp(.2, 5.0).toDouble();
+    }
+    final shortToLong = ((page['pageAspectRatio'] as num?)?.toDouble() ?? (816 / 1152))
+        .clamp(.2, 1.0).toDouble();
+    return page['orientation']?.toString() == 'horizontal'
+        ? 1 / shortToLong
+        : shortToLong;
+  }
   static const int _maxPdfPagesPerImport = 40;
   static const int _maxPdfRasterCacheBytes = 48 * 1024 * 1024;
   static const List<Color> _palette = <Color>[
@@ -501,6 +533,30 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
     final page = await document.getPage(pageNumber);
     try {
+      final lazyIndex = _pages.indexWhere((record) =>
+          record['pdfLazyRender'] == true &&
+          record['pdfSourceAssetId']?.toString() == assetId &&
+          (record['pdfSourcePage'] as num?)?.toInt() == pageNumber &&
+          record['pageWidth'] == null &&
+          record['pageHeight'] == null);
+      if (lazyIndex >= 0) {
+        final record = _pages[lazyIndex];
+        final shortSide = math.min(page.width, page.height);
+        final longSide = math.max(page.width, page.height);
+        final ratio = shortSide / longSide;
+        final orientation = page.width > page.height ? 'horizontal' : 'vertical';
+        if (((record['pageAspectRatio'] as num?)?.toDouble() ?? 0) != ratio ||
+            record['orientation']?.toString() != orientation) {
+          record['pageAspectRatio'] = ratio;
+          record['orientation'] = orientation;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && lazyIndex < _pages.length && identical(_pages[lazyIndex], record)) {
+              setState(() {});
+              _scheduleSave();
+            }
+          });
+        }
+      }
       final maxDimension = thumbnail ? 320.0 : 1600.0;
       final scale = math.min(maxDimension / page.width, maxDimension / page.height);
       final rendered = await page.render(
@@ -3683,6 +3739,235 @@ class _EditorV2PageState extends State<EditorV2Page>
     _scheduleSave();
   }
 
+  Future<void> _showPageFormatSettings() async {
+    if (_pageData['locked'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unlock this page before changing its format.')),
+      );
+      return;
+    }
+
+    const presets = <String, Size>{
+      'A0': Size(3264, 4620),
+      'A1': Size(2304, 3264),
+      'A2': Size(1632, 2304),
+      'A3': Size(1152, 1632),
+      'A4': Size(816, 1152),
+      'A5': Size(576, 816),
+      'A6': Size(408, 576),
+      'B4': Size(960, 1358),
+      'B5': Size(680, 960),
+      'Letter': Size(816, 1056),
+      'Legal': Size(816, 1344),
+      'Tabloid': Size(1056, 1632),
+      'Custom': Size(816, 1152),
+    };
+    final widthController = TextEditingController(text: _pageWidth.toStringAsFixed(0));
+    final heightController = TextEditingController(text: _pageHeight.toStringAsFixed(0));
+    final currentSize = _pageData['pageSize']?.toString() ?? 'A4';
+    var selectedSize = presets.containsKey(currentSize) ? currentSize : 'Custom';
+    var landscape = _pageData['orientation']?.toString() == 'horizontal';
+    var spacing = ((_pageData['spacing'] as num?)?.toDouble() ?? 28.0)
+        .clamp(10.0, 80.0).toDouble();
+    var paperColor = Color(
+      (_pageData['paperColor'] as num?)?.toInt() ?? 0xffffffff,
+    );
+
+    void applyPreset(String value) {
+      selectedSize = value;
+      if (value == 'Custom') return;
+      final portrait = presets[value]!;
+      final size = landscape ? Size(portrait.height, portrait.width) : portrait;
+      widthController.text = size.width.toStringAsFixed(0);
+      heightController.text = size.height.toStringAsFixed(0);
+    }
+
+    final result = await showDialog<Map<String, Object?>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          void changeOrientation(bool value) {
+            if (landscape == value) return;
+            setDialogState(() {
+              landscape = value;
+              if (selectedSize == 'Custom') {
+                final oldWidth = widthController.text;
+                widthController.text = heightController.text;
+                heightController.text = oldWidth;
+              } else {
+                applyPreset(selectedSize);
+              }
+            });
+          }
+
+          return AlertDialog(
+            title: const Text('Page format & paper'),
+            content: SizedBox(
+              width: 460,
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DropdownButtonFormField<String>(
+                      value: selectedSize,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Paper preset',
+                        prefixIcon: Icon(Icons.description_outlined),
+                      ),
+                      items: presets.keys.map((name) => DropdownMenuItem(
+                        value: name,
+                        child: Text(name == 'Custom' ? 'Custom dimensions' : name),
+                      )).toList(),
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setDialogState(() => applyPreset(value));
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('Portrait'),
+                          selected: !landscape,
+                          onSelected: (value) { if (value) changeOrientation(false); },
+                        ),
+                        ChoiceChip(
+                          label: const Text('Landscape'),
+                          selected: landscape,
+                          onSelected: (value) { if (value) changeOrientation(true); },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: widthController,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: const InputDecoration(
+                              labelText: 'Page width',
+                              suffixText: 'units',
+                              isDense: true,
+                            ),
+                            onChanged: (_) => setDialogState(() => selectedSize = 'Custom'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: heightController,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: const InputDecoration(
+                              labelText: 'Page height',
+                              suffixText: 'units',
+                              isDense: true,
+                            ),
+                            onChanged: (_) => setDialogState(() => selectedSize = 'Custom'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Text('Line spacing • ${spacing.round()} units',
+                      style: Theme.of(context).textTheme.labelLarge),
+                    Slider(
+                      value: spacing,
+                      min: 10,
+                      max: 80,
+                      divisions: 14,
+                      label: spacing.round().toString(),
+                      onChanged: (value) => setDialogState(() => spacing = value),
+                    ),
+                    const SizedBox(height: 4),
+                    Text('Paper background', style: Theme.of(context).textTheme.labelLarge),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _palette.map((color) => InkWell(
+                        onTap: () => setDialogState(() => paperColor = color),
+                        borderRadius: BorderRadius.circular(20),
+                        child: Container(
+                          width: 25,
+                          height: 25,
+                          decoration: BoxDecoration(
+                            color: color,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: color.toARGB32() == paperColor.toARGB32()
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Theme.of(context).colorScheme.outlineVariant,
+                              width: color.toARGB32() == paperColor.toARGB32() ? 3 : 1,
+                            ),
+                          ),
+                        ),
+                      )).toList(),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              FilledButton.icon(
+                onPressed: () {
+                  final width = double.tryParse(widthController.text);
+                  final height = double.tryParse(heightController.text);
+                  if (width == null || height == null ||
+                      !width.isFinite || !height.isFinite ||
+                      width < 360 || width > 5000 ||
+                      height < 360 || height > 5000) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Page dimensions must be between 360 and 5000 units.')),
+                    );
+                    return;
+                  }
+                  Navigator.pop(dialogContext, <String, Object?>{
+                    'pageSize': selectedSize,
+                    'pageWidth': width,
+                    'pageHeight': height,
+                    'orientation': landscape ? 'horizontal' : 'vertical',
+                    'spacing': spacing,
+                    'paperColor': paperColor.toARGB32(),
+                  });
+                },
+                icon: const Icon(Icons.check_rounded),
+                label: const Text('Apply'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    widthController.dispose();
+    heightController.dispose();
+    if (result == null || !mounted) return;
+
+    final width = (result['pageWidth'] as num).toDouble();
+    final height = (result['pageHeight'] as num).toDouble();
+    _pushUndo();
+    setState(() {
+      _pageData['pageSize'] = result['pageSize'];
+      _pageData['pageWidth'] = width;
+      _pageData['pageHeight'] = height;
+      _pageData['pageAspectRatio'] = math.min(width, height) / math.max(width, height);
+      _pageData['orientation'] = result['orientation'];
+      _pageData['spacing'] = result['spacing'];
+      _pageData['paperColor'] = result['paperColor'];
+    });
+    _scheduleSave();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _resetCanvasView();
+    });
+  }
+
   Future<void> _chooseTemplate() async {
     if (_pageData['locked'] == true) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -3764,9 +4049,9 @@ class _EditorV2PageState extends State<EditorV2Page>
     _scheduleSave();
   }
 
-  void _addPage({int? insertAfter}) {
+  void _addPage({int? insertAfter, Map<String, Object?>? templateFrom}) {
     _pushUndo();
-    final previous = _pageData;
+    final previous = templateFrom ?? _pageData;
     final page = EditorV2DocumentCodec.normalizePage(<String, Object?>{
       'id': DateTime.now().microsecondsSinceEpoch.toString(),
       'template': previous['template'] ?? 'dotted',
@@ -3776,6 +4061,9 @@ class _EditorV2PageState extends State<EditorV2Page>
       'spacing': previous['spacing'] ?? 28.0,
       'lineWidth': previous['lineWidth'] ?? .7,
       'pageSize': previous['pageSize'] ?? 'A4',
+      'pageWidth': previous['pageWidth'],
+      'pageHeight': previous['pageHeight'],
+      'pageAspectRatio': previous['pageAspectRatio'],
       'orientation': previous['orientation'] ?? 'vertical',
       'strokes': <Object?>[],
       'images': <Object?>[],
@@ -4564,7 +4852,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   void _resetCanvasView() {
     final availableWidth = MediaQuery.sizeOf(context).width -
         (_showPagePreview && !_fullScreenMode ? 220 : 12);
-    final scale = (availableWidth.clamp(260.0, 816.0) / 816.0).clamp(.25, 1.0).toDouble();
+    final scale = (availableWidth.clamp(260.0, _pageWidth) / _pageWidth).clamp(.15, 1.0).toDouble();
     _transform.value = Matrix4.identity()..scale(scale);
     setState(() {
       _viewportLocked = false;
@@ -4720,7 +5008,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       case 'zoomOut':
         _zoom(.83);
       case 'fit':
-        final scale = (MediaQuery.sizeOf(context).width - 30).clamp(260, 816) / _pageWidth;
+        final scale = (MediaQuery.sizeOf(context).width - 30).clamp(260.0, _pageWidth) / _pageWidth;
         _transform.value = Matrix4.identity()..scale(scale);
       case 'fullscreen':
         _toggleFullScreen();
@@ -4961,9 +5249,10 @@ class _EditorV2PageState extends State<EditorV2Page>
                 Row(mainAxisSize: MainAxisSize.min, children: [
                   const Icon(Icons.drag_indicator_rounded, size: 14),
                   const SizedBox(width: 3),
-                  const Text('TOOLS', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: .6)),
-                  const SizedBox(width: 3),
-                  InkWell(onTap: _toggleFavoritesOrientation, child: Icon(_favoritesVertical ? Icons.swap_vert_rounded : Icons.swap_horiz_rounded, size: 14)),
+                  InkWell(
+                    onTap: _toggleFavoritesOrientation,
+                    child: Icon(_favoritesVertical ? Icons.swap_vert_rounded : Icons.swap_horiz_rounded, size: 14),
+                  ),
                 ]),
                 const SizedBox(height: 2),
                 if (_favoritesVertical)
@@ -5053,10 +5342,18 @@ class _EditorV2PageState extends State<EditorV2Page>
               )),
             );
           }
-          return ColoredBox(color: Colors.white,
-            child: Center(child: thumbnail
-              ? const Icon(Icons.picture_as_pdf_rounded, size: 13, color: Colors.redAccent)
-              : const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))),
+          return ColoredBox(
+            color: Colors.white,
+            child: Center(
+              child: SizedBox(
+                width: thumbnail ? 16 : 24,
+                height: thumbnail ? 16 : 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: thumbnail ? 1.6 : 2,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            ),
           );
         },
       );
@@ -5158,8 +5455,12 @@ class _EditorV2PageState extends State<EditorV2Page>
           ignoring: _tool == CanvasTool.lasso,
           child: DecoratedBox(
           decoration: BoxDecoration(
-            color: (box['sticker'] == true ? Colors.transparent : Colors.white).withValues(alpha: .12),
-            border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: .25)),
+            color: Colors.transparent,
+            border: Border.all(
+              color: _selectedTextBoxIds.contains(id)
+                  ? Theme.of(context).colorScheme.primary.withValues(alpha: .55)
+                  : Colors.transparent,
+            ),
             borderRadius: BorderRadius.circular(4),
           ),
           child: Stack(
@@ -5258,9 +5559,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                 itemCount: _pages.length,
                 itemBuilder: (context, index) {
                   final page = _pages[index];
-                  final pageWidth = _pageWidth;
-                  final pageHeight = _pageHeight;
-                  final cardHeight = cardWidth * pageHeight / pageWidth;
+                  final cardHeight = cardWidth / _pageAspectRatioFor(page);
                   final selected = index == _page;
                   final isPdf = page['pdfLazyRender'] == true ||
                       (page['backgroundImage'] is String &&
@@ -5770,6 +6069,8 @@ class _EditorV2PageState extends State<EditorV2Page>
                         _pastePage();
                       case 'background':
                         unawaited(_chooseTemplate());
+                      case 'format':
+                        unawaited(_showPageFormatSettings());
                       case 'delete':
                         _deletePage(_page);
                       case 'preview':
@@ -5782,7 +6083,8 @@ class _EditorV2PageState extends State<EditorV2Page>
                     PopupMenuItem(value: 'cut', child: Text('Cut page')),
                     PopupMenuItem(value: 'paste', child: Text('Paste as page')),
                     PopupMenuItem(value: 'duplicate', child: Text('Duplicate page')),
-                    PopupMenuItem(value: 'background', child: Text('Change background')),
+                    PopupMenuItem(value: 'background', child: Text('Change template')),
+                    PopupMenuItem(value: 'format', child: Text('Page format & background')),
                     PopupMenuItem(value: 'preview', child: Text('Page preview / reorder')),
                     PopupMenuDivider(),
                     PopupMenuItem(value: 'delete', child: Text('Delete page')),
@@ -6147,6 +6449,13 @@ class _EditorV2PageState extends State<EditorV2Page>
               tooltip: 'Page template',
               onPressed: _chooseTemplate,
               icon: const Icon(Icons.grid_on_rounded),
+            ),
+          if (MediaQuery.sizeOf(context).width >= 500)
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Page format, dimensions, spacing & background',
+              onPressed: _showPageFormatSettings,
+              icon: const Icon(Icons.straighten_rounded, size: 18),
             ),
           if (titleBarToolButtons.isNotEmpty)
             SizedBox(
