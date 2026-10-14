@@ -277,10 +277,11 @@ class EditorV2InkPainter extends CustomPainter {
       }.contains(shape) || lower.contains('arrow') || lower.contains('line');
 
       if (!openShape) {
-        Path? fillPath;
+        late Path fillPath;
         switch (shape) {
           case 'roundedRectangle':
             fillPath = Path()..addRRect(RRect.fromRectAndRadius(safeRect, const Radius.circular(12)));
+            break;
           case 'ellipse':
           case 'circle':
           case 'sphere':
@@ -290,6 +291,7 @@ class EditorV2InkPainter extends CustomPainter {
           case 'atom':
           case 'orbital':
             fillPath = Path()..addOval(safeRect);
+            break;
           case 'triangle':
           case 'pyramid':
             fillPath = polygon([
@@ -297,6 +299,7 @@ class EditorV2InkPainter extends CustomPainter {
               safeRect.bottomRight,
               Offset(safeRect.left, safeRect.bottom),
             ]);
+            break;
           case 'diamond':
           case 'flowchartDecision':
             fillPath = polygon([
@@ -305,20 +308,28 @@ class EditorV2InkPainter extends CustomPainter {
               Offset(safeRect.center.dx, safeRect.bottom),
               safeRect.centerLeft,
             ]);
+            break;
           case 'pentagon':
             fillPath = polygon(regularPolygon(5));
+            break;
           case 'hexagon':
             fillPath = polygon(regularPolygon(6));
+            break;
           case 'heptagon':
             fillPath = polygon(regularPolygon(7));
+            break;
           case 'octagon':
             fillPath = polygon(regularPolygon(8));
+            break;
           case 'nonagon':
             fillPath = polygon(regularPolygon(9));
+            break;
           case 'decagon':
             fillPath = polygon(regularPolygon(10));
+            break;
           case 'customPolygon':
             fillPath = polygon(regularPolygon(stroke.customSides.clamp(3, 24)));
+            break;
           case 'parallelogram':
             fillPath = polygon([
               Offset(safeRect.left + safeRect.width * .22, safeRect.top),
@@ -326,6 +337,7 @@ class EditorV2InkPainter extends CustomPainter {
               Offset(safeRect.right - safeRect.width * .22, safeRect.bottom),
               safeRect.bottomLeft,
             ]);
+            break;
           case 'trapezoid':
             fillPath = polygon([
               Offset(safeRect.left + safeRect.width * .2, safeRect.top),
@@ -333,6 +345,7 @@ class EditorV2InkPainter extends CustomPainter {
               safeRect.bottomRight,
               safeRect.bottomLeft,
             ]);
+            break;
           case 'star':
             fillPath = polygon(List<Offset>.generate(10, (index) {
               final radius = index.isEven ? .48 : .21;
@@ -342,8 +355,10 @@ class EditorV2InkPainter extends CustomPainter {
                 safeRect.center.dy + math.sin(angle) * safeRect.height * radius,
               );
             }));
+            break;
           default:
             fillPath = Path()..addRect(safeRect);
+            break;
         }
         canvas.drawPath(fillPath, fill);
       }
