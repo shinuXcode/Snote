@@ -374,7 +374,27 @@ class _EditorV2PageState extends State<EditorV2Page>
     var totalPdfPages = 0;
     if (pdfBytes != null && pdfBytes.isNotEmpty) {
       final sourceHash = sha256.convert(pdfBytes).toString();
-      if (shouldRestorePdfPageBackgrounds(pages, sourceHash: sourceHash)) {
+      var restorePdfPages = shouldRestorePdfPageBackgrounds(pages, sourceHash: sourceHash);
+      if (!restorePdfPages && sourcePdf != null) {
+        final recordedPdfPages = pages
+            .where((page) =>
+                page['pdfSourceHash'] == sourceHash &&
+                page['pdfSourcePage'] is num)
+            .map((page) => (page['pdfSourcePage'] as num).toInt())
+            .toList();
+        if (recordedPdfPages.isNotEmpty) {
+          final sourceDocument = await _pdfDocumentForSource(sourcePdf.id);
+          final highestRecordedPage = recordedPdfPages.reduce(
+            (left, right) => left > right ? left : right,
+          );
+          // Older beta builds persisted only the first 40 rendered pages. On
+          // restore, migrate those notes to lazy page records for the full PDF.
+          if (highestRecordedPage < sourceDocument.pagesCount) {
+            restorePdfPages = true;
+          }
+        }
+      }
+      if (restorePdfPages) {
         final result = await _renderPdfPages(
           pdfBytes,
           pdfName ?? '${saved.title}.pdf',
