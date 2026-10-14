@@ -124,6 +124,73 @@ void main() {
       );
     });
 
+    test('PDF restore preserves other PDF pages and their annotations', () {
+      final saved = <Map<String, Object?>>[
+        <String, Object?>{
+          'id': 'source-a-page-1',
+          'pdfSourceAssetId': 'asset-a',
+          'pdfSourceName': 'a.pdf',
+          'pdfSourceHash': 'hash-a',
+          'pdfSourcePage': 1,
+          'backgroundImage': 'old-a-raster',
+          'strokes': <Object?>[
+            <String, Object?>{'id': 'stroke-a'},
+          ],
+        },
+        <String, Object?>{
+          'id': 'source-b-page-1',
+          'pdfSourceAssetId': 'asset-b',
+          'pdfSourceName': 'b.pdf',
+          'pdfSourceHash': 'hash-b',
+          'pdfSourcePage': 1,
+          'backgroundImage': 'old-b-raster',
+          'strokes': <Object?>[
+            <String, Object?>{'id': 'stroke-b'},
+          ],
+        },
+        <String, Object?>{
+          'id': 'blank-after-pdf',
+          'template': 'dotted',
+          'strokes': <Object?>[],
+        },
+      ];
+      final regeneratedB = <Map<String, Object?>>[
+        <String, Object?>{
+          'id': 'fresh-b-page-1',
+          'pdfLazyRender': true,
+          'pdfSourceAssetId': 'asset-b',
+          'pdfSourceName': 'b.pdf',
+          'pdfSourceHash': 'hash-b',
+          'pdfSourcePage': 1,
+          'strokes': <Object?>[],
+        },
+        <String, Object?>{
+          'id': 'fresh-b-page-2',
+          'pdfLazyRender': true,
+          'pdfSourceAssetId': 'asset-b',
+          'pdfSourceName': 'b.pdf',
+          'pdfSourceHash': 'hash-b',
+          'pdfSourcePage': 2,
+          'strokes': <Object?>[],
+        },
+      ];
+
+      final merged = mergeSavedAnnotationsWithPdfPages(
+        savedPages: saved,
+        renderedPages: regeneratedB,
+      );
+
+      expect(merged, hasLength(4));
+      expect(merged[0]['pdfSourceAssetId'], 'asset-a');
+      expect(merged[0]['strokes'], hasLength(1));
+      expect(merged[1]['pdfSourceAssetId'], 'asset-b');
+      expect(merged[1]['strokes'], hasLength(1));
+      expect(merged[1]['pdfLazyRender'], isTrue);
+      expect(merged[1].containsKey('backgroundImage'), isFalse);
+      expect(merged[2]['pdfSourcePage'], 2);
+      expect(merged[3]['id'], 'blank-after-pdf');
+    });
+
     test('page indices are safely clamped after insertions/deletions', () {
       expect(EditorV2DocumentCodec.clampPage(-1, 3), 0);
       expect(EditorV2DocumentCodec.clampPage(99, 3), 2);
