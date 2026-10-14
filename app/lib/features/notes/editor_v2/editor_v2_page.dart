@@ -30,6 +30,7 @@ import '../../../data/local/note_repository.dart';
 import '../note_content_compatibility.dart';
 import 'editor_v2_document.dart';
 import 'editor_v2_ink_painter.dart';
+import 'selection_text_recognizer.dart';
 
 /// Replacement note editor surface. It shares only Snote's persistence and
 /// stroke-format contracts; pointer handling, selection, drawing, and painting
@@ -219,7 +220,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     WidgetsBinding.instance.addObserver(this);
     _title.text = widget.note.title;
     _quill.addListener(_scheduleSave);
-    _toolbarDock = const <String>{'top', 'bottom', 'left', 'right'}
+    _toolbarDock = const <String>{'top', 'left', 'right'}
             .contains(_settings.getString('editorV2ToolbarDock'))
         ? _settings.getString('editorV2ToolbarDock')
         : 'top';
@@ -2846,7 +2847,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     var places = Set<String>.from(_placementsFor(targetTool));
     var precisionErase = _settings.getString('eraserMode') == 'pixel';
 
-    void saveProfile() {
+    void saveProfile({bool persist = true}) {
       setState(() {
         _tool = targetTool;
         _size = size;
@@ -2857,8 +2858,8 @@ class _EditorV2PageState extends State<EditorV2Page>
         _color = color;
       });
       _toolPlacements[targetTool.name] = Set<String>.from(places);
-      unawaited(_saveToolPlacements());
-      if (targetTool == CanvasTool.eraser) {
+      if (persist) unawaited(_saveToolPlacements());
+      if (persist && targetTool == CanvasTool.eraser) {
         unawaited(_settings.setString('eraserMode', precisionErase ? 'pixel' : 'stroke'));
       }
       _toolProfiles[targetTool.name] = <String, Object?>{
@@ -2869,7 +2870,7 @@ class _EditorV2PageState extends State<EditorV2Page>
         'velocitySensitivity': velocity,
         'pressureCurve': curve.name,
       };
-      unawaited(_saveToolProfiles());
+      if (persist) unawaited(_saveToolProfiles());
     }
 
     Widget panel(
@@ -2903,7 +2904,7 @@ class _EditorV2PageState extends State<EditorV2Page>
             spacing: 8,
             runSpacing: 8,
             children: _palette.map((candidate) => InkWell(
-              onTap: () => setPanelState(() => color = candidate),
+              onTap: () { setPanelState(() => color = candidate); saveProfile(); },
               borderRadius: BorderRadius.circular(24),
               child: Container(
                 width: isPopover ? 25 : 30,
@@ -2922,43 +2923,47 @@ class _EditorV2PageState extends State<EditorV2Page>
             )).toList(),
           ),
           const SizedBox(height: 8),
-          Text('Stroke size: ${size.toStringAsFixed(1)}'),
+          Row(children: [const Icon(Icons.line_weight_rounded, size: 17), const SizedBox(width: 7), Text('Stroke size: ${size.toStringAsFixed(1)}')]),
           Slider(
             min: .5,
             max: 40,
             value: size.clamp(.5, 40),
-            onChanged: (value) => setPanelState(() => size = value),
+            onChanged: (value) { setPanelState(() => size = value); saveProfile(persist: false); },
+            onChangeEnd: (_) => saveProfile(),
           ),
-          Text('Opacity: ${(opacity * 100).round()}%'),
+          Row(children: [const Icon(Icons.opacity_rounded, size: 17), const SizedBox(width: 7), Text('Opacity: ${(opacity * 100).round()}%')]),
           Slider(
             min: .05,
             max: 1,
             value: opacity.clamp(.05, 1),
-            onChanged: (value) => setPanelState(() => opacity = value),
+            onChanged: (value) { setPanelState(() => opacity = value); saveProfile(persist: false); },
+            onChangeEnd: (_) => saveProfile(),
           ),
-          Text('Pressure sensitivity: ${pressure.toStringAsFixed(2)}'),
+          Row(children: [const Icon(Icons.touch_app_rounded, size: 17), const SizedBox(width: 7), Text('Pressure sensitivity: ${pressure.toStringAsFixed(2)}')]),
           Slider(
             min: 0,
             max: 1,
             value: pressure,
-            onChanged: (value) => setPanelState(() => pressure = value),
+            onChanged: (value) { setPanelState(() => pressure = value); saveProfile(persist: false); },
+            onChangeEnd: (_) => saveProfile(),
           ),
-          Text('Velocity sensitivity: ${velocity.toStringAsFixed(2)}'),
+          Row(children: [const Icon(Icons.speed_rounded, size: 17), const SizedBox(width: 7), Text('Velocity sensitivity: ${velocity.toStringAsFixed(2)}')]),
           Slider(
             min: 0,
             max: 1,
             value: velocity,
-            onChanged: (value) => setPanelState(() => velocity = value),
+            onChanged: (value) { setPanelState(() => velocity = value); saveProfile(persist: false); },
+            onChangeEnd: (_) => saveProfile(),
           ),
           DropdownButtonFormField<PressureCurve>(
             initialValue: curve,
-            decoration: const InputDecoration(labelText: 'Pressure curve'),
+            decoration: const InputDecoration(labelText: 'Pressure curve', prefixIcon: Icon(Icons.show_chart_rounded)),
             items: PressureCurve.values.map((value) => DropdownMenuItem(
               value: value,
               child: Text(value.name),
             )).toList(),
             onChanged: (value) {
-              if (value != null) setPanelState(() => curve = value);
+              if (value != null) { setPanelState(() => curve = value); saveProfile(); }
             },
           ),
           if (targetTool == CanvasTool.eraser)
@@ -2969,8 +2974,20 @@ class _EditorV2PageState extends State<EditorV2Page>
               title: const Text('Precision erase radius'),
               subtitle: const Text('Use a narrow hit area instead of the standard eraser radius'),
               value: precisionErase,
-              onChanged: (value) => setPanelState(() => precisionErase = value),
+              onChanged: (value) { setPanelState(() => precisionErase = value); saveProfile(); },
             ),
+          if (targetTool == CanvasTool.lasso) ...[
+            OutlinedButton.icon(
+              icon: const Icon(Icons.text_fields_rounded),
+              label: const Text('Convert selected ink to text'),
+              onPressed: () {
+                saveProfile();
+                close();
+                unawaited(_convertSelectedInkToText());
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
           const SizedBox(height: 8),
           const Divider(),
           const Text('Tool placement', style: TextStyle(fontWeight: FontWeight.w800)),
@@ -2980,13 +2997,16 @@ class _EditorV2PageState extends State<EditorV2Page>
             secondary: const Icon(Icons.title_rounded),
             title: const Text('Show in Title Bar'),
             value: places.contains('titleBar'),
-            onChanged: (value) => setPanelState(() {
-              if (value == true) {
-                places.add('titleBar');
-              } else {
-                places.remove('titleBar');
-              }
-            }),
+            onChanged: (value) {
+              setPanelState(() {
+                if (value == true) {
+                  places.add('titleBar');
+                } else {
+                  places.remove('titleBar');
+                }
+              });
+              saveProfile();
+            },
           ),
           CheckboxListTile(
             dense: true,
@@ -2994,13 +3014,16 @@ class _EditorV2PageState extends State<EditorV2Page>
             secondary: const Icon(Icons.widgets_outlined),
             title: const Text('Show in Main Toolbar'),
             value: places.contains('toolbar'),
-            onChanged: (value) => setPanelState(() {
-              if (value == true) {
-                places.add('toolbar');
-              } else {
-                places.remove('toolbar');
-              }
-            }),
+            onChanged: (value) {
+              setPanelState(() {
+                if (value == true) {
+                  places.add('toolbar');
+                } else {
+                  places.remove('toolbar');
+                }
+              });
+              saveProfile();
+            },
           ),
           CheckboxListTile(
             dense: true,
@@ -3008,13 +3031,16 @@ class _EditorV2PageState extends State<EditorV2Page>
             secondary: const Icon(Icons.inventory_2_outlined),
             title: const Text('Show in Pencase'),
             value: places.contains('pencase'),
-            onChanged: (value) => setPanelState(() {
-              if (value == true) {
-                places.add('pencase');
-              } else {
-                places.remove('pencase');
-              }
-            }),
+            onChanged: (value) {
+              setPanelState(() {
+                if (value == true) {
+                  places.add('pencase');
+                } else {
+                  places.remove('pencase');
+                }
+              });
+              saveProfile();
+            },
           ),
           SwitchListTile(
             dense: true,
@@ -3023,13 +3049,16 @@ class _EditorV2PageState extends State<EditorV2Page>
             title: const Text('Hidden / nowhere'),
             subtitle: const Text('Hide this tool from all three locations'),
             value: places.isEmpty,
-            onChanged: (value) => setPanelState(() {
-              if (value) {
-                places.clear();
-              } else {
-                places.add('toolbar');
-              }
-            }),
+            onChanged: (value) {
+              setPanelState(() {
+                if (value) {
+                  places.clear();
+                } else {
+                  places.add('toolbar');
+                }
+              });
+              saveProfile();
+            },
           ),
           Align(
             alignment: Alignment.centerLeft,
@@ -3058,27 +3087,8 @@ class _EditorV2PageState extends State<EditorV2Page>
               },
             ),
           ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              if (!isPopover)
-                TextButton(
-                  onPressed: () {
-                    saveProfile();
-                    close();
-                  },
-                  child: const Text('Save to this tool'),
-                ),
-              const Spacer(),
-              FilledButton(
-                onPressed: () {
-                  saveProfile();
-                  close();
-                },
-                child: const Text('Done'),
-              ),
-            ],
-          ),
+          const SizedBox(height: 4),
+          Text('Changes apply immediately.', style: Theme.of(panelContext).textTheme.bodySmall),
         ],
       );
       return Padding(
@@ -3168,6 +3178,148 @@ class _EditorV2PageState extends State<EditorV2Page>
         );
       },
     );
+  }
+
+  Future<void> _convertSelectedInkToText() async {
+    if (_pageData['locked'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unlock this page before converting handwriting.')),
+      );
+      return;
+    }
+    final selectedStrokes = _strokesFor(_pageData)
+        .where((stroke) => _selectedStrokeIds.contains(stroke.id))
+        .where((stroke) => stroke.points.isNotEmpty)
+        .toList();
+    if (selectedStrokes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Use Lasso to select handwriting strokes first.')),
+      );
+      return;
+    }
+
+    var left = double.infinity;
+    var top = double.infinity;
+    var right = double.negativeInfinity;
+    var bottom = double.negativeInfinity;
+    for (final stroke in selectedStrokes) {
+      for (final point in stroke.points) {
+        left = math.min(left, point.position.dx);
+        top = math.min(top, point.position.dy);
+        right = math.max(right, point.position.dx);
+        bottom = math.max(bottom, point.position.dy);
+      }
+    }
+    final bounds = Rect.fromLTRB(left, top, right, bottom).inflate(14);
+    const maxRasterDimension = 2400.0;
+    final scale = math.min(
+      3.0,
+      maxRasterDimension / math.max(bounds.width, bounds.height).clamp(1.0, maxRasterDimension),
+    );
+    final rasterWidth = math.max(1, (bounds.width * scale).ceil());
+    final rasterHeight = math.max(1, (bounds.height * scale).ceil());
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawColor(Colors.white, BlendMode.src);
+    canvas.save();
+    canvas.scale(scale);
+    canvas.translate(-bounds.left, -bounds.top);
+    for (final stroke in selectedStrokes) {
+      final points = stroke.points;
+      final ink = Paint()
+        ..color = stroke.pen.color.withValues(alpha: stroke.pen.opacity.clamp(.2, 1).toDouble())
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke.pen.size.clamp(.8, 40).toDouble()
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..isAntiAlias = true;
+      if (points.length == 1) {
+        canvas.drawCircle(points.first.position, math.max(.7, ink.strokeWidth / 2), ink);
+      } else {
+        final path = Path()..moveTo(points.first.position.dx, points.first.position.dy);
+        for (var i = 1; i < points.length - 1; i++) {
+          final current = points[i].position;
+          final next = points[i + 1].position;
+          final midpoint = Offset((current.dx + next.dx) / 2, (current.dy + next.dy) / 2);
+          path.quadraticBezierTo(current.dx, current.dy, midpoint.dx, midpoint.dy);
+        }
+        path.lineTo(points.last.position.dx, points.last.position.dy);
+        canvas.drawPath(path, ink);
+      }
+    }
+    canvas.restore();
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(rasterWidth, rasterHeight);
+    final pngData = await image.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    if (pngData == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not prepare the selected ink for recognition.')),
+      );
+      return;
+    }
+
+    try {
+      final recognizedText = await recognizeSelectionText(
+        pngData.buffer.asUint8List(pngData.offsetInBytes, pngData.lengthInBytes),
+      );
+      if (!mounted) return;
+      if (recognizedText.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No text was recognized. Try selecting clearer handwriting.')),
+        );
+        return;
+      }
+      _pushUndo();
+      final selectedIds = _selectedStrokeIds.toSet();
+      final rawStrokes = _pageData['strokes'];
+      if (rawStrokes is List) {
+        final allStrokes = StrokeCodec.documentToStrokes(<String, Object?>{'strokes': rawStrokes});
+        _pageData['strokes'] = allStrokes
+            .where((stroke) => !selectedIds.contains(stroke.id))
+            .map(StrokeCodec.strokeToJson)
+            .toList();
+      }
+      final id = DateTime.now().microsecondsSinceEpoch.toString();
+      final boxX = (bounds.left / _pageWidth).clamp(0.0, .95).toDouble();
+      final boxY = (bounds.top / _pageHeight).clamp(0.0, .95).toDouble();
+      final boxWidth = (bounds.width / _pageWidth).clamp(.04, math.max(.04, 1 - boxX)).toDouble();
+      final boxHeight = (math.max(bounds.height * 1.8, 48) / _pageHeight)
+          .clamp(.045, 1 - boxY)
+          .toDouble();
+      final box = <String, Object?>{
+        'id': id,
+        'x': boxX,
+        'y': boxY,
+        'width': boxWidth,
+        'height': boxHeight,
+        'text': recognizedText.trim(),
+        'fontSize': 22.0,
+        'color': _color.toARGB32(),
+      };
+      final rawBoxes = _pageData['textBoxes'];
+      if (rawBoxes is List<Object?>) {
+        rawBoxes.add(box);
+      } else {
+        _pageData['textBoxes'] = <Object?>[box];
+      }
+      _textControllers[id] = TextEditingController(text: recognizedText.trim());
+      setState(() {
+        _clearSelectionIds();
+        _lassoRect = null;
+      });
+      _scheduleSave();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Handwriting converted to editable text.')),
+      );
+    } catch (error, stackTrace) {
+      debugPrint('[Snote][EditorV2] selection OCR failed: $error\\n$stackTrace');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Text recognition unavailable: $error')),
+        );
+      }
+    }
   }
 
   void _addTextBox() {
@@ -3923,11 +4075,14 @@ class _EditorV2PageState extends State<EditorV2Page>
   }
 
   Future<void> _setToolbarDock(String value) async {
+    // The editor no longer renders a bottom dock/navigation panel. Keep old
+    // saved preferences compatible by mapping a requested bottom dock to top.
+    final dock = value == 'bottom' ? 'top' : value;
     setState(() {
-      _toolbarDock = value;
+      _toolbarDock = dock;
       _floatingToolbar = false;
     });
-    await _settings.setString('editorV2ToolbarDock', value);
+    await _settings.setString('editorV2ToolbarDock', dock);
     await _settings.setBool('editorV2FloatingToolbar', false);
   }
 
@@ -4383,7 +4538,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     ];
     final quickButtons = _toolKeysForLocation('toolbar')
         .map((key) => Padding(
-              padding: const EdgeInsets.all(1),
+              padding: const EdgeInsets.all(.5),
               child: _buildPlacedToolButton(key, 'toolbar'),
             ))
         .toList();
@@ -4416,14 +4571,11 @@ class _EditorV2PageState extends State<EditorV2Page>
           PopupMenuItem(value: 'timer', child: Text('Study timer')),
           PopupMenuDivider(),
           PopupMenuItem(value: 'dockTop', child: Text('Dock toolbar to top')),
-          PopupMenuItem(value: 'dockBottom', child: Text('Dock toolbar to bottom')),
           PopupMenuItem(value: 'dockLeft', child: Text('Dock toolbar to left')),
           PopupMenuItem(value: 'dockRight', child: Text('Dock toolbar to right')),
           PopupMenuItem(value: 'float', child: Text('Toggle floating toolbar')),
           PopupMenuItem(value: 'favoritesShowcase', child: Text('Show / hide favorite pen case')),
           PopupMenuItem(value: 'favoritesOrientation', child: Text('Rotate pen case')),
-          PopupMenuItem(value: 'pageNavigation', child: Text('Show / hide page navigation')),
-          PopupMenuItem(value: 'floatingPageNavigation', child: Text('Toggle movable vertical page bar')),
           PopupMenuItem(value: 'pageSettings', child: Text('Note page and editor settings')),
           PopupMenuItem(value: 'zoomIn', child: Text('Zoom in')),
           PopupMenuItem(value: 'zoomOut', child: Text('Zoom out')),
@@ -4439,7 +4591,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       elevation: 2,
       borderRadius: BorderRadius.circular(vertical ? 12 : 10),
       child: SingleChildScrollView(
-        padding: EdgeInsets.symmetric(horizontal: vertical ? 2 : 3, vertical: vertical ? 3 : 2),
+        padding: EdgeInsets.symmetric(horizontal: vertical ? 1 : 2, vertical: vertical ? 2 : 1),
         scrollDirection: vertical ? Axis.vertical : Axis.horizontal,
         child: vertical ? Column(mainAxisSize: MainAxisSize.min, children: children) : Row(mainAxisSize: MainAxisSize.min, children: children),
       ),
@@ -4770,122 +4922,242 @@ class _EditorV2PageState extends State<EditorV2Page>
     return Stack(clipBehavior: Clip.none, children: children);
   }
 
-  Widget _buildPagePreviewSidebar() => Material(
-        color: Theme.of(context).colorScheme.surfaceContainerLow,
-        elevation: 2,
-        child: SizedBox(
-          width: 64,
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 3),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.view_sidebar_outlined, size: 15),
-                    const SizedBox(width: 3),
-                    Text(
-                      _pages.length.toString(),
-                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900),
+  Widget _buildPagePreviewSidebar() {
+    final sidebarWidth = MediaQuery.sizeOf(context).width >= 900 ? 216.0 : 172.0;
+    final cardWidth = sidebarWidth - 20;
+    final cardHeight = cardWidth * (_pageHeight / _pageWidth);
+    return Material(
+      color: Theme.of(context).colorScheme.surfaceContainerLow,
+      elevation: 2,
+      child: SizedBox(
+        width: sidebarWidth,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
+              child: Row(
+                children: [
+                  const Icon(Icons.auto_stories_rounded, size: 17),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      'Pages',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
-                  ],
-                ),
+                  ),
+                  Text(
+                    _pages.length.toString(),
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
               ),
-              const Divider(height: 1),
-              Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 6),
-                  itemCount: _pages.length,
-                  itemBuilder: (context, index) {
-                    final page = _pages[index];
-                    final selected = index == _page;
-                    final isPdf = page['pdfLazyRender'] == true ||
-                        (page['backgroundImage'] is String &&
-                            (page['backgroundImage'] as String).isNotEmpty);
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Tooltip(
-                        message: 'Page ${index + 1}${isPdf ? ' • PDF' : ''} • long-press for actions',
-                        child: GestureDetector(
-                          onLongPress: _showPagePicker,
-                          child: InkWell(
-                            onTap: () => _goToPage(index),
-                            borderRadius: BorderRadius.circular(7),
-                            child: Container(
-                              height: 76,
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.surface,
-                                borderRadius: BorderRadius.circular(7),
-                                border: Border.all(
-                                  color: selected
-                                      ? Theme.of(context).colorScheme.primary
-                                      : Theme.of(context).colorScheme.outlineVariant,
-                                  width: selected ? 2 : 1,
-                                ),
-                              ),
-                              child: Stack(
-                                fit: StackFit.expand,
-                                children: [
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(6),
-                                    child: _buildPageBackground(
-                                      page,
-                                      showPdf: true,
-                                      thumbnail: true,
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: ListView.builder(
+                // ListView.builder virtualizes off-screen page cards. PDF page
+                // rasters are independently lazy-loaded and byte-bounded.
+                padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+                itemCount: _pages.length,
+                itemBuilder: (context, index) {
+                  final page = _pages[index];
+                  final selected = index == _page;
+                  final isPdf = page['pdfLazyRender'] == true ||
+                      (page['backgroundImage'] is String &&
+                          (page['backgroundImage'] as String).isNotEmpty);
+                  final rawStrokes = _strokesFor(page);
+                  final rawTextBoxes = page['textBoxes'] is List
+                      ? (page['textBoxes'] as List).whereType<Map>().toList()
+                      : const <Map>[];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        RepaintBoundary(
+                          child: Container(
+                            height: cardHeight,
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surface,
+                            borderRadius: BorderRadius.circular(9),
+                            border: Border.all(
+                              color: selected
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Theme.of(context).colorScheme.outlineVariant,
+                              width: selected ? 2 : 1,
+                            ),
+                            boxShadow: selected
+                                ? [
+                                    BoxShadow(
+                                      color: Theme.of(context).colorScheme.primary.withValues(alpha: .10),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
                                     ),
-                                  ),
-                                  if (_settings.getBool('showPageNumbers'))
-                                    Align(
-                                      alignment: Alignment.bottomRight,
-                                      child: Container(
-                                        margin: const EdgeInsets.all(2),
-                                        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withValues(alpha: .88),
-                                          borderRadius: BorderRadius.circular(3),
-                                        ),
-                                        child: Text(
-                                          (index + 1).toString(),
-                                          style: const TextStyle(
-                                            fontSize: 9,
-                                            fontWeight: FontWeight.w900,
-                                            color: Colors.black,
+                                  ]
+                                : const [],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                InkWell(
+                                  onTap: () => _goToPage(index),
+                                  child: Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      _buildPageBackground(
+                                        page,
+                                        showPdf: true,
+                                        thumbnail: true,
+                                      ),
+                                      FittedBox(
+                                        fit: BoxFit.contain,
+                                        child: SizedBox(
+                                          width: _pageWidth,
+                                          height: _pageHeight,
+                                          child: Stack(
+                                            fit: StackFit.expand,
+                                            children: [
+                                              CustomPaint(
+                                                painter: EditorV2InkPainter(
+                                                  strokes: rawStrokes,
+                                                ),
+                                              ),
+                                              for (final box in rawTextBoxes)
+                                                Positioned(
+                                                  left: (((box['x'] as num?)?.toDouble() ?? .1) * _pageWidth).clamp(0.0, _pageWidth - 1).toDouble(),
+                                                  top: (((box['y'] as num?)?.toDouble() ?? .1) * _pageHeight).clamp(0.0, _pageHeight - 1).toDouble(),
+                                                  width: (((box['width'] as num?)?.toDouble() ?? .68) * _pageWidth).clamp(1.0, _pageWidth).toDouble(),
+                                                  height: (((box['height'] as num?)?.toDouble() ?? .16) * _pageHeight).clamp(1.0, _pageHeight).toDouble(),
+                                                  child: IgnorePointer(
+                                                    child: Text(
+                                                      box['text']?.toString() ?? '',
+                                                      maxLines: 8,
+                                                      overflow: TextOverflow.clip,
+                                                      style: TextStyle(
+                                                        color: Color((box['color'] as num?)?.toInt() ?? 0xff17202a),
+                                                        fontSize: (((box['fontSize'] as num?)?.toDouble() ?? 22) * .75).clamp(8.0, 24.0).toDouble(),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                            ],
                                           ),
                                         ),
                                       ),
-                                    ),
-                                  if (isPdf)
-                                    const Align(
-                                      alignment: Alignment.topLeft,
-                                      child: Padding(
-                                        padding: EdgeInsets.all(2),
-                                        child: Icon(
-                                          Icons.picture_as_pdf_rounded,
-                                          size: 10,
-                                          color: Colors.redAccent,
-                                        ),
+                                    ],
+                                  ),
+                                ),
+                                Positioned(
+                                  left: 6,
+                                  bottom: 6,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(context).colorScheme.surface.withValues(alpha: .94),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: Theme.of(context).colorScheme.outlineVariant,
                                       ),
                                     ),
-                                ],
-                              ),
+                                    child: Text(
+                                      'Page ${index + 1}',
+                                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                        fontWeight: FontWeight.w900,
+                                        color: Theme.of(context).colorScheme.onSurface,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                if (isPdf)
+                                  const Positioned(
+                                    left: 6,
+                                    top: 6,
+                                    child: Icon(Icons.picture_as_pdf_rounded, size: 15, color: Colors.redAccent),
+                                  ),
+                                Positioned(
+                                  right: 0,
+                                  top: 0,
+                                  child: Material(
+                                    color: Theme.of(context).colorScheme.surface.withValues(alpha: .96),
+                                    borderRadius: const BorderRadius.only(
+                                      bottomLeft: Radius.circular(8),
+                                    ),
+                                    child: PopupMenuButton<String>(
+                                      tooltip: 'Page ${index + 1} options',
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints.tightFor(width: 34, height: 32),
+                                      iconSize: 18,
+                                      onSelected: (action) {
+                                        switch (action) {
+                                          case 'up':
+                                            _movePage(index, index - 1);
+                                          case 'down':
+                                            _movePage(index, index + 1);
+                                          case 'cut':
+                                            _cutPage(index);
+                                          case 'copy':
+                                            _copyPage(index);
+                                          case 'paste':
+                                            _pastePage(insertAfter: index);
+                                          case 'duplicate':
+                                            _duplicatePage(index);
+                                          case 'delete':
+                                            _deletePage(index);
+                                        }
+                                      },
+                                      itemBuilder: (_) => <PopupMenuEntry<String>>[
+                                        PopupMenuItem(value: 'up', enabled: index > 0, child: const ListTile(dense: true, leading: Icon(Icons.arrow_upward_rounded), title: Text('Move up'))),
+                                        PopupMenuItem(value: 'down', enabled: index < _pages.length - 1, child: const ListTile(dense: true, leading: Icon(Icons.arrow_downward_rounded), title: Text('Move down'))),
+                                        const PopupMenuDivider(),
+                                        const PopupMenuItem(value: 'cut', child: ListTile(dense: true, leading: Icon(Icons.content_cut_rounded), title: Text('Cut page'))),
+                                        const PopupMenuItem(value: 'copy', child: ListTile(dense: true, leading: Icon(Icons.copy_rounded), title: Text('Copy page'))),
+                                        PopupMenuItem(value: 'paste', enabled: _pageClipboard != null, child: const ListTile(dense: true, leading: Icon(Icons.content_paste_rounded), title: Text('Paste after'))),
+                                        const PopupMenuItem(value: 'duplicate', child: ListTile(dense: true, leading: Icon(Icons.control_point_duplicate_rounded), title: Text('Duplicate'))),
+                                        const PopupMenuItem(value: 'delete', child: ListTile(dense: true, leading: Icon(Icons.delete_outline_rounded), title: Text('Delete page'))),
+                                      ],
+                                      icon: const Icon(Icons.more_horiz_rounded),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                      ),
-                    );
-                  },
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 4, 10, 10),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: _addPage,
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text('Add Page'),
+                  style: FilledButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                    textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+                  ),
                 ),
               ),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                tooltip: 'Add blank page',
-                onPressed: _addPage,
-                icon: const Icon(Icons.note_add_outlined, size: 17),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
-      );
+      ),
+    );
+  }
 
   Widget _buildPageSurface() {
     final page = _pageData;
@@ -5054,6 +5326,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 2),
                     child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Convert selected handwriting to text', onPressed: _convertSelectedInkToText, icon: const Icon(Icons.text_fields_rounded, size: 16)),
                       IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Copy selection', onPressed: _copySelection, icon: const Icon(Icons.copy_rounded, size: 16)),
                       IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Cut selection', onPressed: _cutSelection, icon: const Icon(Icons.content_cut_rounded, size: 16)),
                       IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Paste copied selection', onPressed: _selectionClipboard == null ? null : () => _pasteStrokes(), icon: const Icon(Icons.content_paste_rounded, size: 16)),
@@ -5455,6 +5728,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           },
         ),
         titleSpacing: 0,
+        toolbarHeight: 48,
         title: Row(
           children: [
             IconButton(
@@ -5490,7 +5764,8 @@ class _EditorV2PageState extends State<EditorV2Page>
                 onPressed: _redoStack.isEmpty ? null : _redo,
                 icon: const Icon(Icons.redo_rounded, size: 18),
               ),
-            Expanded(
+            SizedBox(
+              width: math.min(280.0, MediaQuery.sizeOf(context).width * .38),
               child: DragTarget<Object>(
                 onAcceptWithDetails: (details) => unawaited(
                   _moveDroppedTool(details.data, 'titleBar'),
@@ -5631,12 +5906,13 @@ class _EditorV2PageState extends State<EditorV2Page>
   }
 
   Widget _buildEditorLayout() {
+    final sidebarWidth = MediaQuery.sizeOf(context).width >= 900 ? 216.0 : 172.0;
     final viewport = Expanded(
       child: Stack(
         clipBehavior: Clip.none,
         children: [
           Positioned.fill(
-            left: _showPagePreview && !_fullScreenMode ? 66 : 0,
+            left: _showPagePreview && !_fullScreenMode ? sidebarWidth + 8 : 0,
             child: _buildCanvas(),
           ),
           if (_showPagePreview && !_fullScreenMode)
@@ -5644,7 +5920,7 @@ class _EditorV2PageState extends State<EditorV2Page>
               left: 0,
               top: 0,
               bottom: 0,
-              width: 64,
+              width: sidebarWidth,
               child: _buildPagePreviewSidebar(),
             ),
           if (_floatingToolbar || _fullScreenMode)
@@ -5664,7 +5940,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                   } else if (y <= 18) {
                     unawaited(_setToolbarDock('top'));
                   } else if (y >= screen.height - 230) {
-                    unawaited(_setToolbarDock('bottom'));
+                    unawaited(_setToolbarDock('right'));
                   }
                 },
                 child: Material(
@@ -5682,7 +5958,7 @@ class _EditorV2PageState extends State<EditorV2Page>
               ),
             ),
           if (_showFavoritesShowcase || _pencaseTools.isNotEmpty) _buildFavoriteShowcase(),
-          if (_showPageNavigation && _floatingPageNavigation) _buildFloatingPageNavigation(),
+          // Page navigation is now handled by the expanded page-preview sidebar.
           if (_calculatorVisible) _buildFloatingCalculator(),
           if (_fullScreenMode)
             Positioned(
@@ -5703,12 +5979,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       ),
     );
 
-    final canvasWithFooter = Column(
-      children: [
-        viewport,
-        if (!_fullScreenMode && _showPageNavigation && !_floatingPageNavigation) _buildPageFooter(),
-      ],
-    );
+    final canvasWithFooter = Column(children: [viewport]);
 
     if (_fullScreenMode) {
       return canvasWithFooter;
@@ -5727,7 +5998,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           children: [
             if (!_floatingToolbar)
               SizedBox(
-                width: 34,
+                width: 32,
                 child: _buildToolbar(vertical: true),
               ),
             Expanded(child: canvasWithFooter),

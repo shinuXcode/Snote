@@ -168,11 +168,69 @@ class EditorV2InkPainter extends CustomPainter {
                 ? baseWidth * 1.2
                 : baseWidth;
 
-    if (!pressureSensitive) {
+    if (type == PenType.fountain) {
+      // Fountain ink reacts to both pressure and speed. Fast strokes become
+      // narrower; heavier pressure broadens the nib. The first and last
+      // segments taper, while a faint outer pass gives ink a soft natural edge.
+      final pressureSensitivity =
+          stroke.pen.pressureSensitivity.clamp(0.0, 1.0).toDouble();
+      final velocitySensitivity =
+          stroke.pen.velocitySensitivity.clamp(0.0, 1.0).toDouble();
+      final lastIndex = stroke.points.length - 1;
+      // Reuse the segment paints instead of allocating two objects per point.
+      final edgePaint = Paint()
+        ..blendMode = paint.blendMode
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..isAntiAlias = true;
+      final inkPaint = Paint()
+        ..blendMode = paint.blendMode
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..isAntiAlias = true;
+      for (var i = 1; i < stroke.points.length; i++) {
+        final a = stroke.points[i - 1];
+        final b = stroke.points[i];
+        final distance = (b.position - a.position).distance;
+        final elapsedMs = (b.timestamp - a.timestamp).abs().clamp(1.0, 250.0);
+        final speed = distance / elapsedMs;
+        final speedResponse = (speed / 24.0).clamp(0.0, 1.0).toDouble();
+        final pressure = ((a.pressure + b.pressure) / 2).clamp(.05, 1.0);
+        final pressureFactor = .48 + pressure * (.70 + pressureSensitivity * .50);
+        final velocityFactor = 1.24 - speedResponse * (.52 * velocitySensitivity);
+        final progress = i / lastIndex;
+        final taper = math.min(
+          1.0,
+          math.min(.55 + progress * 2.25, .55 + (1 - progress) * 2.25),
+        );
+        final width = (inkBaseWidth * pressureFactor * velocityFactor * taper)
+            .clamp(.45, 60.0)
+            .toDouble();
+        final flowAlpha = (alpha * (.78 + pressure * .22) *
+                (1 - speedResponse * .08))
+            .clamp(.04, 1.0)
+            .toDouble();
+        edgePaint
+          ..color = stroke.pen.color.withValues(alpha: flowAlpha * .13)
+          ..strokeWidth = width + math.max(.45, baseWidth * .12);
+        inkPaint
+          ..color = stroke.pen.color.withValues(alpha: flowAlpha)
+          ..strokeWidth = width;
+        canvas.drawLine(a.position, b.position, edgePaint);
+        canvas.drawLine(a.position, b.position, inkPaint);
+      }
+    } else if (!pressureSensitive) {
       canvas.drawPath(path, paint);
     } else {
       // Use variable-width segments only: a full-width base path would hide
-      // the pressure effect beneath those segments.
+      // the pressure effect beneath those segments. Reuse one Paint for the
+      // whole stroke to avoid allocating an object for every pointer sample.
+      final segmentPaint = Paint()
+        ..color = paint.color
+        ..blendMode = paint.blendMode
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..isAntiAlias = true;
       for (var i = 1; i < stroke.points.length; i++) {
         final a = stroke.points[i - 1];
         final b = stroke.points[i];
@@ -180,17 +238,8 @@ class EditorV2InkPainter extends CustomPainter {
         final width = inkBaseWidth *
             (1 - stroke.pen.pressureSensitivity * .52 +
                 stroke.pen.pressureSensitivity * pressure);
-        canvas.drawLine(
-          a.position,
-          b.position,
-          Paint()
-            ..color = paint.color
-            ..blendMode = paint.blendMode
-            ..strokeWidth = width.clamp(.5, 60).toDouble()
-            ..strokeCap = StrokeCap.round
-            ..strokeJoin = StrokeJoin.round
-            ..isAntiAlias = true,
-        );
+        segmentPaint.strokeWidth = width.clamp(.5, 60).toDouble();
+        canvas.drawLine(a.position, b.position, segmentPaint);
       }
     }
   }
