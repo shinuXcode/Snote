@@ -30,6 +30,8 @@ class SnoteSettings extends ChangeNotifier {
     'velocitySensitivity': .65,
     'pressureExponent': 1.0,
     'noteZoom': 1.0,
+    'toolPencaseX': -1.0,
+    'toolPencaseY': 170.0,
   };
 
   static const stringDefaults = <String, String>{
@@ -39,7 +41,10 @@ class SnoteSettings extends ChangeNotifier {
     'eInkProfile': 'physical',
     'defaultPageTemplate': 'dotted',
     'defaultPaperPalette': 'paper-white',
-    'pencaseTools': 'ballpoint,fountain,pencil,highlighter,marker,brush,eraser,lasso,line,arrow,rectangle,ellipse,cartesianPlane,dashedLine,dottedLine,ruler,compass,protractor,divider',
+    'pencaseTools': 'ballpoint,fountain,pencil,highlighter,marker,brush,eraser,lasso,fill,line,arrow,rectangle,ellipse,cartesianPlane,dashedLine,dottedLine,ruler,compass,protractor,divider',
+    'toolPlacements': '{}',
+    'toolOrder': '[]',
+    'toolPencaseDockSide': 'right',
     'toolInstrumentDefaultsV1': '',
     'pencasePresets': '[]',
     'coverLibrary': '[]',
