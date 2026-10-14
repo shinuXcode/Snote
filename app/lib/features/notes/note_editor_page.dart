@@ -3262,7 +3262,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                                 unawaited(_commitToolOptions(target: target, size: value, color: color, opacity: opacity, fill: fill));
                               },
                             ),
-                            Text('Opacity: ${(opacity * 100).round()}%'),
+                            Row(children: [
+                    const Icon(Icons.opacity_rounded, size: 18),
+                    const SizedBox(width: 8),
+                    Text('Opacity: ${(opacity * 100).round()}%'),
+                  ]),
                             Slider(
                               value: opacity.clamp(.05, 1).toDouble(),
                               min: .05,
@@ -3309,7 +3313,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                                   setPopup(() => fill = value);
                                   unawaited(_commitToolOptions(target: target, size: size, color: color, opacity: opacity, fill: value));
                                 },
-                                title: const Text('Fill shape'),
+                                secondary: const Icon(Icons.format_color_fill_outlined),
+                      title: const Text('Fill shape'),
                               ),
                             const Divider(height: 18),
                             const Text('Display location', style: TextStyle(fontWeight: FontWeight.w900)),
@@ -4504,6 +4509,159 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     });
   }
 
+  Future<void> _convertSelectionToText() async {
+    final platform = defaultTargetPlatform;
+    if (platform != TargetPlatform.android && platform != TargetPlatform.iOS) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Handwriting recognition is available on Android and iOS.')),
+      );
+      return;
+    }
+
+    final selected = _canvas.selectedStrokes
+        .where((stroke) =>
+            stroke.shape == null &&
+            stroke.stickerText == null &&
+            stroke.points.isNotEmpty)
+        .toList(growable: false);
+    if (selected.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Use the lasso to select handwritten ink first.')),
+      );
+      return;
+    }
+
+    final targetPage = pageData;
+    final targetPageId = targetPage['id']?.toString();
+    final points = selected.expand((stroke) => stroke.points).toList(growable: false);
+    var left = points.first.position.dx;
+    var right = left;
+    var top = points.first.position.dy;
+    var bottom = top;
+    for (final point in points.skip(1)) {
+      left = math.min(left, point.position.dx);
+      right = math.max(right, point.position.dx);
+      top = math.min(top, point.position.dy);
+      bottom = math.max(bottom, point.position.dy);
+    }
+
+    final canvasObject = _canvasRenderKey.currentContext?.findRenderObject();
+    final canvasSize = canvasObject is RenderBox &&
+            canvasObject.size.width > 1 &&
+            canvasObject.size.height > 1
+        ? canvasObject.size
+        : const Size(700, 990);
+    const padding = 18.0;
+    final logicalWidth = math.max(48.0, right - left + padding * 2);
+    final logicalHeight = math.max(48.0, bottom - top + padding * 2);
+    final scale = math.min(
+      3.0,
+      2048.0 / math.max(logicalWidth, logicalHeight),
+    ).clamp(.75, 3.0).toDouble();
+    final pixelWidth = math.max(1, (logicalWidth * scale).ceil());
+    final pixelHeight = math.max(1, (logicalHeight * scale).ceil());
+    final recorder = ui.PictureRecorder();
+    final bitmapCanvas = ui.Canvas(recorder);
+    bitmapCanvas.drawRect(
+      Rect.fromLTWH(0, 0, pixelWidth.toDouble(), pixelHeight.toDouble()),
+      Paint()..color = Colors.white,
+    );
+    bitmapCanvas.scale(scale);
+    bitmapCanvas.translate(padding - left, padding - top);
+    for (final stroke in selected) {
+      final readablePen = stroke.pen.copyWith(
+        color: const Color(0xff111827),
+        opacity: 1,
+      );
+      InkRenderer.drawInk(bitmapCanvas, stroke.points, readablePen);
+    }
+
+    final picture = recorder.endRecording();
+    ui.Image? image;
+    TextRecognizer? recognizer;
+    try {
+      image = await picture.toImage(pixelWidth, pixelHeight);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      if (byteData == null) {
+        throw StateError('Could not prepare handwriting for recognition.');
+      }
+      final input = InputImage.fromBitmap(
+        bitmap: byteData.buffer.asUint8List(
+          byteData.offsetInBytes,
+          byteData.lengthInBytes,
+        ),
+        width: image.width,
+        height: image.height,
+        rotation: 0,
+      );
+      recognizer = TextRecognizer(script: TextRecognitionScript.latin);
+      final recognized = (await recognizer.processImage(input)).text.trim();
+      if (!mounted) return;
+      if (recognized.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No text was recognized. Try selecting clearer handwriting.')),
+        );
+        return;
+      }
+
+      final targetPageIndex = _pages.indexWhere((page) => page['id']?.toString() == targetPageId);
+      if (targetPageIndex < 0) {
+        throw StateError('The source page no longer exists.');
+      }
+      final boundsWidth = math.max(1.0, right - left);
+      final boundsHeight = math.max(1.0, bottom - top);
+      final x = ((left - padding) / canvasSize.width).clamp(0.0, .92).toDouble();
+      final y = ((top - padding) / canvasSize.height).clamp(0.0, .92).toDouble();
+      final width = ((boundsWidth + padding * 2) / canvasSize.width)
+          .clamp(.12, math.max(.12, 1.0 - x)).toDouble();
+      final lineCount = '\n'.allMatches(recognized).length + 1;
+      final height = ((boundsHeight + padding * 2 + lineCount * 8) / canvasSize.height)
+          .clamp(.06, math.max(.06, 1.0 - y)).toDouble();
+      final id = DateTime.now().microsecondsSinceEpoch.toString();
+      final box = <String, Object?>{
+        'id': id,
+        'x': x,
+        'y': y,
+        'width': width,
+        'height': height,
+        'text': recognized,
+        'fontSize': (boundsHeight / lineCount * .72).clamp(14.0, 28.0).toDouble(),
+        'color': const Color(0xff172334).toARGB32(),
+      };
+      final page = _pages[targetPageIndex];
+      final rawBoxes = page['textBoxes'];
+      if (rawBoxes is List) {
+        rawBoxes.add(box);
+      } else {
+        page['textBoxes'] = <Object?>[box];
+      }
+      _textBoxControllers[id] = TextEditingController(text: recognized);
+
+      if (targetPageIndex == _page && identical(page, pageData)) {
+        setState(() {});
+        // Replace selected handwriting only after recognition has succeeded.
+        _canvas.deleteSelection();
+      } else {
+        setState(() {});
+      }
+      _scheduleSave();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Handwriting converted to editable text.')),
+      );
+    } catch (error, stackTrace) {
+      debugPrint('Snote selected handwriting recognition failed: $error\n$stackTrace');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not convert this selection. Your handwriting is unchanged.')),
+        );
+      }
+    } finally {
+      image?.dispose();
+      picture.dispose();
+      await recognizer?.close();
+    }
+  }
+
   Widget _selectionTools() {
     final size = MediaQuery.sizeOf(context);
     final landscape = size.width > size.height;
@@ -4536,6 +4694,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       IconButton(onPressed: () => _canvas.moveSelection(8, 0), icon: const Icon(Icons.arrow_forward_rounded), tooltip: 'Move right'),
       IconButton(onPressed: () => _canvas.scaleSelection(.9), icon: const Icon(Icons.remove_circle_outline_rounded), tooltip: 'Scale down'),
       IconButton(onPressed: () => _canvas.scaleSelection(1.1), icon: const Icon(Icons.add_circle_outline_rounded), tooltip: 'Scale up'),
+      IconButton(
+        onPressed: () => unawaited(_convertSelectionToText()),
+        icon: const Icon(Icons.text_fields_rounded),
+        tooltip: 'Convert selected handwriting to text',
+      ),
       IconButton(onPressed: _canvas.duplicateSelection, icon: const Icon(Icons.copy_rounded), tooltip: 'Duplicate'),
       IconButton(onPressed: _canvas.deleteSelection, icon: const Icon(Icons.delete_outline_rounded), tooltip: 'Delete'),
       IconButton(onPressed: _canvas.selectAll, icon: const Icon(Icons.select_all_rounded), tooltip: 'Select all'),
@@ -5560,9 +5723,27 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('${target.label} options', style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 8),
-                  Text('Stroke size: ${size.toStringAsFixed(1)}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                  Row(children: [
+                    Icon(_toolIcon(target), size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${target.label} options',
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Close settings',
+                      onPressed: () => Navigator.pop(dialogContext),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ]),
+                  const SizedBox(height: 4),
+                  Row(children: [
+                    const Icon(Icons.line_weight_rounded, size: 18),
+                    const SizedBox(width: 8),
+                    Text('Stroke size: ${size.toStringAsFixed(1)} px', style: const TextStyle(fontWeight: FontWeight.w700)),
+                  ]),
                   Slider(value: size.clamp(.5, 60), min: .5, max: 60, divisions: 119, onChanged: (v) {
                     setModal(() => size = v);
                     unawaited(_commitToolOptions(target: target, size: v, color: color, opacity: opacity, fill: fill, dashed: dashed, sides: sides));
@@ -5573,7 +5754,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     unawaited(_commitToolOptions(target: target, size: size, color: color, opacity: v, fill: fill, dashed: dashed, sides: sides));
                   }),
                   const SizedBox(height: 4),
-                  const Text('Color', style: TextStyle(fontWeight: FontWeight.w800)),
+                  const Row(children: [
+                    Icon(Icons.palette_outlined, size: 18),
+                    SizedBox(width: 8),
+                    Text('Color', style: TextStyle(fontWeight: FontWeight.w800)),
+                  ]),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
@@ -5645,6 +5830,17 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     ),
                     const SizedBox(height: 6),
                     const Text('Draw around content with the lasso, then drag the selection toolbar to place its options wherever you need them.'),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: _selected > 0
+                          ? () {
+                              Navigator.pop(dialogContext);
+                              unawaited(_convertSelectionToText());
+                            }
+                          : null,
+                      icon: const Icon(Icons.text_fields_rounded),
+                      label: const Text('Convert selected ink to text'),
+                    ),
                   ] else if (target.isShape) ...[
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
@@ -5653,6 +5849,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                         setModal(() => dashed = value);
                         unawaited(_commitToolOptions(target: target, size: size, color: color, opacity: opacity, fill: fill, dashed: value, sides: sides));
                       },
+                      secondary: const Icon(Icons.border_style_rounded),
                       title: const Text('Dashed outline'),
                     ),
                   ],
@@ -5676,7 +5873,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     ),
                   if (target.isPen) ...[
                     const SizedBox(height: 6),
-                    const Text('Pressure response', style: TextStyle(fontWeight: FontWeight.w800)),
+                    const Row(children: [
+                      Icon(Icons.speed_rounded, size: 18),
+                      SizedBox(width: 8),
+                      Text('Pressure response', style: TextStyle(fontWeight: FontWeight.w800)),
+                    ]),
                     DropdownButtonFormField<String>(
                       value: curve,
                       items: const [
@@ -5702,15 +5903,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                         }),
                       ),
                   ],
-                  const SizedBox(height: 14),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton.icon(
-                      onPressed: () => Navigator.pop(dialogContext),
-                      icon: const Icon(Icons.check_rounded),
-                      label: const Text('Done'),
-                    ),
-                  ),
+                  const SizedBox(height: 8),
                 ],
               ),
             ),
