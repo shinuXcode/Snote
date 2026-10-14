@@ -1131,70 +1131,168 @@ class _EditorV2PageState extends State<EditorV2Page>
       math.max(rect.top, rect.bottom),
     );
     final hitRect = normalized.inflate(2);
-    final selected = <String>{};
+    final selectedStrokes = <String>{};
     for (final stroke in _strokesFor(_pageData)) {
       final points = stroke.points.map((point) => point.position).toList();
       var intersects = points.any(hitRect.contains);
       for (var i = 1; !intersects && i < points.length; i++) {
         intersects = _segmentIntersectsRect(points[i - 1], points[i], hitRect);
       }
-      if (intersects) selected.add(stroke.id);
+      if (intersects) selectedStrokes.add(stroke.id);
     }
+
+    final selectedImages = <String>{};
+    final images = _pageData['images'];
+    if (images is List) {
+      for (final raw in images.whereType<Map>()) {
+        final image = raw.map<String, Object?>((key, value) => MapEntry(key.toString(), value));
+        final id = image['id']?.toString() ?? '';
+        if (id.isEmpty) continue;
+        final x = (image['x'] as num?)?.toDouble() ?? .1;
+        final y = (image['y'] as num?)?.toDouble() ?? .1;
+        final width = (image['width'] as num?)?.toDouble() ?? .4;
+        final height = (image['height'] as num?)?.toDouble() ?? .3;
+        final bounds = Rect.fromLTWH(x * _pageWidth, y * _pageHeight, width * _pageWidth, height * _pageHeight);
+        if (hitRect.overlaps(bounds) || hitRect.contains(bounds.center)) selectedImages.add(id);
+      }
+    }
+
+    final selectedTextBoxes = <String>{};
+    final textBoxes = _pageData['textBoxes'];
+    if (textBoxes is List) {
+      for (final raw in textBoxes.whereType<Map>()) {
+        final box = raw.map<String, Object?>((key, value) => MapEntry(key.toString(), value));
+        final id = box['id']?.toString() ?? '';
+        if (id.isEmpty) continue;
+        final x = (box['x'] as num?)?.toDouble() ?? .12;
+        final y = (box['y'] as num?)?.toDouble() ?? .12;
+        final width = (box['width'] as num?)?.toDouble() ?? .68;
+        final height = (box['height'] as num?)?.toDouble() ?? .16;
+        final bounds = Rect.fromLTWH(x * _pageWidth, y * _pageHeight, width * _pageWidth, height * _pageHeight);
+        if (hitRect.overlaps(bounds) || hitRect.contains(bounds.center)) selectedTextBoxes.add(id);
+      }
+    }
+
     setState(() {
       _lassoRect = normalized;
       _selectedStrokeIds
         ..clear()
-        ..addAll(selected);
+        ..addAll(selectedStrokes);
+      _selectedImageIds
+        ..clear()
+        ..addAll(selectedImages);
+      _selectedTextBoxIds
+        ..clear()
+        ..addAll(selectedTextBoxes);
     });
   }
 
   void _deleteSelection() {
-    if (_pageData['locked'] == true) return;
-    if (_selectedStrokeIds.isEmpty) return;
+    if (_pageData['locked'] == true || _selectionCount == 0) return;
     _pushUndo();
-    final raw = _pageData['strokes'] as List<Object?>;
-    final strokes = StrokeCodec.documentToStrokes(<String, Object?>{'strokes': raw});
-    _pageData['strokes'] = strokes
-        .where((stroke) => !_selectedStrokeIds.contains(stroke.id))
-        .map(StrokeCodec.strokeToJson)
-        .toList();
+    final rawStrokes = _pageData['strokes'];
+    if (rawStrokes is List) {
+      final strokes = StrokeCodec.documentToStrokes(<String, Object?>{'strokes': rawStrokes});
+      _pageData['strokes'] = strokes
+          .where((stroke) => !_selectedStrokeIds.contains(stroke.id))
+          .map(StrokeCodec.strokeToJson)
+          .toList();
+    }
+    final rawImages = _pageData['images'];
+    if (rawImages is List) {
+      _pageData['images'] = rawImages.where((raw) {
+        if (raw is! Map) return true;
+        return !_selectedImageIds.contains(raw['id']?.toString());
+      }).toList();
+    }
+    final rawBoxes = _pageData['textBoxes'];
+    if (rawBoxes is List) {
+      for (final id in _selectedTextBoxIds) {
+        _textControllers.remove(id)?.dispose();
+      }
+      _pageData['textBoxes'] = rawBoxes.where((raw) {
+        if (raw is! Map) return true;
+        return !_selectedTextBoxIds.contains(raw['id']?.toString());
+      }).toList();
+    }
     setState(() {
-      _selectedStrokeIds.clear();
+      _clearSelectionIds();
       _lassoRect = null;
     });
     _scheduleSave();
   }
 
   void _moveSelection(Offset delta) {
-    if (_pageData['locked'] == true) return;
-    if (_selectedStrokeIds.isEmpty) return;
+    if (_pageData['locked'] == true || _selectionCount == 0) return;
     _pushUndo();
-    final raw = _pageData['strokes'] as List<Object?>;
-    final strokes = StrokeCodec.documentToStrokes(<String, Object?>{'strokes': raw});
-    _pageData['strokes'] = strokes.map((stroke) {
-      if (!_selectedStrokeIds.contains(stroke.id)) return StrokeCodec.strokeToJson(stroke);
-      return StrokeCodec.strokeToJson(stroke.copyWith(
-        points: stroke.points
-            .map((point) => point.copyWith(position: point.position + delta))
-            .toList(),
-      ));
-    }).toList();
-    setState(() {});
+    final rawStrokes = _pageData['strokes'];
+    if (rawStrokes is List) {
+      final strokes = StrokeCodec.documentToStrokes(<String, Object?>{'strokes': rawStrokes});
+      _pageData['strokes'] = strokes.map((stroke) {
+        if (!_selectedStrokeIds.contains(stroke.id)) return StrokeCodec.strokeToJson(stroke);
+        return StrokeCodec.strokeToJson(stroke.copyWith(
+          points: stroke.points.map((point) => point.copyWith(position: point.position + delta)).toList(),
+        ));
+      }).toList();
+    }
+    for (final key in const ['images', 'textBoxes']) {
+      final raw = _pageData[key];
+      if (raw is! List) continue;
+      final selectedIds = key == 'images' ? _selectedImageIds : _selectedTextBoxIds;
+      _pageData[key] = raw.whereType<Map>().map((item) {
+        final object = item.map<String, Object?>((k, v) => MapEntry(k.toString(), v));
+        if (!selectedIds.contains(object['id']?.toString())) return object;
+        final x = (object['x'] as num?)?.toDouble() ?? .1;
+        final y = (object['y'] as num?)?.toDouble() ?? .1;
+        final width = (object['width'] as num?)?.toDouble() ?? .4;
+        final height = (object['height'] as num?)?.toDouble() ?? .2;
+        object['x'] = (x + delta.dx / _pageWidth).clamp(0.0, math.max(0.0, 1 - width)).toDouble();
+        object['y'] = (y + delta.dy / _pageHeight).clamp(0.0, math.max(0.0, 1 - height)).toDouble();
+        return object;
+      }).toList();
+    }
+    setState(() => _lassoRect = _selectionBounds());
     _scheduleSave();
   }
 
   Rect? _selectionBounds() {
-    final selected = _strokesFor(_pageData).where((stroke) => _selectedStrokeIds.contains(stroke.id));
-    final points = selected.expand((stroke) => stroke.points).map((point) => point.position).toList();
-    if (points.isEmpty) return null;
-    var left = points.first.dx, right = points.first.dx, top = points.first.dy, bottom = points.first.dy;
-    for (final point in points.skip(1)) {
-      left = math.min(left, point.dx);
-      right = math.max(right, point.dx);
-      top = math.min(top, point.dy);
-      bottom = math.max(bottom, point.dy);
+    final bounds = <Rect>[];
+    final selectedStrokes = _strokesFor(_pageData).where((stroke) => _selectedStrokeIds.contains(stroke.id));
+    for (final stroke in selectedStrokes) {
+      if (stroke.points.isEmpty) continue;
+      var left = stroke.points.first.position.dx;
+      var right = left;
+      var top = stroke.points.first.position.dy;
+      var bottom = top;
+      for (final point in stroke.points.skip(1)) {
+        left = math.min(left, point.position.dx);
+        right = math.max(right, point.position.dx);
+        top = math.min(top, point.position.dy);
+        bottom = math.max(bottom, point.position.dy);
+      }
+      bounds.add(Rect.fromLTRB(left, top, right, bottom));
     }
-    return Rect.fromLTRB(left, top, right, bottom).inflate(3);
+    for (final spec in <({String key, Set<String> ids, double width, double height})>[
+      (key: 'images', ids: _selectedImageIds, width: .4, height: .3),
+      (key: 'textBoxes', ids: _selectedTextBoxIds, width: .68, height: .16),
+    ]) {
+      final raw = _pageData[spec.key];
+      if (raw is! List) continue;
+      for (final item in raw.whereType<Map>()) {
+        if (!spec.ids.contains(item['id']?.toString())) continue;
+        final x = (item['x'] as num?)?.toDouble() ?? .1;
+        final y = (item['y'] as num?)?.toDouble() ?? .1;
+        final width = (item['width'] as num?)?.toDouble() ?? spec.width;
+        final height = (item['height'] as num?)?.toDouble() ?? spec.height;
+        bounds.add(Rect.fromLTWH(x * _pageWidth, y * _pageHeight, width * _pageWidth, height * _pageHeight));
+      }
+    }
+    if (bounds.isEmpty) return null;
+    var result = bounds.first;
+    for (final item in bounds.skip(1)) {
+      result = result.expandToInclude(item);
+    }
+    return result.inflate(3);
   }
 
   void _startSelectionTransform({required bool resize}) {
