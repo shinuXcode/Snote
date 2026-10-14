@@ -685,6 +685,10 @@ class _EditorV2PageState extends State<EditorV2Page>
         event.kind == PointerDeviceKind.invertedStylus) {
       _stylusPointers.add(event.pointer);
     }
+    if (_pageData['locked'] == true) {
+      _ignoredPointers.add(event.pointer);
+      return;
+    }
     if (_activePointers.length > 1) {
       if (_activePointer != null) _ignoredPointers.add(_activePointer!);
       _ignoredPointers.add(event.pointer);
@@ -1890,6 +1894,19 @@ class _EditorV2PageState extends State<EditorV2Page>
     await _settings.setBool('editorV2FloatingPageNavigation', _floatingPageNavigation);
   }
 
+  Future<void> _togglePageLock([int? requestedIndex]) async {
+    final index = requestedIndex ?? _page;
+    if (index < 0 || index >= _pages.length) return;
+    final locked = _pages[index]['locked'] != true;
+    setState(() => _pages[index]['locked'] = locked);
+    _scheduleSave();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Page \${index + 1} \${locked ? 'locked' : 'unlocked'}')),
+      );
+    }
+  }
+
   Future<void> _togglePalmRejection() async {
     final enabled = !_settings.getBool('palmRejection');
     await _settings.setBool('palmRejection', enabled);
@@ -2093,6 +2110,8 @@ class _EditorV2PageState extends State<EditorV2Page>
         unawaited(_togglePalmRejection());
       case 'pageSettings':
         unawaited(_showPageAndEditorSettings());
+      case 'togglePageLock':
+        unawaited(_togglePageLock());
       case 'pan':
         setState(() => _panMode = !_panMode);
       case 'zoomIn':
@@ -2539,7 +2558,7 @@ class _EditorV2PageState extends State<EditorV2Page>
               ),
             ),
             Positioned.fill(child: _buildImages(page)),
-            Positioned.fill(child: _buildTextBoxes(page)),
+            Positioned.fill(child: IgnorePointer(ignoring: page['locked'] == true, child: _buildTextBoxes(page))),
             if (_lassoRect != null)
               Positioned(
                 left: math.min(_lassoRect!.left, _lassoRect!.right),
@@ -2803,6 +2822,8 @@ class _EditorV2PageState extends State<EditorV2Page>
                                   _movePage(index, math.max(0, index - 1));
                                 case 'down':
                                   _movePage(index, math.min(_pages.length - 1, index + 1));
+                                case 'lock':
+                                  unawaited(_togglePageLock(index));
                                 case 'delete':
                                   Navigator.pop(sheetContext);
                                   _deletePage(index);
@@ -2814,6 +2835,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                               PopupMenuItem(value: 'paste', child: Text('Paste copied page after this')),
                               PopupMenuItem(value: 'duplicate', child: Text('Duplicate page')),
                               PopupMenuItem(value: 'background', child: Text('Change page background')),
+                              PopupMenuItem(value: 'lock', child: Text('Lock / unlock this page')),
                               PopupMenuItem(value: 'up', child: Text('Move page up')),
                               PopupMenuItem(value: 'down', child: Text('Move page down')),
                               PopupMenuDivider(),
