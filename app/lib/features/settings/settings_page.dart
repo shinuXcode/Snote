@@ -173,8 +173,12 @@ class _SettingsPageState extends State<SettingsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Note canvas zoom', style: TextStyle(fontWeight: FontWeight.w800)),
-                Text((_settings.getDouble('noteZoom') * 100).round().toString() + '%'),
+                const Row(children: [
+                  Icon(Icons.zoom_in_rounded, size: 18),
+                  SizedBox(width: 8),
+                  Text('Note canvas zoom', style: TextStyle(fontWeight: FontWeight.w800)),
+                ]),
+                Text('${(_settings.getDouble('noteZoom') * 100).round()}%'),
                 Slider(
                   value: _settings.getDouble('noteZoom').clamp(.5, 4).toDouble(),
                   min: .5,
