@@ -19,9 +19,11 @@ class SnoteScreenColorPicker {
         _showError(context, 'Screen capture returned no image. Check the capture permission.');
         return null;
       }
-      codec = await ui.instantiateImageCodec(bytes);
-      image = (await codec.getNextFrame()).image;
-      final rgba = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      final imageCodec = await ui.instantiateImageCodec(bytes);
+      codec = imageCodec;
+      final capturedImage = (await imageCodec.getNextFrame()).image;
+      image = capturedImage;
+      final rgba = await capturedImage.toByteData(format: ui.ImageByteFormat.rawRgba);
       if (rgba == null) {
         _showError(context, 'This screen image could not be sampled.');
         return null;
@@ -31,11 +33,11 @@ class SnoteScreenColorPicker {
       final media = MediaQuery.sizeOf(context);
       final maxWidth = math.max(180.0, math.min(900.0, media.width - 48));
       final maxHeight = math.max(120.0, media.height - 210);
-      var previewWidth = math.min(maxWidth, maxHeight * image.width / image.height);
-      var previewHeight = previewWidth * image.height / image.width;
+      var previewWidth = math.min(maxWidth, maxHeight * capturedImage.width / capturedImage.height);
+      var previewHeight = previewWidth * capturedImage.height / capturedImage.width;
       if (previewHeight > maxHeight) {
         previewHeight = maxHeight;
-        previewWidth = previewHeight * image.width / image.height;
+        previewWidth = previewHeight * capturedImage.width / capturedImage.height;
       }
 
       final point = await showDialog<Offset>(
@@ -61,15 +63,15 @@ class SnoteScreenColorPicker {
                           position.dx >= previewWidth || position.dy >= previewHeight) {
                         return;
                       }
-                      final x = (position.dx / previewWidth * image!.width)
-                          .floor().clamp(0, image.width - 1);
-                      final y = (position.dy / previewHeight * image.height)
-                          .floor().clamp(0, image.height - 1);
+                      final x = (position.dx / previewWidth * capturedImage.width)
+                          .floor().clamp(0, capturedImage.width - 1);
+                      final y = (position.dy / previewHeight * capturedImage.height)
+                          .floor().clamp(0, capturedImage.height - 1);
                       Navigator.of(dialogContext, rootNavigator: true).pop(
                         Offset(x.toDouble(), y.toDouble()),
                       );
                     },
-                    child: RawImage(image: image, fit: BoxFit.fill),
+                    child: RawImage(image: capturedImage, fit: BoxFit.fill),
                   ),
                 ),
               ],
@@ -84,9 +86,9 @@ class SnoteScreenColorPicker {
         ),
       );
       if (point == null) return null;
-      final x = point.dx.toInt().clamp(0, image.width - 1);
-      final y = point.dy.toInt().clamp(0, image.height - 1);
-      final offset = (y * image.width + x) * 4;
+      final x = point.dx.toInt().clamp(0, capturedImage.width - 1);
+      final y = point.dy.toInt().clamp(0, capturedImage.height - 1);
+      final offset = (y * capturedImage.width + x) * 4;
       return Color.fromARGB(
         rgba.getUint8(offset + 3),
         rgba.getUint8(offset),
