@@ -37,6 +37,8 @@ import 'selection_text_recognizer.dart';
 import '../../tools/screen_capture.dart';
 import '../../tools/floating_timer_panel.dart';
 import '../../tools/screenshot_cropper.dart';
+import '../../tools/screen_color_picker.dart';
+import '../../tools/web_search_panel.dart';
 
 String _hashPdfBytesInBackground(Uint8List bytes) => sha256.convert(bytes).toString();
 
@@ -252,6 +254,8 @@ class _EditorV2PageState extends State<EditorV2Page>
   Rect? _selectionTransformBounds;
   Offset _selectionTransformDelta = Offset.zero;
   bool _selectionTransformIsResize = false;
+  String? _selectionResizeHandle;
+  Offset? _selectionTransformAnchor;
 
   bool get _hasPdfBackgroundPages => _pages.any((page) {
         if (page['pdfLazyRender'] == true) return true;
@@ -2428,17 +2432,25 @@ class _EditorV2PageState extends State<EditorV2Page>
     return result.inflate(3);
   }
 
-  Rect _transformObjectRect(Map<String, Object?> object, Offset center, double factor, Offset offset, {double defaultWidth = .4, double defaultHeight = .2}) {
+  Rect _transformObjectRect(
+    Map<String, Object?> object,
+    Offset anchor,
+    double factorX,
+    double factorY,
+    Offset offset, {
+    double defaultWidth = .4,
+    double defaultHeight = .2,
+  }) {
     final x = (object['x'] as num?)?.toDouble() ?? .1;
     final y = (object['y'] as num?)?.toDouble() ?? .1;
     final width = (object['width'] as num?)?.toDouble() ?? defaultWidth;
     final height = (object['height'] as num?)?.toDouble() ?? defaultHeight;
     final original = Rect.fromLTWH(x * _pageWidth, y * _pageHeight, width * _pageWidth, height * _pageHeight);
     return Rect.fromLTWH(
-      center.dx + (original.left - center.dx) * factor + offset.dx,
-      center.dy + (original.top - center.dy) * factor + offset.dy,
-      math.max(8.0, original.width * factor).toDouble(),
-      math.max(8.0, original.height * factor).toDouble(),
+      anchor.dx + (original.left - anchor.dx) * factorX + offset.dx,
+      anchor.dy + (original.top - anchor.dy) * factorY + offset.dy,
+      math.max(8.0, original.width * factorX).toDouble(),
+      math.max(8.0, original.height * factorY).toDouble(),
     );
   }
 
@@ -2451,9 +2463,25 @@ class _EditorV2PageState extends State<EditorV2Page>
     object['y'] = (rect.top / _pageHeight).clamp(0.0, math.max(0.0, 1 - height)).toDouble();
   }
 
-  void _startSelectionTransform({required bool resize}) {
+  void _startSelectionTransform({required bool resize, String? handle}) {
     final bounds = _selectionBounds();
     if (bounds == null || _selectionCount == 0) return;
+    final resizeHandle = resize ? (handle ?? 'br') : null;
+    final handleX = resizeHandle?.contains('l') == true
+        ? -1
+        : resizeHandle?.contains('r') == true
+            ? 1
+            : 0;
+    final handleY = resizeHandle?.contains('t') == true
+        ? -1
+        : resizeHandle?.contains('b') == true
+            ? 1
+            : 0;
+    _selectionResizeHandle = resizeHandle;
+    _selectionTransformAnchor = Offset(
+      handleX < 0 ? bounds.right : handleX > 0 ? bounds.left : bounds.center.dx,
+      handleY < 0 ? bounds.bottom : handleY > 0 ? bounds.top : bounds.center.dy,
+    );
     _pushUndo();
     _selectionTransformSnapshot = _strokesFor(_pageData)
         .where((stroke) => _selectedStrokeIds.contains(stroke.id))
@@ -2481,11 +2509,25 @@ class _EditorV2PageState extends State<EditorV2Page>
     if (bounds == null || (strokeSnapshot == null && imageSnapshot.isEmpty && textSnapshot.isEmpty)) return;
     final scale = _transform.value.getMaxScaleOnAxis().clamp(.25, 4).toDouble();
     _selectionTransformDelta += delta / scale;
-    final factor = _selectionTransformIsResize
-        ? (1 + (_selectionTransformDelta.dx + _selectionTransformDelta.dy) / math.max(40, bounds.longestSide)).clamp(.35, 3.0).toDouble()
-        : 1.0;
+    var factorX = 1.0;
+    var factorY = 1.0;
+    if (_selectionTransformIsResize) {
+      final handle = _selectionResizeHandle ?? 'br';
+      if (handle.contains('l')) {
+        factorX = 1 - _selectionTransformDelta.dx / math.max(40.0, bounds.width);
+      } else if (handle.contains('r')) {
+        factorX = 1 + _selectionTransformDelta.dx / math.max(40.0, bounds.width);
+      }
+      if (handle.contains('t')) {
+        factorY = 1 - _selectionTransformDelta.dy / math.max(40.0, bounds.height);
+      } else if (handle.contains('b')) {
+        factorY = 1 + _selectionTransformDelta.dy / math.max(40.0, bounds.height);
+      }
+      factorX = factorX.clamp(.35, 3.0).toDouble();
+      factorY = factorY.clamp(.35, 3.0).toDouble();
+    }
     final offset = _selectionTransformIsResize ? Offset.zero : _selectionTransformDelta;
-    final center = bounds.center;
+    final anchor = _selectionTransformAnchor ?? bounds.center;
 
     if (strokeSnapshot != null) {
       final byId = <String, Stroke>{for (final stroke in strokeSnapshot) stroke.id: stroke};
@@ -2495,7 +2537,10 @@ class _EditorV2PageState extends State<EditorV2Page>
         if (original == null) return StrokeCodec.strokeToJson(stroke);
         return StrokeCodec.strokeToJson(original.copyWith(
           points: original.points.map((point) => point.copyWith(
-            position: center + (point.position - center) * factor + offset,
+            position: anchor + Offset(
+            (point.position.dx - anchor.dx) * factorX,
+            (point.position.dy - anchor.dy) * factorY,
+          ) + offset,
           )).toList(),
         ));
       }).toList();
@@ -2511,11 +2556,11 @@ class _EditorV2PageState extends State<EditorV2Page>
         final id = object['id']?.toString() ?? '';
         final original = source[id];
         if (!ids.contains(id) || original == null) return object;
-        final originalRect = _transformObjectRect(original, center, factor, offset, defaultWidth: defaultWidth, defaultHeight: defaultHeight);
+        final originalRect = _transformObjectRect(original, anchor, factorX, factorY, offset, defaultWidth: defaultWidth, defaultHeight: defaultHeight);
         _writeObjectRect(object, originalRect);
         if (_selectionTransformIsResize && key == 'textBoxes') {
           final fontSize = (original['fontSize'] as num?)?.toDouble() ?? 18;
-          object['fontSize'] = (fontSize * factor).clamp(6.0, 240.0).toDouble();
+          object['fontSize'] = (fontSize * math.sqrt(factorX * factorY)).clamp(6.0, 240.0).toDouble();
         }
         return object;
       }).toList();
@@ -2534,6 +2579,43 @@ class _EditorV2PageState extends State<EditorV2Page>
     _selectionTransformBounds = null;
     _selectionTransformDelta = Offset.zero;
     _selectionTransformIsResize = false;
+    _selectionResizeHandle = null;
+    _selectionTransformAnchor = null;
+  }
+
+  List<Widget> _selectionResizeHandleWidgets(Rect bounds) {
+    final handles = <({String key, Offset point, String tooltip})>[
+      (key: 'tl', point: bounds.topLeft, tooltip: 'Resize width and height from top-left'),
+      (key: 't', point: Offset(bounds.center.dx, bounds.top), tooltip: 'Resize height from top edge'),
+      (key: 'tr', point: bounds.topRight, tooltip: 'Resize width and height from top-right'),
+      (key: 'r', point: Offset(bounds.right, bounds.center.dy), tooltip: 'Resize width from right edge'),
+      (key: 'br', point: bounds.bottomRight, tooltip: 'Resize width and height from bottom-right'),
+      (key: 'b', point: Offset(bounds.center.dx, bounds.bottom), tooltip: 'Resize height from bottom edge'),
+      (key: 'bl', point: bounds.bottomLeft, tooltip: 'Resize width and height from bottom-left'),
+      (key: 'l', point: Offset(bounds.left, bounds.center.dy), tooltip: 'Resize width from left edge'),
+    ];
+    return handles.map((handle) => Positioned(
+      left: (handle.point.dx - 7.5).clamp(0.0, math.max(0.0, _pageWidth - 15)).toDouble(),
+      top: (handle.point.dy - 7.5).clamp(0.0, math.max(0.0, _pageHeight - 15)).toDouble(),
+      child: Tooltip(
+        message: handle.tooltip,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onPanStart: (_) => _startSelectionTransform(resize: true, handle: handle.key),
+          onPanUpdate: (details) => _updateSelectionTransform(details.delta),
+          onPanEnd: (_) => _finishSelectionTransform(),
+          child: Container(
+            width: 15,
+            height: 15,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primary,
+              border: Border.all(color: Colors.white, width: 1.5),
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+        ),
+      ),
+    )).toList(growable: false);
   }
 
   Map<String, Object?> _currentSelectionPayload() {
@@ -3111,7 +3193,53 @@ class _EditorV2PageState extends State<EditorV2Page>
                     });
                   },
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Text('Fine shade', style: TextStyle(fontWeight: FontWeight.w700)),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'Darken by 2%',
+                      onPressed: () {
+                        final hsv = HSVColor.fromColor(selectedColor);
+                        setSheetState(() {
+                          selectedColor = hsv.withValue((hsv.value - .02).clamp(0.0, 1.0).toDouble()).toColor();
+                          hexController.text = selectedColor.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase();
+                        });
+                      },
+                      icon: const Icon(Icons.remove_circle_outline_rounded, size: 19),
+                    ),
+                    const Text('2%'),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'Lighten by 2%',
+                      onPressed: () {
+                        final hsv = HSVColor.fromColor(selectedColor);
+                        setSheetState(() {
+                          selectedColor = hsv.withValue((hsv.value + .02).clamp(0.0, 1.0).toDouble()).toColor();
+                          hexController.text = selectedColor.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase();
+                        });
+                      },
+                      icon: const Icon(Icons.add_circle_outline_rounded, size: 19),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'Eyedropper: sample a screen color',
+                      onPressed: () async {
+                        final sampled = await SnoteScreenColorPicker.pick(context);
+                        if (sampled == null || !mounted) return;
+                        setSheetState(() {
+                          selectedColor = sampled;
+                          spectrumHue = HSVColor.fromColor(sampled).hue;
+                          hexController.text = sampled.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase();
+                        });
+                      },
+                      icon: const Icon(Icons.colorize_rounded),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
                 Row(children: [
                   const Expanded(child: Text('Opacity')),
                   Text('${(selectedOpacity * 100).round()}%'),
@@ -3122,6 +3250,46 @@ class _EditorV2PageState extends State<EditorV2Page>
                   value: selectedOpacity.clamp(.05, 1).toDouble(),
                   onChanged: (value) => setSheetState(() => selectedOpacity = value),
                 ),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Quick colors', style: TextStyle(fontWeight: FontWeight.w700)),
+                ),
+                const SizedBox(height: 6),
+                SizedBox(
+                  height: 34,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    children: _palette.take(20).map((candidate) => Padding(
+                      padding: const EdgeInsets.only(right: 7),
+                      child: Tooltip(
+                        message: '#${candidate.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}',
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: () => setSheetState(() {
+                            selectedColor = candidate;
+                            spectrumHue = HSVColor.fromColor(candidate).hue;
+                            hexController.text = candidate.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase();
+                          }),
+                          child: Container(
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: candidate,
+                              border: Border.all(
+                                color: candidate.toARGB32() == selectedColor.toARGB32()
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Theme.of(context).colorScheme.outlineVariant,
+                                width: candidate.toARGB32() == selectedColor.toARGB32() ? 2.5 : 1,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    )).toList(),
+                  ),
+                ),
+                const SizedBox(height: 8),
                 Align(
                   alignment: Alignment.centerRight,
                   child: FilledButton.icon(
@@ -3658,6 +3826,81 @@ class _EditorV2PageState extends State<EditorV2Page>
     _textControllers[id] = TextEditingController();
     setState(() {});
     _scheduleSave();
+  }
+
+  Future<void> _showTextBoxContextMenu(
+    String id,
+    Map<String, Object?> box,
+    Offset globalPosition,
+  ) async {
+    if (!mounted) return;
+    final screen = MediaQuery.sizeOf(context);
+    final choice = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        globalPosition.dx.clamp(0.0, screen.width - 1).toDouble(),
+        globalPosition.dy.clamp(0.0, screen.height - 1).toDouble(),
+        math.max(0.0, screen.width - globalPosition.dx),
+        math.max(0.0, screen.height - globalPosition.dy),
+      ),
+      items: const [
+        PopupMenuItem(value: 'copy', child: ListTile(dense: true, leading: Icon(Icons.copy_rounded), title: Text('Copy text'))),
+        PopupMenuItem(value: 'paste', child: ListTile(dense: true, leading: Icon(Icons.content_paste_rounded), title: Text('Paste text'))),
+        PopupMenuItem(value: 'select', child: ListTile(dense: true, leading: Icon(Icons.select_all_rounded), title: Text('Select element'))),
+        PopupMenuItem(value: 'duplicate', child: ListTile(dense: true, leading: Icon(Icons.control_point_duplicate_rounded), title: Text('Duplicate element'))),
+        PopupMenuItem(value: 'delete', child: ListTile(dense: true, leading: Icon(Icons.delete_outline_rounded), title: Text('Delete element'))),
+      ],
+    );
+    if (!mounted || choice == null) return;
+    switch (choice) {
+      case 'copy':
+        await Clipboard.setData(ClipboardData(text: _textControllers[id]?.text ?? box['text']?.toString() ?? ''));
+      case 'paste':
+        final clipboard = await Clipboard.getData('text/plain');
+        final controller = _textControllers[id];
+        if (clipboard == null || controller == null) return;
+        final inserted = clipboard.text ?? '';
+        final text = controller.text + inserted;
+        controller.value = TextEditingValue(
+          text: text,
+          selection: TextSelection.collapsed(offset: text.length),
+        );
+        box['text'] = text;
+        _scheduleSave();
+        if (mounted) setState(() {});
+      case 'select':
+        setState(() {
+          _selectedStrokeIds.clear();
+          _selectedImageIds.clear();
+          _selectedTextBoxIds
+            ..clear()
+            ..add(id);
+          _lassoRect = _selectionBounds();
+        });
+      case 'duplicate':
+        _pushUndo();
+        final duplicate = Map<String, Object?>.from(box);
+        final duplicateId = DateTime.now().microsecondsSinceEpoch.toString();
+        duplicate['id'] = duplicateId;
+        duplicate['x'] = (((box['x'] as num?)?.toDouble() ?? .1) + .03).clamp(0.0, .9).toDouble();
+        duplicate['y'] = (((box['y'] as num?)?.toDouble() ?? .1) + .03).clamp(0.0, .9).toDouble();
+        final raw = _pageData['textBoxes'];
+        if (raw is List) {
+          raw.add(duplicate);
+        } else {
+          _pageData['textBoxes'] = <Map<String, Object?>>[duplicate];
+        }
+        _textControllers[duplicateId] = TextEditingController(text: duplicate['text']?.toString() ?? '');
+        setState(() {
+          _selectedTextBoxIds
+            ..clear()
+            ..add(duplicateId);
+          _lassoRect = _selectionBounds();
+        });
+        _scheduleSave();
+      case 'delete':
+        _removeTextBox(id);
+    }
   }
 
   void _removeTextBox(String id) {
@@ -5812,6 +6055,8 @@ class _EditorV2PageState extends State<EditorV2Page>
         _openCalculator();
       case 'screenshot':
         unawaited(_captureScreenToCanvas());
+      case 'webSearch':
+        unawaited(SnoteWebSearchPanel.show(context));
       case 'calculatorSettings':
         unawaited(_specialToolSettingsSheet('calculator'));
       case 'screenshotSettings':
@@ -6023,6 +6268,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           if (_specialToolLocations('screenshot').isNotEmpty)
             PopupMenuItem(value: 'clipboardImage', child: Text('Paste screenshot from clipboard')),
           PopupMenuItem(value: 'screenshot', child: Text('Crop screenshot area to canvas')),
+          const PopupMenuItem(value: 'webSearch', child: Text('Search the web')),
           PopupMenuItem(value: 'pasteSelection', enabled: _selectionClipboard != null, child: Text('Paste copied selection')),
           PopupMenuItem(value: 'clipboardHistory', enabled: _selectionClipboardHistory.isNotEmpty, child: Text('Clipboard history (last 4)')),
           if (_specialToolLocations('calculator').isNotEmpty)
@@ -6354,7 +6600,15 @@ class _EditorV2PageState extends State<EditorV2Page>
         height: height * _pageHeight,
         child: IgnorePointer(
           ignoring: _tool == CanvasTool.lasso,
-          child: DecoratedBox(
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onLongPressStart: (details) => unawaited(
+              _showTextBoxContextMenu(id, box, details.globalPosition),
+            ),
+            onSecondaryTapDown: (details) => unawaited(
+              _showTextBoxContextMenu(id, box, details.globalPosition),
+            ),
+            child: DecoratedBox(
           decoration: BoxDecoration(
             color: Colors.transparent,
             border: Border.all(
@@ -6399,6 +6653,7 @@ class _EditorV2PageState extends State<EditorV2Page>
               ),
             ],
           ),
+            ),
           ),
         ),
       ));
@@ -6800,27 +7055,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                   ),
                 ),
               ),
-              Positioned(
-                left: (_selectionBounds()!.right - 7).clamp(0, _pageWidth - 18).toDouble(),
-                top: (_selectionBounds()!.bottom - 7).clamp(0, _pageHeight - 18).toDouble(),
-                child: Tooltip(
-                  message: 'Drag corner to resize selection',
-                  child: GestureDetector(
-                    onPanStart: (_) => _startSelectionTransform(resize: true),
-                    onPanUpdate: (details) => _updateSelectionTransform(details.delta),
-                    onPanEnd: (_) => _finishSelectionTransform(),
-                    child: Container(
-                      width: 15,
-                      height: 15,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary,
-                        border: Border.all(color: Colors.white, width: 1.5),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+              ..._selectionResizeHandleWidgets(_selectionBounds()!),
             ],
             if (_lassoRect != null && _selectionCount > 0 && _selectionBounds() != null)
               Positioned(
@@ -7374,6 +7609,19 @@ class _EditorV2PageState extends State<EditorV2Page>
               onPressed: _showPageAndEditorSettings,
               icon: const Icon(Icons.tune_rounded, size: 18),
             ),
+          if (MediaQuery.sizeOf(context).width >= 500)
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Search the web',
+              onPressed: () => unawaited(SnoteWebSearchPanel.show(context)),
+              icon: const Icon(Icons.travel_explore_rounded, size: 18),
+            ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Crop screenshot area to canvas',
+            onPressed: () => unawaited(_captureScreenToCanvas()),
+            icon: const Icon(Icons.crop_rounded, size: 18),
+          ),
           if (titleBarToolButtons.isNotEmpty)
             SizedBox(
               width: math.min(
@@ -7408,6 +7656,7 @@ class _EditorV2PageState extends State<EditorV2Page>
               PopupMenuItem(value: 'focusMode', child: Text(_focusMode ? 'Exit focus mode' : 'Focus mode')),
               const PopupMenuItem(value: 'toolPicker', child: Text('Open tool library')),
               const PopupMenuItem(value: 'screenshot', child: Text('Crop screenshot area to canvas')),
+              const PopupMenuItem(value: 'webSearch', child: Text('Search the web')),
               PopupMenuItem(value: 'timerPanel', child: Text(_showFloatingTimer ? 'Show timer panel again' : 'Timer / stopwatch / alarm')),
               const PopupMenuItem(value: 'image', child: Text('Insert image from file')),
               const PopupMenuItem(value: 'clipboardImage', child: Text('Paste screenshot from clipboard')),
