@@ -42,6 +42,16 @@ import '../../tools/web_search_panel.dart';
 
 String _hashPdfBytesInBackground(Uint8List bytes) => sha256.convert(bytes).toString();
 
+/// Parse and normalize the JSON document envelope on a worker isolate so large
+/// notebooks do not spend the first editor frame decoding every page on UI.
+Map<String, Object?> _decodeEditorEnvelopeInBackground(String? raw) {
+  final root = EditorV2DocumentCodec.decodeRoot(raw);
+  return <String, Object?>{
+    'root': root,
+    'pages': EditorV2DocumentCodec.decodePages(root),
+  };
+}
+
 /// Replacement note editor surface. It shares only Snote's persistence and
 /// stroke-format contracts; pointer handling, selection, drawing, and painting
 /// are implemented here rather than delegated to the legacy SnoteCanvas.
@@ -384,7 +394,21 @@ class _EditorV2PageState extends State<EditorV2Page>
     if (saved == null) {
       throw StateError('This note no longer exists in the current local account.');
     }
-    final root = EditorV2DocumentCodec.decodeRoot(saved.contentJson);
+    final envelope = await compute(
+      _decodeEditorEnvelopeInBackground,
+      saved.contentJson,
+      debugLabel: 'Snote document decode',
+    );
+    final root = (envelope['root'] as Map).map<String, Object?>(
+      (key, value) => MapEntry(key.toString(), value),
+    );
+    final decodedPages = envelope['pages'];
+    if (decodedPages is! List) {
+      throw const FormatException('Saved notebook pages could not be decoded.');
+    }
+    final pages = decodedPages.whereType<Map>().map((item) =>
+      item.map<String, Object?>((key, value) => MapEntry(key.toString(), value))
+    ).toList(growable: true);
     final delta = root['text_delta'];
     if (delta is List) {
       try {
@@ -393,8 +417,6 @@ class _EditorV2PageState extends State<EditorV2Page>
         debugPrint('[Snote][EditorV2] rich-text delta restore failed: $error\n$stackTrace');
       }
     }
-    final pages = EditorV2DocumentCodec.decodePages(root);
-
     Uint8List? pdfBytes = widget.initialPdfBytes;
     String? pdfName = widget.initialPdfName;
     DocumentAsset? sourcePdf;
