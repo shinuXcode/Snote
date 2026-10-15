@@ -2800,7 +2800,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       _pageData[key] = raw.whereType<Map>().map((item) {
         final object = item.map<String, Object?>((k, v) => MapEntry(k.toString(), v));
         if (!ids.contains(object['id']?.toString())) return object;
-        final rect = _transformObjectRect(object, center, factor, Offset.zero, defaultWidth: key == 'images' ? .4 : .68, defaultHeight: key == 'images' ? .3 : .16);
+        final rect = _transformObjectRect(object, center, factor, factor, Offset.zero, defaultWidth: key == 'images' ? .4 : .68, defaultHeight: key == 'images' ? .3 : .16);
         _writeObjectRect(object, rect);
         if (key == 'textBoxes') {
           object['fontSize'] = (((object['fontSize'] as num?)?.toDouble() ?? 18) * factor).clamp(6.0, 240.0).toDouble();
