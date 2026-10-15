@@ -25,11 +25,32 @@ void main() {
         ),
       );
 
-      // The editor must provide a visible app bar immediately, even while
-      // asynchronous local-database restoration is still in progress.
+      // The editor shell must be present immediately, with a visible body
+      // while local storage restores the note. This catches the old blank-route
+      // regression, which the earlier app-bar-only assertion did not detect.
       expect(find.byType(EditorV2Page), findsOneWidget);
+      expect(find.byType(Scaffold), findsWidgets);
       expect(find.byType(AppBar), findsOneWidget);
       expect(find.text('New Note route smoke test'), findsOneWidget);
+      expect(find.text('Preparing your note…'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      // Allow storage initialization either to finish or to display the
+      // explicit recovery state; neither path may collapse into a blank body.
+      await tester.pump(const Duration(milliseconds: 150));
+      await tester.pump();
+      final hasPageSurface = find
+          .byKey(const ValueKey<String>('editor-v2-page-surface'))
+          .evaluate()
+          .isNotEmpty;
+      final hasLoadingState = find.text('Preparing your note…').evaluate().isNotEmpty;
+      final hasRecoveryState = find.text('Could not render this note').evaluate().isNotEmpty;
+      expect(
+        hasPageSurface || hasLoadingState || hasRecoveryState,
+        isTrue,
+        reason: 'New Note must show a page, a loading state, or a visible recovery message.',
+      );
+      expect(tester.takeException(), isNull);
     },
   );
 }
