@@ -32,23 +32,31 @@ void main() {
       expect(find.byType(Scaffold), findsWidgets);
       expect(find.byType(AppBar), findsOneWidget);
       expect(find.text('New Note route smoke test'), findsOneWidget);
-      expect(find.text('Preparing your note…'), findsOneWidget);
       expect(tester.takeException(), isNull);
 
-      // Allow storage initialization either to finish or to display the
-      // explicit recovery state; neither path may collapse into a blank body.
+      bool hasVisibleEditorState() {
+        final hasPageSurface = find
+            .byKey(const ValueKey<String>('editor-v2-page-surface'))
+            .evaluate()
+            .isNotEmpty;
+        final hasLoadingState = find.text('Preparing your note…').evaluate().isNotEmpty;
+        final hasRecoveryState = find.text('Could not render this note').evaluate().isNotEmpty;
+        return hasPageSurface || hasLoadingState || hasRecoveryState;
+      }
+
+      // Storage may resolve before or after the first frame. Either way, New
+      // Note must show a page, a loading state, or explicit recovery UI.
+      expect(
+        hasVisibleEditorState(),
+        isTrue,
+        reason: 'New Note must not render a blank editor body.',
+      );
       await tester.pump(const Duration(milliseconds: 150));
       await tester.pump();
-      final hasPageSurface = find
-          .byKey(const ValueKey<String>('editor-v2-page-surface'))
-          .evaluate()
-          .isNotEmpty;
-      final hasLoadingState = find.text('Preparing your note…').evaluate().isNotEmpty;
-      final hasRecoveryState = find.text('Could not render this note').evaluate().isNotEmpty;
       expect(
-        hasPageSurface || hasLoadingState || hasRecoveryState,
+        hasVisibleEditorState(),
         isTrue,
-        reason: 'New Note must show a page, a loading state, or a visible recovery message.',
+        reason: 'New Note must remain visible after storage initialization settles.',
       );
       expect(tester.takeException(), isNull);
     },
