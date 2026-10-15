@@ -232,6 +232,9 @@ class _EditorV2PageState extends State<EditorV2Page>
   final Map<String, Set<String>> _toolPlacements = <String, Set<String>>{};
   List<String> _toolbarOrder = <String>[];
   bool _showNoteSwitcherInTitleBar = true;
+  bool _showNoteTabStrip = false;
+  bool _loadingNoteTabs = false;
+  List<LocalNote> _noteTabNotes = <LocalNote>[];
   List<Map<String, Object?>>? _selectionTransformImageSnapshot;
   List<Map<String, Object?>>? _selectionTransformTextSnapshot;
   bool _showFavoritesShowcase = true;
@@ -317,6 +320,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     _restoreToolProfiles();
     _restoreToolPlacements();
     _showNoteSwitcherInTitleBar = _settings.getBool('editorV2ShowNoteSwitcher');
+    _showNoteTabStrip = _settings.getBool('editorV2ShowNoteTabStrip');
     _pressureSensitivity = .55;
     _pressureCurve = PressureCurve.values.firstWhere(
       (curve) => curve.name == _settings.getString('pressureCurve'),
@@ -549,6 +553,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       _loadError = null;
     });
     _initializeTextControllers();
+    if (_showNoteTabStrip) unawaited(_refreshNoteTabNotes());
     _prefetchAdjacentPdfPages();
     debugPrint(
       '[Snote][EditorV2] document ready noteId=${widget.note.id} '
@@ -2963,6 +2968,104 @@ class _EditorV2PageState extends State<EditorV2Page>
   Future<void> _toggleNoteSwitcher() async {
     setState(() => _showNoteSwitcherInTitleBar = !_showNoteSwitcherInTitleBar);
     await _settings.setBool('editorV2ShowNoteSwitcher', _showNoteSwitcherInTitleBar);
+  }
+
+  Future<void> _toggleNoteTabStrip() async {
+    final visible = !_showNoteTabStrip;
+    setState(() => _showNoteTabStrip = visible);
+    await _settings.setBool('editorV2ShowNoteTabStrip', visible);
+    if (visible) await _refreshNoteTabNotes();
+  }
+
+  Future<void> _refreshNoteTabNotes() async {
+    if (_loadingNoteTabs) return;
+    setState(() => _loadingNoteTabs = true);
+    try {
+      final recent = await _repo.listAllVisible(limit: 32);
+      if (!mounted) return;
+      final tabs = <LocalNote>[widget.note];
+      final seen = <String>{widget.note.id};
+      for (final note in recent) {
+        if (seen.add(note.id)) tabs.add(note);
+        if (tabs.length >= 24) break;
+      }
+      setState(() => _noteTabNotes = tabs);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not load note tabs: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loadingNoteTabs = false);
+    }
+  }
+
+  Future<void> _switchToNoteTab(LocalNote note) async {
+    if (note.id == widget.note.id) return;
+    await _flushSave();
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(builder: (_) => EditorV2Page(note: note)),
+    );
+  }
+
+  Widget _buildNoteTabStrip() {
+    final colors = Theme.of(context).colorScheme;
+    return Material(
+      color: colors.surfaceContainerLow,
+      child: SizedBox(
+        height: 44,
+        child: Row(
+          children: [
+            const SizedBox(width: 8),
+            if (_loadingNoteTabs)
+              const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+            else
+              const Icon(Icons.tab_rounded, size: 17),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _noteTabNotes.isEmpty
+                  ? const Text('No recent notes', style: TextStyle(fontSize: 12))
+                  : ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(vertical: 5),
+                      itemCount: _noteTabNotes.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 6),
+                      itemBuilder: (context, index) {
+                        final note = _noteTabNotes[index];
+                        final active = note.id == widget.note.id;
+                        return Tooltip(
+                          message: note.title,
+                          child: ChoiceChip(
+                            selected: active,
+                            label: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 156),
+                              child: Text(
+                                note.title.trim().isEmpty ? 'Untitled note' : note.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ),
+                            avatar: Icon(active ? Icons.edit_note_rounded : Icons.description_outlined, size: 15),
+                            visualDensity: VisualDensity.compact,
+                            onSelected: (_) => unawaited(_switchToNoteTab(note)),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Switch to any note',
+              onPressed: _openNoteSwitcher,
+              icon: const Icon(Icons.more_horiz_rounded, size: 20),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _openNoteSwitcher() async {
@@ -6109,6 +6212,8 @@ class _EditorV2PageState extends State<EditorV2Page>
         unawaited(_openNoteSwitcher());
       case 'toggleNoteSwitcher':
         unawaited(_toggleNoteSwitcher());
+      case 'toggleNoteTabStrip':
+        unawaited(_toggleNoteTabStrip());
       case 'calculator':
         _openCalculator();
       case 'screenshot':
@@ -7660,9 +7765,9 @@ class _EditorV2PageState extends State<EditorV2Page>
           if (_showNoteSwitcherInTitleBar)
             IconButton(
               visualDensity: VisualDensity.compact,
-              tooltip: 'Show tabs / switch open notes',
-              onPressed: _openNoteSwitcher,
-              icon: const Icon(Icons.tab_rounded),
+              tooltip: _showNoteTabStrip ? 'Hide note tabs' : 'Show note tabs',
+              onPressed: () => unawaited(_toggleNoteTabStrip()),
+              icon: Icon(_showNoteTabStrip ? Icons.keyboard_arrow_up_rounded : Icons.tab_rounded),
             ),
           if (MediaQuery.sizeOf(context).width >= 500)
             IconButton(
@@ -7727,7 +7832,8 @@ class _EditorV2PageState extends State<EditorV2Page>
               const PopupMenuItem(value: 'pageSettings', child: Text('Note page settings')),
               const PopupMenuItem(value: 'appSettings', child: Text('App settings')),
               const PopupMenuItem(value: 'template', child: Text('Page template')),
-              PopupMenuItem(value: 'toggleNoteSwitcher', child: Text(_showNoteSwitcherInTitleBar ? 'Hide note switcher in title bar' : 'Show note switcher in title bar')),
+              PopupMenuItem(value: 'toggleNoteSwitcher', child: Text(_showNoteSwitcherInTitleBar ? 'Hide tabs toggle icon' : 'Show tabs toggle icon')),
+              PopupMenuItem(value: 'toggleNoteTabStrip', child: Text(_showNoteTabStrip ? 'Hide note tabs' : 'Show note tabs')),
               const PopupMenuItem(value: 'noteSwitcher', child: Text('Switch note')),
               const PopupMenuItem(value: 'calculator', child: Text('Scientific calculator')),
               if (_hasPdfBackgroundPages) ...[
@@ -7753,7 +7859,11 @@ class _EditorV2PageState extends State<EditorV2Page>
           ),
         ],
       ),
-      body: _loading
+      body: Column(
+        children: [
+          if (_showNoteTabStrip && !_fullScreenMode && !_focusMode) _buildNoteTabStrip(),
+          Expanded(
+            child: _loading
           ? const Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -7769,6 +7879,9 @@ class _EditorV2PageState extends State<EditorV2Page>
               : _loadError != null
                   ? _buildErrorBody()
                   : _buildEditorLayout(),
+          ),
+        ],
+      ),
     );
   }
 
