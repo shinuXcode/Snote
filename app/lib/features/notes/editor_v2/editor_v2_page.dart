@@ -8,7 +8,7 @@ import 'dart:ui' as ui;
 import 'package:archive/archive.dart' as zip;
 import 'package:crypto/crypto.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
+import 'package:flutter/foundation.dart' show compute, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -35,6 +35,10 @@ import 'editor_v2_document.dart';
 import 'editor_v2_ink_painter.dart';
 import 'selection_text_recognizer.dart';
 import '../../tools/screen_capture.dart';
+import '../../tools/floating_timer_panel.dart';
+import '../../tools/screenshot_cropper.dart';
+
+String _hashPdfBytesInBackground(Uint8List bytes) => sha256.convert(bytes).toString();
 
 /// Replacement note editor surface. It shares only Snote's persistence and
 /// stroke-format contracts; pointer handling, selection, drawing, and painting
@@ -222,6 +226,9 @@ class _EditorV2PageState extends State<EditorV2Page>
   bool _showPagePreview = true;
   bool _floatingPageNavigation = false;
   bool _fullScreenMode = false;
+  bool _readingMode = false;
+  bool _focusMode = false;
+  bool _showFloatingTimer = false;
   bool _showViewportHud = false;
   bool _viewportLocked = false;
   bool _watermarkCoverMode = false;
@@ -429,7 +436,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     var renderedPdf = false;
     var totalPdfPages = 0;
     if (pdfBytes != null && pdfBytes.isNotEmpty) {
-      final sourceHash = sha256.convert(pdfBytes).toString();
+      final sourceHash = await compute(_hashPdfBytesInBackground, pdfBytes);
       var restorePdfPages = shouldRestorePdfPageBackgrounds(pages, sourceHash: sourceHash);
       if (!restorePdfPages && sourcePdf != null) {
         final recordedPdfPages = pages
@@ -817,7 +824,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     for (final tool in CanvasTool.values) {
       if (!_toolbarOrder.contains(tool.name)) _toolbarOrder.add(tool.name);
     }
-    for (final key in const <String>['calculator', 'screenshot']) {
+    for (final key in const <String>['calculator', 'timer', 'screenshot']) {
       if (!_toolbarOrder.contains(key)) _toolbarOrder.add(key);
     }
   }
@@ -837,7 +844,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       _placementsFor(tool).contains(location);
 
   bool _isSpecialToolKey(String key) =>
-      const <String>{'calculator', 'screenshot'}.contains(key);
+      const <String>{'calculator', 'timer', 'screenshot'}.contains(key);
 
   Set<String> _locationsForToolKey(String key) {
     final tool = CanvasTool.values.where((candidate) => candidate.name == key).firstOrNull;
@@ -859,7 +866,7 @@ class _EditorV2PageState extends State<EditorV2Page>
         ordered.add(tool.name);
       }
     }
-    for (final key in const <String>['calculator', 'screenshot']) {
+    for (final key in const <String>['calculator', 'timer', 'screenshot']) {
       if (seen.add(key) && _specialToolLocations(key).contains(location)) {
         ordered.add(key);
       }
@@ -945,8 +952,11 @@ class _EditorV2PageState extends State<EditorV2Page>
     await _settings.setString('editorV2ToolbarOrder', jsonEncode(order));
   }
 
-  Set<String> _specialToolLocations(String key) =>
-      Set<String>.from(_toolPlacements[key] ?? <String>{'toolbar'});
+  Set<String> _specialToolLocations(String key) => Set<String>.from(
+        _toolPlacements[key] ?? <String>{
+          if (key == 'calculator' || key == 'timer') 'titleBar' else 'toolbar',
+        },
+      );
 
   Future<void> _specialToolSettingsSheet(String key) async {
     final selected = _specialToolLocations(key);
@@ -971,13 +981,17 @@ class _EditorV2PageState extends State<EditorV2Page>
                   Row(children: [
                     Icon(key == 'calculator'
                         ? Icons.calculate_outlined
-                        : Icons.screenshot_monitor_rounded),
+                        : key == 'timer'
+                            ? Icons.timer_outlined
+                            : Icons.screenshot_monitor_rounded),
                     const SizedBox(width: 9),
                     Expanded(
                       child: Text(
                         key == 'calculator'
                             ? 'Calculator settings'
-                            : 'Screenshot tool settings',
+                            : key == 'timer'
+                                ? 'Timer / stopwatch / alarm settings'
+                                : 'Screenshot tool settings',
                         style: const TextStyle(
                           fontSize: 19,
                           fontWeight: FontWeight.w900,
@@ -1052,15 +1066,24 @@ class _EditorV2PageState extends State<EditorV2Page>
       _openCalculator();
     } else if (key == 'screenshot') {
       unawaited(_captureScreenToCanvas());
+    } else if (key == 'timer') {
+      setState(() => _showFloatingTimer = true);
     }
   }
 
   Widget _specialToolButton(String key, String location) {
     final calculator = key == 'calculator';
+    final timer = key == 'timer';
     final icon = calculator
         ? Icons.calculate_outlined
-        : Icons.screenshot_monitor_rounded;
-    final title = calculator ? 'Calculator' : 'Capture screen to canvas';
+        : timer
+            ? Icons.timer_outlined
+            : Icons.screenshot_monitor_rounded;
+    final title = calculator
+        ? 'Calculator'
+        : timer
+            ? 'Timer, stopwatch and alarm'
+            : 'Capture screenshot area to canvas';
     return DragTarget<Object>(
       onAcceptWithDetails: (details) => unawaited(
         _moveDroppedTool(details.data, location, target: key),
@@ -1584,6 +1607,20 @@ class _EditorV2PageState extends State<EditorV2Page>
         event.kind == PointerDeviceKind.invertedStylus) {
       _stylusPointers.add(event.pointer);
     }
+    if (_readingMode && _pageData['locked'] != true) {
+      if (event.kind == PointerDeviceKind.touch) {
+        _activePointer = event.pointer;
+        _gestureStart = event.localPosition;
+        _holdStartPosition = null;
+        _pageSwipeStart = event.localPosition;
+        _pageSwipeTriggered = false;
+        _livePoints = <StrokePoint>[];
+        _liveStroke = null;
+      } else {
+        _ignoredPointers.add(event.pointer);
+      }
+      return;
+    }
     if (_pageData['locked'] == true) {
       final position = event.localPosition;
       final atPageEdge = position.dx < 30 ||
@@ -1726,6 +1763,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       }
     }
     if (_activePointer == event.pointer && _pageSwipeTriggered) return;
+    if (_readingMode) return;
     if (_navigationOnlyPointers.contains(event.pointer)) return;
     // A locked page may participate in edge swipes, but must never render a
     // transient ink preview from an unfinished navigation gesture.
@@ -1809,7 +1847,10 @@ class _EditorV2PageState extends State<EditorV2Page>
       _navigationOnlyPointers.remove(event.pointer);
       final swipe = event.localPosition - _pageSwipeStart!;
       final horizontalSwipe = swipe.dx.abs() > swipe.dy.abs() * 1.25;
-      final forward = horizontalSwipe ? swipe.dx > 0 : swipe.dy < 0;
+      final rightMeansNext = _settings.getString('pageTurningDirection') != 'rightToLeft';
+      final forward = horizontalSwipe
+          ? (rightMeansNext ? swipe.dx > 0 : swipe.dx < 0)
+          : swipe.dy < 0;
       setState(() {
         _activePointer = null;
         _gestureStart = null;
@@ -1828,6 +1869,18 @@ class _EditorV2PageState extends State<EditorV2Page>
       } else if (_page > 0) {
         _goToPage(_page - 1);
       }
+      return;
+    }
+    if (_readingMode) {
+      setState(() {
+        _activePointer = null;
+        _gestureStart = null;
+        _pageSwipeStart = null;
+        _pageSwipeTriggered = false;
+        _livePoints.clear();
+        _liveStroke = null;
+        _eraserCursor = null;
+      });
       return;
     }
     _pageSwipeStart = null;
@@ -3669,6 +3722,9 @@ class _EditorV2PageState extends State<EditorV2Page>
         }
       }
       if (bytes == null || bytes.isEmpty) throw StateError('No screenshot image was returned.');
+      final croppedBytes = await SnoteScreenshotCropper.crop(context, bytes);
+      if (!mounted || croppedBytes == null || croppedBytes.isEmpty) return;
+      bytes = croppedBytes;
       final codec = await ui.instantiateImageCodec(bytes);
       final frame = await codec.getNextFrame();
       final sourceAspect = frame.image.width / math.max(1, frame.image.height);
@@ -5302,6 +5358,9 @@ class _EditorV2PageState extends State<EditorV2Page>
     var floatingNavigation = _floatingPageNavigation;
     var floatingToolbar = _floatingToolbar;
     var showFavorites = _showFavoritesShowcase;
+    var landscape = _pageData['orientation']?.toString() == 'horizontal';
+    final widthController = TextEditingController(text: _pageWidth.toStringAsFixed(0));
+    final heightController = TextEditingController(text: _pageHeight.toStringAsFixed(0));
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -5319,6 +5378,41 @@ class _EditorV2PageState extends State<EditorV2Page>
                   decoration: const InputDecoration(labelText: 'Page template', prefixIcon: Icon(Icons.grid_4x4_rounded)),
                   items: PageTemplate.values.map((value) => DropdownMenuItem(value: value, child: Text(value.name))).toList(),
                   onChanged: (value) { if (value != null) setSheetState(() => template = value); },
+                ),
+                const SizedBox(height: 12),
+                const Text('Page dimensions', style: TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 6),
+                Row(children: [
+                  Expanded(child: TextField(
+                    controller: widthController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(labelText: 'Width', suffixText: 'units', isDense: true),
+                  )),
+                  const SizedBox(width: 10),
+                  Expanded(child: TextField(
+                    controller: heightController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(labelText: 'Height', suffixText: 'units', isDense: true),
+                  )),
+                ]),
+                const SizedBox(height: 8),
+                SegmentedButton<bool>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment<bool>(value: false, label: Text('Portrait'), icon: Icon(Icons.stay_current_portrait_rounded)),
+                    ButtonSegment<bool>(value: true, label: Text('Landscape'), icon: Icon(Icons.stay_current_landscape_rounded)),
+                  ],
+                  selected: <bool>{landscape},
+                  onSelectionChanged: (values) {
+                    final next = values.first;
+                    if (next == landscape) return;
+                    setSheetState(() {
+                      landscape = next;
+                      final previousWidth = widthController.text;
+                      widthController.text = heightController.text;
+                      heightController.text = previousWidth;
+                    });
+                  },
                 ),
                 const SizedBox(height: 12),
                 Row(children: [Icon(Icons.palette_outlined, color: Theme.of(context).colorScheme.primary), const SizedBox(width: 8), const Text('Paper color')]),
@@ -5426,8 +5520,21 @@ class _EditorV2PageState extends State<EditorV2Page>
                   alignment: Alignment.centerRight,
                   child: FilledButton(
                     onPressed: () async {
+                      final width = double.tryParse(widthController.text);
+                      final height = double.tryParse(heightController.text);
+                      if (width == null || height == null ||
+                          !width.isFinite || !height.isFinite ||
+                          width < 360 || height < 360 || width > 5000 || height > 5000) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Page width and height must be between 360 and 5000 units.')),
+                        );
+                        return;
+                      }
                       final pageLocked = _pageData['locked'] == true;
+                      var appliedPageSettings = false;
                       final pageSettingsChanged =
+                          width != _pageWidth || height != _pageHeight ||
+                          landscape != (_pageData['orientation']?.toString() == 'horizontal') ||
                           template.name != _pageData['template']?.toString() ||
                           spacing != ((_pageData['spacing'] as num?)?.toDouble() ?? 28) ||
                           opacity != ((_pageData['lineOpacity'] as num?)?.toDouble() ?? .85) ||
@@ -5436,7 +5543,12 @@ class _EditorV2PageState extends State<EditorV2Page>
                       if (!pageLocked && pageSettingsChanged) {
                         _pushUndo();
                         _pageData['template'] = template.name;
+                        _pageData['pageWidth'] = width;
+                        _pageData['pageHeight'] = height;
+                        _pageData['pageSize'] = 'Custom';
+                        _pageData['orientation'] = landscape ? 'horizontal' : 'vertical';
                         _pageData['spacing'] = spacing;
+                        appliedPageSettings = true;
                         _pageData['lineOpacity'] = opacity;
                         _pageData['paperColor'] = paper.toARGB32();
                         _pageData['lineColor'] = line.toARGB32();
@@ -5460,6 +5572,11 @@ class _EditorV2PageState extends State<EditorV2Page>
                       await _settings.setBool('editorV2FloatingToolbar', floatingToolbar);
                       await _settings.setBool('editorV2ShowFavoritesShowcase', showFavorites);
                       _scheduleSave();
+                      if (appliedPageSettings) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted) _resetCanvasView();
+                        });
+                      }
                       if (sheetContext.mounted) Navigator.pop(sheetContext);
                     },
                     child: const Text('Save settings'),
@@ -5471,6 +5588,8 @@ class _EditorV2PageState extends State<EditorV2Page>
         ),
       ),
     );
+    widthController.dispose();
+    heightController.dispose();
   }
 
 
@@ -5492,7 +5611,7 @@ class _EditorV2PageState extends State<EditorV2Page>
 
   void _resetCanvasView() {
     final availableWidth = MediaQuery.sizeOf(context).width -
-        (_showPagePreview && !_fullScreenMode ? 220 : 12);
+        (_showPagePreview && !_fullScreenMode && !_focusMode ? 220 : 12);
     final scale = (availableWidth.clamp(260.0, _pageWidth) / _pageWidth).clamp(.15, 1.0).toDouble();
     _transform.value = Matrix4.identity()..scale(scale);
     setState(() {
@@ -5506,7 +5625,22 @@ class _EditorV2PageState extends State<EditorV2Page>
   void _toggleFullScreen() {
     setState(() => _fullScreenMode = !_fullScreenMode);
     unawaited(SystemChrome.setEnabledSystemUIMode(
-      _fullScreenMode ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+      (_fullScreenMode || _focusMode)
+          ? SystemUiMode.immersiveSticky
+          : SystemUiMode.edgeToEdge,
+    ));
+  }
+
+  void _toggleReadingMode() {
+    setState(() => _readingMode = !_readingMode);
+  }
+
+  void _toggleFocusMode() {
+    setState(() => _focusMode = !_focusMode);
+    unawaited(SystemChrome.setEnabledSystemUIMode(
+      (_focusMode || _fullScreenMode)
+          ? SystemUiMode.immersiveSticky
+          : SystemUiMode.edgeToEdge,
     ));
   }
 
@@ -5659,6 +5793,14 @@ class _EditorV2PageState extends State<EditorV2Page>
         unawaited(_showBookmarks());
       case 'timer':
         unawaited(_startStudyTimer());
+      case 'timerPanel':
+        setState(() => _showFloatingTimer = true);
+      case 'readingMode':
+        _toggleReadingMode();
+      case 'focusMode':
+        _toggleFocusMode();
+      case 'toolPicker':
+        unawaited(_openToolPicker());
       case 'favorite':
         unawaited(_addFavoritePen());
       case 'dockTop':
@@ -5800,7 +5942,6 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
     final actions = <Widget>[
       action(tooltip: _panMode ? 'Exit pan mode' : 'Pan / zoom', icon: _panMode ? Icons.pan_tool : Icons.pan_tool_outlined, onPressed: () => setState(() => _panMode = !_panMode)),
-      action(tooltip: _textMode ? 'Handwriting mode' : 'Rich text mode', icon: _textMode ? Icons.draw_rounded : Icons.text_fields_rounded, onPressed: () => setState(() { _textMode = !_textMode; _scheduleSave(); })),
       action(
         tooltip: 'Color palette & opacity',
         icon: Icons.palette_outlined,
@@ -5809,7 +5950,6 @@ class _EditorV2PageState extends State<EditorV2Page>
         onPressed: () => unawaited(_strokeSettings(null, _toolSettingsAnchor)),
       ),
       action(tooltip: 'Text box', icon: Icons.text_fields_rounded, onPressed: _addTextBox),
-      action(tooltip: 'Capture screen to canvas', icon: Icons.screenshot_monitor_rounded, onPressed: () => unawaited(_captureScreenToCanvas())),
       if (_hasPdfBackgroundPages)
         action(
           tooltip: _watermarkCoverMode
@@ -5823,7 +5963,6 @@ class _EditorV2PageState extends State<EditorV2Page>
       action(tooltip: 'Selection clipboard history', icon: Icons.content_paste_go_rounded, onPressed: () => unawaited(_showClipboardHistory())),
       action(tooltip: 'Shape box', icon: Icons.category_outlined, onPressed: () => _openToolPicker(initialCategory: 'Shapes & diagrams')),
       action(tooltip: 'Sticker library', icon: Icons.emoji_emotions_outlined, onPressed: () => unawaited(_addSticker())),
-      action(tooltip: 'All tools / categories', icon: Icons.apps_rounded, onPressed: _openToolPicker),
     ];
     final quickButtons = _toolKeysForLocation('toolbar')
         .map((key) => Padding(
@@ -5858,7 +5997,11 @@ class _EditorV2PageState extends State<EditorV2Page>
           PopupMenuItem(value: 'importOtherFormats', child: Text('Import SVG, CSV, PNG, PPTX, Excel or Nebo file')),
           PopupMenuItem(value: 'export', child: Text('Export pages to PDF')),
           PopupMenuItem(value: 'bookmarks', child: Text('Bookmarks')),
-          PopupMenuItem(value: 'timer', child: Text('Study timer')),
+          PopupMenuItem(value: 'timer', child: Text('Study countdown dialog')),
+          PopupMenuItem(value: 'timerPanel', child: Text('Floating timer / stopwatch / alarm')),
+          PopupMenuItem(value: 'toolPicker', child: Text('Open tool library')),
+          PopupMenuItem(value: 'readingMode', child: Text(_readingMode ? 'Exit reading mode' : 'Reading mode')),
+          PopupMenuItem(value: 'focusMode', child: Text(_focusMode ? 'Exit focus mode' : 'Focus mode')),
           PopupMenuDivider(),
           PopupMenuItem(value: 'dockTop', child: Text('Dock toolbar to top')),
           PopupMenuItem(value: 'dockLeft', child: Text('Dock toolbar to left')),
@@ -6820,9 +6963,12 @@ class _EditorV2PageState extends State<EditorV2Page>
   }
 
   Future<void> _showPagePicker() async {
+    final pageScrollController = ScrollController();
+    var initialScrollScheduled = false;
     final selected = await showModalBottomSheet<int>(
       context: context,
       isScrollControlled: true,
+      useRootNavigator: true,
       showDragHandle: true,
       builder: (sheetContext) => SizedBox(
         height: MediaQuery.sizeOf(sheetContext).height * .78,
@@ -6856,6 +7002,7 @@ class _EditorV2PageState extends State<EditorV2Page>
             ),
             Expanded(
               child: ReorderableListView.builder(
+                controller: pageScrollController,
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
                 itemCount: _pages.length,
                 onReorder: (oldIndex, newIndex) {
@@ -6863,6 +7010,16 @@ class _EditorV2PageState extends State<EditorV2Page>
                   _movePage(oldIndex, newIndex);
                 },
                 itemBuilder: (_, index) {
+                  if (index == 0 && !initialScrollScheduled) {
+                    initialScrollScheduled = true;
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!pageScrollController.hasClients) return;
+                      final target = (_page * 92.0)
+                          .clamp(0.0, pageScrollController.position.maxScrollExtent)
+                          .toDouble();
+                      pageScrollController.jumpTo(target);
+                    });
+                  }
                   final page = _pages[index];
                   final template = page['template']?.toString() ?? 'PDF';
                   final isPdf = page['pdfLazyRender'] == true || (page['backgroundImage'] is String && (page['backgroundImage'] as String).isNotEmpty);
@@ -6917,6 +7074,9 @@ class _EditorV2PageState extends State<EditorV2Page>
                         children: [
                           if (_bookmarkedPages.contains(index + 1)) const Icon(Icons.bookmark_rounded, size: 18),
                           PopupMenuButton<String>(
+                            useRootNavigator: true,
+                            position: PopupMenuPosition.under,
+                            constraints: const BoxConstraints(minWidth: 220),
                             tooltip: 'Page actions',
                             onSelected: (action) {
                               switch (action) {
@@ -6975,6 +7135,7 @@ class _EditorV2PageState extends State<EditorV2Page>
         ),
       ),
     );
+    pageScrollController.dispose();
     if (selected == null || !mounted) return;
     setState(() {
       _page = EditorV2DocumentCodec.clampPage(selected, _pages.length);
@@ -7046,7 +7207,7 @@ class _EditorV2PageState extends State<EditorV2Page>
         .map((key) => _buildPlacedToolButton(key, 'titleBar'))
         .toList();
     return Scaffold(
-      appBar: _fullScreenMode ? null : AppBar(
+      appBar: (_fullScreenMode || _focusMode) ? null : AppBar(
         leading: BackButton(
           onPressed: () async {
             await _flushSave();
@@ -7166,16 +7327,9 @@ class _EditorV2PageState extends State<EditorV2Page>
           if (MediaQuery.sizeOf(context).width >= 500)
             IconButton(
               visualDensity: VisualDensity.compact,
-              tooltip: 'Page template',
-              onPressed: _chooseTemplate,
-              icon: const Icon(Icons.grid_on_rounded),
-            ),
-          if (MediaQuery.sizeOf(context).width >= 500)
-            IconButton(
-              visualDensity: VisualDensity.compact,
-              tooltip: 'Page format, dimensions, spacing & background',
-              onPressed: _showPageFormatSettings,
-              icon: const Icon(Icons.straighten_rounded, size: 18),
+              tooltip: 'Page template, dimensions, spacing & background',
+              onPressed: _showPageAndEditorSettings,
+              icon: const Icon(Icons.tune_rounded, size: 18),
             ),
           if (titleBarToolButtons.isNotEmpty)
             SizedBox(
@@ -7197,12 +7351,6 @@ class _EditorV2PageState extends State<EditorV2Page>
             ),
           IconButton(
             visualDensity: VisualDensity.compact,
-            tooltip: 'Capture screenshot to canvas',
-            onPressed: () => unawaited(_captureScreenToCanvas()),
-            icon: const Icon(Icons.screenshot_monitor_rounded, size: 18),
-          ),
-          IconButton(
-            visualDensity: VisualDensity.compact,
             tooltip: _fullScreenMode ? 'Exit full screen' : 'Enter full screen',
             onPressed: _toggleFullScreen,
             icon: Icon(_fullScreenMode ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded, size: 19),
@@ -7213,7 +7361,10 @@ class _EditorV2PageState extends State<EditorV2Page>
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'fit', child: Text('Fit page to width')),
               const PopupMenuItem(value: 'fullscreen', child: Text('Toggle full screen')),
-              const PopupMenuItem(value: 'text', child: Text('Toggle rich text / handwriting')),
+              PopupMenuItem(value: 'readingMode', child: Text(_readingMode ? 'Exit reading mode' : 'Reading mode')),
+              PopupMenuItem(value: 'focusMode', child: Text(_focusMode ? 'Exit focus mode' : 'Focus mode')),
+              const PopupMenuItem(value: 'toolPicker', child: Text('Open tool library')),
+              PopupMenuItem(value: 'timerPanel', child: Text(_showFloatingTimer ? 'Show timer panel again' : 'Timer / stopwatch / alarm')),
               const PopupMenuItem(value: 'image', child: Text('Insert image from file')),
               const PopupMenuItem(value: 'clipboardImage', child: Text('Paste screenshot from clipboard')),
               PopupMenuItem(value: 'pasteSelection', enabled: _selectionClipboard != null, child: const Text('Paste copied selection')),
@@ -7264,10 +7415,10 @@ class _EditorV2PageState extends State<EditorV2Page>
         clipBehavior: Clip.none,
         children: [
           Positioned.fill(
-            left: _showPagePreview && !_fullScreenMode ? sidebarWidth + 8 : 0,
+            left: _showPagePreview && !_fullScreenMode && !_focusMode ? sidebarWidth + 8 : 0,
             child: _buildCanvas(),
           ),
-          if (_showPagePreview && !_fullScreenMode)
+          if (_showPagePreview && !_fullScreenMode && !_focusMode)
             Positioned(
               left: 0,
               top: 0,
@@ -7275,7 +7426,7 @@ class _EditorV2PageState extends State<EditorV2Page>
               width: sidebarWidth,
               child: _buildPagePreviewSidebar(),
             ),
-          if (_floatingToolbar || _fullScreenMode)
+          if ((_floatingToolbar || _fullScreenMode) && !_focusMode)
             Positioned(
               left: _floatingOffset.dx.clamp(0, math.max(0, MediaQuery.sizeOf(context).width - 160)).toDouble(),
               top: _floatingOffset.dy.clamp(0, math.max(0, MediaQuery.sizeOf(context).height - 210)).toDouble(),
@@ -7301,7 +7452,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                   clipBehavior: Clip.antiAlias,
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
-                      maxWidth: math.min(360, MediaQuery.sizeOf(context).width - 16),
+                      maxWidth: math.min(_fullScreenMode ? 300.0 : 360.0, MediaQuery.sizeOf(context).width - 16),
                       maxHeight: math.min(190, MediaQuery.sizeOf(context).height * .5),
                     ),
                     child: _buildToolbar(vertical: false),
@@ -7309,13 +7460,22 @@ class _EditorV2PageState extends State<EditorV2Page>
                 ),
               ),
             ),
-          if (_showFavoritesShowcase || _pencaseTools.isNotEmpty) _buildFavoriteShowcase(),
+          if (!_focusMode && (_showFavoritesShowcase || _pencaseTools.isNotEmpty)) _buildFavoriteShowcase(),
           // Page navigation is now handled by the expanded page-preview sidebar.
-          if (_calculatorVisible) _buildFloatingCalculator(),
-          if (_showViewportHud || _viewportLocked)
+          if (!_focusMode && _calculatorVisible) _buildFloatingCalculator(),
+          if (_showFloatingTimer)
+            Positioned.fill(
+              child: Offstage(
+                offstage: _focusMode,
+                child: SnoteFloatingTimerPanel(
+                  onClose: () => setState(() => _showFloatingTimer = false),
+                ),
+              ),
+            ),
+          if (!_focusMode && (_showViewportHud || _viewportLocked))
             Positioned(
               top: 8,
-              left: _showPagePreview && !_fullScreenMode ? sidebarWidth + 8 : 8,
+              left: _showPagePreview && !_fullScreenMode && !_focusMode ? sidebarWidth + 8 : 8,
               right: _fullScreenMode ? 54 : 8,
               child: Center(
                 child: Material(
@@ -7353,7 +7513,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                 ),
               ),
             ),
-          if (_fullScreenMode)
+          if (_fullScreenMode || _focusMode)
             Positioned(
               right: 8,
               top: 8,
@@ -7362,9 +7522,9 @@ class _EditorV2PageState extends State<EditorV2Page>
                 shape: const CircleBorder(),
                 elevation: 5,
                 child: IconButton(
-                  tooltip: 'Exit full screen',
-                  onPressed: _toggleFullScreen,
-                  icon: const Icon(Icons.fullscreen_exit_rounded),
+                  tooltip: _focusMode ? 'Exit focus mode' : 'Exit full screen',
+                  onPressed: _focusMode ? _toggleFocusMode : _toggleFullScreen,
+                  icon: Icon(_focusMode ? Icons.visibility_rounded : Icons.fullscreen_exit_rounded),
                 ),
               ),
             ),
@@ -7374,7 +7534,7 @@ class _EditorV2PageState extends State<EditorV2Page>
 
     final canvasWithFooter = Column(children: [viewport]);
 
-    if (_fullScreenMode) {
+    if (_fullScreenMode || _focusMode) {
       return canvasWithFooter;
     }
 

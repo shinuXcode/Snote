@@ -130,6 +130,37 @@ class _SettingsPageState extends State<SettingsPage> {
           onSelectionChanged: (values) => setState(() => _noteOnly = values.first),
         ),
       ),
+      if (_query.isEmpty || 'page turning direction horizontal swipe next previous'.contains(_query))
+        Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(children: [
+                  Icon(Icons.swap_horiz_rounded),
+                  SizedBox(width: 8),
+                  Text('Horizontal page-turn direction', style: TextStyle(fontWeight: FontWeight.w800)),
+                ]),
+                const SizedBox(height: 6),
+                const Text('Choose which horizontal swipe moves to the next page. This applies to the editor in both settings modes.'),
+                const SizedBox(height: 10),
+                SegmentedButton<String>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(value: 'leftToRight', label: Text('Swipe right = next'), icon: Icon(Icons.arrow_forward_rounded)),
+                    ButtonSegment(value: 'rightToLeft', label: Text('Swipe left = next'), icon: Icon(Icons.arrow_back_rounded)),
+                  ],
+                  selected: <String>{
+                    _settings.getString('pageTurningDirection') == 'rightToLeft' ? 'rightToLeft' : 'leftToRight',
+                  },
+                  onSelectionChanged: (values) => unawaited(_settings.setString('pageTurningDirection', values.first)),
+                ),
+              ],
+            ),
+          ),
+        ),
       if (_noteOnly) _group('Writing Operation', [
         _toggle('autoRecognition', 'Auto Recognition', 'Recognize a drawn shape after a short hold.'),
         _toggle('palmRejection', 'Palm rejection', 'Ignore accidental finger touches while writing with a stylus. Turn this off to allow finger drawing.'),

@@ -56,6 +56,7 @@ class SnoteSettings extends ChangeNotifier {
     'toolDashed': '{}',
     'lassoStyle': 'solid',
     'eraserMode': 'stroke',
+    'pageTurningDirection': 'leftToRight',
   };
 
   bool getBool(String key) => (_values[key] as bool?) ?? boolDefaults[key] ?? false;
