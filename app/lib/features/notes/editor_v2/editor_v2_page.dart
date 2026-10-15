@@ -2407,7 +2407,7 @@ class _EditorV2PageState extends State<EditorV2Page>
         top = math.min(top, point.position.dy);
         bottom = math.max(bottom, point.position.dy);
       }
-      bounds.add(Rect.fromLTRB(left, top, right, bottom));
+      bounds.add(Rect.fromLTRB(left, top, right, bottom).inflate(math.max(.5, stroke.pen.size / 2)));
     }
     for (final spec in <({String key, Set<String> ids, double width, double height})>[
       (key: 'images', ids: _selectedImageIds, width: .4, height: .3),
@@ -2429,7 +2429,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     for (final item in bounds.skip(1)) {
       result = result.expandToInclude(item);
     }
-    return result.inflate(3);
+    return result;
   }
 
   Rect _transformObjectRect(
@@ -6943,8 +6943,10 @@ class _EditorV2PageState extends State<EditorV2Page>
           children: [
             Positioned.fill(child: _buildPageBackground(page, showPdf: _pdfBackgroundVisible, thumbnail: false)),
             Positioned.fill(
+              child: IgnorePointer(
+                ignoring: !_textMode || page['locked'] == true,
                 child: IgnorePointer(
-                  ignoring: !_textMode || page['locked'] == true,
+                  ignoring: true,
                   child: Padding(
                     padding: const EdgeInsets.all(42),
                     child: QuillEditor(
@@ -6952,16 +6954,17 @@ class _EditorV2PageState extends State<EditorV2Page>
                       scrollController: _quillScroll,
                       controller: _quill,
                       config: QuillEditorConfig(
-                        placeholder: 'Start writing rich text…',
+                        placeholder: 'Legacy text (read-only)',
                       ),
                     ),
                   ),
                 ),
               ),
+            ),
             Positioned.fill(
-                child: IgnorePointer(
-                  ignoring: _textMode || page['locked'] == true,
-                  child: Listener(
+              child: IgnorePointer(
+                ignoring: page['locked'] == true,
+                child: Listener(
                 behavior: HitTestBehavior.opaque,
                 onPointerDown: _onPointerDown,
                 onPointerMove: _onPointerMove,
