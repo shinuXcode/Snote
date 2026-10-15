@@ -549,6 +549,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       _loadError = null;
     });
     _initializeTextControllers();
+    _prefetchAdjacentPdfPages();
     debugPrint(
       '[Snote][EditorV2] document ready noteId=${widget.note.id} '
       'pages=${pages.length} pdfPages=$totalPdfPages migratedPdf=$renderedPdf',
@@ -632,6 +633,33 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
   }
 
+  /// Warm adjacent page rasters before a reader swipes to them. The page records
+  /// remain virtualized; rendered bytes still use the bounded LRU cache.
+  void _prefetchAdjacentPdfPages() {
+    if (!mounted || _page < 0 || _page >= _pages.length) return;
+    final current = _pages[_page];
+    if (current['pdfLazyRender'] != true) return;
+    final assetId = current['pdfSourceAssetId']?.toString();
+    if (assetId == null || assetId.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      for (final index in <int>[_page - 1, _page + 1]) {
+        if (index < 0 || index >= _pages.length) continue;
+        final neighbour = _pages[index];
+        if (neighbour['pdfLazyRender'] != true ||
+            neighbour['pdfSourceAssetId']?.toString() != assetId) {
+          continue;
+        }
+        final pageNumber = (neighbour['pdfSourcePage'] as num?)?.toInt();
+        if (pageNumber == null || pageNumber < 1) continue;
+        unawaited(
+          _lazyPdfPageRaster(assetId, pageNumber).then<void>((_) {}).catchError((Object error) {
+            debugPrint('[Snote][EditorV2] adjacent PDF prefetch failed page=$pageNumber: $error');
+          }),
+        );
+      }
+    });
+  }
   Future<Uint8List?> _lazyPdfPageRaster(
     String assetId,
     int pageNumber, {
@@ -5342,6 +5370,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     });
     _scheduleSave();
     _scrollActivePagePreviewIntoView();
+    _prefetchAdjacentPdfPages();
   }
 
   void _toggleBookmark() {
