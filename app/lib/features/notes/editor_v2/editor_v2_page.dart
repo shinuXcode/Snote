@@ -224,6 +224,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   bool _showFavoritesShowcase = true;
   bool _showPageNavigation = true;
   bool _showPagePreview = true;
+  final ScrollController _pagePreviewScrollController = ScrollController();
   bool _floatingPageNavigation = false;
   bool _fullScreenMode = false;
   bool _readingMode = false;
@@ -952,11 +953,12 @@ class _EditorV2PageState extends State<EditorV2Page>
     await _settings.setString('editorV2ToolbarOrder', jsonEncode(order));
   }
 
-  Set<String> _specialToolLocations(String key) => Set<String>.from(
-        _toolPlacements[key] ?? <String>{
-          if (key == 'calculator' || key == 'timer') 'titleBar' else 'toolbar',
-        },
-      );
+  Set<String> _specialToolLocations(String key) {
+    final saved = _toolPlacements[key];
+    if (saved != null) return Set<String>.from(saved);
+    if (key == 'calculator' || key == 'timer') return <String>{'titleBar'};
+    return <String>{};
+  }
 
   Future<void> _specialToolSettingsSheet(String key) async {
     final selected = _specialToolLocations(key);
@@ -5010,6 +5012,37 @@ class _EditorV2PageState extends State<EditorV2Page>
     _scheduleSave();
   }
 
+  void _scrollActivePagePreviewIntoView() {
+    if (!mounted || !_pagePreviewScrollController.hasClients ||
+        !_showPagePreview || _focusMode || _fullScreenMode ||
+        _page < 0 || _page >= _pages.length) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_pagePreviewScrollController.hasClients ||
+          !_showPagePreview || _focusMode || _fullScreenMode ||
+          _page < 0 || _page >= _pages.length) {
+        return;
+      }
+      final sidebarWidth = MediaQuery.sizeOf(context).width >= 900 ? 216.0 : 172.0;
+      final cardWidth = sidebarWidth - 20;
+      var offsetBefore = 10.0;
+      for (var index = 0; index < _page; index++) {
+        offsetBefore += cardWidth / _pageAspectRatioFor(_pages[index]) + 12;
+      }
+      final activeHeight = cardWidth / _pageAspectRatioFor(_pages[_page]);
+      final position = _pagePreviewScrollController.position;
+      final target = (offsetBefore + activeHeight / 2 - position.viewportDimension / 2)
+          .clamp(0.0, position.maxScrollExtent)
+          .toDouble();
+      unawaited(_pagePreviewScrollController.animateTo(
+        target,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+      ));
+    });
+  }
+
   void _movePage(int from, int to) {
     if (from < 0 || from >= _pages.length || to < 0 || to >= _pages.length || from == to) return;
     _pushUndo();
@@ -5025,6 +5058,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       }
     });
     _scheduleSave();
+    _scrollActivePagePreviewIntoView();
   }
 
   void _goToPage(int index) {
@@ -5035,6 +5069,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       _lassoRect = null;
     });
     _scheduleSave();
+    _scrollActivePagePreviewIntoView();
   }
 
   void _toggleBookmark() {
@@ -5775,6 +5810,8 @@ class _EditorV2PageState extends State<EditorV2Page>
         unawaited(_toggleNoteSwitcher());
       case 'calculator':
         _openCalculator();
+      case 'screenshot':
+        unawaited(_captureScreenToCanvas());
       case 'calculatorSettings':
         unawaited(_specialToolSettingsSheet('calculator'));
       case 'screenshotSettings':
@@ -5985,6 +6022,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           PopupMenuItem(value: 'image', child: Text('Insert image from file')),
           if (_specialToolLocations('screenshot').isNotEmpty)
             PopupMenuItem(value: 'clipboardImage', child: Text('Paste screenshot from clipboard')),
+          PopupMenuItem(value: 'screenshot', child: Text('Crop screenshot area to canvas')),
           PopupMenuItem(value: 'pasteSelection', enabled: _selectionClipboard != null, child: Text('Paste copied selection')),
           PopupMenuItem(value: 'clipboardHistory', enabled: _selectionClipboardHistory.isNotEmpty, child: Text('Clipboard history (last 4)')),
           if (_specialToolLocations('calculator').isNotEmpty)
@@ -6412,6 +6450,7 @@ class _EditorV2PageState extends State<EditorV2Page>
             const Divider(height: 1),
             Expanded(
               child: ReorderableListView.builder(
+                scrollController: _pagePreviewScrollController,
                 onReorder: (oldIndex, newIndex) {
                   if (newIndex > oldIndex) newIndex--;
                   _movePage(oldIndex, newIndex);
@@ -6548,9 +6587,11 @@ class _EditorV2PageState extends State<EditorV2Page>
                                       bottomLeft: Radius.circular(8),
                                     ),
                                     child: PopupMenuButton<String>(
+                                      useRootNavigator: true,
+                                      position: PopupMenuPosition.under,
                                       tooltip: 'Page ${index + 1} options',
                                       padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints.tightFor(width: 34, height: 32),
+                                      constraints: const BoxConstraints(minWidth: 220),
                                       iconSize: 18,
                                       onSelected: (action) {
                                         switch (action) {
@@ -7002,7 +7043,7 @@ class _EditorV2PageState extends State<EditorV2Page>
             ),
             Expanded(
               child: ReorderableListView.builder(
-                controller: pageScrollController,
+                scrollController: pageScrollController,
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
                 itemCount: _pages.length,
                 onReorder: (oldIndex, newIndex) {
@@ -7142,6 +7183,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       _clearSelectionIds();
       _lassoRect = null;
     });
+    _scrollActivePagePreviewIntoView();
   }
 
   Widget _buildLockedBody() => Center(
@@ -7364,6 +7406,7 @@ class _EditorV2PageState extends State<EditorV2Page>
               PopupMenuItem(value: 'readingMode', child: Text(_readingMode ? 'Exit reading mode' : 'Reading mode')),
               PopupMenuItem(value: 'focusMode', child: Text(_focusMode ? 'Exit focus mode' : 'Focus mode')),
               const PopupMenuItem(value: 'toolPicker', child: Text('Open tool library')),
+              const PopupMenuItem(value: 'screenshot', child: Text('Crop screenshot area to canvas')),
               PopupMenuItem(value: 'timerPanel', child: Text(_showFloatingTimer ? 'Show timer panel again' : 'Timer / stopwatch / alarm')),
               const PopupMenuItem(value: 'image', child: Text('Insert image from file')),
               const PopupMenuItem(value: 'clipboardImage', child: Text('Paste screenshot from clipboard')),
@@ -7586,6 +7629,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     _viewportHudTimer?.cancel();
     unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
     if (!_loading && _pages.isNotEmpty) unawaited(_flushSave());
+    _pagePreviewScrollController.dispose();
     _title.dispose();
     _quill.removeListener(_scheduleSave);
     _quill.dispose();

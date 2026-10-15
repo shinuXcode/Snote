@@ -164,7 +164,7 @@ class _ScreenshotCropDialogState extends State<_ScreenshotCropDialog> {
                 FilledButton.icon(
                   onPressed: canCrop
                       ? () {
-                          final rect = selection!;
+                          final rect = selection;
                           Navigator.pop(
                             context,
                             Rect.fromLTRB(
