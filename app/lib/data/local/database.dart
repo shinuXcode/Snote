@@ -6,12 +6,26 @@ import 'schema.dart';
 
 class SnoteDatabase {
   static Database? _db;
+  // Several repositories can request the database together during notebook
+  // startup. Share one in-flight open instead of racing separate connections.
+  static Future<Database>? _opening;
 
-  static Future<Database> open() async {
-    if (_db?.isOpen == true) return _db!;
+  static Future<Database> open() {
+    final current = _db;
+    if (current?.isOpen == true) return Future<Database>.value(current);
+    final opening = _opening;
+    if (opening != null) return opening;
+
+    final pending = _open();
+    _opening = pending;
+    return pending;
+  }
+
+  static Future<Database> _open() async {
+    try {
 
     final dir = await getApplicationDocumentsDirectory();
-    _db = await openDatabase(
+    final database = await openDatabase(
       p.join(dir.path, 'snote.db'),
       version: databaseVersion,
       onConfigure: (db) async {
@@ -117,7 +131,11 @@ class SnoteDatabase {
         );
       },
     );
-    return _db!;
+    _db = database;
+    return database;
+    } finally {
+      _opening = null;
+    }
   }
 
   static Future<void> _addColumnIfMissing(
