@@ -207,6 +207,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   int? _activePointer;
   Offset? _gestureStart;
   Offset? _eraserCursor;
+  double _eraserRadius = 7.0;
   Offset _floatingOffset = const Offset(12, 12);
   List<StrokePoint> _livePoints = <StrokePoint>[];
   Stroke? _liveStroke;
@@ -1698,6 +1699,10 @@ class _EditorV2PageState extends State<EditorV2Page>
     _longPressTriggered = false;
     _livePoints = <StrokePoint>[_pointFrom(event)];
     _eraserCursor = event.localPosition;
+    if (_tool == CanvasTool.eraser || _tool == CanvasTool.pixelEraser) {
+      final precise = _tool == CanvasTool.pixelEraser || _settings.getString('eraserMode') == 'pixel';
+      _eraserRadius = _pressureEraseRadius(event, baseRadius: precise ? 7.0 : math.max(18.0, _size * 2));
+    }
     _liveStroke = _buildLiveStroke();
     _holdTimer?.cancel();
     if ((event.kind == PointerDeviceKind.stylus || event.kind == PointerDeviceKind.invertedStylus) &&
@@ -1784,6 +1789,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     if (_activePointer == event.pointer && _pressureEraseActive) {
       _eraserCursor = event.localPosition;
       final radius = _pressureEraseRadius(event);
+      _eraserRadius = radius;
       if (_pressureEraseAllowed(event) && _shouldProcessErase(event, radius)) {
         _eraseAt(event.localPosition, radius);
       }
@@ -1797,6 +1803,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           _settings.getString('eraserMode') == 'pixel';
       final baseRadius = precisionRadius ? 7.0 : math.max(18, _size * 2).toDouble();
       final radius = _pressureEraseRadius(event, baseRadius: baseRadius);
+      _eraserRadius = radius;
       if (_pressureEraseAllowed(event) && _shouldProcessErase(event, radius)) {
         _eraseAt(event.localPosition, radius);
       }
@@ -6973,6 +6980,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                 onPointerHover: (event) {
                   if (_tool == CanvasTool.eraser || _tool == CanvasTool.pixelEraser) {
                     _eraserCursor = event.localPosition;
+                    _eraserRadius = _tool == CanvasTool.pixelEraser || _settings.getString('eraserMode') == 'pixel' ? 7.0 : math.max(18, _size * 2).toDouble();
                     setState(() {});
                   }
                 },
@@ -6982,7 +6990,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                     liveStroke: live,
                     selectedStrokeIds: selected,
                     eraserCursor: _tool == CanvasTool.eraser || _tool == CanvasTool.pixelEraser ? _eraserCursor : null,
-                    eraserRadius: _tool == CanvasTool.pixelEraser ? 7 : math.max(18, _size * 2).toDouble(),
+                    eraserRadius: _eraserRadius,
                   ),
                   size: Size(_pageWidth, _pageHeight),
                 ),
