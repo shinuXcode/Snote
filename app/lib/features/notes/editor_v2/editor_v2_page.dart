@@ -6672,6 +6672,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     return RepaintBoundary(
       key: _pageCaptureKey,
       child: Container(
+        key: const ValueKey<String>('editor-v2-page-surface'),
         width: _pageWidth,
         height: _pageHeight,
         clipBehavior: Clip.hardEdge,
@@ -7442,7 +7443,16 @@ class _EditorV2PageState extends State<EditorV2Page>
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 14),
+                  Text('Preparing your note…'),
+                ],
+              ),
+            )
           : _locked && !_unlocked
               ? _buildLockedBody()
               : _loadError != null
@@ -7453,8 +7463,7 @@ class _EditorV2PageState extends State<EditorV2Page>
 
   Widget _buildEditorLayout() {
     final sidebarWidth = MediaQuery.sizeOf(context).width >= 900 ? 216.0 : 172.0;
-    final viewport = Expanded(
-      child: Stack(
+    final viewport = Stack(
         clipBehavior: Clip.none,
         children: [
           Positioned.fill(
@@ -7572,20 +7581,17 @@ class _EditorV2PageState extends State<EditorV2Page>
               ),
             ),
         ],
-      ),
-    );
-
-    final canvasWithFooter = Column(children: [viewport]);
+      );
 
     if (_fullScreenMode || _focusMode) {
-      return canvasWithFooter;
+      return SizedBox.expand(child: viewport);
     }
 
     switch (_toolbarDock) {
       case 'bottom':
         return Column(
           children: [
-            Expanded(child: canvasWithFooter),
+            Expanded(child: viewport),
             if (!_floatingToolbar) _buildToolbar(vertical: false),
           ],
         );
@@ -7597,13 +7603,13 @@ class _EditorV2PageState extends State<EditorV2Page>
                 width: 32,
                 child: _buildToolbar(vertical: true),
               ),
-            Expanded(child: canvasWithFooter),
+            Expanded(child: viewport),
           ],
         );
       case 'right':
         return Row(
           children: [
-            Expanded(child: canvasWithFooter),
+            Expanded(child: viewport),
             if (!_floatingToolbar)
               SizedBox(
                 width: 34,
@@ -7615,7 +7621,7 @@ class _EditorV2PageState extends State<EditorV2Page>
         return Column(
           children: [
             if (!_floatingToolbar) _buildToolbar(vertical: false),
-            Expanded(child: canvasWithFooter),
+            Expanded(child: viewport),
           ],
         );
     }
