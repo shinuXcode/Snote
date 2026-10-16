@@ -183,16 +183,101 @@ class _TemplatePreview extends StatelessWidget {
   final String title;
   final String category;
   @override
-  Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-    Text(category.toUpperCase(), style: Theme.of(context).textTheme.labelMedium),
-    const SizedBox(height: 8),
-    Text(title, style: Theme.of(context).textTheme.headlineSmall),
-    const SizedBox(height: 20),
-    for (var i = 0; i < 5; i++) ...[
-      Container(height: 1, color: Theme.of(context).colorScheme.outlineVariant),
-      const SizedBox(height: 24),
-    ],
-    const Spacer(),
-    const Text('Template preview • content fields are populated by the editor integration'),
-  ]);
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final name = title.toLowerCase();
+    final isPlanner = name.contains('planner') || name.contains('calendar') ||
+        name.contains('schedule') || name.contains('weekly');
+    final isMatrix = name.contains('matrix') || name.contains('swot') ||
+        name.contains('pros and cons') || name.contains('kanban');
+    final isFinance = name.contains('budget') || name.contains('expense') ||
+        name.contains('income') || name.contains('bill') || name.contains('finance');
+    final isTracker = name.contains('tracker') || name.contains('checklist') ||
+        name.contains('habit') || name.contains('log');
+    Widget line(String label) => Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(children: [
+        if (isTracker) const Icon(Icons.check_box_outline_blank_rounded, size: 15),
+        if (isTracker) const SizedBox(width: 8),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label, style: theme.textTheme.labelMedium),
+          const SizedBox(height: 5),
+          Container(height: 1, color: theme.colorScheme.outlineVariant),
+        ])),
+      ]),
+    );
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(category.toUpperCase(), style: theme.textTheme.labelMedium),
+      const SizedBox(height: 8),
+      Text(title, style: theme.textTheme.headlineSmall),
+      const SizedBox(height: 20),
+      if (isMatrix)
+        Expanded(child: GridView.count(
+          crossAxisCount: 2, crossAxisSpacing: 8, mainAxisSpacing: 8,
+          physics: const NeverScrollableScrollPhysics(),
+          children: const [
+            'Do first', 'Schedule', 'Delegate', 'Review'
+          ].map((label) => Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              border: Border.all(color: theme.colorScheme.outlineVariant),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(label),
+          )).toList(),
+        ))
+      else if (isPlanner)
+        Expanded(child: Column(children: [
+          Row(children: List.generate(7, (i) => Expanded(
+            child: Center(child: Text(
+              ['M','T','W','T','F','S','S'][i],
+              style: theme.textTheme.labelSmall,
+            )),
+          ))),
+          const SizedBox(height: 10),
+          Expanded(child: GridView.count(
+            crossAxisCount: 7, crossAxisSpacing: 4, mainAxisSpacing: 4,
+            physics: const NeverScrollableScrollPhysics(),
+            children: List.generate(28, (i) => Container(
+              alignment: Alignment.topLeft,
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                border: Border.all(color: theme.colorScheme.outlineVariant),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text('${i + 1}', style: theme.textTheme.labelSmall),
+            )),
+          )),
+        ]))
+      else if (isFinance)
+        Expanded(child: Column(children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Row(children: [
+              Expanded(child: Text('Item')),
+              Text('Amount'),
+            ]),
+          ),
+          const SizedBox(height: 10),
+          for (final label in ['Planned', 'Actual', 'Difference', 'Total']) line(label),
+        ]))
+      else
+        Expanded(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final label in (isTracker
+              ? ['Task / item', 'Status', 'Notes', 'Next step']
+              : ['Overview', 'Key points', 'Details', 'Action items']))
+              line(label),
+          ],
+        )),
+      const SizedBox(height: 8),
+      Text('Preview layout • editable content is created in your note',
+        style: theme.textTheme.bodySmall),
+    ]);
+  }
 }
