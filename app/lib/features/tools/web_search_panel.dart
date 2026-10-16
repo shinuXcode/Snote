@@ -121,6 +121,27 @@ class _SnoteWebSearchPanelState extends State<SnoteWebSearchPanel> {
     }
   }
 
+
+  Future<void> _openGoogleSearch() async {
+    final query = _query.text.trim();
+    if (query.isEmpty) return;
+    final uri = Uri.https('www.google.com', '/search', {'q': query});
+    try {
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!opened && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open Google Search.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Google Search could not be opened: $error')),
+        );
+      }
+    }
+  }
+
   Future<void> _openResult(Uri uri) async {
     try {
       final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -183,6 +204,17 @@ class _SnoteWebSearchPanelState extends State<SnoteWebSearchPanel> {
                   ),
                   border: const OutlineInputBorder(),
                   isDense: true,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: _openGoogleSearch,
+                  icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                  label: const Text('Open in Google Search'),
                 ),
               ),
             ),
