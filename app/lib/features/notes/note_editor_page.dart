@@ -127,6 +127,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   bool _shapePanel = false;
   bool _showcaseOpen = false;
   bool _showcaseCollapsed = false;
+  bool _calculatorCollapsed = false;
   bool _studyTimerVisible = false;
   bool _viewportZoomLocked = false;
   int _viewportResetToken = 0;
@@ -1134,6 +1135,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
               if (_shapePanel && !_full && !_readingMode) _shapePanelWidget(),
               if (_showcaseOpen && !_full && !_readingMode) _showcaseWidget(),
               if (!_full) _viewportZoomControls(),
+              if (_calculatorCollapsed && !_full && !_readingMode) _calculatorEdgeButton(),
               _StudyTimerFloating(
                 visible: _studyTimerVisible && !_full,
                 onVisibilityChanged: (visible) => setState(() => _studyTimerVisible = visible),
@@ -2180,6 +2182,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   }
 
   Future<void> _calculatorSheet() async {
+    if (mounted) setState(() => _calculatorCollapsed = false);
     const keys = [
       'sin', 'cos', 'tan', 'sqrt',
       '(', ')', 'abs', 'ln',
@@ -2228,6 +2231,15 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                         'Scientific calculator',
                         style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
                       ),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'Collapse calculator to screen edge',
+                      onPressed: () {
+                        Navigator.pop(sheetContext);
+                        if (mounted) setState(() => _calculatorCollapsed = true);
+                      },
+                      icon: const Icon(Icons.keyboard_double_arrow_right_rounded),
                     ),
                     IconButton(
                       visualDensity: VisualDensity.compact,
@@ -2706,6 +2718,21 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       ),
     );
   }
+
+  Widget _calculatorEdgeButton() => Positioned(
+        right: 0,
+        top: MediaQuery.sizeOf(context).height * .35,
+        child: Material(
+          elevation: 8,
+          color: Theme.of(context).colorScheme.primaryContainer,
+          borderRadius: const BorderRadius.horizontal(left: Radius.circular(16)),
+          child: IconButton(
+            tooltip: 'Expand calculator',
+            onPressed: () => unawaited(_calculatorSheet()),
+            icon: const Icon(Icons.calculate_rounded),
+          ),
+        ),
+      );
 
   Widget _toolbarOpen() => Positioned(
         right: 8,
