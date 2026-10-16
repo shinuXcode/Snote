@@ -125,7 +125,11 @@ class NoteRepository {
     return LocalNote.fromMap(rows.first);
   }
 
-  Future<List<LocalNote>> list({String? folderId}) async {
+  Future<List<LocalNote>> list({
+    String? folderId,
+    int? limit,
+    int offset = 0,
+  }) async {
     final db = await _db;
 
     final whereParts = <String>['owner_id = ?', 'deleted_at IS NULL'];
@@ -143,21 +147,41 @@ class NoteRepository {
       where: whereParts.join(' AND '),
       whereArgs: args.isEmpty ? null : args,
       orderBy: 'updated_at DESC',
+      limit: limit == null ? null : limit.clamp(1, 10000).toInt(),
+      offset: offset > 0 ? offset : null,
     );
 
     return rows.map(LocalNote.fromMap).toList();
   }
 
-  Future<List<LocalNote>> listAllVisible({int? limit}) async {
+  Future<List<LocalNote>> listAllVisible({int? limit, int offset = 0}) async {
     final db = await _db;
     final rows = await db.query(
       'notes',
       where: 'owner_id = ? AND deleted_at IS NULL',
       whereArgs: [SnoteAccountScope.ownerId],
       orderBy: 'updated_at DESC',
-      limit: limit == null ? null : limit.clamp(1, 500).toInt(),
+      limit: limit == null ? null : limit.clamp(1, 10000).toInt(),
+      offset: offset > 0 ? offset : null,
     );
     return rows.map(LocalNote.fromMap).toList();
+  }
+
+  /// Searches titles inside SQLite to avoid scanning and filtering every note
+  /// in the UI isolate on each keystroke.
+  Future<List<LocalNote>> searchVisible(String query, {int limit = 10000, int offset = 0}) async {
+    final normalized = query.trim();
+    if (normalized.isEmpty) return listAllVisible(limit: limit, offset: offset);
+    final db = await _db;
+    final rows = await db.query(
+      'notes',
+      where: 'owner_id = ? AND deleted_at IS NULL AND title LIKE ?',
+      whereArgs: [SnoteAccountScope.ownerId, '%$normalized%'],
+      orderBy: 'updated_at DESC',
+      limit: limit.clamp(1, 10000).toInt(),
+      offset: offset > 0 ? offset : null,
+    );
+    return rows.map(LocalNote.fromMap).toList(growable: false);
   }
 
   Future<void> saveContent(

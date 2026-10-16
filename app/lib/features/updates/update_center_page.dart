@@ -19,7 +19,7 @@ class _UpdateCenterPageState extends State<UpdateCenterPage> {
   static final _releaseUri =
       Uri.parse('https://github.com/shinuXcode/Snote/releases/latest');
   static final _apiUri =
-      Uri.parse('https://api.github.com/repos/shinuXcode/Snote/releases/latest');
+      Uri.parse('https://api.github.com/repos/shinuXcode/Snote/releases?per_page=30');
 
   final _notificationRepository = NotificationRepository();
   bool _loading = true;
@@ -68,12 +68,25 @@ class _UpdateCenterPageState extends State<UpdateCenterPage> {
         throw Exception('Update server returned ${response.statusCode}.');
       }
       final decoded = jsonDecode(response.body);
-      if (decoded is! Map) throw const FormatException('Invalid release data.');
-
-      final tag = decoded['tag_name']?.toString();
+      if (decoded is! List) throw const FormatException('Invalid release list.');
+      final betaChannel = currentVersion.contains('-beta.');
+      final releases = decoded.whereType<Map>().where((release) {
+        if (release['draft'] == true) return false;
+        if (!betaChannel && release['prerelease'] == true) return false;
+        final tag = release['tag_name']?.toString();
+        return tag != null && tag.isNotEmpty;
+      }).toList();
+      if (releases.isEmpty) throw const FormatException('No eligible release was found.');
+      releases.sort((left, right) {
+        final leftTag = left['tag_name']?.toString() ?? '';
+        final rightTag = right['tag_name']?.toString() ?? '';
+        return _versionParts(rightTag).compareTo(_versionParts(leftTag));
+      });
+      final release = releases.first;
+      final tag = release['tag_name']?.toString();
       final normalizedVersion = tag?.replaceFirst(RegExp(r'^v'), '');
-      final url = decoded['html_url']?.toString();
-      final published = decoded['published_at']?.toString();
+      final url = release['html_url']?.toString();
+      final published = release['published_at']?.toString();
       if (!mounted) return;
       setState(() {
         _latestVersion = normalizedVersion;
@@ -113,14 +126,38 @@ class _UpdateCenterPageState extends State<UpdateCenterPage> {
   }
 
   _ComparableVersion _versionParts(String value) {
-    final parts = value
-        .split('.')
-        .map((part) => int.tryParse(RegExp(r'^\d+').firstMatch(part)?.group(0) ?? '') ?? 0)
-        .toList();
-    while (parts.length < 3) {
-      parts.add(0);
+    final normalized = value.trim().replaceFirst(RegExp(r'^v'), '');
+    final match = RegExp(
+      r'^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+\d+)?$',
+    ).firstMatch(normalized);
+    if (match == null) {
+      final parts = normalized
+          .split('.')
+          .map((part) => int.tryParse(RegExp(r'^\d+').firstMatch(part)?.group(0) ?? '') ?? 0)
+          .toList();
+      while (parts.length < 3) {
+        parts.add(0);
+      }
+      return _ComparableVersion(parts[0], parts[1], parts[2]);
     }
-    return _ComparableVersion(parts[0], parts[1], parts[2]);
+    final preRelease = match.group(4);
+    final tokens = preRelease?.toLowerCase().split(RegExp(r'[.-]')) ?? const <String>[];
+    final preReleaseName = tokens.isEmpty ? null : tokens.first;
+    var preReleaseNumber = 0;
+    for (final token in tokens.skip(1)) {
+      final parsed = int.tryParse(token);
+      if (parsed != null) {
+        preReleaseNumber = parsed;
+        break;
+      }
+    }
+    return _ComparableVersion(
+      int.parse(match.group(1)!),
+      int.parse(match.group(2)!),
+      int.parse(match.group(3)!),
+      preRelease: preReleaseName,
+      preReleaseNumber: preReleaseNumber,
+    );
   }
 
   Future<void> _open(Uri uri) async {
@@ -308,13 +345,44 @@ class _ComparableVersion implements Comparable<_ComparableVersion> {
   final int major;
   final int minor;
   final int patch;
+  final String? preRelease;
+  final int preReleaseNumber;
 
-  const _ComparableVersion(this.major, this.minor, this.patch);
+  const _ComparableVersion(
+    this.major,
+    this.minor,
+    this.patch, {
+    this.preRelease,
+    this.preReleaseNumber = 0,
+  });
+
+  int _stageRank(String? name) {
+    if (name == null) return 4;
+    switch (name) {
+      case 'dev':
+      case 'alpha':
+        return 0;
+      case 'beta':
+        return 1;
+      case 'rc':
+        return 2;
+      default:
+        return 1;
+    }
+  }
 
   @override
   int compareTo(_ComparableVersion other) {
     if (major != other.major) return major.compareTo(other.major);
     if (minor != other.minor) return minor.compareTo(other.minor);
-    return patch.compareTo(other.patch);
+    if (patch != other.patch) return patch.compareTo(other.patch);
+    final leftRank = _stageRank(preRelease);
+    final rightRank = _stageRank(other.preRelease);
+    if (leftRank != rightRank) return leftRank.compareTo(rightRank);
+    if (preRelease == null || other.preRelease == null) return 0;
+    if (preRelease != other.preRelease) {
+      return preRelease!.compareTo(other.preRelease!);
+    }
+    return preReleaseNumber.compareTo(other.preReleaseNumber);
   }
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart';
@@ -8,11 +10,66 @@ import 'core/settings/app_settings.dart';
 import 'data/remote/supabase_service.dart';
 import 'ui/snote_theme.dart';
 
-Future<void> main() async {
+void _installSnoteErrorLogging() {
+  final previousFlutterError = FlutterError.onError;
+  FlutterError.onError = (details) {
+    debugPrint('[Snote][FlutterError] ${details.exceptionAsString()}');
+    if (details.stack != null) {
+      debugPrintStack(stackTrace: details.stack);
+    }
+    if (previousFlutterError != null) {
+      previousFlutterError(details);
+    } else {
+      FlutterError.presentError(details);
+    }
+  };
+
+  final dispatcher = WidgetsBinding.instance.platformDispatcher;
+  final previousPlatformError = dispatcher.onError;
+  dispatcher.onError = (error, stackTrace) {
+    debugPrint('[Snote][PlatformError] $error\n$stackTrace');
+    return previousPlatformError?.call(error, stackTrace) ?? false;
+  };
+}
+
+Widget _snoteErrorWidget(FlutterErrorDetails details) {
+  debugPrint('[Snote][ErrorWidget] ${details.exceptionAsString()}');
+  if (details.stack != null) debugPrintStack(stackTrace: details.stack);
+  return Material(
+    color: const Color(0xfff7f8fa),
+    child: SafeArea(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline_rounded, size: 42, color: Colors.redAccent),
+              const SizedBox(height: 12),
+              const Text('This screen could not be rendered.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              const Text('Your saved notes have not been deleted. Return and reopen the note.',
+                  textAlign: TextAlign.center),
+              const SizedBox(height: 12),
+              SelectableText(details.exceptionAsString(),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 11, color: Colors.black54)),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  await SnoteSupabase.initialize();
-  await SnoteThemeController.instance.load();
-  await SnoteSettings.instance.load();
+  ErrorWidget.builder = _snoteErrorWidget;
+  _installSnoteErrorLogging();
+  // Mount Flutter immediately so startup failures can show an error/retry
+  // screen instead of leaving the user on a blank launch surface.
   runApp(const SnoteApp());
 }
 
@@ -23,20 +80,70 @@ class SnoteApp extends StatefulWidget {
 
 class _SnoteAppState extends State<SnoteApp> {
   final _theme = SnoteThemeController.instance;
+  bool _bootstrapping = true;
+  bool _bootstrapAttemptActive = false;
+  String? _startupError;
+
   @override
-  void initState() { super.initState(); _theme.addListener(_refresh); }
-  void _refresh() { if (mounted) setState(() {}); }
+  void initState() {
+    super.initState();
+    _theme.addListener(_refresh);
+    unawaited(_initialize());
+  }
+
+  void _refresh() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _initialize() async {
+    if (_bootstrapAttemptActive) return;
+    _bootstrapAttemptActive = true;
+    if (mounted) {
+      setState(() {
+        _bootstrapping = true;
+        _startupError = null;
+      });
+    }
+
+    try {
+      await SnoteSupabase.initialize();
+      await _theme.load();
+      await SnoteSettings.instance.load();
+      if (!mounted) return;
+      setState(() {
+        _bootstrapping = false;
+        _startupError = null;
+      });
+    } catch (error, stackTrace) {
+      debugPrint('Snote startup failed: $error\\n$stackTrace');
+      if (!mounted) return;
+      setState(() {
+        _bootstrapping = false;
+        _startupError = error.toString();
+      });
+    } finally {
+      _bootstrapAttemptActive = false;
+    }
+  }
+
+  void _retryBootstrap() => unawaited(_initialize());
 
   @override
   Widget build(BuildContext context) {
     final light = SnoteTheme.light();
     final dark = SnoteTheme.dark();
-    final styleSeed = switch (_theme.style) {
+    final profileSeed = switch (_theme.style) {
       SnoteThemeStyle.apple => const Color(0xff007aff),
       SnoteThemeStyle.windows => const Color(0xff0078d4),
       SnoteThemeStyle.mac => const Color(0xff8e8e93),
+      SnoteThemeStyle.linux => const Color(0xffe95420),
+      SnoteThemeStyle.mobile => const Color(0xff009688),
+      SnoteThemeStyle.tablet => const Color(0xff3949ab),
       SnoteThemeStyle.standard => SnoteTheme.violet,
     };
+    final seedColor = _theme.colorTheme.followsInterfaceProfile
+        ? profileSeed
+        : _theme.colorTheme.color;
     final app = MaterialApp(
       title: 'Snote',
       debugShowCheckedModeBanner: false,
@@ -58,10 +165,21 @@ class _SnoteAppState extends State<SnoteApp> {
                   : const PageTransitionsTheme(),
             )
           : light.copyWith(
-              colorScheme: ColorScheme.fromSeed(seedColor: styleSeed),
+              colorScheme: ColorScheme.fromSeed(seedColor: seedColor, brightness: Brightness.light),
+              visualDensity: _theme.style == SnoteThemeStyle.windows || _theme.style == SnoteThemeStyle.linux
+                  ? VisualDensity.compact
+                  : VisualDensity.standard,
             ),
-      darkTheme: dark,
-      themeMode: ThemeMode.system,
+      darkTheme: dark.copyWith(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: seedColor,
+          brightness: Brightness.dark,
+        ),
+        visualDensity: _theme.style == SnoteThemeStyle.windows || _theme.style == SnoteThemeStyle.linux
+            ? VisualDensity.compact
+            : VisualDensity.standard,
+      ),
+      themeMode: _theme.themeMode,
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
@@ -69,7 +187,14 @@ class _SnoteAppState extends State<SnoteApp> {
         FlutterQuillLocalizations.delegate,
       ],
       supportedLocales: const [Locale('en'), Locale('hi')],
-      home: const AuthGate(),
+      home: _bootstrapping
+          ? const _StartupPage()
+          : _startupError == null
+              ? const AuthGate()
+              : _StartupFailurePage(
+                  details: _startupError!,
+                  onRetry: _retryBootstrap,
+                ),
     );
     if (_theme.eInk && _theme.grayscale) {
       return ColorFiltered(
@@ -86,5 +211,87 @@ class _SnoteAppState extends State<SnoteApp> {
   }
 
   @override
-  void dispose() { _theme.removeListener(_refresh); super.dispose(); }
+  void dispose() {
+    _theme.removeListener(_refresh);
+    super.dispose();
+  }
+}
+
+class _StartupPage extends StatelessWidget {
+  const _StartupPage();
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        body: SafeArea(
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 18),
+                Text(
+                  'Starting Snote…',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 6),
+                const Text('Preparing your settings and notebook'),
+              ],
+            ),
+          ),
+        ),
+      );
+}
+
+class _StartupFailurePage extends StatelessWidget {
+  final String details;
+  final VoidCallback onRetry;
+
+  const _StartupFailurePage({
+    required this.details,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        body: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.error_outline_rounded,
+                      size: 48,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Snote could not finish starting.',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Your saved notes have not been deleted. Retry startup; '
+                      'if this keeps happening, share the details below.',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    SelectableText(details, textAlign: TextAlign.center),
+                    const SizedBox(height: 20),
+                    FilledButton.icon(
+                      onPressed: onRetry,
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Retry startup'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
 }

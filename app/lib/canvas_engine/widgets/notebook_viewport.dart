@@ -9,6 +9,10 @@ class NotebookViewport extends StatefulWidget {
   final bool allowSingleFingerPan;
   final double minScale;
   final double maxScale;
+  final double initialScale;
+  final bool zoomLocked;
+  final int resetToken;
+  final ValueChanged<ViewportTransform>? onTransformChanged;
   final InkGesturePolicy gesturePolicy;
 
   const NotebookViewport({
@@ -17,6 +21,10 @@ class NotebookViewport extends StatefulWidget {
     this.allowSingleFingerPan = false,
     this.minScale = .5,
     this.maxScale = 4,
+    this.initialScale = 1,
+    this.zoomLocked = false,
+    this.resetToken = 0,
+    this.onTransformChanged,
     this.gesturePolicy = const InkGesturePolicy(),
   });
 
@@ -25,7 +33,34 @@ class NotebookViewport extends StatefulWidget {
 }
 
 class _NotebookViewportState extends State<NotebookViewport> {
-  ViewportTransform _transform = const ViewportTransform();
+  late ViewportTransform _transform;
+
+  @override
+  void initState() {
+    super.initState();
+    _transform = ViewportTransform(
+      scale: widget.initialScale.clamp(widget.minScale, widget.maxScale).toDouble(),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.onTransformChanged?.call(_transform);
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant NotebookViewport oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.resetToken != widget.resetToken ||
+        oldWidget.initialScale != widget.initialScale ||
+        oldWidget.minScale != widget.minScale ||
+        oldWidget.maxScale != widget.maxScale) {
+      _transform = ViewportTransform(
+        scale: widget.initialScale.clamp(widget.minScale, widget.maxScale).toDouble(),
+      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onTransformChanged?.call(_transform);
+      });
+    }
+  }
   int _touchCount = 0;
   late ViewportTransform _gestureStart;
   Offset _gestureDocumentFocal = Offset.zero;
@@ -56,7 +91,7 @@ class _NotebookViewportState extends State<NotebookViewport> {
   }
 
   void _onScaleUpdate(ScaleUpdateDetails details) {
-    if (!_gestureAllowed) return;
+    if (!_gestureAllowed || widget.zoomLocked) return;
     final nextScale =
         (_gestureStart.scale * details.scale)
             .clamp(widget.minScale, widget.maxScale)
@@ -73,6 +108,7 @@ class _NotebookViewportState extends State<NotebookViewport> {
         pan: nextPan,
       );
     });
+    widget.onTransformChanged?.call(_transform);
   }
 
   @override
@@ -90,7 +126,12 @@ class _NotebookViewportState extends State<NotebookViewport> {
         },
         onScaleStart: _onScaleStart,
         onScaleUpdate: _onScaleUpdate,
-        onDoubleTap: () => setState(() => _transform = const ViewportTransform()),
+        onDoubleTap: () {
+          setState(() => _transform = ViewportTransform(
+                scale: widget.initialScale.clamp(widget.minScale, widget.maxScale).toDouble(),
+              ));
+          widget.onTransformChanged?.call(_transform);
+        },
         child: ClipRect(
           child: Transform(
             alignment: Alignment.topLeft,

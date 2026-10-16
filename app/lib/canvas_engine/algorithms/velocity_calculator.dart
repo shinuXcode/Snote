@@ -30,8 +30,11 @@ double fountainWidth({
   required double velocity,
   required double pressure,
 }) {
-  final speedFactor = 1 / (1 + velocity * .012);
-  final pressureFactor = .7 + (pressure.clamp(0, 1) * .6);
+  // Velocity is measured in canvas pixels per millisecond by the stroke
+  // pipeline. Normalize it before applying a clear but bounded nib response.
+  final speedResponse = (velocity / 24.0).clamp(0.0, 1.0).toDouble();
+  final speedFactor = 1.24 - speedResponse * .52;
+  final pressureFactor = .48 + pressure.clamp(0.0, 1.0) * .95;
   return (baseWidth * speedFactor * pressureFactor)
       .clamp(baseWidth * .3, baseWidth * 1.4)
       .toDouble();

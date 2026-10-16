@@ -53,6 +53,51 @@ class LassoGeometry {
     return false;
   }
 
+
+  /// Tight lasso hit testing: most of a stroke's centreline must be inside the
+  /// selected polygon. A long stroke that merely clips the boundary is not
+  /// selected just because one segment crosses the polygon.
+  static bool strokeMostlyInsidePolygon(
+    List<StrokePoint> points,
+    List<Offset> polygon, {
+    double minimumInsideFraction = .65,
+  }) {
+    if (points.isEmpty || polygon.length < 3) return false;
+    if (points.length == 1) {
+      return pointInPolygon(points.first.position, polygon);
+    }
+
+    var totalLength = 0.0;
+    for (var i = 1; i < points.length; i++) {
+      totalLength +=
+          (points[i].position - points[i - 1].position).distance;
+    }
+    if (totalLength <= 1e-6) {
+      return pointInPolygon(points.first.position, polygon);
+    }
+
+    var insideLength = 0.0;
+    for (var i = 1; i < points.length; i++) {
+      final a = points[i - 1].position;
+      final b = points[i].position;
+      final length = (b - a).distance;
+      if (length <= 1e-8) continue;
+
+      // Weighted sampling handles sparse points on long segments while
+      // bounding CPU use when a user lassos a page with dense handwriting.
+      final sampleCount = math.max(1, math.min(512, (length / 2).ceil()));
+      final sampleLength = length / sampleCount;
+      for (var sample = 0; sample < sampleCount; sample++) {
+        final t = (sample + .5) / sampleCount;
+        final point = Offset.lerp(a, b, t)!;
+        if (pointInPolygon(point, polygon)) insideLength += sampleLength;
+      }
+    }
+
+    return insideLength / totalLength >=
+        minimumInsideFraction.clamp(0.0, 1.0).toDouble();
+  }
+
   static bool _segmentsIntersect(Offset a, Offset b, Offset c, Offset d) {
     const epsilon = 1e-7;
     final abC = _orientation(a, b, c);
