@@ -126,6 +126,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   int _sides = 6;
   bool _shapePanel = false;
   bool _showcaseOpen = false;
+  bool _showcaseCollapsed = false;
   bool _studyTimerVisible = false;
   bool _viewportZoomLocked = false;
   int _viewportResetToken = 0;
@@ -3531,6 +3532,29 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   }
 
   Widget _showcaseWidget() {
+    final size = MediaQuery.sizeOf(context);
+    if (_showcaseCollapsed) {
+      final left = _showcaseDock == 'left' || (_showcaseDock == 'free' && _showcaseX < size.width / 2);
+      return Positioned(
+        left: left ? 0 : null,
+        right: left ? null : 0,
+        top: _showcaseDock == 'top' ? 52 : (_showcaseDock == 'bottom' ? null : 112),
+        bottom: _showcaseDock == 'bottom' ? 8 : null,
+        child: Material(
+          elevation: 8,
+          color: Theme.of(context).colorScheme.primaryContainer,
+          borderRadius: BorderRadius.horizontal(
+            left: Radius.circular(left ? 0 : 16),
+            right: Radius.circular(left ? 16 : 0),
+          ),
+          child: IconButton(
+            tooltip: 'Expand pen showcase',
+            onPressed: () => setState(() => _showcaseCollapsed = false),
+            icon: Icon(left ? Icons.keyboard_double_arrow_right_rounded : Icons.keyboard_double_arrow_left_rounded),
+          ),
+        ),
+      );
+    }
     final presets = _savedPenPresets;
     final side = _showcaseDock;
     return Positioned(
@@ -3586,8 +3610,13 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   padding: const EdgeInsets.fromLTRB(12, 9, 4, 8),
                   child: Row(
                     children: [
-                      const Icon(Icons.drag_indicator_rounded),
-                      const SizedBox(width: 6),
+                      IconButton(
+                        tooltip: 'Collapse to screen edge',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => setState(() => _showcaseCollapsed = true),
+                        icon: const Icon(Icons.keyboard_double_arrow_left_rounded),
+                      ),
+                      const SizedBox(width: 2),
                       const Expanded(child: Text('Tool showcase', style: TextStyle(fontWeight: FontWeight.w900))),
                       PopupMenuButton<String>(
                         tooltip: 'Attach showcase to an edge',
