@@ -1,4 +1,4 @@
-const databaseVersion = 6;
+const databaseVersion = 8;
 const createNotesTable = '''
 CREATE TABLE notes (
   id TEXT PRIMARY KEY,
@@ -76,4 +76,12 @@ CREATE TABLE app_notifications (
   created_at INTEGER NOT NULL,
   read_at INTEGER,
   action_url TEXT
+)''';
+
+const createFolderCoversTable = '''
+CREATE TABLE folder_covers (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  image_data BLOB NOT NULL,
+  created_at INTEGER NOT NULL
 )''';

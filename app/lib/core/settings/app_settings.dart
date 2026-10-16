@@ -9,10 +9,10 @@ class SnoteSettings extends ChangeNotifier {
   final Map<String, dynamic> _values = {};
 
   static const boolDefaults = <String, bool>{
-    'autoRecognition': true, 'independentGraphColor': true, 'longPressMenu': true,
+    'autoRecognition': true, 'independentGraphColor': true, 'longPressMenu': true, 'palmRejection': true,
     'selectionMenuOnTouch': true, 'eraseClickSwitch': true, 'stylusDoubleTapUndo': true,
     'fingerLongPressSelection': true, 'showAuxiliaryLine': true, 'autoAuxiliaryPoint': true,
-    'pressureErase': true, 'pressureEraseArea': true, 'volumeKeyTurnPage': false,
+    'pressureErase': true, 'pressureEraseArea': true, 'stylusHoldActions': true, 'autoSave': true, 'volumeKeyTurnPage': false,
     'keepScreenOn': false, 'bookshelfStartPage': true, 'showPageNavigation': true,
     'showPageNumbers': true, 'showVisitedHistory': true, 'showPagePreview': true,
     'showUndoOnRight': false, 'screenshotNotification': false, 'clickHyperlink': true,
@@ -21,6 +21,7 @@ class SnoteSettings extends ChangeNotifier {
     'autoBackupLocal': true, 'writingPostureRightHand': true, 'disableBackGesture': false,
     'turnOffPush': false, 'pageSwipe': true, 'autoAddPage': true,
     'securePagePreviews': true, 'eInk': false, 'grayscaleEInk': true, 'reduceMotion': false,
+    'welcomeGuideSeen': false,
   };
 
   static const doubleDefaults = <String, double>{
@@ -28,17 +29,27 @@ class SnoteSettings extends ChangeNotifier {
     'strokeSmoothing': .72,
     'velocitySensitivity': .65,
     'pressureExponent': 1.0,
+    'noteZoom': 1.0,
   };
 
   static const stringDefaults = <String, String>{
     'themeStyle': 'standard',
-    'toolbarDock': 'bottom',
+    'toolbarDock': 'left',
     'toolbarToolbox': 'compact',
     'eInkProfile': 'physical',
     'defaultPageTemplate': 'dotted',
     'defaultPaperPalette': 'paper-white',
-    'pencaseTools': 'ballpoint,fountain,pencil,highlighter,marker,brush,eraser,pixelEraser,lasso',
+    'pencaseTools': 'ballpoint,fountain,pencil,highlighter,marker,brush,eraser,lasso,line,arrow,rectangle,ellipse,cartesianPlane,dashedLine,dottedLine,ruler,compass,protractor,divider',
+    'toolInstrumentDefaultsV1': '',
+    'pencasePresets': '[]',
+    'coverLibrary': '[]',
+    'folderSort': 'nameAsc',
     'pressureCurve': 'linear',
+    'toolSizes': '{}',
+    'toolColors': '{}',
+    'toolDashed': '{}',
+    'lassoStyle': 'solid',
+    'eraserMode': 'stroke',
   };
 
   bool getBool(String key) => (_values[key] as bool?) ?? boolDefaults[key] ?? false;
@@ -57,6 +68,23 @@ class SnoteSettings extends ChangeNotifier {
     for (final entry in stringDefaults.entries) {
       final raw = await _storage.read(key: 'snote.setting.' + entry.key);
       if (raw != null) _values[entry.key] = raw;
+    }
+
+    // One-time migration for users who already saved a customized toolbox
+    // before the measuring instruments were exposed in the default toolbox.
+    if (_values['toolInstrumentDefaultsV1'] != 'done') {
+      final current = getString('pencaseTools')
+          .split(',')
+          .where((tool) => tool.isNotEmpty)
+          .toList();
+      for (final instrument in const ['ruler', 'compass', 'protractor', 'divider']) {
+        if (!current.contains(instrument)) current.add(instrument);
+      }
+      final migrated = current.join(',');
+      _values['pencaseTools'] = migrated;
+      _values['toolInstrumentDefaultsV1'] = 'done';
+      await _storage.write(key: 'snote.setting.pencaseTools', value: migrated);
+      await _storage.write(key: 'snote.setting.toolInstrumentDefaultsV1', value: 'done');
     }
     notifyListeners();
   }

@@ -1,0 +1,896 @@
+import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
+
+import '../../../canvas_engine/models/pen_config.dart';
+import '../../../canvas_engine/models/stroke.dart';
+
+/// Independent renderer used by the rebuilt editor surface.
+///
+/// The serialized Stroke model is intentionally shared with legacy documents,
+/// but this painter has no dependency on the legacy SnoteCanvas widget,
+/// controller, gesture recognizers, or repaint pipeline.
+class EditorV2InkPainter extends CustomPainter {
+  final List<Stroke> strokes;
+  final Stroke? liveStroke;
+  final Set<String> selectedStrokeIds;
+  final Offset? eraserCursor;
+  final double eraserRadius;
+
+  const EditorV2InkPainter({
+    required this.strokes,
+    this.liveStroke,
+    this.selectedStrokeIds = const <String>{},
+    this.eraserCursor,
+    this.eraserRadius = 18,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final stroke in strokes) {
+      _drawStroke(canvas, stroke);
+      if (selectedStrokeIds.contains(stroke.id)) {
+        final bounds = _strokeBounds(stroke);
+        if (bounds != null) {
+          final selection = Paint()
+            ..color = const Color(0xff3979e8).withValues(alpha: .9)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.2;
+          canvas.drawRect(bounds.inflate(5), selection);
+        }
+      }
+    }
+    if (liveStroke != null) _drawStroke(canvas, liveStroke!);
+    if (eraserCursor != null) {
+      final cursor = Paint()
+        ..color = const Color(0xff3979e8).withValues(alpha: .65)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4;
+      canvas.drawCircle(eraserCursor!, eraserRadius, cursor);
+    }
+  }
+
+  Rect? _strokeBounds(Stroke stroke) {
+    if (stroke.points.isEmpty) return null;
+    var left = double.infinity;
+    var top = double.infinity;
+    var right = double.negativeInfinity;
+    var bottom = double.negativeInfinity;
+    for (final point in stroke.points) {
+      left = math.min(left, point.position.dx);
+      top = math.min(top, point.position.dy);
+      right = math.max(right, point.position.dx);
+      bottom = math.max(bottom, point.position.dy);
+    }
+    final padding = math.max(2.0, stroke.pen.size).toDouble();
+    return Rect.fromLTRB(left, top, right, bottom).inflate(padding);
+  }
+
+  void _drawStroke(Canvas canvas, Stroke stroke) {
+    if (stroke.points.isEmpty) return;
+    if (stroke.shape != null && stroke.shape!.isNotEmpty) {
+      _drawShape(canvas, stroke);
+      return;
+    }
+
+    final type = stroke.pen.type;
+    final baseWidth = stroke.pen.size.clamp(.5, 60).toDouble();
+    final alpha = (stroke.pen.opacity *
+            (type == PenType.pencil ? .78 : 1.0))
+        .clamp(.03, 1.0)
+        .toDouble();
+    final paint = Paint()
+      ..color = stroke.pen.color.withValues(alpha: alpha)
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..strokeWidth = baseWidth
+      ..isAntiAlias = true;
+    if (type == PenType.highlighter) {
+      paint
+        ..strokeWidth = math.max(baseWidth, 7)
+        ..blendMode = BlendMode.multiply
+        ..color = stroke.pen.color.withValues(
+          alpha: math.min(alpha, .38),
+        );
+    } else if (type == PenType.marker) {
+      paint.strokeWidth = baseWidth * 1.35;
+    } else if (type == PenType.brush) {
+      paint.strokeWidth = baseWidth * 1.2;
+    }
+
+    if (stroke.points.length == 1) {
+      canvas.drawCircle(
+        stroke.points.first.position,
+        math.max(.6, baseWidth * .42).toDouble(),
+        Paint()
+          ..color = paint.color
+          ..style = PaintingStyle.fill
+          ..isAntiAlias = true,
+      );
+      return;
+    }
+
+    final path = Path()..moveTo(
+        stroke.points.first.position.dx,
+        stroke.points.first.position.dy,
+      );
+    for (var i = 1; i < stroke.points.length - 1; i++) {
+      final current = stroke.points[i].position;
+      final next = stroke.points[i + 1].position;
+      final midpoint = Offset(
+        (current.dx + next.dx) / 2,
+        (current.dy + next.dy) / 2,
+      );
+      path.quadraticBezierTo(current.dx, current.dy, midpoint.dx, midpoint.dy);
+    }
+    final last = stroke.points.last.position;
+    path.lineTo(last.dx, last.dy);
+    canvas.drawPath(path, paint);
+
+    // Width modulation preserves the captured pressure signal without
+    // rebuilding the path for every pointer update.
+    if (type != PenType.highlighter &&
+        type != PenType.pointer &&
+        stroke.points.length > 2) {
+      for (var i = 1; i < stroke.points.length; i++) {
+        final a = stroke.points[i - 1];
+        final b = stroke.points[i];
+        final pressure = ((a.pressure + b.pressure) / 2).clamp(.08, 1.0);
+        final width = baseWidth *
+            (1 - stroke.pen.pressureSensitivity * .52 +
+                stroke.pen.pressureSensitivity * pressure);
+        canvas.drawLine(
+          a.position,
+          b.position,
+          Paint()
+            ..color = paint.color
+            ..strokeWidth = width.clamp(.5, 60).toDouble()
+            ..strokeCap = StrokeCap.round
+            ..isAntiAlias = true,
+        );
+      }
+    }
+  }
+
+  void _drawShape(Canvas canvas, Stroke stroke) {
+    final points = stroke.points;
+    if (points.isEmpty) return;
+    final start = points.first.position;
+    final end = points.length > 1 ? points.last.position : start + const Offset(1, 1);
+    final rect = Rect.fromPoints(start, end);
+    final safeRect = rect.width < 1 || rect.height < 1
+        ? Rect.fromCenter(
+            center: rect.center,
+            width: math.max(rect.width, 2).toDouble(),
+            height: math.max(rect.height, 2).toDouble(),
+          )
+        : rect;
+    final shape = stroke.shape ?? 'line';
+    final base = Paint()
+      ..color = stroke.pen.color.withValues(
+        alpha: stroke.pen.opacity.clamp(.05, 1).toDouble(),
+      )
+      ..strokeWidth = stroke.pen.size.clamp(.6, 20).toDouble()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..isAntiAlias = true;
+    final fill = Paint()
+      ..color = (stroke.fillColor ?? stroke.pen.color).withValues(
+        alpha: stroke.fill ? stroke.fillOpacity.clamp(0, 1).toDouble() : 0,
+      )
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+
+    void line(Offset a, Offset b, [Paint? p]) => canvas.drawLine(a, b, p ?? base);
+    void arrow(Offset a, Offset b, {bool both = false}) {
+      line(a, b);
+      _drawArrowHead(canvas, a, b, base);
+      if (both) _drawArrowHead(canvas, b, a, base);
+    }
+
+    Path polygon(List<Offset> vertices, {bool close = true}) {
+      final path = Path()..moveTo(vertices.first.dx, vertices.first.dy);
+      for (final p in vertices.skip(1)) {
+        path.lineTo(p.dx, p.dy);
+      }
+      if (close) path.close();
+      return path;
+    }
+
+    List<Offset> regularPolygon(int sides, {double rotation = -math.pi / 2}) {
+      return List<Offset>.generate(sides, (index) {
+        final angle = rotation + index * math.pi * 2 / sides;
+        return Offset(
+          safeRect.center.dx + math.cos(angle) * safeRect.width * .48,
+          safeRect.center.dy + math.sin(angle) * safeRect.height * .48,
+        );
+      });
+    }
+
+    void label(String text) {
+      final painter = TextPainter(
+        text: TextSpan(
+          text: text,
+          style: TextStyle(
+            color: stroke.pen.color,
+            fontSize: math.max(9, math.min(16, safeRect.height * .14)).toDouble(),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+        textAlign: TextAlign.center,
+        maxLines: 2,
+      )..layout(maxWidth: math.max(24, safeRect.width - 8));
+      painter.paint(
+        canvas,
+        Offset(
+          safeRect.center.dx - painter.width / 2,
+          safeRect.center.dy - painter.height / 2,
+        ),
+      );
+    }
+
+    switch (shape) {
+      case 'line':
+      case 'dottedLine':
+      case 'dashedLine':
+      case 'divider':
+        if (shape == 'dottedLine' || stroke.dashed) {
+          _drawDashedLine(canvas, start, end, base, dotted: shape == 'dottedLine');
+        } else {
+          line(start, end);
+        }
+      case 'arrow':
+      case 'vectorArrow':
+      case 'rayDiagram':
+      case 'projectilePath':
+      case 'forceDiagram':
+        arrow(start, end);
+        if (shape == 'forceDiagram') {
+          arrow(safeRect.topLeft, safeRect.bottomRight);
+          arrow(safeRect.bottomLeft, safeRect.topRight);
+        }
+      case 'dimensionLine':
+        arrow(start, end, both: true);
+        _drawDimensionTicks(canvas, start, end, base);
+      case 'numberLine':
+        line(Offset(safeRect.left, safeRect.center.dy),
+            Offset(safeRect.right, safeRect.center.dy));
+        for (var x = safeRect.left; x <= safeRect.right; x += 16) {
+          line(Offset(x, safeRect.center.dy - 6),
+              Offset(x, safeRect.center.dy + 6));
+        }
+      case 'rectangle':
+      case 'flowchartProcess':
+      case 'cuboid':
+        canvas.drawRect(safeRect, base);
+        if (shape == 'cuboid') {
+          final o = Offset(safeRect.width * .16, -safeRect.height * .16);
+          canvas.drawRect(safeRect.shift(o), base);
+          line(safeRect.topLeft, safeRect.topLeft + o);
+          line(safeRect.topRight, safeRect.topRight + o);
+          line(safeRect.bottomRight, safeRect.bottomRight + o);
+        }
+      case 'roundedRectangle':
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(safeRect, const Radius.circular(12)),
+          base,
+        );
+      case 'ellipse':
+      case 'circle':
+      case 'sphere':
+      case 'flowchartConnector':
+      case 'atom':
+      case 'orbital':
+      case 'animalCell':
+        canvas.drawOval(safeRect, base);
+        if (shape == 'sphere') {
+          canvas.drawOval(
+            Rect.fromLTWH(
+              safeRect.left + safeRect.width * .22,
+              safeRect.top,
+              safeRect.width * .56,
+              safeRect.height,
+            ),
+            base,
+          );
+          canvas.drawOval(
+            Rect.fromLTWH(
+              safeRect.left,
+              safeRect.top + safeRect.height * .3,
+              safeRect.width,
+              safeRect.height * .4,
+            ),
+            base,
+          );
+        } else if (shape == 'atom' || shape == 'orbital') {
+          canvas.drawOval(
+            Rect.fromCenter(
+              center: safeRect.center,
+              width: safeRect.width * .48,
+              height: safeRect.height,
+            ),
+            base,
+          );
+          canvas.drawOval(
+            Rect.fromCenter(
+              center: safeRect.center,
+              width: safeRect.width,
+              height: safeRect.height * .48,
+            ),
+            base,
+          );
+          canvas.drawCircle(safeRect.center, math.max(2, base.strokeWidth * 1.8).toDouble(), fill..color = stroke.pen.color);
+        }
+      case 'triangle':
+      case 'pyramid':
+        canvas.drawPath(
+          polygon([
+            Offset(safeRect.center.dx, safeRect.top),
+            safeRect.bottomRight,
+            Offset(safeRect.left, safeRect.bottom),
+          ]),
+          base,
+        );
+        if (shape == 'pyramid') {
+          line(Offset(safeRect.center.dx, safeRect.top),
+              Offset(safeRect.center.dx, safeRect.bottom));
+          line(Offset(safeRect.center.dx, safeRect.bottom),
+              Offset(safeRect.left, safeRect.bottom - safeRect.height * .15));
+        }
+      case 'diamond':
+        canvas.drawPath(
+          polygon([
+            Offset(safeRect.center.dx, safeRect.top),
+            Offset(safeRect.right, safeRect.center.dy),
+            Offset(safeRect.center.dx, safeRect.bottom),
+            Offset(safeRect.left, safeRect.center.dy),
+          ]),
+          base,
+        );
+      case 'pentagon':
+        canvas.drawPath(polygon(regularPolygon(5)), base);
+      case 'hexagon':
+      case 'benzeneRing':
+        canvas.drawPath(polygon(regularPolygon(6)), base);
+        if (shape == 'benzeneRing') {
+          canvas.drawPath(
+            polygon(regularPolygon(6).map((p) {
+              return Offset(
+                safeRect.center.dx + (p.dx - safeRect.center.dx) * .68,
+                safeRect.center.dy + (p.dy - safeRect.center.dy) * .68,
+              );
+            }).toList()),
+            base,
+          );
+        }
+      case 'customPolygon':
+        canvas.drawPath(polygon(regularPolygon(stroke.customSides.clamp(3, 24))), base);
+      case 'star':
+        final vertices = <Offset>[];
+        for (var i = 0; i < 10; i++) {
+          final radius = i.isEven ? .48 : .21;
+          final angle = -math.pi / 2 + i * math.pi / 5;
+          vertices.add(Offset(
+            safeRect.center.dx + math.cos(angle) * safeRect.width * radius,
+            safeRect.center.dy + math.sin(angle) * safeRect.height * radius,
+          ));
+        }
+        canvas.drawPath(polygon(vertices), base);
+      case 'parallelogram':
+      case 'trapezoid':
+        final inset = safeRect.width * (shape == 'trapezoid' ? .2 : .14);
+        canvas.drawPath(
+          polygon([
+            Offset(safeRect.left + inset, safeRect.top),
+            Offset(safeRect.right, safeRect.top),
+            Offset(safeRect.right - inset, safeRect.bottom),
+            Offset(safeRect.left, safeRect.bottom),
+          ]),
+          base,
+        );
+      case 'cube':
+      case 'triangularPrism':
+        final o = Offset(safeRect.width * .2, -safeRect.height * .2);
+        canvas.drawRect(safeRect, base);
+        canvas.drawRect(safeRect.shift(o), base);
+        line(safeRect.topLeft, safeRect.topLeft + o);
+        line(safeRect.topRight, safeRect.topRight + o);
+        line(safeRect.bottomRight, safeRect.bottomRight + o);
+      case 'cylinder':
+        canvas.drawRect(safeRect, base);
+        canvas.drawOval(Rect.fromLTWH(safeRect.left, safeRect.top, safeRect.width, safeRect.height * .2), base);
+        canvas.drawArc(Rect.fromLTWH(safeRect.left, safeRect.bottom - safeRect.height * .2, safeRect.width, safeRect.height * .2), 0, math.pi, false, base);
+      case 'cone':
+        canvas.drawPath(
+          polygon([
+            Offset(safeRect.center.dx, safeRect.top),
+            Offset(safeRect.right, safeRect.bottom),
+            Offset(safeRect.left, safeRect.bottom),
+          ]),
+          base,
+        );
+        canvas.drawOval(Rect.fromLTWH(safeRect.left, safeRect.bottom - safeRect.height * .14, safeRect.width, safeRect.height * .22), base);
+      case 'arc':
+      case 'semicircle':
+      case 'sector':
+      case 'ring':
+      case 'crescent':
+        if (shape == 'semicircle') {
+          canvas.drawArc(safeRect, math.pi, math.pi, false, base);
+          line(Offset(safeRect.left, safeRect.center.dy), Offset(safeRect.right, safeRect.center.dy));
+        } else if (shape == 'sector') {
+          canvas.drawArc(safeRect, -math.pi / 2, math.pi * .72, false, base);
+          line(safeRect.center, Offset(safeRect.center.dx, safeRect.top));
+          line(safeRect.center, Offset(safeRect.right, safeRect.center.dy + safeRect.height * .08));
+        } else if (shape == 'ring') {
+          canvas.drawOval(safeRect, base);
+          canvas.drawOval(safeRect.deflate(math.min(safeRect.width, safeRect.height) * .22), base);
+        } else if (shape == 'crescent') {
+          canvas.drawArc(safeRect, -.9, 4.8, false, base);
+          canvas.drawArc(safeRect.shift(Offset(safeRect.width * .25, 0)), -.9, 4.8, false, base);
+        } else {
+          canvas.drawArc(safeRect, math.pi * 1.1, math.pi * 1.6, false, base);
+        }
+      case 'cross':
+      case 'plus':
+        line(Offset(safeRect.center.dx, safeRect.top), Offset(safeRect.center.dx, safeRect.bottom));
+        line(Offset(safeRect.left, safeRect.center.dy), Offset(safeRect.right, safeRect.center.dy));
+      case 'heart':
+        final path = Path()
+          ..moveTo(safeRect.center.dx, safeRect.bottom)
+          ..cubicTo(safeRect.left - safeRect.width * .12, safeRect.center.dy,
+              safeRect.left + safeRect.width * .08, safeRect.top,
+              safeRect.center.dx, safeRect.top + safeRect.height * .24)
+          ..cubicTo(safeRect.right - safeRect.width * .08, safeRect.top,
+              safeRect.right + safeRect.width * .12, safeRect.center.dy,
+              safeRect.center.dx, safeRect.bottom)
+          ..close();
+        canvas.drawPath(path, base);
+      case 'cloud':
+        final p = Path()
+          ..moveTo(safeRect.left + safeRect.width * .12, safeRect.bottom)
+          ..cubicTo(safeRect.left - safeRect.width * .05, safeRect.bottom - safeRect.height * .35, safeRect.left + safeRect.width * .12, safeRect.top + safeRect.height * .35, safeRect.center.dx - safeRect.width * .2, safeRect.top + safeRect.height * .4)
+          ..cubicTo(safeRect.center.dx - safeRect.width * .1, safeRect.top - safeRect.height * .05, safeRect.center.dx + safeRect.width * .15, safeRect.top + safeRect.height * .08, safeRect.center.dx + safeRect.width * .2, safeRect.top + safeRect.height * .34)
+          ..cubicTo(safeRect.right + safeRect.width * .05, safeRect.top + safeRect.height * .26, safeRect.right + safeRect.width * .12, safeRect.bottom - safeRect.height * .25, safeRect.right - safeRect.width * .1, safeRect.bottom)
+          ..close();
+        canvas.drawPath(p, base);
+      case 'speechBubble':
+      case 'callout':
+        final p = Path()
+          ..addRRect(RRect.fromRectAndRadius(safeRect.deflate(safeRect.width * .04), const Radius.circular(8)))
+          ..moveTo(safeRect.left + safeRect.width * .28, safeRect.bottom - 2)
+          ..lineTo(safeRect.left + safeRect.width * .18, safeRect.bottom + safeRect.height * .12)
+          ..lineTo(safeRect.left + safeRect.width * .43, safeRect.bottom - 2);
+        canvas.drawPath(p, base);
+      case 'curlyBrace':
+      case 'bracket':
+        final x = shape == 'bracket' ? safeRect.left : safeRect.center.dx;
+        final p = Path()
+          ..moveTo(x + 12, safeRect.top)
+          ..quadraticBezierTo(x, safeRect.top, x, safeRect.top + 12)
+          ..lineTo(x, safeRect.center.dy - 10)
+          ..quadraticBezierTo(x, safeRect.center.dy, x - 10, safeRect.center.dy)
+          ..quadraticBezierTo(x, safeRect.center.dy, x, safeRect.center.dy + 10)
+          ..lineTo(x, safeRect.bottom - 12)
+          ..quadraticBezierTo(x, safeRect.bottom, x + 12, safeRect.bottom);
+        canvas.drawPath(p, base);
+      case 'cartesianPlane':
+      case 'coordinateAxes':
+      case 'ellipseAxes':
+      case 'unitCircle':
+        canvas.drawRect(safeRect, Paint()..color = base.color.withValues(alpha: .25)..style = PaintingStyle.stroke..strokeWidth = .8);
+        final center = safeRect.center;
+        line(Offset(safeRect.left, center.dy), Offset(safeRect.right, center.dy));
+        line(Offset(center.dx, safeRect.bottom), Offset(center.dx, safeRect.top));
+        _drawArrowHead(canvas, Offset(safeRect.left, center.dy), Offset(safeRect.right, center.dy), base);
+        _drawArrowHead(canvas, Offset(center.dx, safeRect.bottom), Offset(center.dx, safeRect.top), base);
+        if (shape == 'unitCircle') canvas.drawOval(safeRect.deflate(math.min(safeRect.width, safeRect.height) * .1), base);
+        if (shape == 'ellipseAxes') canvas.drawOval(safeRect.deflate(math.min(safeRect.width, safeRect.height) * .2), base);
+        if (shape == 'cartesianPlane') {
+          for (double x = safeRect.left + 14; x < safeRect.right; x += 14) line(Offset(x, safeRect.top), Offset(x, safeRect.bottom), Paint()..color = base.color.withValues(alpha: .15)..strokeWidth = .5);
+          for (double y = safeRect.top + 14; y < safeRect.bottom; y += 14) line(Offset(safeRect.left, y), Offset(safeRect.right, y), Paint()..color = base.color.withValues(alpha: .15)..strokeWidth = .5);
+        }
+      case 'sineWave':
+      case 'waveform':
+      case 'cubicGraph':
+      case 'parabola':
+      case 'exponentialGraph':
+      case 'logarithmicGraph':
+      case 'tangentGraph':
+      case 'projectilePath':
+        _drawGraph(canvas, safeRect, base, shape);
+      case 'polarGraph':
+      case 'vectorField':
+        for (var i = 1; i <= 4; i++) {
+          canvas.drawOval(safeRect.deflate(math.min(safeRect.width, safeRect.height) * i / 10), base);
+        }
+        for (var i = 0; i < 8; i++) {
+          final a = i * math.pi / 4;
+          line(
+            Offset(safeRect.center.dx + math.cos(a) * safeRect.width * .48, safeRect.center.dy + math.sin(a) * safeRect.height * .48),
+            Offset(safeRect.center.dx - math.cos(a) * safeRect.width * .48, safeRect.center.dy - math.sin(a) * safeRect.height * .48),
+          );
+        }
+        if (shape == 'vectorField') {
+          for (double x = safeRect.left + 18; x < safeRect.right; x += 34) {
+            for (double y = safeRect.top + 18; y < safeRect.bottom; y += 34) {
+              arrow(Offset(x - 5, y), Offset(x + 5, y - 3));
+            }
+          }
+        }
+      case 'histogram':
+      case 'barChart':
+        canvas.drawLine(Offset(safeRect.left, safeRect.bottom), Offset(safeRect.right, safeRect.bottom), base);
+        canvas.drawLine(Offset(safeRect.left, safeRect.top), Offset(safeRect.left, safeRect.bottom), base);
+        final bars = [0.35, 0.7, 0.53, 0.9, 0.46];
+        final gap = safeRect.width * .035;
+        final barWidth = (safeRect.width - gap * (bars.length + 1)) / bars.length;
+        for (var i = 0; i < bars.length; i++) {
+          final left = safeRect.left + gap + i * (barWidth + gap);
+          canvas.drawRect(Rect.fromLTWH(left, safeRect.bottom - safeRect.height * bars[i], barWidth, safeRect.height * bars[i]), base);
+        }
+      case 'pieChart':
+        canvas.drawCircle(safeRect.center, math.min(safeRect.width, safeRect.height) * .45, base);
+        for (var i = 0; i < 4; i++) {
+          final angle = -math.pi / 2 + i * math.pi / 2;
+          line(safeRect.center, Offset(safeRect.center.dx + math.cos(angle) * safeRect.width * .45, safeRect.center.dy + math.sin(angle) * safeRect.height * .45));
+        }
+      case 'flowchartDecision':
+        canvas.drawPath(polygon([
+          Offset(safeRect.center.dx, safeRect.top),
+          Offset(safeRect.right, safeRect.center.dy),
+          Offset(safeRect.center.dx, safeRect.bottom),
+          Offset(safeRect.left, safeRect.center.dy),
+        ]), base);
+        label('Decision');
+      case 'flowchartTerminator':
+        canvas.drawRRect(RRect.fromRectAndRadius(safeRect, Radius.circular(safeRect.height * .45)), base);
+        label('Start / End');
+      case 'flowchartInputOutput':
+        canvas.drawPath(polygon([
+          Offset(safeRect.left + safeRect.width * .16, safeRect.top),
+          Offset(safeRect.right, safeRect.top),
+          Offset(safeRect.right - safeRect.width * .16, safeRect.bottom),
+          Offset(safeRect.left, safeRect.bottom),
+        ]), base);
+      case 'flowchartDocument':
+        final p = Path()
+          ..moveTo(safeRect.left, safeRect.top)
+          ..lineTo(safeRect.right, safeRect.top)
+          ..lineTo(safeRect.right, safeRect.bottom - 8)
+          ..quadraticBezierTo(safeRect.center.dx, safeRect.bottom + 10, safeRect.left, safeRect.bottom - 8)
+          ..close();
+        canvas.drawPath(p, base);
+      case 'flowchartDatabase':
+        canvas.drawOval(Rect.fromLTWH(safeRect.left, safeRect.top, safeRect.width, safeRect.height * .22), base);
+        canvas.drawLine(safeRect.topLeft, Offset(safeRect.left, safeRect.bottom - safeRect.height * .12), base);
+        canvas.drawLine(safeRect.topRight, Offset(safeRect.right, safeRect.bottom - safeRect.height * .12), base);
+        canvas.drawArc(Rect.fromLTWH(safeRect.left, safeRect.bottom - safeRect.height * .22, safeRect.width, safeRect.height * .22), 0, math.pi, false, base);
+      case 'timeline':
+        line(Offset(safeRect.left, safeRect.center.dy), Offset(safeRect.right, safeRect.center.dy));
+        for (var i = 0; i < 5; i++) {
+          canvas.drawCircle(Offset(safeRect.left + safeRect.width * i / 4, safeRect.center.dy), 4, Paint()..color = base.color..style = PaintingStyle.fill);
+          line(Offset(safeRect.left + safeRect.width * i / 4, safeRect.center.dy - 5), Offset(safeRect.left + safeRect.width * i / 4, safeRect.top + 8));
+        }
+      case 'tableGrid':
+        canvas.drawRect(safeRect, base);
+        for (var i = 1; i < 4; i++) {
+          line(Offset(safeRect.left + safeRect.width * i / 4, safeRect.top), Offset(safeRect.left + safeRect.width * i / 4, safeRect.bottom));
+          line(Offset(safeRect.left, safeRect.top + safeRect.height * i / 4), Offset(safeRect.right, safeRect.top + safeRect.height * i / 4));
+        }
+      case 'checklist':
+        for (var i = 0; i < 4; i++) {
+          final y = safeRect.top + i * safeRect.height / 4 + 2;
+          canvas.drawRect(Rect.fromLTWH(safeRect.left, y, safeRect.height / 7, safeRect.height / 7), base);
+          line(Offset(safeRect.left + safeRect.height / 6, y + safeRect.height / 14), Offset(safeRect.right, y + safeRect.height / 14));
+        }
+      case 'convexLens':
+      case 'concaveLens':
+        final p = Path()
+          ..moveTo(safeRect.center.dx, safeRect.top)
+          ..quadraticBezierTo(safeRect.left - safeRect.width * (shape == 'convexLens' ? .25 : -.2), safeRect.center.dy, safeRect.center.dx, safeRect.bottom)
+          ..quadraticBezierTo(safeRect.right + safeRect.width * (shape == 'convexLens' ? .25 : -.2), safeRect.center.dy, safeRect.center.dx, safeRect.top)
+          ..close();
+        canvas.drawPath(p, base);
+      case 'planeMirror':
+        line(Offset(safeRect.center.dx, safeRect.top), Offset(safeRect.center.dx, safeRect.bottom));
+        for (var y = safeRect.top; y < safeRect.bottom; y += 10) {
+          line(Offset(safeRect.center.dx, y), Offset(safeRect.center.dx + 8, y - 8));
+        }
+      case 'pulley':
+        canvas.drawCircle(safeRect.center, math.min(safeRect.width, safeRect.height) * .28, base);
+        line(Offset(safeRect.center.dx, safeRect.top), Offset(safeRect.center.dx, safeRect.bottom));
+        line(Offset(safeRect.left, safeRect.center.dy), Offset(safeRect.right, safeRect.center.dy));
+      case 'circuitResistor':
+        _drawResistor(canvas, safeRect, base);
+      case 'circuitBattery':
+        line(Offset(safeRect.left, safeRect.center.dy), Offset(safeRect.center.dx - 10, safeRect.center.dy));
+        line(Offset(safeRect.center.dx - 10, safeRect.top + safeRect.height * .22), Offset(safeRect.center.dx - 10, safeRect.bottom - safeRect.height * .22));
+        line(Offset(safeRect.center.dx + 10, safeRect.top + safeRect.height * .35), Offset(safeRect.center.dx + 10, safeRect.bottom - safeRect.height * .35));
+        line(Offset(safeRect.center.dx + 10, safeRect.center.dy), Offset(safeRect.right, safeRect.center.dy));
+      case 'capacitor':
+        line(Offset(safeRect.left, safeRect.center.dy), Offset(safeRect.center.dx - 4, safeRect.center.dy));
+        line(Offset(safeRect.center.dx - 4, safeRect.top), Offset(safeRect.center.dx - 4, safeRect.bottom));
+        line(Offset(safeRect.center.dx + 4, safeRect.top), Offset(safeRect.center.dx + 4, safeRect.bottom));
+        line(Offset(safeRect.center.dx + 4, safeRect.center.dy), Offset(safeRect.right, safeRect.center.dy));
+      case 'circuitSwitch':
+        line(Offset(safeRect.left, safeRect.center.dy), Offset(safeRect.center.dx - 8, safeRect.center.dy));
+        canvas.drawCircle(Offset(safeRect.center.dx - 8, safeRect.center.dy), 2.5, fill..color = base.color);
+        line(Offset(safeRect.center.dx - 8, safeRect.center.dy), Offset(safeRect.center.dx + 8, safeRect.center.dy - safeRect.height * .24));
+        canvas.drawCircle(Offset(safeRect.center.dx + 10, safeRect.center.dy), 2.5, fill..color = base.color);
+        line(Offset(safeRect.center.dx + 10, safeRect.center.dy), Offset(safeRect.right, safeRect.center.dy));
+      case 'circuitLamp':
+        canvas.drawCircle(safeRect.center, math.min(safeRect.width, safeRect.height) * .28, base);
+        line(safeRect.center - Offset(6, 6), safeRect.center + const Offset(6, 6));
+        line(safeRect.center - const Offset(6, -6), safeRect.center + const Offset(6, -6));
+      case 'molecule':
+        final centers = [
+          Offset(safeRect.left + safeRect.width * .23, safeRect.center.dy),
+          Offset(safeRect.center.dx, safeRect.top + safeRect.height * .22),
+          Offset(safeRect.right - safeRect.width * .23, safeRect.center.dy),
+          Offset(safeRect.center.dx, safeRect.bottom - safeRect.height * .22),
+        ];
+        for (var i = 0; i < centers.length; i++) {
+          line(centers[i], centers[(i + 1) % centers.length]);
+          canvas.drawCircle(centers[i], math.min(safeRect.width, safeRect.height) * .1, base);
+        }
+      case 'beaker':
+      case 'testTube':
+      case 'conicalFlask':
+        final p = Path()
+          ..moveTo(safeRect.left + safeRect.width * .3, safeRect.top)
+          ..lineTo(safeRect.left + safeRect.width * .7, safeRect.top)
+          ..lineTo(safeRect.left + safeRect.width * .7, safeRect.top + safeRect.height * .22)
+          ..lineTo(shape == 'beaker' ? safeRect.right : safeRect.right - safeRect.width * .1, safeRect.bottom)
+          ..lineTo(shape == 'beaker' ? safeRect.left : safeRect.left + safeRect.width * .1, safeRect.bottom)
+          ..lineTo(safeRect.left + safeRect.width * .3, safeRect.top + safeRect.height * .22)
+          ..close();
+        canvas.drawPath(p, base);
+        line(Offset(safeRect.left + safeRect.width * .25, safeRect.top + safeRect.height * .52), Offset(safeRect.right - safeRect.width * .25, safeRect.top + safeRect.height * .52));
+      case 'plantCell':
+        canvas.drawRRect(RRect.fromRectAndRadius(safeRect, const Radius.circular(12)), base);
+        canvas.drawOval(safeRect.deflate(safeRect.width * .15), base);
+        canvas.drawCircle(safeRect.center, math.max(2, safeRect.width * .04), base);
+      case 'dnaHelix':
+        final p1 = Path()..moveTo(safeRect.left, safeRect.center.dy);
+        final p2 = Path()..moveTo(safeRect.right, safeRect.center.dy);
+        for (var i = 1; i <= 24; i++) {
+          final t = i / 24;
+          final x = safeRect.left + safeRect.width * t;
+          final wave = math.sin(t * math.pi * 6) * safeRect.height * .35;
+          p1.lineTo(x, safeRect.center.dy + wave);
+          p2.lineTo(x, safeRect.center.dy - wave);
+          if (i % 2 == 0) line(Offset(x, safeRect.center.dy + wave), Offset(x, safeRect.center.dy - wave), Paint()..color = base.color.withValues(alpha: .55)..strokeWidth = .8);
+        }
+        canvas.drawPath(p1, base);
+        canvas.drawPath(p2, base);
+      case 'neuron':
+        final center = safeRect.center;
+        canvas.drawCircle(center, math.min(safeRect.width, safeRect.height) * .12, base);
+        for (var i = 0; i < 7; i++) {
+          final a = i * math.pi * 2 / 7;
+          final end = Offset(center.dx + math.cos(a) * safeRect.width * .4, center.dy + math.sin(a) * safeRect.height * .4);
+          line(center, end);
+          line(end, end + Offset(math.cos(a + .6) * 12, math.sin(a + .6) * 12));
+          line(end, end + Offset(math.cos(a - .6) * 12, math.sin(a - .6) * 12));
+        }
+      case 'leaf':
+        final p = Path()
+          ..moveTo(safeRect.left, safeRect.bottom)
+          ..quadraticBezierTo(safeRect.left, safeRect.top, safeRect.right, safeRect.top)
+          ..quadraticBezierTo(safeRect.right, safeRect.bottom, safeRect.left, safeRect.bottom)
+          ..close();
+        canvas.drawPath(p, base);
+        line(safeRect.bottomLeft, safeRect.topRight);
+      case 'microscope':
+        final p = Path()
+          ..moveTo(safeRect.left + safeRect.width * .38, safeRect.top)
+          ..lineTo(safeRect.left + safeRect.width * .65, safeRect.top + safeRect.height * .08)
+          ..lineTo(safeRect.center.dx + safeRect.width * .12, safeRect.center.dy)
+          ..lineTo(safeRect.center.dx, safeRect.center.dy + safeRect.height * .12)
+          ..lineTo(safeRect.center.dx - safeRect.width * .14, safeRect.center.dy - safeRect.height * .12)
+          ..moveTo(safeRect.center.dx, safeRect.center.dy)
+          ..lineTo(safeRect.center.dx - safeRect.width * .2, safeRect.bottom - safeRect.height * .16)
+          ..lineTo(safeRect.right - safeRect.width * .1, safeRect.bottom - safeRect.height * .16)
+          ..moveTo(safeRect.left + safeRect.width * .12, safeRect.bottom)
+          ..lineTo(safeRect.right, safeRect.bottom);
+        canvas.drawPath(p, base);
+      case 'ruler':
+        canvas.drawRect(safeRect, base);
+        for (var i = 0; i <= 10; i++) {
+          final x = safeRect.left + safeRect.width * i / 10;
+          line(Offset(x, safeRect.top), Offset(x, safeRect.top + safeRect.height * (i.isEven ? .6 : .35)));
+        }
+      case 'compass':
+        canvas.drawCircle(safeRect.center, math.min(safeRect.width, safeRect.height) * .45, base);
+        line(safeRect.center, Offset(safeRect.center.dx, safeRect.top));
+        line(safeRect.center, Offset(safeRect.right, safeRect.center.dy));
+      case 'protractor':
+        canvas.drawArc(safeRect, math.pi, math.pi, false, base);
+        line(safeRect.bottomLeft, safeRect.bottomRight);
+        for (var i = 0; i <= 18; i++) {
+          final a = math.pi + math.pi * i / 18;
+          final r = math.min(safeRect.width, safeRect.height) * .45;
+          final inner = r - (i % 3 == 0 ? 10 : 5);
+          line(Offset(safeRect.center.dx + math.cos(a) * inner, safeRect.center.dy + math.sin(a) * inner), Offset(safeRect.center.dx + math.cos(a) * r, safeRect.center.dy + math.sin(a) * r));
+        }
+      case 'spring':
+        final p = Path()..moveTo(safeRect.left, safeRect.center.dy);
+        for (var i = 1; i <= 12; i++) {
+          p.lineTo(safeRect.left + safeRect.width * i / 12, safeRect.center.dy + (i.isEven ? -1 : 1) * safeRect.height * .35);
+        }
+        p.lineTo(safeRect.right, safeRect.center.dy);
+        canvas.drawPath(p, base);
+      case 'lever':
+      case 'inclinedPlane':
+        line(safeRect.bottomLeft, safeRect.topRight);
+        canvas.drawPath(polygon([
+          Offset(safeRect.center.dx, safeRect.bottom),
+          Offset(safeRect.center.dx - safeRect.width * .12, safeRect.bottom - safeRect.height * .15),
+          Offset(safeRect.center.dx + safeRect.width * .12, safeRect.bottom - safeRect.height * .15),
+        ]), base);
+      case 'gear':
+        final center = safeRect.center;
+        final radius = math.min(safeRect.width, safeRect.height) * .42;
+        final vertices = <Offset>[];
+        for (var i = 0; i < 24; i++) {
+          final r = radius * (i % 2 == 0 ? 1 : .82);
+          final a = i * math.pi / 12;
+          vertices.add(Offset(center.dx + math.cos(a) * r, center.dy + math.sin(a) * r));
+        }
+        canvas.drawPath(polygon(vertices), base);
+        canvas.drawCircle(center, radius * .26, base);
+      case 'magnet':
+        final p = Path()
+          ..moveTo(safeRect.left, safeRect.top)
+          ..lineTo(safeRect.left, safeRect.bottom - safeRect.height * .2)
+          ..quadraticBezierTo(safeRect.center.dx, safeRect.bottom + safeRect.height * .15, safeRect.right, safeRect.bottom - safeRect.height * .2)
+          ..lineTo(safeRect.right, safeRect.top);
+        canvas.drawPath(p, base);
+        line(Offset(safeRect.left, safeRect.top + safeRect.height * .18), Offset(safeRect.left + safeRect.width * .25, safeRect.top + safeRect.height * .18));
+        line(Offset(safeRect.right - safeRect.width * .25, safeRect.top + safeRect.height * .18), Offset(safeRect.right, safeRect.top + safeRect.height * .18));
+      case 'thermometer':
+        canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromCenter(center: Offset(safeRect.center.dx, safeRect.center.dy - 5), width: safeRect.width * .28, height: safeRect.height * .7), const Radius.circular(8)), base);
+        canvas.drawCircle(Offset(safeRect.center.dx, safeRect.bottom - safeRect.height * .08), math.min(safeRect.width, safeRect.height) * .1, base);
+        line(Offset(safeRect.center.dx, safeRect.center.dy + safeRect.height * .2), Offset(safeRect.center.dx, safeRect.bottom - safeRect.height * .12));
+      case 'stopwatch':
+        canvas.drawCircle(safeRect.center, math.min(safeRect.width, safeRect.height) * .42, base);
+        canvas.drawRect(Rect.fromCenter(center: Offset(safeRect.center.dx, safeRect.top + 4), width: safeRect.width * .18, height: 8), base);
+        line(safeRect.center, Offset(safeRect.center.dx, safeRect.top + safeRect.height * .18));
+        line(safeRect.center, Offset(safeRect.center.dx + safeRect.width * .2, safeRect.center.dy));
+      default:
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(safeRect, const Radius.circular(5)),
+          base,
+        );
+        label(_humanize(shape));
+    }
+
+    if (stroke.fill && shape != 'flowchartDecision') {
+      // Fill remains opt-in, preserving the previous editor's default no-fill
+      // semantics while making the new renderer capable of filled geometry.
+      final fillPath = Path()..addRect(safeRect);
+      canvas.drawPath(fillPath, fill);
+    }
+  }
+
+  static String _humanize(String raw) {
+    final buffer = StringBuffer();
+    for (var i = 0; i < raw.length; i++) {
+      final code = raw.codeUnitAt(i);
+      if (i > 0 && code >= 65 && code <= 90) buffer.write(' ');
+      buffer.writeCharCode(code);
+    }
+    return buffer.toString();
+  }
+
+  static void _drawArrowHead(Canvas canvas, Offset from, Offset to, Paint paint) {
+    final angle = math.atan2(to.dy - from.dy, to.dx - from.dx);
+    const length = 11.0;
+    const spread = .55;
+    final a = Offset(
+      to.dx - length * math.cos(angle - spread),
+      to.dy - length * math.sin(angle - spread),
+    );
+    final b = Offset(
+      to.dx - length * math.cos(angle + spread),
+      to.dy - length * math.sin(angle + spread),
+    );
+    canvas.drawLine(to, a, paint);
+    canvas.drawLine(to, b, paint);
+  }
+
+  static void _drawDashedLine(
+    Canvas canvas,
+    Offset a,
+    Offset b,
+    Paint paint, {
+    bool dotted = false,
+  }) {
+    final delta = b - a;
+    final length = delta.distance;
+    if (length <= 0) return;
+    final direction = delta / length;
+    final unit = dotted ? 8.0 : 14.0;
+    final gap = dotted ? 9.0 : 7.0;
+    for (double d = 0; d < length; d += unit + gap) {
+      final end = math.min(length, d + unit);
+      if (dotted) {
+        canvas.drawCircle(a + direction * d, math.max(1, paint.strokeWidth * .5).toDouble(), Paint()..color = paint.color);
+      } else {
+        canvas.drawLine(a + direction * d, a + direction * end, paint);
+      }
+    }
+  }
+
+  static void _drawDimensionTicks(Canvas canvas, Offset a, Offset b, Paint paint) {
+    final delta = b - a;
+    if (delta.distance == 0) return;
+    final normal = Offset(-delta.dy, delta.dx) / delta.distance * 5;
+    canvas.drawLine(a - normal, a + normal, paint);
+    canvas.drawLine(b - normal, b + normal, paint);
+  }
+
+  static void _drawGraph(Canvas canvas, Rect rect, Paint paint, String shape) {
+    final axis = Paint()..color = paint.color.withValues(alpha: .32)..strokeWidth = .8;
+    canvas.drawLine(Offset(rect.left, rect.center.dy), Offset(rect.right, rect.center.dy), axis);
+    canvas.drawLine(Offset(rect.center.dx, rect.top), Offset(rect.center.dx, rect.bottom), axis);
+    final path = Path();
+    for (var i = 0; i <= 100; i++) {
+      final t = i / 100;
+      final x = rect.left + t * rect.width;
+      final n = (t - .5) * 4;
+      double y;
+      switch (shape) {
+        case 'sineWave':
+        case 'waveform':
+          y = math.sin(n * math.pi) * .36;
+        case 'parabola':
+        case 'projectilePath':
+          y = -.8 + 1.6 * math.pow(n / 2, 2).toDouble();
+        case 'cubicGraph':
+          y = math.pow(n / 2, 3).toDouble() * .72;
+        case 'exponentialGraph':
+          y = (math.exp(n * .65) - 1) / 4;
+        case 'logarithmicGraph':
+          y = n <= -.94 ? 1 : math.log(n + 1.01) / 2;
+        case 'tangentGraph':
+          y = math.tan(n).clamp(-3.0, 3.0) / 4;
+        default:
+          y = math.sin(n);
+      }
+      final point = Offset(x, rect.center.dy + y * rect.height * .45);
+      if (i == 0) {
+        path.moveTo(point.dx, point.dy);
+      } else {
+        path.lineTo(point.dx, point.dy);
+      }
+    }
+    canvas.save();
+    canvas.clipRect(rect);
+    canvas.drawPath(path, paint);
+    canvas.restore();
+  }
+
+  static void _drawResistor(Canvas canvas, Rect rect, Paint paint) {
+    final path = Path()..moveTo(rect.left, rect.center.dy);
+    final step = rect.width / 10;
+    for (var i = 1; i < 9; i++) {
+      path.lineTo(rect.left + step * i,
+          rect.center.dy + (i.isEven ? -rect.height * .25 : rect.height * .25));
+    }
+    path.lineTo(rect.right, rect.center.dy);
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant EditorV2InkPainter oldDelegate) =>
+      !identical(strokes, oldDelegate.strokes) ||
+      liveStroke != oldDelegate.liveStroke ||
+      selectedStrokeIds != oldDelegate.selectedStrokeIds ||
+      eraserCursor != oldDelegate.eraserCursor ||
+      eraserRadius != oldDelegate.eraserRadius;
+}

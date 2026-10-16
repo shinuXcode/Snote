@@ -1,22 +1,38 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../app/theme_controller.dart';
 import '../../core/settings/app_settings.dart';
 import '../../data/local/notebook_transfer_service.dart';
 import '../../data/local/note_repository.dart';
 import '../updates/update_center_page.dart';
+import '../onboarding/welcome_guide_page.dart';
+import '../share/qr_import_page.dart';
+import '../share/qr_transfer_page.dart';
+import '../tools/screenshot_import_page.dart';
+import '../trash/trash_page.dart';
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key});
+  final bool noteOnly;
+  const SettingsPage({super.key, this.noteOnly = false});
   @override State<SettingsPage> createState() => _SettingsPageState();
 }
 
 class _SettingsPageState extends State<SettingsPage> {
   final _settings = SnoteSettings.instance;
   final _theme = SnoteThemeController.instance;
+  final _settingsSearch = TextEditingController();
+  bool _noteOnly = false;
+
+  String get _query => _settingsSearch.text.trim().toLowerCase();
+
+  bool _matches(Widget widget) =>
+      _query.isEmpty || widget.toStringDeep().toLowerCase().contains(_query);
 
   @override
   void initState() {
     super.initState();
+    _noteOnly = widget.noteOnly;
+    _settingsSearch.addListener(_refresh);
     _settings.addListener(_refresh);
     _theme.addListener(_refresh);
   }
@@ -25,6 +41,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   void dispose() {
+    _settingsSearch.dispose();
     _settings.removeListener(_refresh);
     _theme.removeListener(_refresh);
     super.dispose();
@@ -33,7 +50,30 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings', style: TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(
+        title: SizedBox(
+          height: 44,
+          child: TextField(
+            controller: _settingsSearch,
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              hintText: 'Search settings',
+              prefixIcon: const Icon(Icons.search_rounded),
+              suffixIcon: _settingsSearch.text.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'Clear search',
+                      onPressed: _settingsSearch.clear,
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+              border: InputBorder.none,
+              filled: true,
+              fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+              contentPadding: const EdgeInsets.symmetric(vertical: 8),
+            ),
+          ),
+        ),
+      ),
       body: LayoutBuilder(builder: (context, c) {
         final wide = c.maxWidth >= 900;
         return wide
@@ -79,8 +119,20 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget _settingsList(BuildContext context) => ListView(
     padding: const EdgeInsets.fromLTRB(18, 8, 18, 40),
     children: [
-      _group('Writing Operation', [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(0, 4, 0, 12),
+        child: SegmentedButton<bool>(
+          segments: const [
+            ButtonSegment(value: false, label: Text('App settings'), icon: Icon(Icons.tune_rounded)),
+            ButtonSegment(value: true, label: Text('Note settings'), icon: Icon(Icons.draw_rounded)),
+          ],
+          selected: {_noteOnly},
+          onSelectionChanged: (values) => setState(() => _noteOnly = values.first),
+        ),
+      ),
+      if (_noteOnly) _group('Writing Operation', [
         _toggle('autoRecognition', 'Auto Recognition', 'Recognize a drawn shape after a short hold.'),
+        _toggle('palmRejection', 'Palm rejection', 'Ignore accidental finger touches while writing with a stylus. Turn this off to allow finger drawing.'),
         _toggle('independentGraphColor', 'Independent graph color / stroke', 'Keep graph and stroke styling separate.'),
         _toggle('longPressMenu', 'Long press to show menu', 'Use a long press for quick pen tools and selection.'),
         _toggle('selectionMenuOnTouch', 'Show menu by touch in selection mode', 'Touch empty canvas to reopen selection controls.'),
@@ -91,8 +143,11 @@ class _SettingsPageState extends State<SettingsPage> {
         _toggle('autoAuxiliaryPoint', 'Auto approach to auxiliary point', 'Snap helper points to the guide.'),
         _toggle('pressureErase', 'Pressure erase', 'Use stylus pressure for erasing.'),
         _toggle('pressureEraseArea', 'Erase area changes with pressure', 'Increase eraser radius with pressure.'),
+        _toggle('stylusHoldActions', 'Stylus hold actions', 'Hold over ink to select it; hold on blank paper to erase.'),
+        _toggle('autoSave', 'Auto-save notes', 'Save automatically after changes. Turn this off to save manually from the editor toolbar.'),
         _toggle('volumeKeyTurnPage', 'Volume key turn page', 'Turn pages with volume keys where the platform exposes the event.'),
       ]),
+      if (_noteOnly && (_query.isEmpty || 'trigger pressure value'.contains(_query)))
       Card(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 5, 16, 8),
@@ -106,8 +161,36 @@ class _SettingsPageState extends State<SettingsPage> {
           ]),
         ),
       ),
-      _group('Display', [
+      if (_noteOnly)
+        Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Note canvas zoom', style: TextStyle(fontWeight: FontWeight.w800)),
+                Text((_settings.getDouble('noteZoom') * 100).round().toString() + '%'),
+                Slider(
+                  value: _settings.getDouble('noteZoom').clamp(.5, 4).toDouble(),
+                  min: .5,
+                  max: 4,
+                  divisions: 14,
+                  label: (_settings.getDouble('noteZoom') * 100).round().toString() + '%',
+                  onChanged: (value) {
+                    setState(() {});
+                    unawaited(_settings.setDouble('noteZoom', value));
+                  },
+                ),
+                const Text('Use two fingers to zoom the page; double-tap resets to the selected zoom.'),
+              ],
+            ),
+          ),
+        ),
+      if (!_noteOnly) _group('Display', [
+        _themeModeSelector(),
         _themeStyleSelector(),
+        _colorThemeSelector(),
         _customToggle(
           value: _theme.eInk,
           title: 'Physical E-Ink display',
@@ -127,7 +210,7 @@ class _SettingsPageState extends State<SettingsPage> {
           onChanged: _theme.setReduceMotion,
         ),
       ]),
-      _group('Other Settings', [
+      if (_noteOnly) _group('Other Settings', [
         _toggle('keepScreenOn', 'Keep screen on', 'Stay awake while writing.'),
         _toggle('bookshelfStartPage', 'Bookshelf as start page', 'Open the notebook library first.'),
         _toggle('showPageNavigation', 'Show page navigation', 'Display previous/next/add controls.'),
@@ -151,7 +234,7 @@ class _SettingsPageState extends State<SettingsPage> {
         _toggle('autoAddPage', 'Auto add page', 'Create the next numbered page when swiping past the end.'),
         _toggle('securePagePreviews', 'Preview lock / privacy', 'Hide handwritten content in the page preview rail.'),
       ]),
-      _group('Privacy & Security', [
+      if (!_noteOnly && (_query.isEmpty || 'privacy security custom note password'.contains(_query))) _group('Privacy & Security', [
         Card(
           child: ListTile(
             leading: const Icon(Icons.lock_outline_rounded),
@@ -160,17 +243,39 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ),
       ]),
-      _group('Notebook Transfer', [
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.import_export_rounded),
-            title: const Text('Import / export notes', style: TextStyle(fontWeight: FontWeight.w800)),
-            subtitle: const Text('Portable Snote package, JSON and best-effort archive import.'),
-            onTap: _transfer,
-          ),
-        ),
+      if (!_noteOnly && (_query.isEmpty || 'private transfer qr screenshot bin trash import export notes'.contains(_query))) _group('Notebook & File Management', [
+        Card(child: ListTile(
+          leading: const Icon(Icons.qr_code_2_rounded),
+          title: const Text('Private transfer'),
+          subtitle: const Text('Send a note using local QR frames or receive a QR transfer. No cloud upload.'),
+          onTap: _privateTransfer,
+        )),
+        Card(child: ListTile(
+          leading: const Icon(Icons.image_outlined),
+          title: const Text('Screenshot to note'),
+          subtitle: const Text('Capture or import a screenshot into a note.'),
+          onTap: _openScreenshotImport,
+        )),
+        Card(child: ListTile(
+          leading: const Icon(Icons.delete_outline_rounded),
+          title: const Text('Bin / recently deleted'),
+          subtitle: const Text('Restore or permanently delete trashed notes.'),
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TrashPage())),
+        )),
+        Card(child: ListTile(
+          leading: const Icon(Icons.import_export_rounded),
+          title: const Text('Import / export notes'),
+          subtitle: const Text('Portable Snote package, JSON and text formats.'),
+          onTap: _transfer,
+        )),
       ]),
-      _group('Updates & About', [
+      if (!_noteOnly && (_query.isEmpty || 'updates about release app notices'.contains(_query))) _group('Updates & About', [
+        Card(child: ListTile(
+          leading: const Icon(Icons.menu_book_outlined),
+          title: const Text('Welcome & user guide'),
+          subtitle: const Text('Reopen the guide to folders, handwriting, PDFs, flashcards, mind maps and privacy.'),
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WelcomeGuidePage())),
+        )),
         Card(
           child: ListTile(
             leading: const Icon(Icons.system_update_alt_rounded),
@@ -191,6 +296,52 @@ class _SettingsPageState extends State<SettingsPage> {
     ],
   );
 
+  Widget _themeModeSelector() => Card(
+    margin: const EdgeInsets.only(bottom: 8),
+    child: Padding(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Appearance mode', style: TextStyle(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          const Text('Choose light, dark, or follow the device.'),
+          const SizedBox(height: 10),
+          SegmentedButton<ThemeMode>(
+            segments: const [
+              ButtonSegment(value: ThemeMode.system, label: Text('System'), icon: Icon(Icons.settings_suggest_outlined)),
+              ButtonSegment(value: ThemeMode.light, label: Text('Light'), icon: Icon(Icons.light_mode_outlined)),
+              ButtonSegment(value: ThemeMode.dark, label: Text('Dark'), icon: Icon(Icons.dark_mode_outlined)),
+            ],
+            selected: {_theme.themeMode},
+            onSelectionChanged: (values) => _theme.setThemeMode(values.first),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _colorThemeSelector() => Card(
+    margin: const EdgeInsets.only(bottom: 8),
+    child: ListTile(
+      leading: const Icon(Icons.color_lens_outlined),
+      title: const Text('App color theme', style: TextStyle(fontWeight: FontWeight.w800)),
+      subtitle: Text(_theme.colorTheme.label),
+      trailing: DropdownButtonHideUnderline(
+        child: DropdownButton<SnoteColorTheme>(
+          value: _theme.colorTheme,
+          items: SnoteColorTheme.values.map((theme) => DropdownMenuItem(
+            value: theme,
+            child: Text(theme.label),
+          )).toList(),
+          onChanged: (theme) {
+            if (theme != null) _theme.setColorTheme(theme);
+          },
+        ),
+      ),
+    ),
+  );
+
   Widget _themeStyleSelector() => Card(
     margin: const EdgeInsets.only(bottom: 8),
     child: ListTile(
@@ -202,7 +353,15 @@ class _SettingsPageState extends State<SettingsPage> {
           value: _theme.style,
           items: SnoteThemeStyle.values.map((style) => DropdownMenuItem(
             value: style,
-            child: Text(style.name[0].toUpperCase() + style.name.substring(1)),
+            child: Text(switch (style) {
+              SnoteThemeStyle.standard => 'Standard',
+              SnoteThemeStyle.apple => 'Apple',
+              SnoteThemeStyle.windows => 'Windows',
+              SnoteThemeStyle.mac => 'macOS',
+              SnoteThemeStyle.linux => 'Linux',
+              SnoteThemeStyle.mobile => 'Mobile',
+              SnoteThemeStyle.tablet => 'Tablet',
+            }),
           )).toList(),
           onChanged: (style) {
             if (style != null) _theme.setStyle(style);
@@ -212,16 +371,22 @@ class _SettingsPageState extends State<SettingsPage> {
     ),
   );
 
-  Widget _group(String title, List<Widget> children) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(4, 18, 4, 8),
-        child: Text(title.toUpperCase(), style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 1.1)),
-      ),
-      Card(child: Column(children: children)),
-    ],
-  );
+  Widget _group(String title, List<Widget> children) {
+    final visibleChildren = _query.isEmpty || title.toLowerCase().contains(_query)
+        ? children
+        : children.where(_matches).toList();
+    if (visibleChildren.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 18, 4, 8),
+          child: Text(title.toUpperCase(), style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 1.1)),
+        ),
+        Card(child: Column(children: visibleChildren)),
+      ],
+    );
+  }
 
   Widget _toggle(String key, String title, String subtitle) => SwitchListTile.adaptive(
     contentPadding: const EdgeInsets.symmetric(horizontal: 16),
@@ -233,6 +398,53 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Widget _customToggle({required bool value, required String title, required String subtitle, required ValueChanged<bool> onChanged}) =>
       SwitchListTile.adaptive(contentPadding: const EdgeInsets.symmetric(horizontal: 16), value: value, onChanged: onChanged, title: Text(title), subtitle: Text(subtitle));
+
+  Future<void> _privateTransfer() async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheet) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        ListTile(leading: const Icon(Icons.qr_code_scanner_rounded), title: const Text('Receive note'), subtitle: const Text('Open the QR receiver'), onTap: () => Navigator.pop(sheet, 'receive')),
+        ListTile(leading: const Icon(Icons.qr_code_2_rounded), title: const Text('Send note'), subtitle: const Text('Choose a note to display transfer QR codes'), onTap: () => Navigator.pop(sheet, 'send')),
+      ])),
+    );
+    if (!mounted || action == null) return;
+    if (action == 'receive') {
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => const QrImportPage()));
+      return;
+    }
+    final notes = await NoteRepository().listAllVisible();
+    if (!mounted) return;
+    final selected = await showModalBottomSheet<LocalNote>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheet) => SafeArea(child: SizedBox(
+        height: MediaQuery.sizeOf(sheet).height * .7,
+        child: ListView(
+          children: [
+            const ListTile(title: Text('Choose note to send', style: TextStyle(fontWeight: FontWeight.w800))),
+            for (final note in notes)
+              ListTile(
+                leading: const Icon(Icons.description_outlined),
+                title: Text(note.title.isEmpty ? 'Untitled note' : note.title),
+                subtitle: Text(note.noteType),
+                onTap: () => Navigator.pop(sheet, note),
+              ),
+          ],
+        ),
+      )),
+    );
+    if (selected != null && mounted) {
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => QrTransferPage(note: selected)));
+    }
+  }
+
+  Future<void> _openScreenshotImport() async {
+    if (!mounted) return;
+    // Screenshot import creates a new note; an empty folder context is intentional here.
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => const ScreenshotImportPage()));
+  }
 
   Future<void> _transfer() async {
     final messenger = ScaffoldMessenger.of(context);

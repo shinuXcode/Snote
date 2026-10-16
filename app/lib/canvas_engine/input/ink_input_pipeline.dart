@@ -91,10 +91,12 @@ class InkInputPipeline {
       return _frame(null, actual);
     }
 
-    // The newest real sample is always the visible endpoint. Continuous
-    // ribbon geometry smooths the path without moving the tip away from the
-    // physical stylus location.
-    _livePoints.add(actual);
+    // Use the exact canonical sample stored in the buffer for both layers.
+    // _append clamps non-monotonic timestamps by copying the point; rendering
+    // the pre-copy object caused identity-based live-tip checks to fail and
+    // could make the active tip disappear on devices with coalesced samples.
+    final committedActual = _buffer.last ?? actual;
+    _livePoints.add(committedActual);
 
     final prediction = _predictor.predict(_buffer.points);
     if (prediction != null) {
@@ -102,7 +104,7 @@ class InkInputPipeline {
       _previousPrediction = prediction;
     }
 
-    return _frame(prediction, actual);
+    return _frame(prediction, committedActual);
   }
 
   List<StrokePoint> finish(PointerUpEvent event) {
@@ -136,9 +138,16 @@ class InkInputPipeline {
   }
 
   bool _append(InkSample sample, [StrokePoint? point]) {
-    final timestamp = sample.timestampMs;
-    if (_lastTimestamp != null && timestamp < _lastTimestamp!) return false;
-    final canonical = point ?? sample.toStrokePoint();
+    var timestamp = sample.timestampMs;
+    // Some tablet drivers deliver coalesced samples slightly out of order.
+    // Dropping those events can create visible gaps or a stroke that appears
+    // to stop mid-way. Preserve the sample and clamp only its timestamp to a
+    // strictly increasing sequence; spatial positions and pressure stay raw.
+    if (_lastTimestamp != null && timestamp <= _lastTimestamp!) {
+      timestamp = _lastTimestamp! + 0.001;
+    }
+    final source = point ?? sample.toStrokePoint();
+    final canonical = source.copyWith(timestamp: timestamp);
     final added = _buffer.add(canonical);
     if (added) _lastTimestamp = timestamp;
     return added;
