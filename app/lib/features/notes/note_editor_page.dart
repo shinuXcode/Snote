@@ -32,6 +32,8 @@ import '../../data/local/file_document_repository.dart';
 import '../../data/local/note_repository.dart';
 import 'note_content_compatibility.dart';
 import '../settings/settings_page.dart';
+import '../smart_pages/smart_page_template.dart';
+import '../smart_pages/smart_pages_gallery_screen.dart';
 import '../folders/folder_cover_library_page.dart';
 
 // Open-note tabs are shared by editor routes during the current app session.
@@ -1754,8 +1756,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       width: (width * pageWidth).clamp(80.0, math.max(80.0, pageWidth)).toDouble(),
       height: (height * pageHeight).clamp(54.0, math.max(54.0, pageHeight)).toDouble(),
       child: Material(
-        color: Theme.of(context).colorScheme.surface.withValues(alpha: .93),
-        elevation: 3,
+        color: Colors.transparent,
+        elevation: 0,
         borderRadius: BorderRadius.circular(8),
         clipBehavior: Clip.antiAlias,
         child: DecoratedBox(
@@ -1770,7 +1772,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
             children: [
               Container(
                 height: 22,
-                color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: .85),
+                color: Colors.transparent,
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onPanUpdate: (details) {
@@ -1866,7 +1868,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
             Container(
               decoration: BoxDecoration(
                 border: Border.all(color: Theme.of(context).colorScheme.primary, width: 1.2),
-                color: Colors.white,
+                color: Colors.transparent,
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Image.memory(
@@ -2668,11 +2670,13 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
 
   Widget _toolbarWidget() {
     final screen = MediaQuery.sizeOf(context);
-    final axis = _docked
-        ? (_dockSide == 'left' || _dockSide == 'right'
-            ? Axis.vertical
-            : Axis.horizontal)
-        : _floatingAxis;
+    final axis = _full
+        ? Axis.horizontal
+        : (_docked
+            ? (_dockSide == 'left' || _dockSide == 'right'
+                ? Axis.vertical
+                : Axis.horizontal)
+            : _floatingAxis);
     final constraints = axis == Axis.vertical
         ? BoxConstraints(
             maxWidth: 128,
@@ -2695,6 +2699,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     return ValueListenableBuilder<Offset>(
       valueListenable: _toolbarOffset,
       builder: (_, offset, child) {
+        if (_full) {
+          return Positioned(left: 8, right: 8, top: 8, child: child!);
+        }
         if (_docked) {
           return Positioned(
             left: _dockSide == 'left' ? 0 : null,
@@ -4237,18 +4244,19 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       useSafeArea: true,
       showDragHandle: true,
       builder: (_) => DefaultTabController(
-        length: 3,
+        length: 4,
         child: StatefulBuilder(
           builder: (sheetContext, setSheetState) {
             _templateSheetRefresh = setSheetState;
             return SizedBox(
               height: MediaQuery.sizeOf(context).height * .88,
               child: Column(children: [
-                const TabBar(tabs: [Tab(text: 'Paper'), Tab(text: 'Featured'), Tab(text: 'Custom')]),
+                const TabBar(tabs: [Tab(text: 'Paper'), Tab(text: 'Featured'), Tab(text: 'Custom'), Tab(text: 'Smart Pages')]),
                 Expanded(child: TabBarView(children: [
                   _paperTab([PageTemplate.grid, PageTemplate.lined, PageTemplate.dotted, PageTemplate.blank, PageTemplate.cornell]),
                   _paperTab([PageTemplate.dotGrid, PageTemplate.isometric, PageTemplate.planner, PageTemplate.music, PageTemplate.checklist, PageTemplate.dark]),
                   _customPaper(),
+                  _smartPagesTab(),
                 ])),
               ]),
             );
@@ -4256,6 +4264,80 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         ),
       ),
     ).whenComplete(() => _templateSheetRefresh = null);
+  }
+
+  Widget _smartPagesTab() {
+    return FutureBuilder<List<SmartPageTemplate>>(
+      future: SmartPagesStore.instance.load(),
+      builder: (context, snapshot) {
+        final favorites = (snapshot.data ?? const <SmartPageTemplate>[])
+            .where((template) => template.isFavorite).take(6).toList();
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Card(
+              child: ListTile(
+                leading: const CircleAvatar(child: Icon(Icons.auto_awesome)),
+                title: const Text('Smart Pages'),
+                subtitle: const Text('Search and preview 200 ready-made layouts'),
+                trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                onTap: () => _openSmartPages(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text('Favorite Smart Pages', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            if (snapshot.connectionState == ConnectionState.waiting)
+              const LinearProgressIndicator()
+            else if (favorites.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Text('Favorite a layout in Smart Pages to pin it here.'),
+              )
+            else
+              ...favorites.map((template) => ListTile(
+                leading: const Icon(Icons.bookmark_outline_rounded),
+                title: Text(template.title),
+                subtitle: Text(template.category),
+                onTap: () => _applySmartPage(template),
+              )),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _openSmartPages() async {
+    await Navigator.of(context).push<void>(MaterialPageRoute(
+      builder: (_) => SmartPagesGalleryScreen(onUseTemplate: _applySmartPage),
+    ));
+  }
+
+  void _applySmartPage(SmartPageTemplate template) {
+    if (!mounted || _pages.isEmpty) return;
+    setState(() {
+      pageData['smartPageId'] = template.id;
+      pageData['smartPageTitle'] = template.title;
+      pageData['smartPageCategory'] = template.category;
+      pageData['template'] = PageTemplate.planner.name;
+      final id = 'smart-page-${template.id}-${DateTime.now().microsecondsSinceEpoch}';
+      final boxes = pageData['textBoxes'];
+      final heading = <String, Object?>{
+        'id': id, 'x': .08, 'y': .04, 'width': .84, 'height': .09,
+        'text': template.title, 'fontSize': 22.0, 'color': _penColor.toARGB32(),
+        'transparent': true,
+      };
+      if (boxes is List) {
+        boxes.add(heading);
+      } else {
+        pageData['textBoxes'] = <Object?>[heading];
+      }
+      _textBoxControllers[id] = TextEditingController(text: template.title);
+    });
+    _scheduleSave();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${template.title} added to this page.')),
+    );
   }
 
   List<double> _paperDimensions(String size) {
