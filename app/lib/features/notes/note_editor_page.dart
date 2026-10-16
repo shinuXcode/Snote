@@ -18,6 +18,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/theme_controller.dart';
 import '../../canvas_engine/models/pen_config.dart';
@@ -2562,6 +2563,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                           _keepAwake();
                         }
                         break;
+                      case 'googleSearch':
+                        await _googleSearch();
+                        break;
                       case 'screenshot':
                         await _exportLiveScreenshot();
                         break;
@@ -2574,8 +2578,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     PopupMenuItem(value: 'addText', child: Text('Add text box to page')),
                     PopupMenuItem(value: 'lock', child: Text('Lock note')),
                     PopupMenuItem(value: 'fullscreen', child: Text('Fullscreen')),
-                    PopupMenuItem(value: 'settings', child: Text('Note settings')),
-                    PopupMenuItem(value: 'screenshot', child: Text('Save page screenshot')),
+                    PopupMenuItem(value: 'settings', child: Row(children: [Icon(Icons.tune_rounded), SizedBox(width: 10), Text('Note settings')])),
+                    PopupMenuItem(value: 'googleSearch', child: Row(children: [Icon(Icons.search_rounded), SizedBox(width: 10), Text('Search Google')])),
+                    PopupMenuItem(value: 'screenshot', child: Row(children: [Icon(Icons.screenshot_rounded), SizedBox(width: 10), Text('Save page screenshot')]),
                   ],
                 ),
             ],
@@ -2583,6 +2588,51 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         ),
       ),
     );
+  }
+
+  Future<void> _googleSearch() async {
+    final controller = TextEditingController();
+    final query = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Search Google'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textInputAction: TextInputAction.search,
+          onSubmitted: (value) => Navigator.pop(dialogContext, value.trim()),
+          decoration: const InputDecoration(
+            hintText: 'Search the web…',
+            prefixIcon: Icon(Icons.search_rounded),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(dialogContext, controller.text.trim()),
+            icon: const Icon(Icons.open_in_new_rounded),
+            label: const Text('Search'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (!mounted || query == null || query.isEmpty) return;
+    final uri = Uri.https('www.google.com', '/search', {'q': query});
+    try {
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!opened && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open Google Search. Check your browser settings.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Google Search failed: $error')),
+        );
+      }
+    }
   }
 
   Widget _compactAction({
@@ -5211,6 +5261,10 @@ class _StudyTimerFloatingState extends State<_StudyTimerFloating> {
           _remainingSeconds = 0;
           _running = false;
         });
+        unawaited(SystemSound.play(SystemSoundType.alert));
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          const SnackBar(content: Text('Focus timer finished.'), duration: Duration(seconds: 4)),
+        );
       } else {
         setState(() => _remainingSeconds -= 1);
       }
