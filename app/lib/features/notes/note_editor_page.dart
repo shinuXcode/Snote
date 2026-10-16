@@ -2580,7 +2580,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     PopupMenuItem(value: 'fullscreen', child: Text('Fullscreen')),
                     PopupMenuItem(value: 'settings', child: Row(children: [Icon(Icons.tune_rounded), SizedBox(width: 10), Text('Note settings')])),
                     PopupMenuItem(value: 'googleSearch', child: Row(children: [Icon(Icons.search_rounded), SizedBox(width: 10), Text('Search Google')])),
-                    PopupMenuItem(value: 'screenshot', child: Row(children: [Icon(Icons.screenshot_rounded), SizedBox(width: 10), Text('Save page screenshot')]),
+                    PopupMenuItem(value: 'screenshot', child: Row(children: [Icon(Icons.screenshot_rounded), SizedBox(width: 10), Text('Save page screenshot')])),
                   ],
                 ),
             ],
