@@ -6344,7 +6344,26 @@ Future<void> _openSmartPages() async {
       case 'pageSettings':
         unawaited(_showPageAndEditorSettings());
       case 'appSettings':
-        unawaited(Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SettingsPage())));
+        unawaited(showGeneralDialog<void>(
+          context: context,
+          barrierDismissible: true,
+          barrierLabel: 'More settings',
+          barrierColor: Colors.black54,
+          transitionDuration: const Duration(milliseconds: 180),
+          pageBuilder: (dialogContext, _, __) => Align(
+            alignment: Alignment.centerRight,
+            child: SizedBox(
+              width: math.min(480.0, MediaQuery.sizeOf(dialogContext).width * .94),
+              height: double.infinity,
+              child: const Material(elevation: 16, child: SettingsPage()),
+            ),
+          ),
+          transitionBuilder: (_, animation, __, child) => SlideTransition(
+            position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
+                .animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+            child: child,
+          ),
+        ));
       case 'togglePageLock':
         unawaited(_togglePageLock());
       case 'notesLayer':
@@ -7941,7 +7960,6 @@ Future<void> _openSmartPages() async {
               PopupMenuItem(value: 'pasteSelection', enabled: _selectionClipboard != null, child: const Text('Paste copied selection')),
               PopupMenuItem(value: 'clipboardHistory', enabled: _selectionClipboardHistory.isNotEmpty, child: const Text('Clipboard history (last 4)')),
               const PopupMenuItem(value: 'pageSettings', child: Text('Note page settings')),
-              const PopupMenuItem(value: 'appSettings', child: Text('App settings')),
               const PopupMenuItem(value: 'template', child: Text('Page template')),
               const PopupMenuItem(value: 'smartPages', child: Text('Smart Pages')),
               PopupMenuItem(value: 'toggleNoteSwitcher', child: Text(_showNoteSwitcherInTitleBar ? 'Hide tabs toggle icon' : 'Show tabs toggle icon')),
@@ -7966,6 +7984,8 @@ Future<void> _openSmartPages() async {
                       ? 'Exit watermark cover mode'
                       : 'Watermark cover / whiteout (source PDF unchanged)'),
                 ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(value: 'appSettings', child: Text('More settings')),
             ],
             icon: const Icon(Icons.settings_rounded),
           ),
