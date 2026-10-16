@@ -2585,12 +2585,12 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                     }
                   },
                   itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'pages', child: Text('Pages / thumbnails')),
-                    PopupMenuItem(value: 'shapes', child: Text('Shapes and diagrams')),
-                    PopupMenuItem(value: 'mode', child: Text('Toggle text / handwriting')),
-                    PopupMenuItem(value: 'addText', child: Text('Add text box to page')),
-                    PopupMenuItem(value: 'lock', child: Text('Lock note')),
-                    PopupMenuItem(value: 'fullscreen', child: Text('Fullscreen')),
+                    PopupMenuItem(value: 'pages', child: Row(children: [Icon(Icons.auto_stories_rounded), SizedBox(width: 10), Text('Pages / thumbnails')])),
+                    PopupMenuItem(value: 'shapes', child: Row(children: [Icon(Icons.category_outlined), SizedBox(width: 10), Text('Shapes and diagrams')])),
+                    PopupMenuItem(value: 'mode', child: Row(children: [Icon(Icons.draw_rounded), SizedBox(width: 10), Text('Toggle text / handwriting')])),
+                    PopupMenuItem(value: 'addText', child: Row(children: [Icon(Icons.text_fields_rounded), SizedBox(width: 10), Text('Add text box to page')])),
+                    PopupMenuItem(value: 'lock', child: Row(children: [Icon(Icons.lock_outline_rounded), SizedBox(width: 10), Text('Lock note')])),
+                    PopupMenuItem(value: 'fullscreen', child: Row(children: [Icon(Icons.fullscreen_rounded), SizedBox(width: 10), Text('Fullscreen')])),
                     PopupMenuItem(value: 'settings', child: Row(children: [Icon(Icons.tune_rounded), SizedBox(width: 10), Text('Note settings')])),
                     PopupMenuItem(value: 'googleSearch', child: Row(children: [Icon(Icons.search_rounded), SizedBox(width: 10), Text('Search Google')])),
                     PopupMenuItem(value: 'screenshot', child: Row(children: [Icon(Icons.screenshot_rounded), SizedBox(width: 10), Text('Save page screenshot')])),
