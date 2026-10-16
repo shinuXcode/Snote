@@ -39,6 +39,8 @@ import '../../tools/floating_timer_panel.dart';
 import '../../tools/screenshot_cropper.dart';
 import '../../tools/screen_color_picker.dart';
 import '../../tools/web_search_panel.dart';
+import '../smart_pages/smart_pages_gallery_screen.dart';
+import '../smart_pages/smart_page_template.dart';
 
 String _hashPdfBytesInBackground(Uint8List bytes) => sha256.convert(bytes).toString();
 
@@ -4666,6 +4668,73 @@ class _EditorV2PageState extends State<EditorV2Page>
     });
   }
 
+  
+Future<void> _openSmartPages() async {
+    if (_pageData['locked'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unlock this page before applying a Smart Page.')),
+      );
+      return;
+    }
+    await Navigator.of(context).push<void>(MaterialPageRoute<void>(
+      builder: (_) => SmartPagesGalleryScreen(onUseTemplate: _applySmartPage),
+    ));
+  }
+
+  void _applySmartPage(SmartPageTemplate template) {
+    if (!mounted || _pageData['locked'] == true) return;
+    _pushUndo();
+    final now = DateTime.now().microsecondsSinceEpoch;
+    final prompts = _smartPagePrompts(template);
+    final boxes = <Map<String, Object?>>[
+      <String, Object?>{
+        'id': '${now}-title', 'x': .055, 'y': .035, 'width': .88, 'height': .085,
+        'text': template.title, 'fontSize': 27.0, 'color': 0xff17202a, 'sticker': false,
+      },
+      ...List<Map<String, Object?>>.generate(prompts.length, (index) {
+        final y = .145 + index * (.78 / prompts.length);
+        return <String, Object?>{
+          'id': '${now}-section-${index}', 'x': .065, 'y': y,
+          'width': .87, 'height': (.78 / prompts.length) - .025,
+          'text': prompts[index], 'fontSize': 16.0, 'color': 0xff263238, 'sticker': false,
+        };
+      }),
+    ];
+    setState(() {
+      _pageData['template'] = 'ruled';
+      _pageData['textBoxes'] = boxes;
+      _initializeTextControllers();
+      _clearSelectionIds();
+    });
+    _scheduleSave();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Applied ${template.title} to this page')),
+    );
+  }
+
+  List<String> _smartPagePrompts(SmartPageTemplate template) {
+    final category = template.category.toLowerCase();
+    if (category.contains('education')) {
+      return const ['Learning objectives / key questions\n', 'Key concepts and notes\n', 'Examples / formulas\n', 'Revision checklist / doubts\n'];
+    }
+    if (category.contains('finance')) {
+      return const ['Date / period: ____________________\n', 'Item / description | Amount\n', 'Planned: __________  Actual: __________\n', 'Notes / next action\n'];
+    }
+    if (category.contains('meeting') || category.contains('work')) {
+      return const ['Purpose / agenda\n', 'Discussion notes\n', 'Action items • owner • due date\n', 'Decisions / follow-up\n'];
+    }
+    if (category.contains('health')) {
+      return const ['Date / context\n', 'Log / observations\n', 'Goals / routine\n', 'Notes / follow-up\n'];
+    }
+    if (category.contains('weekly') || category.contains('monthly')) {
+      return const ['Top priorities\n', 'Schedule / milestones\n', 'Tasks and progress\n', 'Review / next steps\n'];
+    }
+    if (category.contains('productivity')) {
+      return const ['Goal / desired outcome\n', 'Next actions\n', 'Blockers / ideas\n', 'Completed / follow-up\n'];
+    }
+    return const ['Priorities / focus\n', 'Plan / schedule\n', 'Notes / details\n', 'Reflection / next steps\n'];
+  }
+
   Future<void> _chooseTemplate() async {
     if (_pageData['locked'] == true) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -6234,6 +6303,8 @@ class _EditorV2PageState extends State<EditorV2Page>
         unawaited(_exportPdf());
       case 'template':
         unawaited(_chooseTemplate());
+      case 'smartPages':
+        unawaited(_openSmartPages());
       case 'bookmarks':
         unawaited(_showBookmarks());
       case 'timer':
@@ -7652,7 +7723,7 @@ class _EditorV2PageState extends State<EditorV2Page>
         .map((key) => _buildPlacedToolButton(key, 'titleBar'))
         .toList();
     return Scaffold(
-      appBar: (_fullScreenMode || _focusMode) ? null : AppBar(
+      appBar: _focusMode ? null : AppBar(
         leading: BackButton(
           onPressed: () async {
             await _flushSave();
@@ -7832,6 +7903,7 @@ class _EditorV2PageState extends State<EditorV2Page>
               const PopupMenuItem(value: 'pageSettings', child: Text('Note page settings')),
               const PopupMenuItem(value: 'appSettings', child: Text('App settings')),
               const PopupMenuItem(value: 'template', child: Text('Page template')),
+              const PopupMenuItem(value: 'smartPages', child: Text('Smart Pages')),
               PopupMenuItem(value: 'toggleNoteSwitcher', child: Text(_showNoteSwitcherInTitleBar ? 'Hide tabs toggle icon' : 'Show tabs toggle icon')),
               PopupMenuItem(value: 'toggleNoteTabStrip', child: Text(_showNoteTabStrip ? 'Hide note tabs' : 'Show note tabs')),
               const PopupMenuItem(value: 'noteSwitcher', child: Text('Switch note')),
