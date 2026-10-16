@@ -1,0 +1,89 @@
+name: Snote Beta APK
+
+on:
+  push:
+    branches:
+      - feat/snote-editor-engine-rebuild
+    paths:
+      - "app/**"
+      - ".github/workflows/beta-apk.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: snote-beta-apk
+  cancel-in-progress: true
+
+jobs:
+  android-beta:
+    name: Analyze, test and build beta APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout beta branch
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.3
+          cache: true
+
+      - name: Generate Android runner if needed
+        working-directory: app
+        run: |
+          if [ ! -f android/app/build.gradle.kts ]; then
+            flutter create --platforms=android --org=com.snote --no-pub .
+          fi
+
+      - name: Install dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Generate app icons
+        working-directory: app
+        run: dart run launcher_icons
+
+      - name: Format
+        working-directory: app
+        run: dart format .
+
+      - name: Analyze
+        working-directory: app
+        run: flutter analyze --no-fatal-infos
+
+      - name: Test
+        working-directory: app
+        run: flutter test --reporter expanded
+
+      - name: Build release APK
+        working-directory: app
+        run: flutter build apk --release
+
+      - name: Package beta APK
+        run: cp app/build/app/outputs/flutter-apk/app-release.apk Snote-Android-Beta.apk
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: snote-android-beta
+          path: Snote-Android-Beta.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish latest verified beta APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="snote-beta-latest"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" Snote-Android-Beta.apk --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" Snote-Android-Beta.apk \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Snote Beta — latest verified APK" \
+              --notes "Automated beta build. Generated only after Flutter analysis, tests and Android release build succeed." \
+              --prerelease
+          fi
