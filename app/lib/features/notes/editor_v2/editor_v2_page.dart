@@ -7176,25 +7176,7 @@ Future<void> _openSmartPages() async {
           fit: StackFit.expand,
           children: [
             Positioned.fill(child: _buildPageBackground(page, showPdf: _pdfBackgroundVisible, thumbnail: false)),
-            Positioned.fill(
-              child: IgnorePointer(
-                ignoring: !_textMode || page['locked'] == true,
-                child: IgnorePointer(
-                  ignoring: true,
-                  child: Padding(
-                    padding: const EdgeInsets.all(42),
-                    child: QuillEditor(
-                      focusNode: _quillFocus,
-                      scrollController: _quillScroll,
-                      controller: _quill,
-                      config: QuillEditorConfig(
-                        placeholder: 'Legacy text (read-only)',
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
+            // Legacy rich-text overlay removed; persisted text boxes remain supported.
             Positioned.fill(
               child: IgnorePointer(
                 ignoring: page['locked'] == true,
