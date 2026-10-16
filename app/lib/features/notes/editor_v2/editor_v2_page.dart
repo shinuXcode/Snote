@@ -265,6 +265,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   double _calculatorWidth = 330;
   double _calculatorHeight = 465;
   bool _calculatorVisible = false;
+  bool _calculatorCollapsed = false;
   Offset _calculatorOffset = const Offset(24, 125);
   List<Stroke>? _selectionTransformSnapshot;
   Rect? _selectionTransformBounds;
@@ -6678,6 +6679,33 @@ Future<void> _openSmartPages() async {
 
   Widget _buildFloatingCalculator() {
     final screen = MediaQuery.sizeOf(context);
+    if (_calculatorCollapsed) {
+      final dockRight = _calculatorOffset.dx > screen.width / 2;
+      return Positioned(
+        left: dockRight ? null : 0,
+        right: dockRight ? 0 : null,
+        top: _calculatorOffset.dy.clamp(72, math.max(72, screen.height - 64)).toDouble(),
+        child: Material(
+          elevation: 8,
+          color: Theme.of(context).colorScheme.primaryContainer,
+          borderRadius: BorderRadius.horizontal(
+            left: Radius.circular(dockRight ? 14 : 0),
+            right: Radius.circular(dockRight ? 0 : 14),
+          ),
+          child: IconButton(
+            tooltip: 'Expand calculator',
+            onPressed: () => setState(() {
+              _calculatorCollapsed = false;
+              _calculatorOffset = Offset(
+                dockRight ? math.max(8, screen.width - _calculatorWidth - 8) : 8,
+                _calculatorOffset.dy,
+              );
+            }),
+            icon: const Icon(Icons.calculate_outlined),
+          ),
+        ),
+      );
+    }
     final width = _calculatorWidth.clamp(270.0, math.max(270.0, screen.width - 16)).toDouble();
     final height = _calculatorHeight.clamp(360.0, math.max(360.0, screen.height - 32)).toDouble();
     return Positioned(
@@ -6692,6 +6720,7 @@ Future<void> _openSmartPages() async {
         }),
         onMove: (delta) => setState(() => _calculatorOffset += delta),
         onClose: () => setState(() => _calculatorVisible = false),
+        onCollapse: () => setState(() => _calculatorCollapsed = true),
       ),
     );
   }
@@ -8140,6 +8169,7 @@ class _ScientificCalculatorDialog extends StatefulWidget {
   final double initialHeight;
   final ValueChanged<Size> onResize;
   final VoidCallback onClose;
+  final VoidCallback onCollapse;
   final ValueChanged<Offset> onMove;
 
   const _ScientificCalculatorDialog({
@@ -8147,6 +8177,7 @@ class _ScientificCalculatorDialog extends StatefulWidget {
     required this.initialHeight,
     required this.onResize,
     required this.onClose,
+    required this.onCollapse,
     required this.onMove,
   });
 
@@ -8260,7 +8291,13 @@ class _ScientificCalculatorDialogState extends State<_ScientificCalculatorDialog
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: Row(
                   children: [
-                    const Icon(Icons.drag_indicator_rounded, size: 18),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+                      tooltip: 'Collapse calculator to screen edge',
+                      onPressed: widget.onCollapse,
+                      icon: const Icon(Icons.dock_to_right_rounded, size: 17),
+                    ),
                     const SizedBox(width: 4),
                     const Expanded(child: Text('Calculator', style: TextStyle(fontWeight: FontWeight.w800))),
                     TextButton(
