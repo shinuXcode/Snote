@@ -4744,69 +4744,143 @@ Future<void> _openSmartPages() async {
       );
       return;
     }
+    var favorites = <SmartPageTemplate>[];
+    try {
+      favorites = (await SmartPagesStore.instance.load())
+          .where((template) => template.isFavorite)
+          .take(8)
+          .toList();
+    } catch (error) {
+      debugPrint('[Snote][SmartPages] Could not load favorites: $error');
+    }
     final selected = await showModalBottomSheet<PageTemplate>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: GridView.builder(
-            shrinkWrap: true,
-            itemCount: PageTemplate.values.length,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-              childAspectRatio: 1.1,
-            ),
-            itemBuilder: (_, index) {
-              final template = PageTemplate.values[index];
-              final isSelected = template.name == _pageData['template']?.toString();
-              return InkWell(
-                onTap: () => Navigator.pop(sheetContext, template),
-                borderRadius: BorderRadius.circular(12),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: isSelected ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: .35) : Theme.of(context).colorScheme.surface,
-                    border: Border.all(
-                      color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outlineVariant,
-                      width: isSelected ? 2 : 1,
+        child: SizedBox(
+          height: MediaQuery.sizeOf(sheetContext).height * .82,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text('Templates',
+                        style: Theme.of(context).textTheme.titleLarge),
                     ),
-                    borderRadius: BorderRadius.circular(12),
+                    FilledButton.icon(
+                      onPressed: () {
+                        Navigator.pop(sheetContext);
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted) unawaited(_openSmartPages());
+                        });
+                      },
+                      icon: const Icon(Icons.auto_awesome_rounded),
+                      label: const Text('Smart Pages'),
+                    ),
+                  ],
+                ),
+                if (favorites.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  Text('Favorite Smart Pages',
+                    style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 76,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: favorites.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (_, index) => ActionChip(
+                        avatar: const Icon(Icons.favorite_rounded, size: 16),
+                        label: Text(favorites[index].title,
+                          overflow: TextOverflow.ellipsis),
+                        onPressed: () {
+                          final favorite = favorites[index];
+                          Navigator.pop(sheetContext);
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) _applySmartPage(favorite);
+                          });
+                        },
+                      ),
+                    ),
                   ),
-                  child: Column(
-                    children: [
-                      Expanded(
-                        child: ClipRRect(
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
-                          child: CustomPaint(
-                            painter: PageBackground(
-                              template: template,
-                              paperColor: Color((_pageData['paperColor'] as num?)?.toInt() ?? 0xffffffff),
-                              lineColor: Color((_pageData['lineColor'] as num?)?.toInt() ?? 0xffd8dee8),
-                              spacing: ((_pageData['spacing'] as num?)?.toDouble() ?? 28).clamp(10, 80).toDouble(),
-                              lineOpacity: ((_pageData['lineOpacity'] as num?)?.toDouble() ?? .85).clamp(0, 1).toDouble(),
+                ],
+                const SizedBox(height: 12),
+                Text('Paper backgrounds',
+                  style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: GridView.builder(
+                    itemCount: PageTemplate.values.length,
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      crossAxisSpacing: 10,
+                      mainAxisSpacing: 10,
+                      childAspectRatio: 1.1,
+                    ),
+                    itemBuilder: (_, index) {
+                      final template = PageTemplate.values[index];
+                      final isSelected = template.name == _pageData['template']?.toString();
+                      return InkWell(
+                        onTap: () => Navigator.pop(sheetContext, template),
+                        borderRadius: BorderRadius.circular(12),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: .35)
+                                : Theme.of(context).colorScheme.surface,
+                            border: Border.all(
+                              color: isSelected
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Theme.of(context).colorScheme.outlineVariant,
+                              width: isSelected ? 2 : 1,
                             ),
-                            child: const SizedBox.expand(),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            children: [
+                              Expanded(
+                                child: ClipRRect(
+                                  borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
+                                  child: CustomPaint(
+                                    painter: PageBackground(
+                                      template: template,
+                                      paperColor: Color((_pageData['paperColor'] as num?)?.toInt() ?? 0xffffffff),
+                                      lineColor: Color((_pageData['lineColor'] as num?)?.toInt() ?? 0xffd8dee8),
+                                      spacing: ((_pageData['spacing'] as num?)?.toDouble() ?? 28).clamp(10, 80).toDouble(),
+                                      lineOpacity: ((_pageData['lineOpacity'] as num?)?.toDouble() ?? .85).clamp(0, 1).toDouble(),
+                                    ),
+                                    child: const SizedBox.expand(),
+                                  ),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.all(6),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Flexible(child: Text(template.name,
+                                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(fontWeight: isSelected ? FontWeight.w900 : FontWeight.w500))),
+                                    if (isSelected) const Padding(
+                                      padding: EdgeInsets.only(left: 4),
+                                      child: Icon(Icons.check_circle_rounded, size: 14)),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.all(6),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Flexible(child: Text(template.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: isSelected ? FontWeight.w900 : FontWeight.w500))),
-                            if (isSelected) const Padding(padding: EdgeInsets.only(left: 4), child: Icon(Icons.check_circle_rounded, size: 14)),
-                          ],
-                        ),
-                      ),
-                    ],
+                      );
+                    },
                   ),
                 ),
-              );
-            },
+              ],
+            ),
           ),
         ),
       ),
@@ -6676,7 +6750,7 @@ Future<void> _openSmartPages() async {
                     constraints: const BoxConstraints.tightFor(width: 24, height: 24),
                     tooltip: 'Collapse pen showcase to screen edge',
                     onPressed: () => setState(() => _favoritesCollapsed = true),
-                    icon: const Icon(Icons.dock_to_right_rounded, size: 15),
+                    icon: const Icon(Icons.keyboard_double_arrow_right_rounded, size: 15),
                   ),
                   const SizedBox(width: 3),
                   InkWell(
@@ -8345,7 +8419,7 @@ class _ScientificCalculatorDialogState extends State<_ScientificCalculatorDialog
                       constraints: const BoxConstraints.tightFor(width: 30, height: 30),
                       tooltip: 'Collapse calculator to screen edge',
                       onPressed: widget.onCollapse,
-                      icon: const Icon(Icons.dock_to_right_rounded, size: 17),
+                      icon: const Icon(Icons.keyboard_double_arrow_right_rounded, size: 17),
                     ),
                     const SizedBox(width: 4),
                     const Expanded(child: Text('Calculator', style: TextStyle(fontWeight: FontWeight.w800))),
