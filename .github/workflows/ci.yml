@@ -2,7 +2,7 @@ name: Snote CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/snote-editor-engine-rebuild]
     paths:
       - "app/**"
       - "website/**"
