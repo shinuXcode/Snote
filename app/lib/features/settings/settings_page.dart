@@ -123,7 +123,7 @@ class _SettingsPageState extends State<SettingsPage> {
         padding: const EdgeInsets.fromLTRB(0, 4, 0, 12),
         child: SegmentedButton<bool>(
           segments: const [
-            ButtonSegment(value: false, label: Text('App settings'), icon: Icon(Icons.tune_rounded)),
+            ButtonSegment(value: false, label: Text('More settings'), icon: Icon(Icons.tune_rounded)),
             ButtonSegment(value: true, label: Text('Note settings'), icon: Icon(Icons.draw_rounded)),
           ],
           selected: {_noteOnly},
