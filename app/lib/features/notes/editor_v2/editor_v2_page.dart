@@ -39,8 +39,8 @@ import '../../tools/floating_timer_panel.dart';
 import '../../tools/screenshot_cropper.dart';
 import '../../tools/screen_color_picker.dart';
 import '../../tools/web_search_panel.dart';
-import '../smart_pages/smart_pages_gallery_screen.dart';
-import '../smart_pages/smart_page_template.dart';
+import '../../smart_pages/smart_pages_gallery_screen.dart';
+import '../../smart_pages/smart_page_template.dart';
 
 String _hashPdfBytesInBackground(Uint8List bytes) => sha256.convert(bytes).toString();
 
