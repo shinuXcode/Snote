@@ -1767,8 +1767,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         child: DecoratedBox(
           decoration: BoxDecoration(
             border: Border.all(
-              color: Theme.of(context).colorScheme.primary.withValues(alpha: .65),
-              width: 1,
+              color: Colors.transparent,
+              width: 0,
             ),
             borderRadius: BorderRadius.circular(8),
           ),
@@ -1828,6 +1828,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   style: TextStyle(fontSize: fontSize, color: color, height: 1.15),
                   onChanged: (value) => _updateTextBox(id, 'text', value),
                   decoration: const InputDecoration(
+                    filled: true,
+                    fillColor: Colors.transparent,
                     hintText: 'Type while keeping your handwritten notes',
                     hintStyle: TextStyle(fontSize: 11),
                     isDense: true,
@@ -1871,7 +1873,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           children: [
             Container(
               decoration: BoxDecoration(
-                border: Border.all(color: Theme.of(context).colorScheme.primary, width: 1.2),
+                border: Border.all(color: Colors.transparent, width: 0),
                 color: Colors.transparent,
                 borderRadius: BorderRadius.circular(4),
               ),
