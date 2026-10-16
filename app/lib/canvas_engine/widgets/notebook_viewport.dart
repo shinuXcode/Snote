@@ -181,7 +181,6 @@ class _NotebookViewportState extends State<NotebookViewport> {
         return Listener(
           behavior: HitTestBehavior.opaque,
           onPointerDown: _down,
-          onPointerMove: (_) {},
           onPointerUp: _up,
           onPointerCancel: _up,
           child: GestureDetector(
