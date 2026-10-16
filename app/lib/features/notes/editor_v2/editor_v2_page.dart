@@ -207,6 +207,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   bool _textMode = false;
   bool _floatingToolbar = false;
   bool _favoritesVertical = false;
+  bool _favoritesCollapsed = false;
   bool _fitInitialized = false;
   bool _exporting = false;
   String _toolbarDock = 'top';
@@ -6589,6 +6590,27 @@ Future<void> _openSmartPages() async {
       ...favoriteChips,
     ];
     final screen = MediaQuery.sizeOf(context);
+    if (_favoritesCollapsed) {
+      final dockRight = _favoriteOffset.dx > screen.width / 2;
+      return Positioned(
+        left: dockRight ? null : 0,
+        right: dockRight ? 0 : null,
+        top: _favoriteOffset.dy.clamp(72, math.max(72, screen.height - 64)).toDouble(),
+        child: Material(
+          elevation: 8,
+          color: Theme.of(context).colorScheme.surfaceContainerHigh,
+          borderRadius: BorderRadius.horizontal(
+            left: Radius.circular(dockRight ? 14 : 0),
+            right: Radius.circular(dockRight ? 0 : 14),
+          ),
+          child: IconButton(
+            tooltip: 'Expand pen showcase',
+            onPressed: () => setState(() => _favoritesCollapsed = false),
+            icon: const Icon(Icons.draw_outlined),
+          ),
+        ),
+      );
+    }
     return Positioned(
       left: _favoriteOffset.dx.clamp(0, math.max(0, screen.width - (_favoritesVertical ? 62 : 120))).toDouble(),
       top: _favoriteOffset.dy.clamp(0, math.max(0, screen.height - 120)).toDouble(),
@@ -6629,7 +6651,14 @@ Future<void> _openSmartPages() async {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.drag_indicator_rounded, size: 14),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(width: 24, height: 24),
+                    tooltip: 'Collapse pen showcase to screen edge',
+                    onPressed: () => setState(() => _favoritesCollapsed = true),
+                    icon: const Icon(Icons.dock_to_right_rounded, size: 15),
+                  ),
                   const SizedBox(width: 3),
                   InkWell(
                     onTap: _toggleFavoritesOrientation,
