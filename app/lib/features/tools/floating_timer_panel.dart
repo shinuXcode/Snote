@@ -17,6 +17,8 @@ class SnoteFloatingTimerPanel extends StatefulWidget {
 
 class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> {
   Timer? _ticker;
+  Timer? _alertTicker;
+  bool _alertDialogOpen = false;
   String _mode = 'timer';
   int _timerMinutes = 25;
   int _timerRemaining = 25 * 60;
@@ -70,9 +72,34 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> {
 
   void _notify(String message) {
     unawaited(SystemSound.play(SystemSoundType.alert));
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
-    );
+    if (_alertDialogOpen || !mounted) return;
+    _alertDialogOpen = true;
+    _alertTicker?.cancel();
+    _alertTicker = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (mounted && _alertDialogOpen) {
+        unawaited(SystemSound.play(SystemSoundType.alert));
+      }
+    });
+    unawaited(showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.notifications_active_rounded),
+        title: Text(message),
+        content: const Text('Dismiss this alert to stop the sound.'),
+        actions: [
+          FilledButton.icon(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            icon: const Icon(Icons.stop_rounded),
+            label: const Text('Stop alert'),
+          ),
+        ],
+      ),
+    ).whenComplete(() {
+      _alertDialogOpen = false;
+      _alertTicker?.cancel();
+      _alertTicker = null;
+    }));
   }
 
   String _format(Duration duration) {
@@ -478,6 +505,7 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> {
   @override
   void dispose() {
     _ticker?.cancel();
+    _alertTicker?.cancel();
     super.dispose();
   }
 }
