@@ -11,6 +11,7 @@ on:
       - feat/snote-beta82-editor-polish-ocr
       - feat/snote-beta83-pro-ui-fountain-ocr
       - restore/oct14-beta92
+      - feat/snote-beta96-workspace-overhaul
     paths:
       - "app/**"
       - ".github/workflows/beta.yml"
