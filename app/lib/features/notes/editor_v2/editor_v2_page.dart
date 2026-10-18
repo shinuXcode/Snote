@@ -5981,14 +5981,24 @@ remove all tools categories button    ];
         icon: const Icon(Icons.more_horiz_rounded, size: 20),
       ),
     ];
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final compactWidth = vertical
+        ? 32.0
+        : math.min(
+            math.max(1.0, screenWidth - 12),
+            math.min(360.0, actions.length * 28.0 + quickButtons.length * 30.0 + 69.0),
+          );
     return Material(
       color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: .97),
       elevation: 2,
       borderRadius: BorderRadius.circular(vertical ? 12 : 10),
-      child: SingleChildScrollView(
-        padding: EdgeInsets.symmetric(horizontal: vertical ? 1 : 2, vertical: vertical ? 2 : 1),
-        scrollDirection: vertical ? Axis.vertical : Axis.horizontal,
-        child: vertical ? Column(mainAxisSize: MainAxisSize.min, children: children) : Row(mainAxisSize: MainAxisSize.min, children: children),
+      child: SizedBox(
+        width: compactWidth,
+        child: SingleChildScrollView(
+          padding: EdgeInsets.symmetric(horizontal: vertical ? 1 : 2, vertical: vertical ? 2 : 1),
+          scrollDirection: vertical ? Axis.vertical : Axis.horizontal,
+          child: vertical ? Column(mainAxisSize: MainAxisSize.min, children: children) : Row(mainAxisSize: MainAxisSize.min, children: children),
+        ),
       ),
     );
   }
@@ -6330,6 +6340,63 @@ remove all tools categories button    ];
     return Stack(clipBehavior: Clip.none, children: children);
   }
 
+  void _toggleTextBoxFormat(String id, String key) {
+    final raw = _pageData['textBoxes'];
+    if (raw is! List) return;
+    for (final item in raw.whereType<Map>()) {
+      if (item['id']?.toString() == id) {
+        item[key] = item[key] != true;
+        setState(() {});
+        _scheduleSave();
+        return;
+      }
+    }
+  }
+
+  void _adjustTextBoxFontSize(String id, double delta) {
+    final raw = _pageData['textBoxes'];
+    if (raw is! List) return;
+    for (final item in raw.whereType<Map>()) {
+      if (item['id']?.toString() == id) {
+        final size = (item['fontSize'] as num?)?.toDouble() ?? 18.0;
+        item['fontSize'] = (size + delta).clamp(8.0, 96.0).toDouble();
+        setState(() {});
+        _scheduleSave();
+        return;
+      }
+    }
+  }
+
+  void _setTextBoxAlignment(String id, String alignment) {
+    final raw = _pageData['textBoxes'];
+    if (raw is! List) return;
+    for (final item in raw.whereType<Map>()) {
+      if (item['id']?.toString() == id) {
+        item['textAlign'] = alignment;
+        setState(() {});
+        _scheduleSave();
+        return;
+      }
+    }
+  }
+
+  void _resetTextBoxFormatting(String id) {
+    final raw = _pageData['textBoxes'];
+    if (raw is! List) return;
+    for (final item in raw.whereType<Map>()) {
+      if (item['id']?.toString() == id) {
+        for (final key in const ['bold', 'italic', 'underline', 'strikethrough']) {
+          item[key] = false;
+        }
+        item['fontSize'] = 18.0;
+        item['textAlign'] = 'left';
+        setState(() {});
+        _scheduleSave();
+        return;
+      }
+    }
+  }
+
   Widget _buildTextBoxes(Map<String, Object?> page) {
     final raw = page['textBoxes'];
     if (raw is! List) return const SizedBox.shrink();
@@ -6373,12 +6440,48 @@ remove all tools categories button    ];
                   maxLines: null,
                   expands: true,
                   textAlignVertical: TextAlignVertical.top,
-                  style: TextStyle(fontSize: fontSize, color: color, height: 1.15),
+                  textAlign: switch (box['textAlign']?.toString()) {
+                    'center' => TextAlign.center,
+                    'right' => TextAlign.right,
+                    'justify' => TextAlign.justify,
+                    _ => TextAlign.start,
+                  },
+                  style: TextStyle(
+                    fontSize: fontSize,
+                    color: color,
+                    height: 1.15,
+                    fontWeight: box['bold'] == true ? FontWeight.bold : FontWeight.normal,
+                    fontStyle: box['italic'] == true ? FontStyle.italic : FontStyle.normal,
+                    decoration: TextDecoration.combine(<TextDecoration>[
+                      if (box['underline'] == true) TextDecoration.underline,
+                      if (box['strikethrough'] == true) TextDecoration.lineThrough,
+                    ]),
+                  ),
+                  contextMenuBuilder: (context, editableTextState) {
+                    final baseItems = editableTextState.contextMenuButtonItems;
+                    return AdaptiveTextSelectionToolbar.buttonItems(
+                      anchors: editableTextState.contextMenuAnchors,
+                      buttonItems: <ContextMenuButtonItem>[
+                        ...baseItems,
+                        ContextMenuButtonItem(label: box['bold'] == true ? 'Unbold text box' : 'Bold', onPressed: () { editableTextState.hideToolbar(); _toggleTextBoxFormat(id, 'bold'); }),
+                        ContextMenuButtonItem(label: box['italic'] == true ? 'Remove italic' : 'Italic', onPressed: () { editableTextState.hideToolbar(); _toggleTextBoxFormat(id, 'italic'); }),
+                        ContextMenuButtonItem(label: box['underline'] == true ? 'Remove underline' : 'Underline', onPressed: () { editableTextState.hideToolbar(); _toggleTextBoxFormat(id, 'underline'); }),
+                        ContextMenuButtonItem(label: box['strikethrough'] == true ? 'Remove strikethrough' : 'Strikethrough', onPressed: () { editableTextState.hideToolbar(); _toggleTextBoxFormat(id, 'strikethrough'); }),
+                        ContextMenuButtonItem(label: 'Increase text size', onPressed: () { editableTextState.hideToolbar(); _adjustTextBoxFontSize(id, 2); }),
+                        ContextMenuButtonItem(label: 'Decrease text size', onPressed: () { editableTextState.hideToolbar(); _adjustTextBoxFontSize(id, -2); }),
+                        ContextMenuButtonItem(label: 'Align center', onPressed: () { editableTextState.hideToolbar(); _setTextBoxAlignment(id, 'center'); }),
+                        ContextMenuButtonItem(label: 'Align left', onPressed: () { editableTextState.hideToolbar(); _setTextBoxAlignment(id, 'left'); }),
+                        ContextMenuButtonItem(label: 'Reset formatting', onPressed: () { editableTextState.hideToolbar(); _resetTextBoxFormatting(id); }),
+                      ],
+                    );
+                  },
                   onChanged: (value) {
                     box['text'] = value;
                     _scheduleSave();
                   },
                   decoration: InputDecoration(
+                    filled: false,
+                    fillColor: Colors.transparent,
                     hintText: box['sticker'] == true ? '' : 'Write text…',
                     isDense: true,
                     border: InputBorder.none,
@@ -6588,6 +6691,8 @@ remove all tools categories button    ];
                                     ),
                                     child: PopupMenuButton<String>(
                                       tooltip: 'Page ${index + 1} options',
+                                      useRootNavigator: true,
+                                      position: PopupMenuPosition.under,
                                       padding: EdgeInsets.zero,
                                       constraints: const BoxConstraints.tightFor(width: 34, height: 32),
                                       iconSize: 18,
