@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
+
+import '../../core/settings/app_settings.dart';
 
 /// In-app search surface. Results are shown in Snote and opened externally
 /// only when the user selects one.
@@ -22,13 +25,24 @@ class SnoteWebSearchPanel extends StatefulWidget {
 
 class _SnoteWebSearchPanelState extends State<SnoteWebSearchPanel> {
   final TextEditingController _query = TextEditingController();
+  final TextEditingController _apiKey = TextEditingController();
+  bool _geminiMode = false;
+  bool _geminiLoading = false;
+  String? _geminiAnswer;
   bool _loading = false;
   String? _error;
   List<_WebResult> _results = const [];
 
   @override
+  void initState() {
+    super.initState();
+    _apiKey.text = SnoteSettings.instance.getString('geminiApiKey');
+  }
+
+  @override
   void dispose() {
     _query.dispose();
+    _apiKey.dispose();
     super.dispose();
   }
 
@@ -121,6 +135,88 @@ class _SnoteWebSearchPanelState extends State<SnoteWebSearchPanel> {
     }
   }
 
+  Future<void> _configureGeminiKey() async {
+    final controller = TextEditingController(text: _apiKey.text);
+    final key = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Gemini API key'),
+        content: TextField(
+          controller: controller,
+          obscureText: true,
+          decoration: const InputDecoration(
+            labelText: 'Google AI Studio API key',
+            helperText: 'Stored in device secure storage. A Google API key is required; free-tier limits apply.',
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, controller.text.trim()), child: const Text('Save')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (key == null || !mounted) return;
+    _apiKey.text = key;
+    await SnoteSettings.instance.setString('geminiApiKey', key);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _askGemini([String? supplied]) async {
+    final prompt = (supplied ?? _query.text).trim();
+    if (prompt.isEmpty || _geminiLoading) return;
+    if (_apiKey.text.trim().isEmpty) {
+      await _configureGeminiKey();
+      if (_apiKey.text.trim().isEmpty) return;
+    }
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _geminiLoading = true;
+      _geminiAnswer = null;
+      _error = null;
+    });
+    try {
+      final uri = Uri.https(
+        'generativelanguage.googleapis.com',
+        '/v1beta/models/gemini-2.5-flash:generateContent',
+        {'key': _apiKey.text.trim()},
+      );
+      final response = await http.post(
+        uri,
+        headers: const {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'contents': [{'parts': [{'text': prompt}]}],
+          'generationConfig': {'temperature': 0.4, 'maxOutputTokens': 2048},
+        }),
+      ).timeout(const Duration(seconds: 30));
+      final decoded = jsonDecode(response.body);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        final message = decoded is Map ? decoded['error']?['message'] : null;
+        throw Exception(message?.toString() ?? 'Gemini returned HTTP ${response.statusCode}.');
+      }
+      final candidates = decoded is Map ? decoded['candidates'] : null;
+      final content = candidates is List && candidates.isNotEmpty ? candidates.first['content'] : null;
+      final parts = content is Map ? content['parts'] : null;
+      final answer = parts is List
+          ? parts.map((part) => part is Map ? part['text']?.toString() ?? '' : '').join('\n').trim()
+          : '';
+      if (answer.isEmpty) throw Exception('Gemini returned an empty answer.');
+      if (!mounted) return;
+      setState(() => _geminiAnswer = answer);
+    } catch (error) {
+      if (mounted) setState(() => _error = 'Gemini request failed: ${error.toString().replaceFirst('Exception: ', '')}');
+    } finally {
+      if (mounted) setState(() => _geminiLoading = false);
+    }
+  }
+
+  Future<void> _openGoogleSearch() async {
+    final query = _query.text.trim();
+    if (query.isEmpty) return;
+    final uri = Uri.https('www.google.com', '/search', {'q': query});
+    await _openResult(uri);
+  }
+
   Future<void> _openResult(Uri uri) async {
     try {
       final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -156,8 +252,13 @@ class _SnoteWebSearchPanelState extends State<SnoteWebSearchPanel> {
                 children: [
                   const Icon(Icons.travel_explore_rounded),
                   const SizedBox(width: 10),
-                  const Expanded(
-                    child: Text('Web search', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
+                  Expanded(
+                    child: Text(_geminiMode ? 'Gemini AI' : 'Web search', style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
+                  ),
+                  IconButton(
+                    tooltip: 'Configure Gemini API key',
+                    onPressed: _configureGeminiKey,
+                    icon: const Icon(Icons.key_rounded),
                   ),
                   IconButton(
                     tooltip: 'Close web search',
@@ -168,18 +269,30 @@ class _SnoteWebSearchPanelState extends State<SnoteWebSearchPanel> {
               ),
             ),
             Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: SegmentedButton<bool>(
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(value: false, label: Text('Web search'), icon: Icon(Icons.travel_explore_rounded)),
+                  ButtonSegment(value: true, label: Text('Gemini AI'), icon: Icon(Icons.auto_awesome_rounded)),
+                ],
+                selected: {_geminiMode},
+                onSelectionChanged: (values) => setState(() { _geminiMode = values.first; _error = null; }),
+              ),
+            ),
+            Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               child: TextField(
                 controller: _query,
                 textInputAction: TextInputAction.search,
-                onSubmitted: _search,
+                onSubmitted: _geminiMode ? _askGemini : _search,
                 decoration: InputDecoration(
-                  hintText: 'Search the web…',
+                  hintText: _geminiMode ? 'Ask Gemini anything…' : 'Search the web…',
                   prefixIcon: const Icon(Icons.search_rounded),
                   suffixIcon: IconButton(
-                    tooltip: 'Search',
-                    onPressed: _loading ? null : _search,
-                    icon: const Icon(Icons.arrow_forward_rounded),
+                    tooltip: _geminiMode ? 'Ask Gemini' : 'Search',
+                    onPressed: (_loading || _geminiLoading) ? null : (_geminiMode ? _askGemini : _search),
+                    icon: Icon(_geminiMode ? Icons.auto_awesome_rounded : Icons.arrow_forward_rounded),
                   ),
                   border: const OutlineInputBorder(),
                   isDense: true,
@@ -188,7 +301,15 @@ class _SnoteWebSearchPanelState extends State<SnoteWebSearchPanel> {
             ),
             const Divider(height: 1),
             Expanded(
-              child: _loading
+              child: _geminiMode
+                  ? _geminiLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : _error != null
+                          ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(_error!, textAlign: TextAlign.center)))
+                          : _geminiAnswer == null
+                              ? const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('Ask a question to get a response from Gemini. Configure your API key with the key icon.')))
+                              : SingleChildScrollView(padding: const EdgeInsets.all(18), child: SelectableText(_geminiAnswer!, style: Theme.of(context).textTheme.bodyLarge))
+                  : _loading
                   ? const Center(child: CircularProgressIndicator())
                   : _error != null
                       ? Center(
@@ -248,10 +369,24 @@ class _SnoteWebSearchPanelState extends State<SnoteWebSearchPanel> {
                           },
                         ),
             ),
+            if (!_geminiMode)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: _openGoogleSearch,
+                    icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                    label: const Text('Open Google search'),
+                  ),
+                ),
+              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
               child: Text(
-                'Search results load online; selected pages open in your browser.',
+                _geminiMode
+                    ? 'Gemini uses your Google API key. Free-tier availability and quotas are controlled by Google.'
+                    : 'Search results load online; selected pages open in your browser. Use Google for a full Google results page.',
                 style: Theme.of(context).textTheme.labelSmall,
               ),
             ),
