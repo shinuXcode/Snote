@@ -6187,7 +6187,7 @@ remove all tools categories button    ];
                       });
                       unawaited(_settings.setString('editorV2FavoriteDock', dockLeft ? 'left' : 'right'));
                     },
-                    icon: const Icon(Icons.keyboard_double_arrow_left_rounded, size: 15),
+                    icon: const Icon(Icons.favorite_rounded, size: 15),
                   ),
                   const SizedBox(width: 3),
                   InkWell(
@@ -8016,7 +8016,7 @@ class _ScientificCalculatorDialogState extends State<_ScientificCalculatorDialog
                         widget.onCollapse();
                         setState(() => _collapsed = true);
                       },
-                      icon: const Icon(Icons.keyboard_double_arrow_right_rounded, size: 18),
+                      icon: const Icon(Icons.calculate_rounded, size: 18),
                     ),
                     TextButton(
                       onPressed: () => setState(() => _degrees = !_degrees),
