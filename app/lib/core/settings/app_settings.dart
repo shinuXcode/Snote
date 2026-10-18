@@ -56,6 +56,8 @@ class SnoteSettings extends ChangeNotifier {
     'toolDashed': '{}',
     'lassoStyle': 'solid',
     'eraserMode': 'stroke',
+    'timerAlertSound': 'alert',
+    'geminiApiKey': '',
   };
 
   bool getBool(String key) => (_values[key] as bool?) ?? boolDefaults[key] ?? false;
