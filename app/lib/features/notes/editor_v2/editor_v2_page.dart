@@ -3761,10 +3761,10 @@ class _EditorV2PageState extends State<EditorV2Page>
     try {
       final scaleX = source.width / math.max(1.0, logicalScreenSize.width);
       final scaleY = source.height / math.max(1.0, logicalScreenSize.height);
-      final left = (region.left * scaleX).round().clamp(0, source.width - 1);
-      final top = (region.top * scaleY).round().clamp(0, source.height - 1);
-      final right = (region.right * scaleX).round().clamp(left + 1, source.width);
-      final bottom = (region.bottom * scaleY).round().clamp(top + 1, source.height);
+      final left = (region.left * scaleX).round().clamp(0, source.width - 1).toInt();
+      final top = (region.top * scaleY).round().clamp(0, source.height - 1).toInt();
+      final right = (region.right * scaleX).round().clamp(left + 1, source.width).toInt();
+      final bottom = (region.bottom * scaleY).round().clamp(top + 1, source.height).toInt();
       final sourceRect = Rect.fromLTRB(
         left.toDouble(), top.toDouble(), right.toDouble(), bottom.toDouble(),
       );
