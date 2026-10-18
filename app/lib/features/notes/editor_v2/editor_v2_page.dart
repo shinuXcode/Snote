@@ -7226,13 +7226,22 @@ class _EditorV2PageState extends State<EditorV2Page>
               icon: const Icon(Icons.tab_rounded),
             ),
           if (MediaQuery.sizeOf(context).width >= 500)
-            IconButton(
-              visualDensity: VisualDensity.compact,
-              tooltip: 'Page template, format, dimensions, spacing & background',
-              onPressed: () async {
-                await _showPageAndEditorSettings();
-                if (mounted) await _showPageFormatSettings();
+            PopupMenuButton<String>(
+              tooltip: 'Page template and format',
+              onSelected: (value) {
+                if (value == 'template') {
+                  unawaited(_chooseTemplate());
+                } else if (value == 'format') {
+                  unawaited(_showPageFormatSettings());
+                } else {
+                  unawaited(_showPageAndEditorSettings());
+                }
               },
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'template', child: Text('Choose template (with preview)')),
+                PopupMenuItem(value: 'format', child: Text('Dimensions, spacing & background')),
+                PopupMenuItem(value: 'settings', child: Text('Template colors & editor settings')),
+              ],
               icon: const Icon(Icons.grid_on_rounded),
             ),
           IconButton(
