@@ -15,6 +15,12 @@ on:
     paths:
       - "app/**"
       - ".github/workflows/beta.yml"
+  pull_request:
+    branches:
+      - restore/oct14-beta92
+    paths:
+      - "app/**"
+      - ".github/workflows/beta.yml"
   workflow_dispatch:
 
 permissions:
