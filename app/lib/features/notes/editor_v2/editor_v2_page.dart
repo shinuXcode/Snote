@@ -5646,7 +5646,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       case 'addPage':
         _addPage();
       case 'text':
-        _addTextBox();
+        break;
       case 'image':
         unawaited(_addImage());
       case 'clipboardImage':
@@ -5830,7 +5830,6 @@ class _EditorV2PageState extends State<EditorV2Page>
         captureAnchor: true,
         onPressed: () => unawaited(_strokeSettings(null, _toolSettingsAnchor)),
       ),
-      action(tooltip: 'Text box', icon: Icons.text_fields_rounded, onPressed: _addTextBox),
       action(tooltip: 'Capture screen to canvas', icon: Icons.screenshot_monitor_rounded, onPressed: () => unawaited(_captureScreenToCanvas())),
       if (_hasPdfBackgroundPages)
         action(
@@ -5864,7 +5863,6 @@ class _EditorV2PageState extends State<EditorV2Page>
         constraints: const BoxConstraints.tightFor(width: 28, height: 28),
         onSelected: _onMenuSelected,
         itemBuilder: (_) => <PopupMenuEntry<String>>[
-          PopupMenuItem(value: 'text', child: Text('Insert text box')),
           PopupMenuItem(value: 'image', child: Text('Insert image from file')),
           if (_specialToolLocations('screenshot').isNotEmpty)
             PopupMenuItem(value: 'clipboardImage', child: Text('Paste screenshot from clipboard')),
@@ -6090,6 +6088,10 @@ class _EditorV2PageState extends State<EditorV2Page>
           _calculatorHeight = size.height;
         }),
         onMove: (delta) => setState(() => _calculatorOffset += delta),
+        onCollapse: () {
+          final dockLeft = _calculatorOffset.dx < screen.width / 2;
+          setState(() => _calculatorOffset = Offset(dockLeft ? 0 : screen.width - 28, _calculatorOffset.dy));
+        },
         onClose: () => setState(() => _calculatorVisible = false),
       ),
     );
@@ -7278,7 +7280,6 @@ class _EditorV2PageState extends State<EditorV2Page>
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'fit', child: Text('Fit page to width')),
               const PopupMenuItem(value: 'fullscreen', child: Text('Toggle full screen')),
-              const PopupMenuItem(value: 'text', child: Text('Toggle rich text / handwriting')),
               const PopupMenuItem(value: 'image', child: Text('Insert image from file')),
               const PopupMenuItem(value: 'clipboardImage', child: Text('Paste screenshot from clipboard')),
               PopupMenuItem(value: 'pasteSelection', enabled: _selectionClipboard != null, child: const Text('Paste copied selection')),
@@ -7524,6 +7525,7 @@ class _ScientificCalculatorDialog extends StatefulWidget {
   final ValueChanged<Size> onResize;
   final VoidCallback onClose;
   final ValueChanged<Offset> onMove;
+  final VoidCallback onCollapse;
 
   const _ScientificCalculatorDialog({
     required this.initialWidth,
@@ -7531,6 +7533,7 @@ class _ScientificCalculatorDialog extends StatefulWidget {
     required this.onResize,
     required this.onClose,
     required this.onMove,
+    required this.onCollapse,
   });
 
   @override
@@ -7667,7 +7670,10 @@ class _ScientificCalculatorDialogState extends State<_ScientificCalculatorDialog
                       tooltip: 'Collapse calculator to screen edge',
                       visualDensity: VisualDensity.compact,
                       constraints: const BoxConstraints.tightFor(width: 30, height: 30),
-                      onPressed: () => setState(() => _collapsed = true),
+                      onPressed: () {
+                        widget.onCollapse();
+                        setState(() => _collapsed = true);
+                      },
                       icon: const Icon(Icons.keyboard_double_arrow_right_rounded, size: 18),
                     ),
                     TextButton(
