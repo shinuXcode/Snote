@@ -33,6 +33,12 @@ import '../../../data/local/note_repository.dart';
 import '../note_content_compatibility.dart';
 import 'editor_v2_document.dart';
 
+import 'editor_v2_ink_painter.dart';
+import 'selection_text_recognizer.dart';
+import '../../tools/screen_capture.dart';
+import '../../tools/floating_timer_panel.dart';
+import '../../tools/web_search_panel.dart';
+
 /// Decode large note envelopes away from the UI isolate so returning to a
 /// notebook does not block the first interactive frame on JSON parsing.
 Map<String, Object?> _decodeEditorDocumentPayload(String content) {
@@ -42,11 +48,7 @@ Map<String, Object?> _decodeEditorDocumentPayload(String content) {
     'pages': EditorV2DocumentCodec.decodePages(root),
   };
 }
-import 'editor_v2_ink_painter.dart';
-import 'selection_text_recognizer.dart';
-import '../../tools/screen_capture.dart';
-import '../../tools/floating_timer_panel.dart';
-import '../../tools/web_search_panel.dart';
+
 
 /// Replacement note editor surface. It shares only Snote's persistence and
 /// stroke-format contracts; pointer handling, selection, drawing, and painting
