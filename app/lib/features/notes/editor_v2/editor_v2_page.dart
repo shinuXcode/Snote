@@ -35,6 +35,8 @@ import 'editor_v2_document.dart';
 import 'editor_v2_ink_painter.dart';
 import 'selection_text_recognizer.dart';
 import '../../tools/screen_capture.dart';
+import '../../tools/floating_timer_panel.dart';
+import '../../tools/web_search_panel.dart';
 
 /// Replacement note editor surface. It shares only Snote's persistence and
 /// stroke-format contracts; pointer handling, selection, drawing, and painting
@@ -222,6 +224,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   bool _showPagePreview = true;
   bool _floatingPageNavigation = false;
   bool _fullScreenMode = false;
+  bool _showFloatingTimer = false;
   bool _showViewportHud = false;
   bool _viewportLocked = false;
   bool _watermarkCoverMode = false;
@@ -817,7 +820,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     for (final tool in CanvasTool.values) {
       if (!_toolbarOrder.contains(tool.name)) _toolbarOrder.add(tool.name);
     }
-    for (final key in const <String>['calculator', 'screenshot']) {
+    for (final key in const <String>['calculator', 'screenshot', 'timer', 'webSearch']) {
       if (!_toolbarOrder.contains(key)) _toolbarOrder.add(key);
     }
   }
@@ -837,7 +840,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       _placementsFor(tool).contains(location);
 
   bool _isSpecialToolKey(String key) =>
-      const <String>{'calculator', 'screenshot'}.contains(key);
+      const <String>{'calculator', 'screenshot', 'timer', 'webSearch'}.contains(key);
 
   Set<String> _locationsForToolKey(String key) {
     final tool = CanvasTool.values.where((candidate) => candidate.name == key).firstOrNull;
@@ -1052,15 +1055,31 @@ class _EditorV2PageState extends State<EditorV2Page>
       _openCalculator();
     } else if (key == 'screenshot') {
       unawaited(_captureScreenToCanvas());
+    } else if (key == 'timer') {
+      setState(() => _showFloatingTimer = true);
+    } else if (key == 'webSearch') {
+      unawaited(SnoteWebSearchPanel.show(context));
     }
   }
 
   Widget _specialToolButton(String key, String location) {
     final calculator = key == 'calculator';
+    final timer = key == 'timer';
+    final webSearch = key == 'webSearch';
     final icon = calculator
         ? Icons.calculate_outlined
-        : Icons.screenshot_monitor_rounded;
-    final title = calculator ? 'Calculator' : 'Capture screen to canvas';
+        : timer
+            ? Icons.timer_outlined
+            : webSearch
+                ? Icons.travel_explore_rounded
+                : Icons.screenshot_monitor_rounded;
+    final title = calculator
+        ? 'Calculator'
+        : timer
+            ? 'Timer, alarm and stopwatch'
+            : webSearch
+                ? 'Google/web search'
+                : 'Capture screen to canvas';
     return DragTarget<Object>(
       onAcceptWithDetails: (details) => unawaited(
         _moveDroppedTool(details.data, location, target: key),
@@ -5658,7 +5677,9 @@ class _EditorV2PageState extends State<EditorV2Page>
       case 'bookmarks':
         unawaited(_showBookmarks());
       case 'timer':
-        unawaited(_startStudyTimer());
+        setState(() => _showFloatingTimer = true);
+      case 'webSearch':
+        unawaited(SnoteWebSearchPanel.show(context));
       case 'favorite':
         unawaited(_addFavoritePen());
       case 'dockTop':
@@ -7166,17 +7187,22 @@ class _EditorV2PageState extends State<EditorV2Page>
           if (MediaQuery.sizeOf(context).width >= 500)
             IconButton(
               visualDensity: VisualDensity.compact,
-              tooltip: 'Page template',
-              onPressed: _chooseTemplate,
+              tooltip: 'Page template, format, dimensions, spacing & background',
+              onPressed: _showPageAndEditorSettings,
               icon: const Icon(Icons.grid_on_rounded),
             ),
-          if (MediaQuery.sizeOf(context).width >= 500)
-            IconButton(
-              visualDensity: VisualDensity.compact,
-              tooltip: 'Page format, dimensions, spacing & background',
-              onPressed: _showPageFormatSettings,
-              icon: const Icon(Icons.straighten_rounded, size: 18),
-            ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Timer, alarm and stopwatch',
+            onPressed: () => setState(() => _showFloatingTimer = true),
+            icon: const Icon(Icons.timer_outlined, size: 19),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Google and web search',
+            onPressed: () => unawaited(SnoteWebSearchPanel.show(context)),
+            icon: const Icon(Icons.travel_explore_rounded, size: 19),
+          ),
           if (titleBarToolButtons.isNotEmpty)
             SizedBox(
               width: math.min(
@@ -7301,8 +7327,8 @@ class _EditorV2PageState extends State<EditorV2Page>
                   clipBehavior: Clip.antiAlias,
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
-                      maxWidth: math.min(360, MediaQuery.sizeOf(context).width - 16),
-                      maxHeight: math.min(190, MediaQuery.sizeOf(context).height * .5),
+                      maxWidth: math.min(_fullScreenMode ? MediaQuery.sizeOf(context).width * .94 : 360.0, MediaQuery.sizeOf(context).width - 12),
+                      maxHeight: math.min(_fullScreenMode ? MediaQuery.sizeOf(context).height * .32 : 190.0, MediaQuery.sizeOf(context).height * .5),
                     ),
                     child: _buildToolbar(vertical: false),
                   ),
@@ -7312,6 +7338,12 @@ class _EditorV2PageState extends State<EditorV2Page>
           if (_showFavoritesShowcase || _pencaseTools.isNotEmpty) _buildFavoriteShowcase(),
           // Page navigation is now handled by the expanded page-preview sidebar.
           if (_calculatorVisible) _buildFloatingCalculator(),
+          if (_showFloatingTimer)
+            Positioned.fill(
+              child: SnoteFloatingTimerPanel(
+                onClose: () => setState(() => _showFloatingTimer = false),
+              ),
+            ),
           if (_showViewportHud || _viewportLocked)
             Positioned(
               top: 8,
