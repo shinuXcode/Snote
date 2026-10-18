@@ -37,7 +37,17 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> {
   @override
   void initState() {
     super.initState();
+    _collapsed = SnoteSettings.instance.getBool('floatingTimerCollapsed');
+    _dockSide = SnoteSettings.instance.getString('floatingTimerDockSide') == 'left' ? 'left' : 'right';
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+  }
+
+  void _persistCollapsed(bool value) {
+    unawaited(SnoteSettings.instance.setBool('floatingTimerCollapsed', value));
+  }
+
+  void _persistDockSide(String value) {
+    unawaited(SnoteSettings.instance.setString('floatingTimerDockSide', value));
   }
 
   void _tick() {
@@ -228,12 +238,16 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> {
         _dockSide = 'left';
         _collapsed = true;
         _offset = Offset(0, _offset.dy);
+        _persistCollapsed(true);
+        _persistDockSide('left');
       });
     } else if (_offset.dx + width >= screen.width - 22) {
       setState(() {
         _dockSide = 'right';
         _collapsed = true;
         _offset = Offset(screen.width - 28, _offset.dy);
+        _persistCollapsed(true);
+        _persistDockSide('right');
       });
     }
   }
@@ -242,6 +256,7 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> {
     final width = math.min(330.0, screen.width - 16);
     setState(() {
       _collapsed = false;
+      _persistCollapsed(false);
       _offset = Offset(
         _dockSide == 'left' ? 8 : math.max(8.0, screen.width - width - 8),
         _offset.dy
@@ -278,6 +293,7 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> {
                   );
                   _dockSide =
                       _offset.dx < screen.width / 2 ? 'left' : 'right';
+                  _persistDockSide(_dockSide);
                 });
               },
               child: Material(
