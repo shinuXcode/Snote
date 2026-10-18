@@ -4,6 +4,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/settings/app_settings.dart';
+
 /// A draggable, edge-collapsible timer and stopwatch overlay for the editor.
 class SnoteFloatingTimerPanel extends StatefulWidget {
   final VoidCallback onClose;
@@ -69,7 +71,14 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> {
   }
 
   void _notify(String message) {
-    unawaited(SystemSound.play(SystemSoundType.alert));
+    if (SnoteSettings.instance.getBool('timerAlertEnabled')) {
+      final sound = SnoteSettings.instance.getString('timerAlertSound');
+      if (sound == 'click') {
+        unawaited(SystemSound.play(SystemSoundType.click));
+      } else if (sound == 'alert') {
+        unawaited(SystemSound.play(SystemSoundType.alert));
+      }
+    }
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
       SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
     );
@@ -342,6 +351,40 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> {
                               'Timer & stopwatch',
                               style: TextStyle(fontWeight: FontWeight.w800),
                             ),
+                          ),
+                          PopupMenuButton<String>(
+                            tooltip: 'Alert settings',
+                            icon: const Icon(Icons.notifications_active_outlined, size: 18),
+                            onSelected: (value) async {
+                              if (value == 'enabled') {
+                                await SnoteSettings.instance.setBool('timerAlertEnabled', !SnoteSettings.instance.getBool('timerAlertEnabled'));
+                              } else {
+                                await SnoteSettings.instance.setString('timerAlertSound', value);
+                              }
+                              if (mounted) setState(() {});
+                            },
+                            itemBuilder: (_) => [
+                              CheckedPopupMenuItem<String>(
+                                value: 'enabled',
+                                checked: SnoteSettings.instance.getBool('timerAlertEnabled'),
+                                child: const Text('Sound alerts enabled'),
+                              ),
+                              CheckedPopupMenuItem<String>(
+                                value: 'alert',
+                                checked: SnoteSettings.instance.getString('timerAlertSound') == 'alert',
+                                child: const Text('Alert sound'),
+                              ),
+                              CheckedPopupMenuItem<String>(
+                                value: 'click',
+                                checked: SnoteSettings.instance.getString('timerAlertSound') == 'click',
+                                child: const Text('Click sound'),
+                              ),
+                              CheckedPopupMenuItem<String>(
+                                value: 'none',
+                                checked: SnoteSettings.instance.getString('timerAlertSound') == 'none',
+                                child: const Text('Silent'),
+                              ),
+                            ],
                           ),
                           IconButton(
                             tooltip: 'Collapse to screen edge',
