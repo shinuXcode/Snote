@@ -6862,9 +6862,7 @@ remove all tools categories button    ];
                       focusNode: _quillFocus,
                       scrollController: _quillScroll,
                       controller: _quill,
-                      config: QuillEditorConfig(
-                        placeholder: 'Start writing rich text…',
-                      ),
+                      config: const QuillEditorConfig(placeholder: ''),
                     ),
                   ),
                 ),
@@ -8799,7 +8797,6 @@ class _CaptureRegionPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (selection.isEmpty) return;
-    final overlay = Paint()..color = Colors.black.withValues(alpha: .28);
     final border = Paint()
       ..color = const Color(0xff66e0c2)
       ..style = PaintingStyle.stroke
