@@ -41,8 +41,8 @@ import '../../tools/web_search_panel.dart';
 
 /// Decode large note envelopes away from the UI isolate so returning to a
 /// notebook does not block the first interactive frame on JSON parsing.
-Map<String, Object?> _decodeEditorDocumentPayload(String content) {
-  final root = EditorV2DocumentCodec.decodeRoot(content);
+Map<String, Object?> _decodeEditorDocumentPayload(String? content) {
+  final root = EditorV2DocumentCodec.decodeRoot(content ?? '');
   return <String, Object?>{
     'root': root,
     'pages': EditorV2DocumentCodec.decodePages(root),
