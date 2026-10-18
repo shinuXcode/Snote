@@ -303,13 +303,12 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> {
                   left: Radius.circular(_dockSide == 'left' ? 0 : 14),
                   right: Radius.circular(_dockSide == 'right' ? 0 : 14),
                 ),
-                child: SizedBox(
-                  width: 28,
+                child: const SizedBox(
+                  width: 30,
                   height: 76,
-                  child: Icon(
-                    _dockSide == 'left'
-                        ? Icons.chevron_right_rounded
-                        : Icons.chevron_left_rounded,
+                  child: Tooltip(
+                    message: 'Expand timer, alarm and stopwatch',
+                    child: Icon(Icons.timer_rounded),
                   ),
                 ),
               ),
