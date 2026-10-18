@@ -7244,13 +7244,15 @@ class _EditorV2PageState extends State<EditorV2Page>
               ],
               icon: const Icon(Icons.grid_on_rounded),
             ),
-          IconButton(
+          if (_settings.getBool('showTitleBarTimer'))
+            IconButton(
             visualDensity: VisualDensity.compact,
             tooltip: 'Timer, alarm and stopwatch',
             onPressed: () => setState(() => _showFloatingTimer = true),
             icon: const Icon(Icons.timer_outlined, size: 19),
           ),
-          IconButton(
+          if (_settings.getBool('showTitleBarSearch'))
+            IconButton(
             visualDensity: VisualDensity.compact,
             tooltip: 'Google and web search',
             onPressed: () => unawaited(SnoteWebSearchPanel.show(context)),
