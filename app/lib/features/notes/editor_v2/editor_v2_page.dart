@@ -264,6 +264,13 @@ class _EditorV2PageState extends State<EditorV2Page>
   Rect? _selectionTransformBounds;
   Offset _selectionTransformDelta = Offset.zero;
   bool _selectionTransformIsResize = false;
+  double _toolbarLength = 360;
+  double _toolbarThickness = 34;
+  double _toolbarMarginLeft = 0, _toolbarMarginTop = 0;
+  double _toolbarMarginRight = 0, _toolbarMarginBottom = 0;
+  double _toolbarPaddingLeft = 2, _toolbarPaddingTop = 1;
+  double _toolbarPaddingRight = 2, _toolbarPaddingBottom = 1;
+  bool _toolbarDimensionsLocked = false;
 
   bool get _hasPdfBackgroundPages => _pages.any((page) {
         if (page['pdfLazyRender'] == true) return true;
@@ -298,6 +305,17 @@ class _EditorV2PageState extends State<EditorV2Page>
     _showTabsBar = _settings.getBool('editorV2ShowTabs');
     _noteTabsFuture = _repo.listAllVisible(limit: 12);
     _toolbarCollapsedToEdge = _settings.getBool('editorV2ToolbarCollapsed');
+    _toolbarLength = _settings.getDouble('editorV2ToolbarLength').clamp(180.0, 900.0).toDouble();
+    _toolbarThickness = _settings.getDouble('editorV2ToolbarThickness').clamp(28.0, 96.0).toDouble();
+    _toolbarMarginLeft = _settings.getDouble('editorV2ToolbarMarginLeft').clamp(0.0, 24.0).toDouble();
+    _toolbarMarginTop = _settings.getDouble('editorV2ToolbarMarginTop').clamp(0.0, 24.0).toDouble();
+    _toolbarMarginRight = _settings.getDouble('editorV2ToolbarMarginRight').clamp(0.0, 24.0).toDouble();
+    _toolbarMarginBottom = _settings.getDouble('editorV2ToolbarMarginBottom').clamp(0.0, 24.0).toDouble();
+    _toolbarPaddingLeft = _settings.getDouble('editorV2ToolbarPaddingLeft').clamp(0.0, 20.0).toDouble();
+    _toolbarPaddingTop = _settings.getDouble('editorV2ToolbarPaddingTop').clamp(0.0, 20.0).toDouble();
+    _toolbarPaddingRight = _settings.getDouble('editorV2ToolbarPaddingRight').clamp(0.0, 20.0).toDouble();
+    _toolbarPaddingBottom = _settings.getDouble('editorV2ToolbarPaddingBottom').clamp(0.0, 20.0).toDouble();
+    _toolbarDimensionsLocked = _settings.getBool('editorV2ToolbarDimensionsLocked');
     _favoriteCollapsed = _settings.getBool('editorV2FavoriteCollapsed');
     _calculatorCollapsed = _settings.getBool('editorV2CalculatorCollapsed');
     _favoritesVertical = _settings.getBool('editorV2FavoritesVertical');
@@ -5812,6 +5830,8 @@ class _EditorV2PageState extends State<EditorV2Page>
         unawaited(_toggleNoteSwitcher());
       case 'calculator':
         _openCalculator();
+      case 'toolbarLayout':
+        unawaited(_showToolbarLayoutSettings());
       case 'calculatorSettings':
         unawaited(_specialToolSettingsSheet('calculator'));
       case 'screenshotSettings':
@@ -5949,6 +5969,116 @@ class _EditorV2PageState extends State<EditorV2Page>
     );
   }
 
+  Future<void> _showToolbarLayoutSettings() async {
+    var length = _toolbarLength, thickness = _toolbarThickness;
+    var ml = _toolbarMarginLeft, mt = _toolbarMarginTop;
+    var mr = _toolbarMarginRight, mb = _toolbarMarginBottom;
+    var pl = _toolbarPaddingLeft, pt = _toolbarPaddingTop;
+    var pr = _toolbarPaddingRight, pb = _toolbarPaddingBottom;
+    var locked = _toolbarDimensionsLocked;
+    final result = await showDialog<Map<String, Object?>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          Widget slider(String label, double value, double min, double max,
+              ValueChanged<double> onChanged, {int divisions = 24}) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Expanded(child: Text(label)),
+                  Text(value.toStringAsFixed(0), style: Theme.of(context).textTheme.labelMedium),
+                ]),
+                Slider(
+                  value: value.clamp(min, max).toDouble(),
+                  min: min, max: max, divisions: divisions,
+                  onChanged: locked ? null : onChanged,
+                ),
+              ],
+            );
+          }
+          return AlertDialog(
+            title: const Text('Toolbar size & spacing'),
+            content: SizedBox(
+              width: 440,
+              child: SingleChildScrollView(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Lock toolbar dimensions'),
+                    subtitle: const Text('Prevents accidental layout adjustments.'),
+                    value: locked,
+                    onChanged: (value) => setDialogState(() => locked = value),
+                  ),
+                  slider('Horizontal length', length, 180, 900, (v) => setDialogState(() => length = v), divisions: 36),
+                  slider('Vertical width / thickness', thickness, 28, 96, (v) => setDialogState(() => thickness = v), divisions: 34),
+                  const Divider(),
+                  Text('Outer margin by direction', style: Theme.of(context).textTheme.titleSmall),
+                  slider('Left margin', ml, 0, 24, (v) => setDialogState(() => ml = v)),
+                  slider('Top margin', mt, 0, 24, (v) => setDialogState(() => mt = v)),
+                  slider('Right margin', mr, 0, 24, (v) => setDialogState(() => mr = v)),
+                  slider('Bottom margin', mb, 0, 24, (v) => setDialogState(() => mb = v)),
+                  const Divider(),
+                  Text('Inner padding by direction', style: Theme.of(context).textTheme.titleSmall),
+                  slider('Left padding', pl, 0, 20, (v) => setDialogState(() => pl = v)),
+                  slider('Top padding', pt, 0, 20, (v) => setDialogState(() => pt = v)),
+                  slider('Right padding', pr, 0, 20, (v) => setDialogState(() => pr = v)),
+                  slider('Bottom padding', pb, 0, 20, (v) => setDialogState(() => pb = v)),
+                ]),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+              TextButton(
+                onPressed: () => setDialogState(() {
+                  length = 360; thickness = 34;
+                  ml = 0; mt = 0; mr = 0; mb = 0;
+                  pl = 2; pt = 1; pr = 2; pb = 1;
+                }),
+                child: const Text('Reset'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, <String, Object?>{
+                  'length': length, 'thickness': thickness,
+                  'ml': ml, 'mt': mt, 'mr': mr, 'mb': mb,
+                  'pl': pl, 'pt': pt, 'pr': pr, 'pb': pb, 'locked': locked,
+                }),
+                child: const Text('Apply'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      _toolbarLength = (result['length'] as num).toDouble();
+      _toolbarThickness = (result['thickness'] as num).toDouble();
+      _toolbarMarginLeft = (result['ml'] as num).toDouble();
+      _toolbarMarginTop = (result['mt'] as num).toDouble();
+      _toolbarMarginRight = (result['mr'] as num).toDouble();
+      _toolbarMarginBottom = (result['mb'] as num).toDouble();
+      _toolbarPaddingLeft = (result['pl'] as num).toDouble();
+      _toolbarPaddingTop = (result['pt'] as num).toDouble();
+      _toolbarPaddingRight = (result['pr'] as num).toDouble();
+      _toolbarPaddingBottom = (result['pb'] as num).toDouble();
+      _toolbarDimensionsLocked = result['locked'] == true;
+    });
+    await Future.wait([
+      _settings.setDouble('editorV2ToolbarLength', _toolbarLength),
+      _settings.setDouble('editorV2ToolbarThickness', _toolbarThickness),
+      _settings.setDouble('editorV2ToolbarMarginLeft', _toolbarMarginLeft),
+      _settings.setDouble('editorV2ToolbarMarginTop', _toolbarMarginTop),
+      _settings.setDouble('editorV2ToolbarMarginRight', _toolbarMarginRight),
+      _settings.setDouble('editorV2ToolbarMarginBottom', _toolbarMarginBottom),
+      _settings.setDouble('editorV2ToolbarPaddingLeft', _toolbarPaddingLeft),
+      _settings.setDouble('editorV2ToolbarPaddingTop', _toolbarPaddingTop),
+      _settings.setDouble('editorV2ToolbarPaddingRight', _toolbarPaddingRight),
+      _settings.setDouble('editorV2ToolbarPaddingBottom', _toolbarPaddingBottom),
+      _settings.setBool('editorV2ToolbarDimensionsLocked', _toolbarDimensionsLocked),
+    ]);
+  }
+
   Widget _buildToolbar({required bool vertical}) {
     Widget action({
       required String tooltip,
@@ -6019,6 +6149,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           PopupMenuItem(value: 'clipboardHistory', enabled: _selectionClipboardHistory.isNotEmpty, child: Text('Clipboard history (last 4)')),
           if (_specialToolLocations('calculator').isNotEmpty)
             PopupMenuItem(value: 'calculator', child: Text('Scientific calculator')),
+          const PopupMenuItem(value: 'toolbarLayout', child: Text('Toolbar size, margins & padding')),
           const PopupMenuItem(value: 'calculatorSettings', child: Text('Calculator placement / settings')),
           const PopupMenuItem(value: 'screenshotSettings', child: Text('Screenshot tool placement / settings')),
           PopupMenuItem(value: 'sticker', child: Text('Sticker library')),
@@ -6047,19 +6178,20 @@ class _EditorV2PageState extends State<EditorV2Page>
     ];
     final screenWidth = MediaQuery.sizeOf(context).width;
     final compactWidth = vertical
-        ? 32.0
+        ? _toolbarThickness.clamp(28.0, 96.0).toDouble()
         : math.min(
             math.max(1.0, screenWidth - 12),
-            math.min(360.0, actions.length * 28.0 + quickButtons.length * 30.0 + 69.0),
+            math.min(_toolbarLength, actions.length * 28.0 + quickButtons.length * 30.0 + 69.0),
           );
     return Material(
+      margin: EdgeInsets.fromLTRB(_toolbarMarginLeft, _toolbarMarginTop, _toolbarMarginRight, _toolbarMarginBottom),
       color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: .97),
       elevation: 2,
       borderRadius: BorderRadius.circular(vertical ? 12 : 10),
       child: SizedBox(
         width: compactWidth,
         child: SingleChildScrollView(
-          padding: EdgeInsets.symmetric(horizontal: vertical ? 1 : 2, vertical: vertical ? 2 : 1),
+          padding: EdgeInsets.fromLTRB(_toolbarPaddingLeft, _toolbarPaddingTop, _toolbarPaddingRight, _toolbarPaddingBottom),
           scrollDirection: vertical ? Axis.vertical : Axis.horizontal,
           child: vertical ? Column(mainAxisSize: MainAxisSize.min, children: children) : Row(mainAxisSize: MainAxisSize.min, children: children),
         ),
@@ -7639,7 +7771,8 @@ class _EditorV2PageState extends State<EditorV2Page>
               const PopupMenuItem(value: 'clipboardImage', child: Text('Paste screenshot from clipboard')),
               PopupMenuItem(value: 'pasteSelection', enabled: _selectionClipboard != null, child: const Text('Paste copied selection')),
               PopupMenuItem(value: 'clipboardHistory', enabled: _selectionClipboardHistory.isNotEmpty, child: const Text('Clipboard history (last 4)')),
-              const PopupMenuItem(value: 'pageSettings', child: Text('Note page settings')),
+              const PopupMenuItem(value: 'toolbarLayout', child: Text('Toolbar size, margins & padding')),
+               const PopupMenuItem(value: 'pageSettings', child: Text('Note page settings')),
               const PopupMenuItem(value: 'appSettings', child: Text('App settings')),
               const PopupMenuItem(value: 'template', child: Text('Page template')),
               PopupMenuItem(value: 'toggleNoteSwitcher', child: Text(_showNoteSwitcherInTitleBar ? 'Hide note switcher in title bar' : 'Show note switcher in title bar')),
