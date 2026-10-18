@@ -70,6 +70,7 @@ class SnoteSettings extends ChangeNotifier {
     'floatingTimerDockSide': 'right',
     'editorV2FavoriteOffset': '{"dx":16,"dy":220}',
     'editorV2SmartPageFavorites': '[]',
+    'editorV2SmartPageFavorites': '[]',
   };
 
   bool getBool(String key) => (_values[key] as bool?) ?? boolDefaults[key] ?? false;
