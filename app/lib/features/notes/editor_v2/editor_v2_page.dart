@@ -229,6 +229,8 @@ class _EditorV2PageState extends State<EditorV2Page>
   final Map<String, Set<String>> _toolPlacements = <String, Set<String>>{};
   List<String> _toolbarOrder = <String>[];
   bool _showNoteSwitcherInTitleBar = true;
+  bool _showTabsBar = true;
+  Future<List<LocalNote>>? _noteTabsFuture;
   List<Map<String, Object?>>? _selectionTransformImageSnapshot;
   List<Map<String, Object?>>? _selectionTransformTextSnapshot;
   bool _showFavoritesShowcase = true;
@@ -238,6 +240,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   bool _fullScreenMode = false;
   bool _showFloatingTimer = false;
   bool _toolbarCollapsedToEdge = false;
+  bool _calculatorCollapsed = false;
   bool _showViewportHud = false;
   bool _viewportLocked = false;
   bool _watermarkCoverMode = false;
@@ -292,6 +295,11 @@ class _EditorV2PageState extends State<EditorV2Page>
         ? _settings.getString('editorV2ToolbarDock')
         : 'top';
     _floatingToolbar = _settings.getBool('editorV2FloatingToolbar');
+    _showTabsBar = _settings.getBool('editorV2ShowTabs');
+    _noteTabsFuture = _repo.listAllVisible(limit: 12);
+    _toolbarCollapsedToEdge = _settings.getBool('editorV2ToolbarCollapsed');
+    _favoriteCollapsed = _settings.getBool('editorV2FavoriteCollapsed');
+    _calculatorCollapsed = _settings.getBool('editorV2CalculatorCollapsed');
     _favoritesVertical = _settings.getBool('editorV2FavoritesVertical');
     _showPageNavigation = _settings.getBool('showPageNavigation');
     _showPagePreview = _settings.getBool('showPagePreview');
@@ -2804,6 +2812,70 @@ class _EditorV2PageState extends State<EditorV2Page>
   Future<void> _toggleNoteSwitcher() async {
     setState(() => _showNoteSwitcherInTitleBar = !_showNoteSwitcherInTitleBar);
     await _settings.setBool('editorV2ShowNoteSwitcher', _showNoteSwitcherInTitleBar);
+  }
+
+  Future<void> _toggleTabsBar() async {
+    final next = !_showTabsBar;
+    setState(() {
+      _showTabsBar = next;
+      _noteTabsFuture ??= _repo.listAllVisible(limit: 12);
+    });
+    await _settings.setBool('editorV2ShowTabs', next);
+  }
+
+  Future<void> _openNoteTab(LocalNote note) async {
+    if (note.id == widget.note.id) return;
+    await _flushSave();
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(MaterialPageRoute<void>(
+      builder: (_) => EditorV2Page(note: note),
+    ));
+  }
+
+  Widget _buildNoteTabs() {
+    return Material(
+      color: Theme.of(context).colorScheme.surfaceContainerLow,
+      child: SizedBox(
+        height: 44,
+        child: FutureBuilder<List<LocalNote>>(
+          future: _noteTabsFuture ??= _repo.listAllVisible(limit: 12),
+          builder: (context, snapshot) {
+            final notes = snapshot.data ?? const <LocalNote>[];
+            if (snapshot.hasError) {
+              return Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Could not load note tabs', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              );
+            }
+            if (notes.isEmpty) return const SizedBox.shrink();
+            return ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              itemCount: notes.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 5),
+              itemBuilder: (context, index) {
+                final note = notes[index];
+                final active = note.id == widget.note.id;
+                return ChoiceChip(
+                  visualDensity: VisualDensity.compact,
+                  selected: active,
+                  avatar: Icon(active ? Icons.edit_note_rounded : Icons.note_outlined, size: 16),
+                  label: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 170),
+                    child: Text(
+                      note.title.trim().isEmpty ? 'Untitled note' : note.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  onSelected: (_) => unawaited(_openNoteTab(note)),
+                );
+              },
+            );
+          },
+        ),
+      ),
+    );
   }
 
   Future<void> _openNoteSwitcher() async {
@@ -5858,8 +5930,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       action(tooltip: 'Selection clipboard history', icon: Icons.content_paste_go_rounded, onPressed: () => unawaited(_showClipboardHistory())),
       action(tooltip: 'Shape box', icon: Icons.category_outlined, onPressed: () => _openToolPicker(initialCategory: 'Shapes & diagrams')),
       action(tooltip: 'Sticker library', icon: Icons.emoji_emotions_outlined, onPressed: () => unawaited(_addSticker())),
-      action(tooltip: 'All tools / categories', icon: Icons.apps_rounded, onPressed: _openToolPicker),
-    ];
+remove all tools categories button    ];
     final quickButtons = _toolKeysForLocation('toolbar')
         .map((key) => Padding(
               padding: const EdgeInsets.all(.5),
@@ -5975,11 +6046,14 @@ class _EditorV2PageState extends State<EditorV2Page>
             right: Radius.circular(dockLeft ? 14 : 0),
           ),
           child: InkWell(
-            onTap: () => setState(() => _favoriteCollapsed = false),
-            child: SizedBox(
-              width: 28,
+            onTap: () {
+              setState(() => _favoriteCollapsed = false);
+              unawaited(_settings.setBool('editorV2FavoriteCollapsed', false));
+            },
+            child: const SizedBox(
+              width: 30,
               height: 68,
-              child: Icon(dockLeft ? Icons.chevron_right_rounded : Icons.chevron_left_rounded),
+              child: Tooltip(message: 'Expand favorite pens and tools', child: Icon(Icons.favorite_rounded)),
             ),
           ),
         ),
@@ -6034,7 +6108,8 @@ class _EditorV2PageState extends State<EditorV2Page>
                       final dockLeft = _favoriteOffset.dx < screen.width / 2;
                       setState(() {
                         _favoriteCollapsed = true;
-                        _favoriteOffset = Offset(dockLeft ? 0 : screen.width - 28, _favoriteOffset.dy);
+                        _favoriteOffset = Offset(dockLeft ? 0 : screen.width - 30, _favoriteOffset.dy);
+                        unawaited(_settings.setBool('editorV2FavoriteCollapsed', true));
                       });
                       unawaited(_settings.setString('editorV2FavoriteDock', dockLeft ? 'left' : 'right'));
                     },
@@ -6091,6 +6166,33 @@ class _EditorV2PageState extends State<EditorV2Page>
     final screen = MediaQuery.sizeOf(context);
     final width = _calculatorWidth.clamp(270.0, math.max(270.0, screen.width - 16)).toDouble();
     final height = _calculatorHeight.clamp(360.0, math.max(360.0, screen.height - 32)).toDouble();
+    if (_calculatorCollapsed) {
+      final dockLeft = _calculatorOffset.dx < screen.width / 2;
+      return Positioned(
+        left: dockLeft ? 0 : null,
+        right: dockLeft ? null : 0,
+        top: _calculatorOffset.dy.clamp(8.0, math.max(8.0, screen.height - 82)).toDouble(),
+        child: Material(
+          elevation: 7,
+          color: Theme.of(context).colorScheme.primaryContainer,
+          borderRadius: BorderRadius.horizontal(
+            left: Radius.circular(dockLeft ? 0 : 14),
+            right: Radius.circular(dockLeft ? 14 : 0),
+          ),
+          child: InkWell(
+            onTap: () {
+              setState(() => _calculatorCollapsed = false);
+              unawaited(_settings.setBool('editorV2CalculatorCollapsed', false));
+            },
+            child: const SizedBox(
+              width: 32,
+              height: 72,
+              child: Tooltip(message: 'Expand calculator', child: Icon(Icons.calculate_rounded)),
+            ),
+          ),
+        ),
+      );
+    }
     return Positioned(
       left: _calculatorOffset.dx.clamp(0, math.max(0, screen.width - width)).toDouble(),
       top: _calculatorOffset.dy.clamp(0, math.max(0, screen.height - height)).toDouble(),
@@ -6104,7 +6206,11 @@ class _EditorV2PageState extends State<EditorV2Page>
         onMove: (delta) => setState(() => _calculatorOffset += delta),
         onCollapse: () {
           final dockLeft = _calculatorOffset.dx < screen.width / 2;
-          setState(() => _calculatorOffset = Offset(dockLeft ? 0 : screen.width - 28, _calculatorOffset.dy));
+          setState(() {
+            _calculatorCollapsed = true;
+            _calculatorOffset = Offset(dockLeft ? 0 : screen.width - 32, _calculatorOffset.dy);
+          });
+          unawaited(_settings.setBool('editorV2CalculatorCollapsed', true));
         },
         onClose: () => setState(() => _calculatorVisible = false),
       ),
@@ -7236,8 +7342,8 @@ class _EditorV2PageState extends State<EditorV2Page>
             IconButton(
               visualDensity: VisualDensity.compact,
               tooltip: 'Show tabs / switch open notes',
-              onPressed: _openNoteSwitcher,
-              icon: const Icon(Icons.tab_rounded),
+              onPressed: _toggleTabsBar,
+              icon: Icon(_showTabsBar ? Icons.tab_rounded : Icons.tab_unselected_rounded),
             ),
           if (MediaQuery.sizeOf(context).width >= 500)
             PopupMenuButton<String>(
@@ -7347,7 +7453,12 @@ class _EditorV2PageState extends State<EditorV2Page>
               ? _buildLockedBody()
               : _loadError != null
                   ? _buildErrorBody()
-                  : _buildEditorLayout(),
+                  : Column(
+                      children: [
+                        if (_showTabsBar && !_fullScreenMode) _buildNoteTabs(),
+                        Expanded(child: _buildEditorLayout()),
+                      ],
+                    ),
     );
   }
 
@@ -7416,8 +7527,11 @@ class _EditorV2PageState extends State<EditorV2Page>
                 child: IconButton(
                   tooltip: 'Collapse toolbar to screen edge',
                   visualDensity: VisualDensity.compact,
-                  onPressed: () => setState(() => _toolbarCollapsedToEdge = true),
-                  icon: const Icon(Icons.keyboard_double_arrow_right_rounded, size: 18),
+                  onPressed: () {
+                    setState(() => _toolbarCollapsedToEdge = true);
+                    unawaited(_settings.setBool('editorV2ToolbarCollapsed', true));
+                  },
+                  icon: const Icon(Icons.brush_rounded, size: 18),
                 ),
               ),
             ),
@@ -7430,8 +7544,11 @@ class _EditorV2PageState extends State<EditorV2Page>
                 borderRadius: const BorderRadius.horizontal(left: Radius.circular(14)),
                 elevation: 7,
                 child: InkWell(
-                  onTap: () => setState(() => _toolbarCollapsedToEdge = false),
-                  child: const SizedBox(width: 28, height: 72, child: Icon(Icons.chevron_left_rounded)),
+                  onTap: () {
+                    setState(() => _toolbarCollapsedToEdge = false);
+                    unawaited(_settings.setBool('editorV2ToolbarCollapsed', false));
+                  },
+                  child: const SizedBox(width: 30, height: 72, child: Tooltip(message: 'Expand toolbar', child: Icon(Icons.brush_rounded))),
                 ),
               ),
             ),
