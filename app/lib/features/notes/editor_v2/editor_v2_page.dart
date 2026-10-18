@@ -6404,16 +6404,50 @@ remove all tools categories button    ];
     return Stack(clipBehavior: Clip.none, children: children);
   }
 
-  void _toggleTextBoxFormat(String id, String key) {
+  List<Map<String, Object?>> _decodeTextFormatRanges(Object? raw) {
+    if (raw is! List) return <Map<String, Object?>>[];
+    return raw.whereType<Map>().map((range) => range.map<String, Object?>(
+      (key, value) => MapEntry(key.toString(), value),
+    )).where((range) => range['start'] is num && range['end'] is num).toList();
+  }
+
+  void _applyTextBoxFormatSelection(
+    String id,
+    String key,
+    TextEditingController controller,
+  ) {
+    final selection = controller.selection;
+    if (!selection.isValid || selection.isCollapsed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select some text first to apply formatting.')),
+      );
+      return;
+    }
     final raw = _pageData['textBoxes'];
     if (raw is! List) return;
     for (final item in raw.whereType<Map>()) {
-      if (item['id']?.toString() == id) {
-        item[key] = item[key] != true;
-        setState(() {});
-        _scheduleSave();
-        return;
+      if (item['id']?.toString() != id) continue;
+      final ranges = _decodeTextFormatRanges(item['formatRanges']);
+      bool? current;
+      for (final range in ranges) {
+        final start = (range['start'] as num).toInt();
+        final end = (range['end'] as num).toInt();
+        if (start <= selection.start && end >= selection.end && range.containsKey(key)) {
+          current = range[key] == true;
+        }
       }
+      ranges.add(<String, Object?>{
+        'start': selection.start,
+        'end': selection.end,
+        key: current != true,
+      });
+      item['formatRanges'] = ranges;
+      if (controller is _FormattedTextEditingController) {
+        controller.formatRanges = ranges;
+      }
+      setState(() {});
+      _scheduleSave();
+      return;
     }
   }
 
@@ -6471,8 +6505,12 @@ remove all tools categories button    ];
       if (id.isEmpty) continue;
       final controller = _textControllers.putIfAbsent(
         id,
-        () => TextEditingController(text: box['text']?.toString() ?? ''),
+        () => _FormattedTextEditingController(text: box['text']?.toString() ?? ''),
       );
+      final formatRanges = _decodeTextFormatRanges(box['formatRanges']);
+      if (controller is _FormattedTextEditingController) {
+        controller.formatRanges = formatRanges;
+      }
       final x = (box['x'] as num?)?.toDouble() ?? .12;
       final y = (box['y'] as num?)?.toDouble() ?? .12;
       final width = (box['width'] as num?)?.toDouble() ?? .68;
@@ -6527,10 +6565,10 @@ remove all tools categories button    ];
                       anchors: editableTextState.contextMenuAnchors,
                       buttonItems: <ContextMenuButtonItem>[
                         ...baseItems,
-                        ContextMenuButtonItem(label: box['bold'] == true ? 'Unbold text box' : 'Bold', onPressed: () { editableTextState.hideToolbar(); _toggleTextBoxFormat(id, 'bold'); }),
-                        ContextMenuButtonItem(label: box['italic'] == true ? 'Remove italic' : 'Italic', onPressed: () { editableTextState.hideToolbar(); _toggleTextBoxFormat(id, 'italic'); }),
-                        ContextMenuButtonItem(label: box['underline'] == true ? 'Remove underline' : 'Underline', onPressed: () { editableTextState.hideToolbar(); _toggleTextBoxFormat(id, 'underline'); }),
-                        ContextMenuButtonItem(label: box['strikethrough'] == true ? 'Remove strikethrough' : 'Strikethrough', onPressed: () { editableTextState.hideToolbar(); _toggleTextBoxFormat(id, 'strikethrough'); }),
+                        ContextMenuButtonItem(label: 'Bold selection', onPressed: () { editableTextState.hideToolbar(); _applyTextBoxFormatSelection(id, 'bold', controller); }),
+                        ContextMenuButtonItem(label: 'Italic selection', onPressed: () { editableTextState.hideToolbar(); _applyTextBoxFormatSelection(id, 'italic', controller); }),
+                        ContextMenuButtonItem(label: 'Underline selection', onPressed: () { editableTextState.hideToolbar(); _applyTextBoxFormatSelection(id, 'underline', controller); }),
+                        ContextMenuButtonItem(label: 'Strikethrough selection', onPressed: () { editableTextState.hideToolbar(); _applyTextBoxFormatSelection(id, 'strikethrough', controller); }),
                         ContextMenuButtonItem(label: 'Increase text size', onPressed: () { editableTextState.hideToolbar(); _adjustTextBoxFontSize(id, 2); }),
                         ContextMenuButtonItem(label: 'Decrease text size', onPressed: () { editableTextState.hideToolbar(); _adjustTextBoxFontSize(id, -2); }),
                         ContextMenuButtonItem(label: 'Align center', onPressed: () { editableTextState.hideToolbar(); _setTextBoxAlignment(id, 'center'); }),
@@ -6540,6 +6578,10 @@ remove all tools categories button    ];
                     );
                   },
                   onChanged: (value) {
+                    if (controller is _FormattedTextEditingController) {
+                      controller.reconcileText(value);
+                      box['formatRanges'] = controller.formatRanges;
+                    }
                     box['text'] = value;
                     _scheduleSave();
                   },
@@ -8682,6 +8724,107 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
         ),
       ),
     );
+  }
+}
+
+class _FormattedTextEditingController extends TextEditingController {
+  _FormattedTextEditingController({super.text}) : _lastText = text ?? '';
+
+  String _lastText;
+  List<Map<String, Object?>> formatRanges = <Map<String, Object?>>[];
+
+  void reconcileText(String nextText) {
+    final oldText = _lastText;
+    if (oldText == nextText) return;
+    var prefix = 0;
+    final sharedLength = math.min(oldText.length, nextText.length);
+    while (prefix < sharedLength && oldText.codeUnitAt(prefix) == nextText.codeUnitAt(prefix)) {
+      prefix++;
+    }
+    var suffix = 0;
+    while (suffix < oldText.length - prefix &&
+        suffix < nextText.length - prefix &&
+        oldText.codeUnitAt(oldText.length - 1 - suffix) ==
+            nextText.codeUnitAt(nextText.length - 1 - suffix)) {
+      suffix++;
+    }
+    final oldChangedEnd = oldText.length - suffix;
+    final delta = nextText.length - oldText.length;
+    formatRanges = formatRanges.map((range) {
+      final updated = Map<String, Object?>.from(range);
+      var start = (updated['start'] as num?)?.toInt() ?? 0;
+      var end = (updated['end'] as num?)?.toInt() ?? start;
+      if (start >= oldChangedEnd) {
+        start += delta;
+        end += delta;
+      } else if (end > prefix) {
+        end += delta;
+      }
+      start = start.clamp(0, nextText.length).toInt();
+      end = end.clamp(start, nextText.length).toInt();
+      updated['start'] = start;
+      updated['end'] = end;
+      return updated;
+    }).where((range) =>
+      ((range['end'] as num?)?.toInt() ?? 0) >
+      ((range['start'] as num?)?.toInt() ?? 0)
+    ).toList();
+    _lastText = nextText;
+  }
+
+  @override
+  TextSpan buildTextSpan({
+    required BuildContext context,
+    TextStyle? style,
+    required bool withComposing,
+  }) {
+    final text = value.text;
+    if (text.isEmpty || formatRanges.isEmpty) {
+      return TextSpan(text: text, style: style);
+    }
+    final boundaries = <int>{0, text.length};
+    for (final range in formatRanges) {
+      final start = ((range['start'] as num?)?.toInt() ?? 0).clamp(0, text.length).toInt();
+      final end = ((range['end'] as num?)?.toInt() ?? start).clamp(start, text.length).toInt();
+      if (end > start) {
+        boundaries.add(start);
+        boundaries.add(end);
+      }
+    }
+    final points = boundaries.toList()..sort();
+    final spans = <InlineSpan>[];
+    for (var i = 0; i < points.length - 1; i++) {
+      final start = points[i];
+      final end = points[i + 1];
+      if (end <= start) continue;
+      bool? bold;
+      bool? italic;
+      bool? underline;
+      bool? strike;
+      for (final range in formatRanges) {
+        final rangeStart = (range['start'] as num?)?.toInt() ?? 0;
+        final rangeEnd = (range['end'] as num?)?.toInt() ?? rangeStart;
+        if (rangeStart <= start && rangeEnd >= end) {
+          if (range.containsKey('bold')) bold = range['bold'] == true;
+          if (range.containsKey('italic')) italic = range['italic'] == true;
+          if (range.containsKey('underline')) underline = range['underline'] == true;
+          if (range.containsKey('strikethrough')) strike = range['strikethrough'] == true;
+        }
+      }
+      final decorations = <TextDecoration>[
+        if (underline == true) TextDecoration.underline,
+        if (strike == true) TextDecoration.lineThrough,
+      ];
+      final segmentStyle = (style ?? const TextStyle()).merge(TextStyle(
+        fontWeight: bold == null ? null : (bold ? FontWeight.bold : FontWeight.normal),
+        fontStyle: italic == null ? null : (italic ? FontStyle.italic : FontStyle.normal),
+        decoration: underline == null && strike == null
+            ? null
+            : TextDecoration.combine(decorations),
+      ));
+      spans.add(TextSpan(text: text.substring(start, end), style: segmentStyle));
+    }
+    return TextSpan(style: style, children: spans);
   }
 }
 
