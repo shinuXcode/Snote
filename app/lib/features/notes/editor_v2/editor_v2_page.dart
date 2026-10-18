@@ -6404,6 +6404,17 @@ remove all tools categories button    ];
     return Stack(clipBehavior: Clip.none, children: children);
   }
 
+  void _updateTextBoxField(String id, String key, Object? value) {
+    final raw = _pageData['textBoxes'];
+    if (raw is! List) return;
+    for (final item in raw.whereType<Map>()) {
+      if (item['id']?.toString() == id) {
+        item[key] = value;
+        return;
+      }
+    }
+  }
+
   List<Map<String, Object?>> _decodeTextFormatRanges(Object? raw) {
     if (raw is! List) return <Map<String, Object?>>[];
     return raw.whereType<Map>().map((range) => range.map<String, Object?>(
@@ -6580,9 +6591,9 @@ remove all tools categories button    ];
                   onChanged: (value) {
                     if (controller is _FormattedTextEditingController) {
                       controller.reconcileText(value);
-                      box['formatRanges'] = controller.formatRanges;
+                      _updateTextBoxField(id, 'formatRanges', controller.formatRanges);
                     }
-                    box['text'] = value;
+                    _updateTextBoxField(id, 'text', value);
                     _scheduleSave();
                   },
                   decoration: InputDecoration(
