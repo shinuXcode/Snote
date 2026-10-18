@@ -5994,7 +5994,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       action(tooltip: 'Selection clipboard history', icon: Icons.content_paste_go_rounded, onPressed: () => unawaited(_showClipboardHistory())),
       action(tooltip: 'Shape box', icon: Icons.category_outlined, onPressed: () => _openToolPicker(initialCategory: 'Shapes & diagrams')),
       action(tooltip: 'Sticker library', icon: Icons.emoji_emotions_outlined, onPressed: () => unawaited(_addSticker())),
-remove all tools categories button    ];
+    ];
     final quickButtons = _toolKeysForLocation('toolbar')
         .map((key) => Padding(
               padding: const EdgeInsets.all(.5),
