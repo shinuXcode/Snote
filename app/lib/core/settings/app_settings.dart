@@ -21,7 +21,7 @@ class SnoteSettings extends ChangeNotifier {
     'autoBackupLocal': true, 'writingPostureRightHand': true, 'disableBackGesture': false,
     'turnOffPush': false, 'pageSwipe': true, 'autoAddPage': true,
     'securePagePreviews': false, 'eInk': false, 'grayscaleEInk': true, 'reduceMotion': false,
-    'welcomeGuideSeen': false, 'editorV2FloatingToolbar': false, 'editorV2FavoritesVertical': false, 'editorV2FloatingPageNavigation': false, 'editorV2ShowFavoritesShowcase': true, 'editorV2ShowNoteSwitcher': true, 'editorV2RememberLastPage': true, 'editorV2CompactFullscreenToolbar': true, 'timerAlertEnabled': true, 'showTitleBarTimer': true, 'showTitleBarSearch': true,
+    'welcomeGuideSeen': false, 'editorV2FloatingToolbar': false, 'editorV2FavoritesVertical': false, 'editorV2FloatingPageNavigation': false, 'editorV2ShowFavoritesShowcase': true, 'editorV2ShowNoteSwitcher': true, 'editorV2RememberLastPage': true, 'editorV2CompactFullscreenToolbar': true, 'timerAlertEnabled': true, 'showTitleBarTimer': true, 'showTitleBarSearch': true, 'editorV2ShowTabs': true, 'editorV2ToolbarCollapsed': false, 'editorV2FavoriteCollapsed': false, 'editorV2CalculatorCollapsed': false, 'floatingTimerCollapsed': false,
   };
 
   static const doubleDefaults = <String, double>{
@@ -57,7 +57,6 @@ class SnoteSettings extends ChangeNotifier {
     'lassoStyle': 'solid',
     'eraserMode': 'stroke',
     'timerAlertSound': 'alert',
-    'geminiApiKey': '',
   };
 
   bool getBool(String key) => (_values[key] as bool?) ?? boolDefaults[key] ?? false;
