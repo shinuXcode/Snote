@@ -3740,6 +3740,60 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
   }
 
+  Future<Rect?> _chooseCaptureRegion() => showGeneralDialog<Rect>(
+        context: context,
+        barrierDismissible: false,
+        barrierLabel: 'Select screenshot region',
+        barrierColor: Colors.transparent,
+        transitionDuration: Duration.zero,
+        pageBuilder: (dialogContext, animation, secondaryAnimation) =>
+            const _CaptureRegionSelector(),
+      );
+
+  Future<Uint8List> _cropScreenshotToRegion(
+    Uint8List bytes,
+    Rect region,
+    Size logicalScreenSize,
+  ) async {
+    final codec = await ui.instantiateImageCodec(bytes);
+    final frame = await codec.getNextFrame();
+    final source = frame.image;
+    try {
+      final scaleX = source.width / math.max(1.0, logicalScreenSize.width);
+      final scaleY = source.height / math.max(1.0, logicalScreenSize.height);
+      final left = (region.left * scaleX).round().clamp(0, source.width - 1);
+      final top = (region.top * scaleY).round().clamp(0, source.height - 1);
+      final right = (region.right * scaleX).round().clamp(left + 1, source.width);
+      final bottom = (region.bottom * scaleY).round().clamp(top + 1, source.height);
+      final sourceRect = Rect.fromLTRB(
+        left.toDouble(), top.toDouble(), right.toDouble(), bottom.toDouble(),
+      );
+      final width = math.max(1, right - left);
+      final height = math.max(1, bottom - top);
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      canvas.drawImageRect(
+        source,
+        sourceRect,
+        Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
+        Paint()..filterQuality = FilterQuality.high,
+      );
+      final picture = recorder.endRecording();
+      final cropped = await picture.toImage(width, height);
+      picture.dispose();
+      try {
+        final data = await cropped.toByteData(format: ui.ImageByteFormat.png);
+        if (data == null) throw StateError('Could not encode the selected screenshot region.');
+        return data.buffer.asUint8List();
+      } finally {
+        cropped.dispose();
+      }
+    } finally {
+      source.dispose();
+      codec.dispose();
+    }
+  }
+
   Future<void> _captureScreenToCanvas() async {
     if (_pageData['locked'] == true) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -3750,10 +3804,20 @@ class _EditorV2PageState extends State<EditorV2Page>
     try {
       Uint8List? bytes;
       if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-        // Android MediaProjection requires user consent; PNG bytes return
-        // directly from native code, with no MediaStore/gallery write.
-        bytes = await SnoteScreenCapture.captureDisplay();
-        if (!mounted || bytes == null) return;
+        // Select the area first. Android's public MediaProjection API returns
+        // a display frame, so Snote crops the chosen region in memory without
+        // showing a second post-capture crop screen or writing to the gallery.
+        final logicalScreenSize = MediaQuery.sizeOf(context);
+        final selectedRegion = await _chooseCaptureRegion();
+        if (!mounted || selectedRegion == null) return;
+        final fullFrame = await SnoteScreenCapture.captureDisplay();
+        if (!mounted || fullFrame == null) return;
+        bytes = await _cropScreenshotToRegion(
+          fullFrame,
+          selectedRegion,
+          logicalScreenSize,
+        );
+        if (!mounted) return;
       } else {
         // iOS/desktop captures the active Snote canvas. iOS does not allow
         // third-party apps to capture another app's screen.
@@ -8621,4 +8685,142 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
       ),
     );
   }
+}
+
+class _CaptureRegionSelector extends StatefulWidget {
+  const _CaptureRegionSelector();
+
+  @override
+  State<_CaptureRegionSelector> createState() => _CaptureRegionSelectorState();
+}
+
+class _CaptureRegionSelectorState extends State<_CaptureRegionSelector> {
+  Offset? _start;
+  Offset? _current;
+
+  Rect get _selection {
+    final start = _start;
+    final current = _current;
+    if (start == null || current == null) return Rect.zero;
+    return Rect.fromPoints(start, current);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final selection = _selection;
+    final valid = selection.width >= 12 && selection.height >= 12;
+    return Material(
+      color: Colors.black.withValues(alpha: .52),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onPanStart: (details) => setState(() {
+              _start = details.localPosition;
+              _current = details.localPosition;
+            }),
+            onPanUpdate: (details) => setState(() => _current = details.localPosition),
+            onPanEnd: (_) => setState(() {}),
+            child: CustomPaint(
+              painter: _CaptureRegionPainter(selection: selection),
+              child: const SizedBox.expand(),
+            ),
+          ),
+          Positioned(
+            left: 16,
+            top: 18,
+            right: 16,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: colors.surface,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                  child: Text(
+                    'Drag to select the screenshot area',
+                    style: TextStyle(color: colors.onSurface, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 16,
+            bottom: 20,
+            child: FilledButton.tonal(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+          ),
+          Positioned(
+            right: 16,
+            bottom: 20,
+            child: FilledButton.icon(
+              onPressed: valid ? () => Navigator.of(context).pop(selection) : null,
+              icon: const Icon(Icons.crop_free_rounded),
+              label: const Text('Capture selection'),
+            ),
+          ),
+          if (valid)
+            Positioned(
+              left: selection.left.clamp(0.0, MediaQuery.sizeOf(context).width - 120).toDouble(),
+              top: (selection.top - 34).clamp(8.0, MediaQuery.sizeOf(context).height - 40).toDouble(),
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: colors.surface,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: Text(
+                      '${selection.width.round()} × ${selection.height.round()}',
+                      style: TextStyle(color: colors.onSurface, fontSize: 12, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CaptureRegionPainter extends CustomPainter {
+  final Rect selection;
+
+  const _CaptureRegionPainter({required this.selection});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (selection.isEmpty) return;
+    final overlay = Paint()..color = Colors.black.withValues(alpha: .28);
+    final border = Paint()
+      ..color = const Color(0xff66e0c2)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+    final fill = Paint()..color = const Color(0x2266e0c2);
+    final rect = selection.intersect(Offset.zero & size);
+    canvas.drawRect(rect, fill);
+    canvas.drawRect(rect, border);
+    const handleSize = 8.0;
+    final handlePaint = Paint()..color = const Color(0xff66e0c2);
+    for (final point in <Offset>[
+      rect.topLeft, rect.topRight, rect.bottomLeft, rect.bottomRight,
+    ]) {
+      canvas.drawRect(
+        Rect.fromCenter(center: point, width: handleSize, height: handleSize),
+        handlePaint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _CaptureRegionPainter oldDelegate) =>
+      oldDelegate.selection != selection;
 }
