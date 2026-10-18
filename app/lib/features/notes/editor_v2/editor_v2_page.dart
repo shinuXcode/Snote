@@ -225,6 +225,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   bool _floatingPageNavigation = false;
   bool _fullScreenMode = false;
   bool _showFloatingTimer = false;
+  bool _toolbarCollapsedToEdge = false;
   bool _showViewportHud = false;
   bool _viewportLocked = false;
   bool _watermarkCoverMode = false;
@@ -5822,7 +5823,6 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
     final actions = <Widget>[
       action(tooltip: _panMode ? 'Exit pan mode' : 'Pan / zoom', icon: _panMode ? Icons.pan_tool : Icons.pan_tool_outlined, onPressed: () => setState(() => _panMode = !_panMode)),
-      action(tooltip: _textMode ? 'Handwriting mode' : 'Rich text mode', icon: _textMode ? Icons.draw_rounded : Icons.text_fields_rounded, onPressed: () => setState(() { _textMode = !_textMode; _scheduleSave(); })),
       action(
         tooltip: 'Color palette & opacity',
         icon: Icons.palette_outlined,
@@ -7229,7 +7229,10 @@ class _EditorV2PageState extends State<EditorV2Page>
             IconButton(
               visualDensity: VisualDensity.compact,
               tooltip: 'Page template, format, dimensions, spacing & background',
-              onPressed: _showPageAndEditorSettings,
+              onPressed: () async {
+                await _showPageAndEditorSettings();
+                if (mounted) await _showPageFormatSettings();
+              },
               icon: const Icon(Icons.grid_on_rounded),
             ),
           IconButton(
@@ -7341,7 +7344,7 @@ class _EditorV2PageState extends State<EditorV2Page>
               width: sidebarWidth,
               child: _buildPagePreviewSidebar(),
             ),
-          if (_floatingToolbar || _fullScreenMode)
+          if ((_floatingToolbar || _fullScreenMode) && !_toolbarCollapsedToEdge)
             Positioned(
               left: _floatingOffset.dx.clamp(0, math.max(0, MediaQuery.sizeOf(context).width - 160)).toDouble(),
               top: _floatingOffset.dy.clamp(0, math.max(0, MediaQuery.sizeOf(context).height - 210)).toDouble(),
@@ -7377,6 +7380,36 @@ class _EditorV2PageState extends State<EditorV2Page>
             ),
           if (_showFavoritesShowcase || _pencaseTools.isNotEmpty) _buildFavoriteShowcase(),
           // Page navigation is now handled by the expanded page-preview sidebar.
+          if (_fullScreenMode && !_toolbarCollapsedToEdge)
+            Positioned(
+              top: 8,
+              right: 52,
+              child: Material(
+                color: Theme.of(context).colorScheme.primaryContainer,
+                shape: const CircleBorder(),
+                elevation: 5,
+                child: IconButton(
+                  tooltip: 'Collapse toolbar to screen edge',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => setState(() => _toolbarCollapsedToEdge = true),
+                  icon: const Icon(Icons.keyboard_double_arrow_right_rounded, size: 18),
+                ),
+              ),
+            ),
+          if (_fullScreenMode && _toolbarCollapsedToEdge)
+            Positioned(
+              right: 0,
+              top: 96,
+              child: Material(
+                color: Theme.of(context).colorScheme.primaryContainer,
+                borderRadius: const BorderRadius.horizontal(left: Radius.circular(14)),
+                elevation: 7,
+                child: InkWell(
+                  onTap: () => setState(() => _toolbarCollapsedToEdge = false),
+                  child: const SizedBox(width: 28, height: 72, child: Icon(Icons.chevron_left_rounded)),
+                ),
+              ),
+            ),
           if (_calculatorVisible) _buildFloatingCalculator(),
           if (_showFloatingTimer)
             Positioned.fill(
