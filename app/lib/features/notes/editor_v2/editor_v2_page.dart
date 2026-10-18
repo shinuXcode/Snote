@@ -32,6 +32,7 @@ import '../../../data/local/file_document_repository.dart';
 import '../../../data/local/note_repository.dart';
 import '../note_content_compatibility.dart';
 import 'editor_v2_document.dart';
+import 'smart_pages_catalog.dart';
 
 import 'editor_v2_ink_painter.dart';
 import 'selection_text_recognizer.dart';
@@ -4394,6 +4395,187 @@ class _EditorV2PageState extends State<EditorV2Page>
     });
   }
 
+  Future<void> _showSmartPagesLibrary() async {
+    final templates = SmartPagesCatalog.all;
+    var category = 'All';
+    var query = '';
+    var favoritesOnly = false;
+    Set<String> favorites = <String>{};
+    try {
+      final saved = jsonDecode(_settings.getString('editorV2SmartPageFavorites'));
+      if (saved is List) favorites = saved.whereType<String>().toSet();
+    } catch (_) {
+      // Ignore malformed favorites without hiding the template library.
+    }
+    final categories = <String>['All'];
+    categories.addAll(templates.map((template) => template.category).toSet().toList()..sort());
+    final selected = await showModalBottomSheet<SmartPageTemplate>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final filtered = templates.where((template) {
+            final matchesCategory = category == 'All' || template.category == category;
+            final matchesFavorite = !favoritesOnly || favorites.contains(template.id);
+            final term = query.toLowerCase();
+            final matchesQuery = term.isEmpty ||
+                template.title.toLowerCase().contains(term) ||
+                template.category.toLowerCase().contains(term);
+            return matchesCategory && matchesFavorite && matchesQuery;
+          }).toList(growable: false);
+          return SafeArea(
+            child: SizedBox(
+              height: MediaQuery.sizeOf(context).height * .82,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+                child: Column(
+                  children: [
+                    Row(children: [
+                      Expanded(child: Text('Smart Pages • ${templates.length} templates', style: Theme.of(context).textTheme.titleLarge)),
+                      IconButton(
+                        tooltip: favoritesOnly ? 'Show all templates' : 'Show favorites',
+                        onPressed: () => setSheetState(() => favoritesOnly = !favoritesOnly),
+                        icon: Icon(favoritesOnly ? Icons.star_rounded : Icons.star_border_rounded),
+                      ),
+                    ]),
+                    TextField(
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.search_rounded),
+                        hintText: 'Search calendars, planners, routines…',
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (value) => setSheetState(() => query = value.trim()),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 40,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        children: categories.map((value) => Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: ChoiceChip(
+                            label: Text(value),
+                            selected: category == value,
+                            onSelected: (_) => setSheetState(() => category = value),
+                          ),
+                        )).toList(),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: filtered.isEmpty
+                          ? const Center(child: Text('No templates match this filter.'))
+                          : GridView.builder(
+                              itemCount: filtered.length,
+                              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: 230,
+                                mainAxisSpacing: 8,
+                                crossAxisSpacing: 8,
+                                childAspectRatio: 1.48,
+                              ),
+                              itemBuilder: (_, index) {
+                                final template = filtered[index];
+                                final favorite = favorites.contains(template.id);
+                                return Card(
+                                  clipBehavior: Clip.antiAlias,
+                                  child: InkWell(
+                                    onTap: () => Navigator.pop(sheetContext, template),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(10),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(children: [
+                                            Expanded(child: Text(template.category, maxLines: 1, overflow: TextOverflow.ellipsis,
+                                              style: Theme.of(context).textTheme.labelSmall)),
+                                            IconButton(
+                                              visualDensity: VisualDensity.compact,
+                                              constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+                                              padding: EdgeInsets.zero,
+                                              tooltip: favorite ? 'Remove favorite' : 'Add favorite',
+                                              onPressed: () async {
+                                                setSheetState(() {
+                                                  if (favorite) {
+                                                    favorites.remove(template.id);
+                                                  } else {
+                                                    favorites.add(template.id);
+                                                  }
+                                                });
+                                                await _settings.setString('editorV2SmartPageFavorites', jsonEncode(favorites.toList()));
+                                              },
+                                              icon: Icon(favorite ? Icons.star_rounded : Icons.star_border_rounded, size: 18),
+                                            ),
+                                          ]),
+                                          Text(template.title, maxLines: 2, overflow: TextOverflow.ellipsis,
+                                            style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                                          const Spacer(),
+                                          Text(template.body.replaceAll('\n', ' • '), maxLines: 2, overflow: TextOverflow.ellipsis,
+                                            style: Theme.of(context).textTheme.bodySmall),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    if (selected == null || !mounted) return;
+    if (_pageData['locked'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unlock this page before inserting a Smart Page.')),
+      );
+      return;
+    }
+    _pushUndo();
+    final id = DateTime.now().microsecondsSinceEpoch.toString();
+    final titleBoxId = '$id-smart-title';
+    final bodyBoxId = '$id-smart-body';
+    final nextPage = EditorV2DocumentCodec.normalizePage(<String, Object?>{
+      ...Map<String, Object?>.from(_pageData),
+      'id': '$id-smart-page',
+      'template': selected.pageTemplate,
+      'strokes': <Object?>[],
+      'images': <Object?>[],
+      'textBoxes': <Object?>[
+        <String, Object?>{
+          'id': titleBoxId, 'x': .06, 'y': .035, 'width': .88, 'height': .075,
+          'text': selected.title, 'fontSize': 30.0, 'bold': true,
+          'color': 0xff17202a, 'textAlign': 'left',
+        },
+        <String, Object?>{
+          'id': bodyBoxId, 'x': .06, 'y': .13, 'width': .88, 'height': .82,
+          'text': selected.body, 'fontSize': 17.0,
+          'color': 0xff263238, 'textAlign': 'left',
+        },
+      ],
+      'backgroundImage': null,
+      'pdfLazyRender': false,
+      'smartPageTemplateId': selected.id,
+    });
+    _textControllers[titleBoxId] = TextEditingController(text: selected.title);
+    _textControllers[bodyBoxId] = TextEditingController(text: selected.body);
+    setState(() {
+      _pages.insert((_page + 1).clamp(0, _pages.length).toInt(), nextPage);
+      _page = (_page + 1).clamp(0, _pages.length - 1).toInt();
+      _clearSelectionIds();
+      _lassoRect = null;
+    });
+    _scheduleSave();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _resetCanvasView();
+    });
+  }
+
   Future<void> _chooseTemplate() async {
     if (_pageData['locked'] == true) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -5846,6 +6028,8 @@ class _EditorV2PageState extends State<EditorV2Page>
         unawaited(_exportPdf());
       case 'template':
         unawaited(_chooseTemplate());
+      case 'smartPages':
+        unawaited(_showSmartPagesLibrary());
       case 'bookmarks':
         unawaited(_showBookmarks());
       case 'timer':
@@ -6150,6 +6334,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           if (_specialToolLocations('calculator').isNotEmpty)
             PopupMenuItem(value: 'calculator', child: Text('Scientific calculator')),
           const PopupMenuItem(value: 'toolbarLayout', child: Text('Toolbar size, margins & padding')),
+          const PopupMenuItem(value: 'smartPages', child: Text('Smart Pages library (200+)')),
           const PopupMenuItem(value: 'calculatorSettings', child: Text('Calculator placement / settings')),
           const PopupMenuItem(value: 'screenshotSettings', child: Text('Screenshot tool placement / settings')),
           PopupMenuItem(value: 'sticker', child: Text('Sticker library')),
@@ -7772,6 +7957,7 @@ class _EditorV2PageState extends State<EditorV2Page>
               PopupMenuItem(value: 'pasteSelection', enabled: _selectionClipboard != null, child: const Text('Paste copied selection')),
               PopupMenuItem(value: 'clipboardHistory', enabled: _selectionClipboardHistory.isNotEmpty, child: const Text('Clipboard history (last 4)')),
               const PopupMenuItem(value: 'toolbarLayout', child: Text('Toolbar size, margins & padding')),
+               const PopupMenuItem(value: 'smartPages', child: Text('Smart Pages library (200+)')),
                const PopupMenuItem(value: 'pageSettings', child: Text('Note page settings')),
               const PopupMenuItem(value: 'appSettings', child: Text('App settings')),
               const PopupMenuItem(value: 'template', child: Text('Page template')),
