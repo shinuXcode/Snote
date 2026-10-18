@@ -191,7 +191,8 @@ class _SnoteWebSearchPanelState extends State<SnoteWebSearchPanel> {
       ).timeout(const Duration(seconds: 30));
       final decoded = jsonDecode(response.body);
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        final message = decoded is Map ? decoded['error']?['message'] : null;
+        final errorObject = decoded is Map ? decoded['error'] : null;
+        final message = errorObject is Map ? errorObject['message'] : null;
         throw Exception(message?.toString() ?? 'Gemini returned HTTP ${response.statusCode}.');
       }
       final candidates = decoded is Map ? decoded['candidates'] : null;
