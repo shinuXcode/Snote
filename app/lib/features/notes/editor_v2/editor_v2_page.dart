@@ -6539,11 +6539,9 @@ class _EditorV2PageState extends State<EditorV2Page>
           child: DecoratedBox(
           decoration: BoxDecoration(
             color: Colors.transparent,
-            border: Border.all(
-              color: _selectedTextBoxIds.contains(id)
-                  ? Theme.of(context).colorScheme.primary.withValues(alpha: .55)
-                  : Colors.transparent,
-            ),
+            // Text boxes and stickers are borderless on the page. Selection
+            // remains visible through the lasso bounding box and transform handles.
+            border: Border.all(color: Colors.transparent, width: 0),
             borderRadius: BorderRadius.circular(4),
           ),
           child: Stack(
@@ -7678,7 +7676,14 @@ class _EditorV2PageState extends State<EditorV2Page>
                   ? _buildErrorBody()
                   : Column(
                       children: [
-                        if (_showTabsBar && !_fullScreenMode) _buildNoteTabs(),
+                        // Keep the tab strip's height reserved when hidden so toggling tabs never
+                        // shifts the canvas or changes the current viewport transform.
+                        SizedBox(
+                          height: 44,
+                          child: _showTabsBar && !_fullScreenMode
+                              ? _buildNoteTabs()
+                              : const SizedBox.shrink(),
+                        ),
                         Expanded(child: _buildEditorLayout()),
                       ],
                     ),
