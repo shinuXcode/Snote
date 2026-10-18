@@ -6368,8 +6368,9 @@ class _EditorV2PageState extends State<EditorV2Page>
             math.max(1.0, screenWidth - 12),
             math.min(_toolbarLength, actions.length * 28.0 + quickButtons.length * 30.0 + 69.0),
           );
-    return Material(
+    return Container(
       margin: EdgeInsets.fromLTRB(_toolbarMarginLeft, _toolbarMarginTop, _toolbarMarginRight, _toolbarMarginBottom),
+      child: Material(
       color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: .97),
       elevation: 2,
       borderRadius: BorderRadius.circular(vertical ? 12 : 10),
@@ -6380,6 +6381,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           scrollDirection: vertical ? Axis.vertical : Axis.horizontal,
           child: vertical ? Column(mainAxisSize: MainAxisSize.min, children: children) : Row(mainAxisSize: MainAxisSize.min, children: children),
         ),
+      ),
       ),
     );
   }
