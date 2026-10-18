@@ -688,18 +688,35 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_asset?.name ?? 'PDF workspace'),
+        toolbarHeight: 48,
+        titleSpacing: 8,
+        title: Text(
+          _asset?.name ?? 'PDF / Notes',
+          maxLines: 1,
+          softWrap: false,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
         actions: <Widget>[
           IconButton(
             tooltip: 'Open PDF',
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 36, height: 36),
             onPressed: _openPdf,
-            icon: const Icon(Icons.picture_as_pdf_outlined),
+            icon: const Icon(Icons.picture_as_pdf_outlined, size: 19),
           ),
           IconButton(
             tooltip: 'Actions',
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 36, height: 36),
             onPressed: _controller == null ? null : _actions,
-            icon: const Icon(Icons.more_horiz_rounded),
+            icon: const Icon(Icons.more_horiz_rounded, size: 19),
           ),
+          const SizedBox(width: 4),
         ],
       ),
       body: _splitScreen
