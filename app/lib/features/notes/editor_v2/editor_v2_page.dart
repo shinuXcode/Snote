@@ -237,6 +237,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   bool _pressureEraseActive = false;
   CanvasTool? _toolBeforePressureErase;
   Offset _favoriteOffset = const Offset(16, 220);
+  bool _favoriteCollapsed = false;
   Offset _toolSettingsAnchor = const Offset(20, 120);
   Offset _pageNavOffset = const Offset(8, 280);
   double _calculatorWidth = 330;
@@ -5948,6 +5949,30 @@ class _EditorV2PageState extends State<EditorV2Page>
       ...favoriteChips,
     ];
     final screen = MediaQuery.sizeOf(context);
+    if (_favoriteCollapsed) {
+      final dockLeft = _favoriteOffset.dx < screen.width / 2;
+      return Positioned(
+        left: dockLeft ? 0 : null,
+        right: dockLeft ? null : 0,
+        top: _favoriteOffset.dy.clamp(72.0, math.max(72.0, screen.height - 80)).toDouble(),
+        child: Material(
+          elevation: 7,
+          color: Theme.of(context).colorScheme.primaryContainer,
+          borderRadius: BorderRadius.horizontal(
+            left: Radius.circular(dockLeft ? 0 : 14),
+            right: Radius.circular(dockLeft ? 14 : 0),
+          ),
+          child: InkWell(
+            onTap: () => setState(() => _favoriteCollapsed = false),
+            child: SizedBox(
+              width: 28,
+              height: 68,
+              child: Icon(dockLeft ? Icons.chevron_right_rounded : Icons.chevron_left_rounded),
+            ),
+          ),
+        ),
+      );
+    }
     return Positioned(
       left: _favoriteOffset.dx.clamp(0, math.max(0, screen.width - (_favoritesVertical ? 62 : 120))).toDouble(),
       top: _favoriteOffset.dy.clamp(0, math.max(0, screen.height - 120)).toDouble(),
@@ -5988,7 +6013,21 @@ class _EditorV2PageState extends State<EditorV2Page>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.drag_indicator_rounded, size: 14),
+                  IconButton(
+                    tooltip: 'Collapse pen showcase to screen edge',
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(width: 22, height: 22),
+                    onPressed: () {
+                      final dockLeft = _favoriteOffset.dx < screen.width / 2;
+                      setState(() {
+                        _favoriteCollapsed = true;
+                        _favoriteOffset = Offset(dockLeft ? 0 : screen.width - 28, _favoriteOffset.dy);
+                      });
+                      unawaited(_settings.setString('editorV2FavoriteDock', dockLeft ? 'left' : 'right'));
+                    },
+                    icon: const Icon(Icons.keyboard_double_arrow_left_rounded, size: 15),
+                  ),
                   const SizedBox(width: 3),
                   InkWell(
                     onTap: _toggleFavoritesOrientation,
@@ -7503,6 +7542,7 @@ class _ScientificCalculatorDialogState extends State<_ScientificCalculatorDialog
   String _answer = '0';
   String? _error;
   bool _degrees = true;
+  bool _collapsed = false;
   double _width = 330;
   double _height = 465;
 
@@ -7587,6 +7627,22 @@ class _ScientificCalculatorDialogState extends State<_ScientificCalculatorDialog
     final width = _width.clamp(270.0, math.max(270.0, screen.width - 16)).toDouble();
     final height = _height.clamp(360.0, math.max(360.0, screen.height - 32)).toDouble();
     final scheme = Theme.of(context).colorScheme;
+    if (_collapsed) {
+      final dockLeft = screen.width / 2 > _width / 2;
+      return GestureDetector(
+        onTap: () => setState(() => _collapsed = false),
+        onPanUpdate: (details) => widget.onMove(details.delta),
+        child: Material(
+          color: scheme.primaryContainer,
+          elevation: 8,
+          borderRadius: BorderRadius.horizontal(
+            left: Radius.circular(dockLeft ? 0 : 12),
+            right: Radius.circular(dockLeft ? 12 : 0),
+          ),
+          child: SizedBox(width: 28, height: 76, child: Icon(dockLeft ? Icons.chevron_right_rounded : Icons.chevron_left_rounded)),
+        ),
+      );
+    }
     return SizedBox(
       width: width,
       height: height,
@@ -7607,6 +7663,13 @@ class _ScientificCalculatorDialogState extends State<_ScientificCalculatorDialog
                     const Icon(Icons.drag_indicator_rounded, size: 18),
                     const SizedBox(width: 4),
                     const Expanded(child: Text('Calculator', style: TextStyle(fontWeight: FontWeight.w800))),
+                    IconButton(
+                      tooltip: 'Collapse calculator to screen edge',
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+                      onPressed: () => setState(() => _collapsed = true),
+                      icon: const Icon(Icons.keyboard_double_arrow_right_rounded, size: 18),
+                    ),
                     TextButton(
                       onPressed: () => setState(() => _degrees = !_degrees),
                       child: Text(_degrees ? 'DEG' : 'RAD'),
