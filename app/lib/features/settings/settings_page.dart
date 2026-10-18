@@ -131,8 +131,9 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       ),
       if (!_noteOnly) _group('Editor shortcuts', [
+        _toggle('editorV2ShowTabs', 'Show tabs', 'Show or hide the note-switching bar between the title bar and toolbar.'),
         _toggle('showTitleBarTimer', 'Show timer in title bar', 'Quick access to timer, alarm and stopwatch.'),
-        _toggle('showTitleBarSearch', 'Show Google / web search in title bar', 'Quick access to web search and Gemini AI.'),
+        _toggle('showTitleBarSearch', 'Show Google Search in title bar', 'Open Google Search in the in-app browser.'),
       ]),
       if (_noteOnly) _group('Writing Operation', [
         _toggle('autoRecognition', 'Auto Recognition', 'Recognize a drawn shape after a short hold.'),
