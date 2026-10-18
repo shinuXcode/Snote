@@ -8,7 +8,7 @@ import 'dart:ui' as ui;
 import 'package:archive/archive.dart' as zip;
 import 'package:crypto/crypto.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
+import 'package:flutter/foundation.dart' show compute, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -32,6 +32,16 @@ import '../../../data/local/file_document_repository.dart';
 import '../../../data/local/note_repository.dart';
 import '../note_content_compatibility.dart';
 import 'editor_v2_document.dart';
+
+/// Decode large note envelopes away from the UI isolate so returning to a
+/// notebook does not block the first interactive frame on JSON parsing.
+Map<String, Object?> _decodeEditorDocumentPayload(String content) {
+  final root = EditorV2DocumentCodec.decodeRoot(content);
+  return <String, Object?>{
+    'root': root,
+    'pages': EditorV2DocumentCodec.decodePages(root),
+  };
+}
 import 'editor_v2_ink_painter.dart';
 import 'selection_text_recognizer.dart';
 import '../../tools/screen_capture.dart';
@@ -376,7 +386,11 @@ class _EditorV2PageState extends State<EditorV2Page>
     if (saved == null) {
       throw StateError('This note no longer exists in the current local account.');
     }
-    final root = EditorV2DocumentCodec.decodeRoot(saved.contentJson);
+    final decoded = await compute(_decodeEditorDocumentPayload, saved.contentJson);
+    final root = Map<String, Object?>.from(decoded['root'] as Map);
+    final pages = (decoded['pages'] as List)
+        .map((page) => Map<String, Object?>.from(page as Map))
+        .toList();
     final delta = root['text_delta'];
     if (delta is List) {
       try {
@@ -385,8 +399,6 @@ class _EditorV2PageState extends State<EditorV2Page>
         debugPrint('[Snote][EditorV2] rich-text delta restore failed: $error\n$stackTrace');
       }
     }
-    final pages = EditorV2DocumentCodec.decodePages(root);
-
     Uint8List? pdfBytes = widget.initialPdfBytes;
     String? pdfName = widget.initialPdfName;
     DocumentAsset? sourcePdf;
