@@ -57,6 +57,8 @@ class SnoteSettings extends ChangeNotifier {
     'lassoStyle': 'solid',
     'eraserMode': 'stroke',
     'timerAlertSound': 'alert',
+    'floatingTimerDockSide': 'right',
+    'editorV2FavoriteOffset': '{"dx":16,"dy":220}',
   };
 
   bool getBool(String key) => (_values[key] as bool?) ?? boolDefaults[key] ?? false;
@@ -64,6 +66,8 @@ class SnoteSettings extends ChangeNotifier {
   String getString(String key) => (_values[key] as String?) ?? stringDefaults[key] ?? '';
 
   Future<void> load() async {
+    // Remove legacy Gemini API keys saved by older beta builds.
+    await _storage.delete(key: 'snote.setting.geminiApiKey');
     for (final entry in boolDefaults.entries) {
       final raw = await _storage.read(key: 'snote.setting.' + entry.key);
       if (raw != null) _values[entry.key] = raw == 'true';
