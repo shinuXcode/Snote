@@ -6499,6 +6499,7 @@ remove all tools categories button    ];
         }
         item['fontSize'] = 18.0;
         item['textAlign'] = 'left';
+        item['formatRanges'] = <Map<String, Object?>>[];
         setState(() {});
         _scheduleSave();
         return;
@@ -6584,6 +6585,8 @@ remove all tools categories button    ];
                         ContextMenuButtonItem(label: 'Decrease text size', onPressed: () { editableTextState.hideToolbar(); _adjustTextBoxFontSize(id, -2); }),
                         ContextMenuButtonItem(label: 'Align center', onPressed: () { editableTextState.hideToolbar(); _setTextBoxAlignment(id, 'center'); }),
                         ContextMenuButtonItem(label: 'Align left', onPressed: () { editableTextState.hideToolbar(); _setTextBoxAlignment(id, 'left'); }),
+                        ContextMenuButtonItem(label: 'Align right', onPressed: () { editableTextState.hideToolbar(); _setTextBoxAlignment(id, 'right'); }),
+                        ContextMenuButtonItem(label: 'Justify text', onPressed: () { editableTextState.hideToolbar(); _setTextBoxAlignment(id, 'justify'); }),
                         ContextMenuButtonItem(label: 'Reset formatting', onPressed: () { editableTextState.hideToolbar(); _resetTextBoxFormatting(id); }),
                       ],
                     );
