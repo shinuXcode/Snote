@@ -130,6 +130,10 @@ class _SettingsPageState extends State<SettingsPage> {
           onSelectionChanged: (values) => setState(() => _noteOnly = values.first),
         ),
       ),
+      if (!_noteOnly) _group('Editor shortcuts', [
+        _toggle('showTitleBarTimer', 'Show timer in title bar', 'Quick access to timer, alarm and stopwatch.'),
+        _toggle('showTitleBarSearch', 'Show Google / web search in title bar', 'Quick access to web search and Gemini AI.'),
+      ]),
       if (_noteOnly) _group('Writing Operation', [
         _toggle('autoRecognition', 'Auto Recognition', 'Recognize a drawn shape after a short hold.'),
         _toggle('palmRejection', 'Palm rejection', 'Ignore accidental finger touches while writing with a stylus. Turn this off to allow finger drawing.'),
