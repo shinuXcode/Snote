@@ -39,6 +39,7 @@ dependencies:
   http: ^1.6.0
   collection: ^1.19.1
   url_launcher: ^6.3.3
+  webview_flutter: ^4.13.0
   intl: ^0.20.3
   vector_math: ^2.1.4
 
