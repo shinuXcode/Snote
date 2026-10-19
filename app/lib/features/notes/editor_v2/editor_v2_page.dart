@@ -7,6 +7,7 @@ import 'dart:ui' as ui;
 
 import 'package:archive/archive.dart' as zip;
 import 'package:crypto/crypto.dart';
+import 'package:cross_file/cross_file.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show compute, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/gestures.dart';
@@ -19,6 +20,7 @@ import 'package:pdf/pdf.dart' as pdfcore;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdfx/pdfx.dart';
 import 'package:pasteboard/pasteboard.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../../canvas_engine/models/pen_config.dart';
@@ -5437,6 +5439,45 @@ class _EditorV2PageState extends State<EditorV2Page>
       _lassoRect = null;
     });
     _scheduleSave();
+  }
+
+  Future<void> _sharePage(int index) async {
+    if (index < 0 || index >= _pages.length) return;
+    if (_pages[index]['locked'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Unlock this page before sharing it.')));
+      return;
+    }
+    final originalPage = _page;
+    try {
+      await _flushSave();
+      if (!mounted) return;
+      setState(() => _page = index);
+      await WidgetsBinding.instance.endOfFrame;
+      final object = _pageCaptureKey.currentContext?.findRenderObject();
+      if (object is! RenderRepaintBoundary) throw StateError('Page ${index + 1} is not ready to share.');
+      final image = await object.toImage(pixelRatio: 1.5);
+      try {
+        final data = await image.toByteData(format: ui.ImageByteFormat.png);
+        if (data == null) throw StateError('Could not capture page ${index + 1}.');
+        final bytes = data.buffer.asUint8List();
+        final filename = '${_safeFilename(_title.text)}-page-${index + 1}.png';
+        if (kIsWeb) {
+          await FilePicker.saveFile(fileName: filename, bytes: bytes, mimeType: 'image/png');
+        } else {
+          await SharePlus.instance.share(ShareParams(
+            title: '${_title.text} — Page ${index + 1}',
+            files: <XFile>[XFile.fromData(bytes, mimeType: 'image/png', name: filename)],
+          ));
+        }
+      } finally {
+        image.dispose();
+      }
+    } catch (error, stackTrace) {
+      debugPrint('[Snote][EditorV2] page share failed: $error\n$stackTrace');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not share page: $error')));
+    } finally {
+      if (mounted) setState(() => _page = EditorV2DocumentCodec.clampPage(originalPage, _pages.length));
+    }
   }
 
   void _deletePage(int index) {
