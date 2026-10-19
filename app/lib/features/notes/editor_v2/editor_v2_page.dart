@@ -203,6 +203,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   bool _panMode = false;
   bool _textMode = false;
   bool _floatingToolbar = false;
+  bool _compactFloatingToolbar = false;
   bool _favoritesVertical = false;
   bool _fitInitialized = false;
   bool _exporting = false;
@@ -304,6 +305,7 @@ class _EditorV2PageState extends State<EditorV2Page>
         ? _settings.getString('editorV2ToolbarDock')
         : 'top';
     _floatingToolbar = _settings.getBool('editorV2FloatingToolbar');
+    _compactFloatingToolbar = _settings.getBool('editorV2CompactFloatingToolbar');
     _showTabsBar = _settings.getBool('editorV2ShowTabs');
     _noteTabsFuture = _repo.listAllVisible(limit: 12);
     _toolbarCollapsedToEdge = _settings.getBool('editorV2ToolbarCollapsed');
@@ -5635,6 +5637,11 @@ class _EditorV2PageState extends State<EditorV2Page>
     await _settings.setBool('editorV2FloatingToolbar', _floatingToolbar);
   }
 
+  Future<void> _toggleCompactFloatingToolbar() async {
+    setState(() => _compactFloatingToolbar = !_compactFloatingToolbar);
+    await _settings.setBool('editorV2CompactFloatingToolbar', _compactFloatingToolbar);
+  }
+
   Future<void> _toggleFavoritesOrientation() async {
     setState(() => _favoritesVertical = !_favoritesVertical);
     await _settings.setBool('editorV2FavoritesVertical', _favoritesVertical);
@@ -6070,6 +6077,8 @@ class _EditorV2PageState extends State<EditorV2Page>
         unawaited(_setToolbarDock('right'));
       case 'float':
         unawaited(_toggleFloatingToolbar());
+      case 'compactToolbar':
+        unawaited(_toggleCompactFloatingToolbar());
       case 'favoritesOrientation':
         unawaited(_toggleFavoritesOrientation());
       case 'favoritesShowcase':
@@ -6338,6 +6347,15 @@ class _EditorV2PageState extends State<EditorV2Page>
             ))
         .toList();
     final children = <Widget>[
+      if (_floatingToolbar || _fullScreenMode)
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onPanUpdate: (details) => setState(() => _floatingOffset += details.delta),
+          child: Tooltip(
+            message: 'Drag toolbar from here',
+            child: SizedBox(width: 28, height: 28, child: Icon(Icons.drag_indicator_rounded, size: 18, color: Theme.of(context).colorScheme.primary)),
+          ),
+        ),
       ...actions,
       if (!vertical) const VerticalDivider(width: 5, indent: 6, endIndent: 6),
       ...quickButtons,
@@ -6371,6 +6389,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           PopupMenuItem(value: 'dockLeft', child: Text('Dock toolbar to left')),
           PopupMenuItem(value: 'dockRight', child: Text('Dock toolbar to right')),
           PopupMenuItem(value: 'float', child: Text('Toggle floating toolbar')),
+          PopupMenuItem(value: 'compactToolbar', child: Text(_compactFloatingToolbar ? 'Disable compact floating toolbar' : 'Enable compact floating toolbar')),
           PopupMenuItem(value: 'favoritesShowcase', child: Text('Show / hide favorite pen case')),
           PopupMenuItem(value: 'favoritesOrientation', child: Text('Rotate pen case')),
           PopupMenuItem(value: 'pageSettings', child: Text('Note page and editor settings')),
@@ -6391,15 +6410,19 @@ class _EditorV2PageState extends State<EditorV2Page>
             math.min(_toolbarLength, actions.length * 28.0 + quickButtons.length * 30.0 + 69.0),
           );
     return Container(
-      margin: EdgeInsets.fromLTRB(_toolbarMarginLeft, _toolbarMarginTop, _toolbarMarginRight, _toolbarMarginBottom),
+      margin: _compactFloatingToolbar
+          ? EdgeInsets.zero
+          : EdgeInsets.fromLTRB(_toolbarMarginLeft, _toolbarMarginTop, _toolbarMarginRight, _toolbarMarginBottom),
       child: Material(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: .97),
-      elevation: 2,
-      borderRadius: BorderRadius.circular(vertical ? 12 : 10),
+      color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: _compactFloatingToolbar ? .78 : .97),
+      elevation: _compactFloatingToolbar ? 1 : 2,
+      borderRadius: BorderRadius.circular(_compactFloatingToolbar ? 7 : (vertical ? 12 : 10)),
       child: SizedBox(
         width: compactWidth,
         child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(_toolbarPaddingLeft, _toolbarPaddingTop, _toolbarPaddingRight, _toolbarPaddingBottom),
+          padding: _compactFloatingToolbar
+              ? EdgeInsets.zero
+              : EdgeInsets.fromLTRB(_toolbarPaddingLeft, _toolbarPaddingTop, _toolbarPaddingRight, _toolbarPaddingBottom),
           scrollDirection: vertical ? Axis.vertical : Axis.horizontal,
           child: vertical ? Column(mainAxisSize: MainAxisSize.min, children: children) : Row(mainAxisSize: MainAxisSize.min, children: children),
         ),
@@ -7380,6 +7403,10 @@ class _EditorV2PageState extends State<EditorV2Page>
                 (position: Offset(.5, 1), direction: Offset(0, 1), label: 'Resize from bottom'),
                 (position: Offset(0, .5), direction: Offset(-1, 0), label: 'Resize from left'),
                 (position: Offset(1, .5), direction: Offset(1, 0), label: 'Resize from right'),
+                (position: Offset(0, 0), direction: Offset(-1, -1), label: 'Resize from top-left corner'),
+                (position: Offset(1, 0), direction: Offset(1, -1), label: 'Resize from top-right corner'),
+                (position: Offset(0, 1), direction: Offset(-1, 1), label: 'Resize from bottom-left corner'),
+                (position: Offset(1, 1), direction: Offset(1, 1), label: 'Resize from bottom-right corner'),
               ].map((handle) {
                 final bounds = _selectionBounds()!;
                 return Positioned(
@@ -8101,7 +8128,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                   clipBehavior: Clip.antiAlias,
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
-                      maxWidth: math.min(_fullScreenMode ? MediaQuery.sizeOf(context).width * .94 : 360.0, MediaQuery.sizeOf(context).width - 12),
+                      maxWidth: math.min(_fullScreenMode && !_compactFloatingToolbar ? MediaQuery.sizeOf(context).width * .94 : (_compactFloatingToolbar ? _toolbarLength : 360.0), MediaQuery.sizeOf(context).width - 12),
                       maxHeight: math.min(_fullScreenMode ? MediaQuery.sizeOf(context).height * .32 : 190.0, MediaQuery.sizeOf(context).height * .5),
                     ),
                     child: _buildToolbar(vertical: false),
