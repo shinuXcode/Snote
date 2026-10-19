@@ -66,7 +66,7 @@ class AlarmNotificationService {
         ? 'snote_alarms_silent'
         : customSound == null
             ? 'snote_alarms'
-            : 'snote_alarm_\${base64Url.encode(utf8.encode(customSound)).replaceAll('=', '').substring(0, 20)}';
+            : 'snote_alarm_${base64Url.encode(utf8.encode(customSound)).replaceAll('=', '').substring(0, 20)}';
     if (customSound != null && !silent) {
       final android = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
       await android?.createNotificationChannel(AndroidNotificationChannel(
