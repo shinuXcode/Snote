@@ -53,7 +53,7 @@ npm run dev
 
 ## Documentation
 
-The website documentation library provides PDF downloads for the user guide, feature catalogue, open-source contributor guide, privacy and data-handling overview, permissions and authorization guide, license and third-party notices, app overview, and source-level repository audit. The FAQ page covers installation, offline behavior, handwriting, documents, privacy, permissions, and releases.
+The website documentation library provides PDF downloads for the user guide, feature catalogue, open-source contributor guide, privacy and data-handling overview, permissions and authorization guide, license and third-party notices, terms of use, security and disclosure guide, app overview, and source-level repository audit. The FAQ page covers installation, offline behavior, handwriting, documents, privacy, permissions, and releases.
 
 Legal and security PDFs are informational, not legal advice or certification. Platform permissions, cloud behavior, feature availability, signing, and supported release artifacts must be verified for the exact build and deployment.
 
