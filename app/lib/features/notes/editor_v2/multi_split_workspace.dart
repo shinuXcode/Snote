@@ -25,11 +25,8 @@ class _MultiSplitNoteWorkspaceState extends State<MultiSplitNoteWorkspace> {
   @override
   void initState() {
     super.initState();
-    _leftPercent = SnoteSettings.instance
-        .getDouble('multiSplitLeftPercent')
-        .clamp(30.0, 70.0)
-        .toDouble();
-    if (_leftPercent == 0) _leftPercent = 50;
+    final savedRatio = SnoteSettings.instance.getDouble('multiSplitLeftPercent');
+    _leftPercent = savedRatio >= 30 && savedRatio <= 70 ? savedRatio : 50;
   }
 
   Future<void> _saveRatio(double value) async {
