@@ -1,6 +1,6 @@
 import type { SVGProps } from "react";
 
-type IconName = "pen" | "organize" | "open" | "flow" | "fast" | "cube" | "lock" | "sun" | "moon" | "github" | "arrow" | "external" | "menu" | "close" | "sparkles" | "link" | "lightbulb" | "download" | "check";
+type IconName = "pen" | "organize" | "open" | "flow" | "fast" | "cube" | "lock" | "sun" | "moon" | "github" | "arrow" | "external" | "menu" | "close" | "sparkles" | "link" | "lightbulb" | "download" | "check" | "refresh";
 
 const common: SVGProps<SVGSVGElement> = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.65, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true, focusable: false };
 
@@ -24,7 +24,8 @@ export default function Icon({ name, size = 20, className }: { name: IconName; s
   link: <><path d="M10 13.5a4.5 4.5 0 0 0 6.4 0l3.1-3.1a4.5 4.5 0 0 0-6.4-6.4l-1.8 1.8"/><path d="M14 10.5a4.5 4.5 0 0 0-6.4 0l-3.1 3.1a4.5 4.5 0 0 0 6.4 6.4l1.8-1.8"/></>,
   lightbulb: <><path d="M9 18h6m-5 4h4"/><path d="M8.3 14.5A6 6 0 1 1 15.7 14.5c-.9.7-1.2 1.5-1.2 2.5h-5c0-1-.3-1.8-1.2-2.5Z"/></>,
   download: <><path d="M12 3v12m-5-5 5 5 5-5"/><path d="M4 17v4h16v-4"/></>,
-  check: <path d="m5 12 4 4L19 6"/>
+  check: <path d="m5 12 4 4L19 6"/>,
+  refresh: <><path d="M20 7v5h-5"/><path d="M4 17v-5h5"/><path d="M5.6 9A7 7 0 0 1 17.5 6L20 12M4 12l2.5 6A7 7 0 0 0 18.4 15"/></>
  };
  return <svg {...common} width={size} height={size} className={className}>{shapes[name]}</svg>;
 }
