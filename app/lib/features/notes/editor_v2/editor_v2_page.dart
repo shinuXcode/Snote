@@ -9208,12 +9208,72 @@ class _CaptureRegionSelector extends StatefulWidget {
 class _CaptureRegionSelectorState extends State<_CaptureRegionSelector> {
   Offset? _start;
   Offset? _current;
+  Rect? _resizeOrigin;
+  String? _activeResizeHandle;
 
   Rect get _selection {
     final start = _start;
     final current = _current;
     if (start == null || current == null) return Rect.zero;
     return Rect.fromPoints(start, current);
+  }
+
+  void _beginResize(String handle) {
+    _resizeOrigin = _selection;
+    _activeResizeHandle = handle;
+  }
+
+  void _updateResize(DragUpdateDetails details) {
+    final origin = _resizeOrigin;
+    final handle = _activeResizeHandle;
+    if (origin == null || handle == null) return;
+    final dx = details.delta.dx;
+    final dy = details.delta.dy;
+    var left = origin.left;
+    var top = origin.top;
+    var right = origin.right;
+    var bottom = origin.bottom;
+    if (handle.contains('l')) left = (left + dx).clamp(0.0, right - 12).toDouble();
+    if (handle.contains('r')) right = (right + dx).clamp(left + 12, MediaQuery.sizeOf(context).width).toDouble();
+    if (handle.contains('t')) top = (top + dy).clamp(0.0, bottom - 12).toDouble();
+    if (handle.contains('b')) bottom = (bottom + dy).clamp(top + 12, MediaQuery.sizeOf(context).height).toDouble();
+    setState(() {
+      _start = Offset(left, top);
+      _current = Offset(right, bottom);
+    });
+    _resizeOrigin = Rect.fromLTRB(left, top, right, bottom);
+  }
+
+  List<Widget> _resizeHandles(Rect selection, Color color) {
+    const points = <({String key, double x, double y})>[
+      (key: 'tl', x: 0, y: 0), (key: 't', x: .5, y: 0),
+      (key: 'tr', x: 1, y: 0), (key: 'r', x: 1, y: .5),
+      (key: 'br', x: 1, y: 1), (key: 'b', x: .5, y: 1),
+      (key: 'bl', x: 0, y: 1), (key: 'l', x: 0, y: .5),
+    ];
+    return points.map((point) {
+      final center = Offset(selection.left + selection.width * point.x, selection.top + selection.height * point.y);
+      return Positioned(
+        left: center.dx - 9,
+        top: center.dy - 9,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onPanStart: (_) => _beginResize(point.key),
+          onPanUpdate: _updateResize,
+          onPanEnd: (_) { _resizeOrigin = null; _activeResizeHandle = null; },
+          child: Container(
+            width: 18,
+            height: 18,
+            decoration: BoxDecoration(
+              color: color,
+              border: Border.all(color: Colors.white, width: 1.5),
+              borderRadius: BorderRadius.circular(4),
+              boxShadow: const <BoxShadow>[BoxShadow(color: Color(0x55000000), blurRadius: 3)],
+            ),
+          ),
+        ),
+      );
+    }).toList();
   }
 
   @override
@@ -9276,6 +9336,7 @@ class _CaptureRegionSelectorState extends State<_CaptureRegionSelector> {
               label: const Text('Capture selection'),
             ),
           ),
+          if (valid) ..._resizeHandles(selection, const Color(0xff168d75)),
           if (valid)
             Positioned(
               left: selection.left.clamp(0.0, MediaQuery.sizeOf(context).width - 120).toDouble(),
