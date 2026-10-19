@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+export const metadata: Metadata = { title: "Snote Features — Handwriting, Notes and Documents", description: "Explore Snote's code-informed writing engine, stylus input, local-first storage, organization, and document workflows.", alternates: { canonical: "https://snote-showcase.vercel.app/features" } };
 import Reveal from "../../components/Reveal";
 
 const features = [
