@@ -71,6 +71,27 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> {
     await SnoteSettings.instance.setString('floatingAlarms', jsonEncode(_alarms));
   }
 
+  Future<void> _selectCustomRingtone() async {
+    try {
+      final current = SnoteSettings.instance.getString('timerAlertSoundUri');
+      final selected = await const MethodChannel('com.snote/alarm_audio')
+          .invokeMethod<String>('pickRingtone', <String, Object?>{
+        'existingUri': current.isEmpty ? null : current,
+      });
+      if (selected == null || selected.isEmpty || !mounted) return;
+      await SnoteSettings.instance.setString('timerAlertSoundUri', selected);
+      await SnoteSettings.instance.setString('timerAlertSound', 'custom');
+      if (mounted) setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Custom alarm ringtone saved for new alarms.')),
+      );
+    } on PlatformException catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not select ringtone: ${error.message ?? error.code}')),
+      );
+    }
+  }
+
   Future<void> _addSavedAlarm() async {
     final picked = await showTimePicker(
       context: context,
@@ -153,6 +174,7 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> {
       'weekdays': weekdays,
       'enabled': true,
       'silent': false,
+      'soundUri': SnoteSettings.instance.getString('timerAlertSoundUri'),
     };
     try {
       await AlarmNotificationService.instance.schedule(
@@ -161,6 +183,7 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> {
         firstAt: at,
         repeat: repeat,
         weekdays: weekdays,
+        soundUri: alarm['soundUri']?.toString(),
       );
       if (!mounted) return;
       setState(() => _alarms.add(alarm));
@@ -185,6 +208,7 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> {
           repeat: alarm['repeat']?.toString() ?? 'once',
           weekdays: (alarm['weekdays'] as List? ?? const <Object?>[]).whereType<num>().map((day) => day.toInt()).toList(),
           silent: alarm['silent'] == true,
+          soundUri: alarm['soundUri']?.toString(),
         );
       } else {
         await AlarmNotificationService.instance.cancel(id);
@@ -537,6 +561,8 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> {
                             onSelected: (value) async {
                               if (value == 'enabled') {
                                 await SnoteSettings.instance.setBool('timerAlertEnabled', !SnoteSettings.instance.getBool('timerAlertEnabled'));
+                              } else if (value == 'custom') {
+                                await _selectCustomRingtone();
                               } else {
                                 await SnoteSettings.instance.setString('timerAlertSound', value);
                               }
@@ -562,6 +588,14 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> {
                                 value: 'none',
                                 checked: SnoteSettings.instance.getString('timerAlertSound') == 'none',
                                 child: const Text('Silent'),
+                              ),
+                              PopupMenuItem<String>(
+                                value: 'custom',
+                                child: Row(children: [
+                                  const Icon(Icons.music_note_outlined, size: 18),
+                                  const SizedBox(width: 8),
+                                  const Text('Choose system ringtone…'),
+                                ]),
                               ),
                             ],
                           ),
