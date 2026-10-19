@@ -245,3 +245,20 @@ html[data-theme="light"] .faq-item summary strong{color:#171717}
 html[data-theme="light"] .faq-item>p{color:#414141}
 html[data-theme="light"] .docs-download{border-color:#2223}
 @media(max-width:640px){.docs-faq{align-items:flex-start;flex-direction:column}.faq-item{padding:0 14px}.faq-item summary{grid-template-columns:30px 1fr 24px;gap:9px}.faq-item summary strong{font-size:14px}.faq-item>p{padding:0 4px 18px 39px}}
+
+/* Documentation library: browser preview and explicit PDF download actions */
+.docs-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:18px}
+.docs-actions .docs-download,.docs-view{display:inline-flex;align-items:center;justify-content:space-between;gap:10px;min-height:38px;padding:9px 12px;border:1px solid #ffffff35;border-radius:999px;font-size:11px;color:#e8e8e8;transition:background .2s,border-color .2s,transform .2s}
+.docs-actions .docs-download:hover,.docs-view:hover{background:#ffffff0d;border-color:#ffffff75;transform:translateY(-1px)}
+.docs-actions .docs-download span,.docs-view span{font-size:15px;line-height:1}
+.docs-library-heading{display:flex;align-items:end;justify-content:space-between;gap:24px;margin:48px 0 20px}
+.docs-library-heading h2{font-size:clamp(24px,3vw,34px);letter-spacing:-.045em;margin:12px 0 0;font-weight:500}
+.docs-library-heading>.muted{max-width:300px}
+.docs-card{display:flex;flex-direction:column;align-items:flex-start;min-height:245px}
+.docs-card h2{padding-right:24px}
+.docs-card>.muted{flex:1}
+.docs-card .docs-actions{margin-top:22px;width:100%}
+.docs-card .docs-download{margin:0}
+.docs-faq{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-top:36px}
+.docs-faq h2{margin:12px 0;font-size:clamp(22px,3vw,30px);letter-spacing:-.04em;font-weight:500}
+@media(max-width:680px){.docs-library-heading,.docs-faq{align-items:flex-start;flex-direction:column}.docs-library-heading{margin-top:36px}.docs-actions{gap:8px}.docs-card{min-height:0}.docs-card .docs-actions{margin-top:18px}.docs-callout .docs-actions{align-items:flex-start}}
