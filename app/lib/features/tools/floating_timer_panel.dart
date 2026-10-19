@@ -60,6 +60,7 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> {
     }
     try {
       await AlarmNotificationService.instance.rescheduleAll(_alarms);
+      await _persistAlarms();
     } catch (error) {
       debugPrint('[Snote][Alarm] restore scheduling failed: $error');
     }
