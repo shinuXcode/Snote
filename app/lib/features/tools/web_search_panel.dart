@@ -110,7 +110,7 @@ class _SnoteWebSearchPanelState extends State<SnoteWebSearchPanel> {
     final explicitWebUrl = parsed != null &&
         const {'http', 'https'}.contains(parsed.scheme) &&
         parsed.host.isNotEmpty;
-    final domainLike = !query.contains(RegExp(r'\\s')) &&
+    final domainLike = !query.contains(RegExp(r'\s')) &&
         query.contains('.') &&
         !query.startsWith('.');
     final direct = explicitWebUrl
