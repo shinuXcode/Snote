@@ -224,3 +224,24 @@ html[data-theme="light"] .feature-icon svg{color:#222}
 .release-meta .text-button{display:inline-flex;align-items:center;justify-content:center;gap:7px}
 .release-card .ghost-cta{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;margin-top:8px;overflow-wrap:anywhere}
 .release-history-item>a{display:inline-flex;align-items:center;gap:6px}
+
+/* Documentation library and FAQ */
+.docs-download{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:20px;padding-top:14px;border-top:1px solid var(--line);font-size:13px;font-weight:600}
+.docs-download:hover{opacity:.78}
+.docs-faq{display:flex;align-items:center;justify-content:space-between;gap:28px;margin-top:28px;padding:clamp(20px,4vw,36px)}
+.docs-faq h2{margin:14px 0 8px;font-size:clamp(22px,3vw,32px)}
+.docs-faq .muted{max-width:560px;line-height:1.7}
+.faq-list{display:grid;gap:12px;margin-top:38px}
+.faq-item{padding:0 22px;background:var(--surface);border:1px solid var(--line);transition:border-color .2s,background .2s}
+.faq-item:hover{border-color:color-mix(in srgb,var(--white) 38%,transparent)}
+.faq-item summary{list-style:none;display:grid;grid-template-columns:42px 1fr 24px;align-items:center;gap:14px;padding:20px 0;cursor:pointer}
+.faq-item summary::-webkit-details-marker{display:none}
+.faq-item summary strong{font-size:15px;font-weight:600;line-height:1.5}
+.faq-plus{display:grid;place-items:center;width:24px;height:24px;border:1px solid var(--line);border-radius:50%;transition:transform .2s}
+.faq-item[open] .faq-plus{transform:rotate(45deg)}
+.faq-item>p{padding:0 38px 22px 56px;margin:0;line-height:1.8;max-width:900px}
+html[data-theme="light"] .faq-item{background:#fffdf8;border-color:#2223}
+html[data-theme="light"] .faq-item summary strong{color:#171717}
+html[data-theme="light"] .faq-item>p{color:#414141}
+html[data-theme="light"] .docs-download{border-color:#2223}
+@media(max-width:640px){.docs-faq{align-items:flex-start;flex-direction:column}.faq-item{padding:0 14px}.faq-item summary{grid-template-columns:30px 1fr 24px;gap:9px}.faq-item summary strong{font-size:14px}.faq-item>p{padding:0 4px 18px 39px}}
