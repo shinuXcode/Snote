@@ -222,12 +222,12 @@ jobs:
               marker = 'compileOptions {'
               if marker not in text:
                   raise SystemExit('Generated Gradle file has no compileOptions block')
-              text = text.replace(marker, marker + '\\n        isCoreLibraryDesugaringEnabled = true', 1)
+              text = text.replace(marker, marker + '\n        isCoreLibraryDesugaringEnabled = true', 1)
           if 'coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:' not in text:
               marker = 'dependencies {'
               if marker not in text:
                   raise SystemExit('Generated Gradle file has no dependencies block')
-              text = text.replace(marker, marker + '\\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")', 1)
+              text = text.replace(marker, marker + '\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")', 1)
           path.write_text(text)
           assert 'isCoreLibraryDesugaringEnabled = true' in text
           assert 'coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")' in text
