@@ -1451,7 +1451,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   bool _strokeMostlyInsidePolygon(
     List<Offset> points,
     List<Offset> polygon, {
-    double minimumInsideFraction = .65,
+    double minimumInsideFraction = .5,
   }) {
     if (points.isEmpty || polygon.length < 3) return false;
     if (points.length == 1) return _pointInPolygon(points.first, polygon);
@@ -1468,7 +1468,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       final b = points[i];
       final length = (b - a).distance;
       if (length <= 1e-8) continue;
-      final samples = math.max(1, math.min(512, (length / 2).ceil()));
+      final samples = math.max(1, math.min(1024, (length / 1.5).ceil()));
       final sampleLength = length / samples;
       for (var sample = 0; sample < samples; sample++) {
         final point = Offset.lerp(a, b, (sample + .5) / samples)!;
@@ -7342,6 +7342,22 @@ class _EditorV2PageState extends State<EditorV2Page>
                 ),
               ),
               Positioned(
+                left: (_selectionBounds()!.center.dx + 14).clamp(0, _pageWidth - 24).toDouble(),
+                top: (_selectionBounds()!.top - 12).clamp(0, _pageHeight - 24).toDouble(),
+                child: Tooltip(
+                  message: 'Duplicate selection',
+                  child: GestureDetector(
+                    onTap: () => _pasteStrokes(duplicate: true),
+                    child: Material(
+                      color: Theme.of(context).colorScheme.secondary,
+                      shape: const CircleBorder(),
+                      elevation: 3,
+                      child: const SizedBox(width: 22, height: 22, child: Icon(Icons.control_point_duplicate_rounded, size: 13, color: Colors.white)),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
                 left: _selectionBounds()!.center.dx - 11,
                 top: _selectionBounds()!.top - 12,
                 child: Tooltip(
@@ -7404,7 +7420,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                       IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Copy selection', onPressed: _copySelection, icon: const Icon(Icons.copy_rounded, size: 16)),
                       IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Cut selection', onPressed: _cutSelection, icon: const Icon(Icons.content_cut_rounded, size: 16)),
                       IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Paste copied selection', onPressed: _selectionClipboard == null ? null : () => _pasteStrokes(), icon: const Icon(Icons.content_paste_rounded, size: 16)),
-                      IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Duplicate selection', onPressed: () => _pasteStrokes(duplicate: true), icon: const Icon(Icons.control_point_duplicate_rounded, size: 16)),
+
                       IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Bring selection to front', onPressed: () => _changeSelectionLayer(bringToFront: true), icon: const Icon(Icons.flip_to_front_rounded, size: 16)),
                       IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Send selection to back', onPressed: () => _changeSelectionLayer(bringToFront: false), icon: const Icon(Icons.flip_to_back_rounded, size: 16)),
                       IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Delete selection', onPressed: _deleteSelection, icon: const Icon(Icons.delete_outline_rounded, size: 16, color: Colors.redAccent)),
