@@ -7375,6 +7375,8 @@ class _EditorV2PageState extends State<EditorV2Page>
                                             _duplicatePage(index);
                                           case 'clear':
                                             unawaited(_clearPageWithConfirmation(index));
+                                          case 'share':
+                                            unawaited(_sharePage(index));
                                           case 'delete':
                                             unawaited(_confirmDeletePage(index));
                                         }
@@ -7390,6 +7392,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                                         PopupMenuItem(value: 'paste', enabled: _pageClipboard != null, child: const ListTile(dense: true, leading: Icon(Icons.content_paste_rounded), title: Text('Paste after'))),
                                         const PopupMenuItem(value: 'duplicate', child: ListTile(dense: true, leading: Icon(Icons.control_point_duplicate_rounded), title: Text('Duplicate'))),
                                         const PopupMenuItem(value: 'clear', child: ListTile(dense: true, leading: Icon(Icons.cleaning_services_outlined), title: Text('Clear page…'))),
+                                        const PopupMenuItem(value: 'share', child: ListTile(dense: true, leading: Icon(Icons.share_outlined), title: Text('Share page'))),
                                         const PopupMenuItem(value: 'delete', child: ListTile(dense: true, leading: Icon(Icons.delete_outline_rounded), title: Text('Delete page…'))),
                                       ],
                                       icon: const Icon(Icons.more_horiz_rounded),
@@ -7766,8 +7769,12 @@ class _EditorV2PageState extends State<EditorV2Page>
                         unawaited(_chooseTemplate());
                       case 'format':
                         unawaited(_showPageFormatSettings());
+                      case 'clear':
+                        unawaited(_clearPageWithConfirmation(_page));
+                      case 'share':
+                        unawaited(_sharePage(_page));
                       case 'delete':
-                        _deletePage(_page);
+                        unawaited(_confirmDeletePage(_page));
                       case 'preview':
                         unawaited(_showPagePicker());
                     }
@@ -7781,8 +7788,10 @@ class _EditorV2PageState extends State<EditorV2Page>
                     PopupMenuItem(value: 'background', child: Text('Change template')),
                     PopupMenuItem(value: 'format', child: Text('Page format & background')),
                     PopupMenuItem(value: 'preview', child: Text('Page preview / reorder')),
+                    PopupMenuItem(value: 'clear', child: Text('Clear page…')),
+                    PopupMenuItem(value: 'share', child: Text('Share page')),
                     PopupMenuDivider(),
-                    PopupMenuItem(value: 'delete', child: Text('Delete page')),
+                    PopupMenuItem(value: 'delete', child: Text('Delete page…')),
                   ],
                   icon: const Icon(Icons.more_vert_rounded, size: 16),
                 ),
@@ -7919,9 +7928,15 @@ class _EditorV2PageState extends State<EditorV2Page>
                                   _movePage(index, math.min(_pages.length - 1, index + 1));
                                 case 'lock':
                                   unawaited(_togglePageLock(index));
+                                case 'clear':
+                                  Navigator.pop(sheetContext);
+                                  unawaited(_clearPageWithConfirmation(index));
+                                case 'share':
+                                  Navigator.pop(sheetContext);
+                                  unawaited(_sharePage(index));
                                 case 'delete':
                                   Navigator.pop(sheetContext);
-                                  _deletePage(index);
+                                  unawaited(_confirmDeletePage(index));
                               }
                             },
                             itemBuilder: (_) => const [
@@ -7930,6 +7945,8 @@ class _EditorV2PageState extends State<EditorV2Page>
                               PopupMenuItem(value: 'paste', child: Text('Paste copied page after this')),
                               PopupMenuItem(value: 'duplicate', child: Text('Duplicate page')),
                               PopupMenuItem(value: 'background', child: Text('Change page background')),
+                              PopupMenuItem(value: 'clear', child: Text('Clear page…')),
+                              PopupMenuItem(value: 'share', child: Text('Share page')),
                               PopupMenuItem(value: 'lock', child: Text('Lock / unlock this page')),
                               PopupMenuItem(value: 'up', child: Text('Move page up')),
                               PopupMenuItem(value: 'down', child: Text('Move page down')),
