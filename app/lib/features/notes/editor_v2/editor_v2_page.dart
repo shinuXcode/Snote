@@ -265,6 +265,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   Rect? _selectionTransformBounds;
   Offset _selectionTransformDelta = Offset.zero;
   bool _selectionTransformIsResize = false;
+  Offset _selectionResizeDirection = const Offset(1, 1);
   double _toolbarLength = 360;
   double _toolbarThickness = 34;
   double _toolbarMarginLeft = 0, _toolbarMarginTop = 0;
@@ -2458,7 +2459,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     object['y'] = (rect.top / _pageHeight).clamp(0.0, math.max(0.0, 1 - height)).toDouble();
   }
 
-  void _startSelectionTransform({required bool resize}) {
+  void _startSelectionTransform({required bool resize, Offset resizeDirection = const Offset(1, 1)}) {
     final bounds = _selectionBounds();
     if (bounds == null || _selectionCount == 0) return;
     _pushUndo();
@@ -2478,6 +2479,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     _selectionTransformBounds = bounds;
     _selectionTransformDelta = Offset.zero;
     _selectionTransformIsResize = resize;
+    _selectionResizeDirection = resizeDirection;
   }
 
   void _updateSelectionTransform(Offset delta) {
@@ -2489,7 +2491,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     final scale = _transform.value.getMaxScaleOnAxis().clamp(.25, 4).toDouble();
     _selectionTransformDelta += delta / scale;
     final factor = _selectionTransformIsResize
-        ? (1 + (_selectionTransformDelta.dx + _selectionTransformDelta.dy) / math.max(40, bounds.longestSide)).clamp(.35, 3.0).toDouble()
+        ? (1 + ((_selectionTransformDelta.dx * _selectionResizeDirection.dx) + (_selectionTransformDelta.dy * _selectionResizeDirection.dy)) / math.max(40, bounds.longestSide)).clamp(.35, 3.0).toDouble()
         : 1.0;
     final offset = _selectionTransformIsResize ? Offset.zero : _selectionTransformDelta;
     final center = bounds.center;
@@ -5342,6 +5344,23 @@ class _EditorV2PageState extends State<EditorV2Page>
     _scheduleSave();
   }
 
+  void _warmAdjacentPdfPages(int pageIndex) {
+    // Render only the neighboring PDF pages after the active page is visible.
+    // Current-page rendering stays demand-driven so navigation is not blocked.
+    for (final index in <int>[pageIndex - 1, pageIndex + 1]) {
+      if (index < 0 || index >= _pages.length) continue;
+      final record = _pages[index];
+      if (record['pdfLazyRender'] != true) continue;
+      final assetId = record['pdfSourceAssetId']?.toString();
+      final sourcePage = (record['pdfSourcePage'] as num?)?.toInt();
+      if (assetId == null || assetId.isEmpty || sourcePage == null) continue;
+      unawaited(_lazyPdfPageRaster(assetId, sourcePage).catchError((Object error) {
+        debugPrint('[Snote][PDF] adjacent-page prefetch failed: $error');
+        return null;
+      }));
+    }
+  }
+
   void _goToPage(int index) {
     if (index < 0 || index >= _pages.length || index == _page) return;
     setState(() {
@@ -5350,6 +5369,9 @@ class _EditorV2PageState extends State<EditorV2Page>
       _lassoRect = null;
     });
     _scheduleSave();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _page == index) _warmAdjacentPdfPages(index);
+    });
   }
 
   void _toggleBookmark() {
@@ -7337,27 +7359,35 @@ class _EditorV2PageState extends State<EditorV2Page>
                   ),
                 ),
               ),
-              Positioned(
-                left: (_selectionBounds()!.right - 7).clamp(0, _pageWidth - 18).toDouble(),
-                top: (_selectionBounds()!.bottom - 7).clamp(0, _pageHeight - 18).toDouble(),
-                child: Tooltip(
-                  message: 'Drag corner to resize selection',
-                  child: GestureDetector(
-                    onPanStart: (_) => _startSelectionTransform(resize: true),
-                    onPanUpdate: (details) => _updateSelectionTransform(details.delta),
-                    onPanEnd: (_) => _finishSelectionTransform(),
-                    child: Container(
-                      width: 15,
-                      height: 15,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary,
-                        border: Border.all(color: Colors.white, width: 1.5),
-                        borderRadius: BorderRadius.circular(4),
+              ...<({Offset position, Offset direction, String label})>[
+                (position: Offset(.5, 0), direction: Offset(0, -1), label: 'Resize from top'),
+                (position: Offset(.5, 1), direction: Offset(0, 1), label: 'Resize from bottom'),
+                (position: Offset(0, .5), direction: Offset(-1, 0), label: 'Resize from left'),
+                (position: Offset(1, .5), direction: Offset(1, 0), label: 'Resize from right'),
+              ].map((handle) {
+                final bounds = _selectionBounds()!;
+                return Positioned(
+                  left: (bounds.left + bounds.width * handle.position.dx - 7.5).clamp(0, _pageWidth - 15).toDouble(),
+                  top: (bounds.top + bounds.height * handle.position.dy - 7.5).clamp(0, _pageHeight - 15).toDouble(),
+                  child: Tooltip(
+                    message: handle.label,
+                    child: GestureDetector(
+                      onPanStart: (_) => _startSelectionTransform(resize: true, resizeDirection: handle.direction),
+                      onPanUpdate: (details) => _updateSelectionTransform(details.delta),
+                      onPanEnd: (_) => _finishSelectionTransform(),
+                      child: Container(
+                        width: 15,
+                        height: 15,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primary,
+                          border: Border.all(color: Colors.white, width: 1.5),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ),
+                );
+              }),
             ],
             if (_lassoRect != null && _selectionCount > 0 && _selectionBounds() != null)
               Positioned(
