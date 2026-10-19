@@ -112,6 +112,10 @@ class AlarmNotificationService {
       final id = (alarm['id'] as num?)?.toInt();
       final at = DateTime.tryParse(alarm['at']?.toString() ?? '');
       if (id == null || at == null) continue;
+      if ((alarm['repeat']?.toString() ?? 'once') == 'once' && !at.isAfter(DateTime.now())) {
+        alarm['enabled'] = false;
+        continue;
+      }
       final weekdays = (alarm['weekdays'] as List? ?? const <Object?>[])
           .whereType<num>().map((day) => day.toInt()).toList();
       await schedule(
