@@ -17,7 +17,7 @@ const nav=[
   ["/","Home"],
   ["/features","Features"],
   ["/how-it-works","Showcase"],
-  ["/download","Docs"],
+  ["/download","Download"],
 ];
 
 export default function RootLayout({children}:{children:React.ReactNode}){
