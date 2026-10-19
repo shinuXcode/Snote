@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { useState } from "react";
+import SectionIndex from "./SectionIndex";
 
 const panels = [
   { n: "01", title: "Write Freely", body: "A clean, distraction-free editor.", icon: "✳" },
@@ -53,18 +53,12 @@ function BlueprintArtwork() {
 }
 
 export default function MotionHero() {
-  const [activeIndex, setActiveIndex] = useState(0);
-  const selectSection = (index: number) => {
-    setActiveIndex(index);
-    const ids = ["home", "blueprint-roll", "features", "lower-section"];
-    document.getElementById(ids[index])?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
   return (
     <>
       <section className="hero" id="home">
         <div className="hero-grid" aria-hidden="true" />
         <div className="blueprint-glow" aria-hidden="true" />
-        <nav className="hero-index" aria-label="Jump between homepage sections">{["01","02","03","04"].map((number,index)=><button key={number} type="button" className={activeIndex===index?"is-active":""} aria-current={activeIndex===index?"location":undefined} aria-label={["Home","Highlights","Features","More about Snote"][index]} onClick={()=>selectSection(index)}>{number}</button>)}</nav>
+        <SectionIndex />
         <div className="hero-inner">
           <div className="hero-copy">
             <div className="eyebrow"><i /> YOUR IDEAS, BEAUTIFULLY ORGANIZED</div>
