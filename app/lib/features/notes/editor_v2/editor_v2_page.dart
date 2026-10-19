@@ -8323,12 +8323,41 @@ class _EditorV2PageState extends State<EditorV2Page>
                   elevation: 8,
                   borderRadius: BorderRadius.circular(12),
                   clipBehavior: Clip.antiAlias,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: math.min(_fullScreenMode && !_compactFloatingToolbar ? MediaQuery.sizeOf(context).width * .94 : (_compactFloatingToolbar ? _toolbarLength : 360.0), MediaQuery.sizeOf(context).width - 12),
-                      maxHeight: math.min(_fullScreenMode ? MediaQuery.sizeOf(context).height * .32 : 190.0, MediaQuery.sizeOf(context).height * .5),
-                    ),
-                    child: _buildToolbar(vertical: false),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: math.min(_fullScreenMode && !_compactFloatingToolbar ? MediaQuery.sizeOf(context).width * .94 : (_compactFloatingToolbar ? _toolbarLength : 360.0), MediaQuery.sizeOf(context).width - 12),
+                          maxHeight: math.min(_fullScreenMode ? MediaQuery.sizeOf(context).height * .32 : 190.0, MediaQuery.sizeOf(context).height * .5),
+                        ),
+                        child: _buildToolbar(vertical: false),
+                      ),
+                      Positioned(
+                        right: -5,
+                        bottom: -5,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onPanUpdate: (details) => setState(() {
+                            _toolbarLength = (_toolbarLength + details.delta.dx).clamp(180.0, 900.0).toDouble();
+                            final verticalPadding = details.delta.dy / 2;
+                            _toolbarPaddingTop = (_toolbarPaddingTop + verticalPadding).clamp(0.0, 28.0).toDouble();
+                            _toolbarPaddingBottom = (_toolbarPaddingBottom + verticalPadding).clamp(0.0, 28.0).toDouble();
+                          }),
+                          onPanEnd: (_) => unawaited(Future.wait([
+                            _settings.setDouble('editorV2ToolbarLength', _toolbarLength),
+                            _settings.setDouble('editorV2ToolbarPaddingTop', _toolbarPaddingTop),
+                            _settings.setDouble('editorV2ToolbarPaddingBottom', _toolbarPaddingBottom),
+                          ])),
+                          child: Material(
+                            color: Theme.of(context).colorScheme.primary,
+                            shape: const CircleBorder(),
+                            elevation: 2,
+                            child: const SizedBox(width: 18, height: 18, child: Icon(Icons.open_in_full_rounded, size: 11, color: Colors.white)),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
