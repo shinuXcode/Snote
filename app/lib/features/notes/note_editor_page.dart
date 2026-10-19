@@ -2891,7 +2891,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
 
     final Widget toolbarBody;
     if (isFloatingHorizontal) {
-      toolbarBody = Stack(
+      final floatingToolbar = Stack(
         key: _toolbarKey,
         clipBehavior: Clip.hardEdge,
         children: <Widget>[
@@ -2937,12 +2937,12 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
               width: _floatingToolbarWidth
                   .clamp(140.0, math.max(140.0, screen.width - 16))
                   .toDouble(),
-              child: toolbarBody,
+              child: floatingToolbar,
             )
           : Align(
               alignment: Alignment.centerLeft,
               widthFactor: 1,
-              child: toolbarBody,
+              child: floatingToolbar,
             );
     } else {
       toolbarBody = _toolbarSurface(
