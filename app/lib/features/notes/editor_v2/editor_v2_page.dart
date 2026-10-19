@@ -37,6 +37,13 @@ import 'editor_v2_document.dart';
 import 'multi_split_workspace.dart';
 import 'smart_pages_catalog.dart';
 
+/// Shared regression-tested surface style for sticker/text overlays.
+const BoxDecoration snoteTransparentTextBoxDecoration = BoxDecoration(
+  color: Colors.transparent,
+  border: Border.fromBorderSide(BorderSide(color: Colors.transparent, width: 0)),
+  borderRadius: BorderRadius.all(Radius.circular(4)),
+);
+
 import 'editor_v2_ink_painter.dart';
 import 'selection_text_recognizer.dart';
 import '../../tools/screen_capture.dart';
@@ -7143,13 +7150,8 @@ class _EditorV2PageState extends State<EditorV2Page>
         child: IgnorePointer(
           ignoring: _tool == CanvasTool.lasso,
           child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: Colors.transparent,
-            // Text boxes and stickers are borderless on the page. Selection
-            // remains visible through the lasso bounding box and transform handles.
-            border: Border.all(color: Colors.transparent, width: 0),
-            borderRadius: BorderRadius.circular(4),
-          ),
+          // Text boxes and stickers stay transparent; selection is shown by handles.
+          decoration: snoteTransparentTextBoxDecoration,
           child: Stack(
             children: [
               Positioned.fill(
