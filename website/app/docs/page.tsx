@@ -14,7 +14,9 @@ const docs = [
  ["05","Permissions & Authorization","File, image, camera, network, account authorization, and release verification.","permissions"],
  ["06","License & Third-party Notices","MIT license summary, redistribution requirements, and dependency notices.","license"],
  ["07","App Overview","Product description, platform support, versioning, and upgrade guidance.","app-overview"],
- ["08","Repository Audit","Source-level findings, security-sensitive areas, and outstanding verification checklist.","repository-audit"]
+ ["08","Terms of Use","Plain-language usage, user content, backups, cloud services, and disclaimers.","terms"],
+ ["09","Security & Disclosure","Secret handling, authorization tests, release safety, and responsible vulnerability reporting.","security"],
+ ["10","Repository Audit","Source-level findings, security-sensitive areas, and outstanding verification checklist.","repository-audit"]
 ];
 export default function DocsPage(){
  return <main className="shell section docs-page">
