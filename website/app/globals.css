@@ -62,3 +62,7 @@ a{color:inherit;text-decoration:none}button{font:inherit}
 
 .nav-actions{display:flex;align-items:center;gap:17px}.nav-github{display:grid;place-items:center;width:27px;height:27px;border-radius:50%;font-size:19px;color:#eee;transition:background .2s}.nav-github:hover{background:#ffffff15}.nav-start{display:flex;align-items:center;gap:14px;padding:11px 18px;border:1px solid #ffffff75;border-radius:999px;font-size:11px;white-space:nowrap;transition:background .2s,border-color .2s}.nav-start:hover{background:#ffffff10;border-color:#fff}.nav-start span{font-size:17px;transition:transform .2s}.nav-start:hover span{transform:translateX(3px)}.footer-links{display:flex;gap:18px}.footer-links a:hover{color:#ddd}
 @media(max-width:760px){.nav-actions{display:none}.mobile-nav{display:block}}
+
+/* Route pages start below the floating global navigation; the home hero keeps its cinematic overlap. */
+main.shell.section{padding-top:118px}
+@media(max-width:760px){main.shell.section{padding-top:96px}}
