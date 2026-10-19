@@ -5374,6 +5374,71 @@ class _EditorV2PageState extends State<EditorV2Page>
     _pastePage(insertAfter: index);
   }
 
+  Future<void> _confirmDeletePage(int index) async {
+    if (index < 0 || index >= _pages.length) return;
+    if (_pages[index]['locked'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Unlock this page before deleting it.')));
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete page?'),
+        content: Text('Delete page ${index + 1}?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(dialogContext).colorScheme.error),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) _deletePage(index);
+  }
+
+  Future<void> _clearPageWithConfirmation(int index) async {
+    if (index < 0 || index >= _pages.length) return;
+    final page = _pages[index];
+    if (page['locked'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Unlock this page before clearing it.')));
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Clear page content?'),
+        content: const Text('Remove all handwriting, images and text? The paper template will remain.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(dialogContext).colorScheme.error),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Clear page'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    _pushUndo();
+    final rawBoxes = page['textBoxes'];
+    if (rawBoxes is List) {
+      for (final item in rawBoxes.whereType<Map>()) {
+        final id = item['id']?.toString();
+        if (id != null) _textControllers.remove(id)?.dispose();
+      }
+    }
+    page['strokes'] = <Object?>[];
+    page['images'] = <Object?>[];
+    page['textBoxes'] = <Object?>[];
+    setState(() {
+      if (index == _page) _clearSelectionIds();
+      _lassoRect = null;
+    });
+    _scheduleSave();
+  }
+
   void _deletePage(int index) {
     if (index < 0 || index >= _pages.length) return;
     if (_pages[index]['locked'] == true) {
