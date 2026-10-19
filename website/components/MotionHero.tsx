@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { useState } from "react";
 
 const panels = [
   { n: "01", title: "Write Freely", body: "A clean, distraction-free editor.", icon: "✳" },
@@ -52,12 +53,18 @@ function BlueprintArtwork() {
 }
 
 export default function MotionHero() {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const selectSection = (index: number) => {
+    setActiveIndex(index);
+    const ids = ["home", "blueprint-roll", "features", "lower-section"];
+    document.getElementById(ids[index])?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
   return (
     <>
       <section className="hero" id="home">
         <div className="hero-grid" aria-hidden="true" />
         <div className="blueprint-glow" aria-hidden="true" />
-        <div className="hero-index" aria-hidden="true"><span>01</span><span>02</span><span>03</span><span>04</span></div>
+        <nav className="hero-index" aria-label="Jump between homepage sections">{["01","02","03","04"].map((number,index)=><button key={number} type="button" className={activeIndex===index?"is-active":""} aria-current={activeIndex===index?"location":undefined} aria-label={["Home","Highlights","Features","More about Snote"][index]} onClick={()=>selectSection(index)}>{number}</button>)}</nav>
         <div className="hero-inner">
           <div className="hero-copy">
             <div className="eyebrow"><i /> YOUR IDEAS, BEAUTIFULLY ORGANIZED</div>
@@ -65,14 +72,14 @@ export default function MotionHero() {
             <p>Snote is a minimal, powerful note-taking space for modern minds. Write, organize, and bring your ideas to life — beautifully.</p>
             <div className="row hero-actions">
               <Link className="cta" href="/download">Get Started <span aria-hidden="true">→</span></Link>
-              <a className="ghost-cta" href="https://github.com/shinuXcode/Snote" target="_blank" rel="noreferrer"><span className="github-mark" aria-hidden="true">◉</span> View on GitHub</a>
+              <a className="ghost-cta" href="https://github.com/shinuXcode/Snote" target="_blank" rel="noreferrer"><svg className="github-mark" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .9a11.1 11.1 0 0 0-3.51 21.63c.56.1.76-.24.76-.54v-2.13c-3.1.68-3.75-1.31-3.75-1.31-.5-1.29-1.24-1.63-1.24-1.63-1.02-.7.08-.69.08-.69 1.13.08 1.73 1.16 1.73 1.16 1 .1.78 2.1 3.16 1.5.1-.72.4-1.2.7-1.48-2.48-.28-5.08-1.24-5.08-5.52 0-1.22.44-2.22 1.16-3-.12-.29-.5-1.42.11-2.96 0 0 .95-.3 3.05 1.15a10.6 10.6 0 0 1 5.55 0c2.1-1.43 3.05-1.15 3.05-1.15.61 1.54.23 2.67.11 2.96.72.78 1.16 1.78 1.16 3 0 4.3-2.6 5.24-5.1 5.51.4.35.75 1.02.75 2.06v3.06c0 .3.2.65.77.54A11.1 11.1 0 0 0 12 .9Z"/></svg> View on GitHub</a>
             </div>
             <div className="hero-ribbon"><span><b>ϟ</b> Fast</span><span><b>◇</b> Open Source</span><span><b>▣</b> Privacy First</span></div>
           </div>
           <BlueprintArtwork />
         </div>
       </section>
-      <section className="blueprint-roll" aria-label="Snote highlights">
+      <section className="blueprint-roll" id="blueprint-roll" aria-label="Snote highlights">
         <div className="roll-metal roll-metal-left" />
         {panels.map((panel) => <Link href="/features" className="roll-panel" key={panel.n}>
           <span className="panel-number">{panel.n}</span><span className="panel-glyph" aria-hidden="true">{panel.icon}</span>
@@ -97,7 +104,7 @@ export default function MotionHero() {
             <span className="feature-icon">{icon}<i /></span><span className="feature-number">0{i+1} / SYSTEM</span><h3>{title}</h3><p className="muted">{body}</p><span className="card-cross" aria-hidden="true">+</span>
           </article>)}
         </div>
-        <section className="section lower-section">
+        <section className="section lower-section" id="lower-section">
           <div className="eyebrow"><i /> BUILT FOR CONTINUITY</div><h2 className="title">Your notes. Your space.</h2>
           <p className="lead">Write offline, keep ownership of your work, and continue across supported Snote clients.</p>
           <div className="row hero-actions"><Link className="cta" href="/download">Explore Snote →</Link><Link className="ghost-cta" href="/account">Open your account</Link></div>
