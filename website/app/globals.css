@@ -179,3 +179,15 @@ html[data-theme="light"] .release-notes pre{color:#333}
 html[data-theme="light"] .release-error{color:#a21d1d}
 @media(max-width:760px){.hero-index{display:none}.mobile-nav{display:flex}.nav-actions{display:none}.release-topline{align-items:flex-start}.release-meta{gap:12px}.docs-callout{padding:20px}.download-help{padding:20px}}
 @media(prefers-reduced-motion:reduce){::view-transition-old(root),::view-transition-new(root){animation:none!important}}
+
+.release-history{margin-top:28px;padding:22px;border:1px solid var(--line);border-radius:16px;background:#ffffff03}
+.release-history h3{margin:0;font-size:18px;letter-spacing:-.03em}
+.release-history-list{margin-top:10px}
+.release-history-item{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:14px 0;border-top:1px solid var(--line)}
+.release-history-item>div{display:grid;gap:5px;min-width:0}
+.release-history-item strong{font-size:13px;overflow-wrap:anywhere}
+.release-history-item .muted{font-size:11px}
+.release-history-item>a{flex:none;font-size:11px;text-decoration:underline;text-underline-offset:3px}
+html[data-theme="light"] .release-history{background:#fff9}
+html[data-theme="light"] .release-history-item{border-color:#2222}
+@media(max-width:520px){.release-history{padding:16px}.release-history-item{align-items:flex-start;flex-direction:column;gap:7px}}
