@@ -1,11 +1,12 @@
 import Link from "next/link";
 import SectionIndex from "./SectionIndex";
+import Icon from "./Icon";
 
 const panels = [
-  { n: "01", title: "Write Freely", body: "A clean, distraction-free editor.", icon: "✳" },
-  { n: "02", title: "Organize Beautifully", body: "Keep your thoughts in check.", icon: "◎" },
-  { n: "03", title: "Open Source", body: "Built by the community, for everyone.", icon: "◇" },
-  { n: "04", title: "Designed for Flow", body: "A seamless and intuitive experience.", icon: "⌁" },
+  { n: "01", title: "Write Freely", body: "A clean, distraction-free editor.", icon: "pen" },
+  { n: "02", title: "Organize Beautifully", body: "Keep your thoughts in check.", icon: "organize" },
+  { n: "03", title: "Open Source", body: "Built by the community, for everyone.", icon: "open" },
+  { n: "04", title: "Designed for Flow", body: "A seamless and intuitive experience.", icon: "flow" },
 ];
 
 function BlueprintArtwork() {
@@ -65,10 +66,10 @@ export default function MotionHero() {
             <h1><span className="headline-sans">Notes for</span><em>Creators.</em></h1>
             <p>Snote is a minimal, powerful note-taking space for modern minds. Write, organize, and bring your ideas to life — beautifully.</p>
             <div className="row hero-actions">
-              <Link className="cta" href="/download">Get Started <span aria-hidden="true">→</span></Link>
-              <a className="ghost-cta" href="https://github.com/shinuXcode/Snote" target="_blank" rel="noreferrer"><svg className="github-mark" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .9a11.1 11.1 0 0 0-3.51 21.63c.56.1.76-.24.76-.54v-2.13c-3.1.68-3.75-1.31-3.75-1.31-.5-1.29-1.24-1.63-1.24-1.63-1.02-.7.08-.69.08-.69 1.13.08 1.73 1.16 1.73 1.16 1 .1.78 2.1 3.16 1.5.1-.72.4-1.2.7-1.48-2.48-.28-5.08-1.24-5.08-5.52 0-1.22.44-2.22 1.16-3-.12-.29-.5-1.42.11-2.96 0 0 .95-.3 3.05 1.15a10.6 10.6 0 0 1 5.55 0c2.1-1.43 3.05-1.15 3.05-1.15.61 1.54.23 2.67.11 2.96.72.78 1.16 1.78 1.16 3 0 4.3-2.6 5.24-5.1 5.51.4.35.75 1.02.75 2.06v3.06c0 .3.2.65.77.54A11.1 11.1 0 0 0 12 .9Z"/></svg> View on GitHub</a>
+              <Link className="cta" href="/download">Get Started <Icon name="arrow" size={17} /></Link>
+              <a className="ghost-cta" href="https://github.com/shinuXcode/Snote" target="_blank" rel="noreferrer"><Icon name="github" size={17} /> View on GitHub</a>
             </div>
-            <div className="hero-ribbon"><span><b>ϟ</b> Fast</span><span><b>◇</b> Open Source</span><span><b>▣</b> Privacy First</span></div>
+            <div className="hero-ribbon"><span><b><Icon name="fast" size={14} /></b> Fast</span><span><b><Icon name="cube" size={14} /></b> Open Source</span><span><b><Icon name="lock" size={14} /></b> Privacy First</span></div>
           </div>
           <BlueprintArtwork />
         </div>
@@ -76,9 +77,9 @@ export default function MotionHero() {
       <section className="blueprint-roll" id="blueprint-roll" aria-label="Snote highlights">
         <div className="roll-metal roll-metal-left" />
         {panels.map((panel) => <Link href="/features" className="roll-panel" key={panel.n}>
-          <span className="panel-number">{panel.n}</span><span className="panel-glyph" aria-hidden="true">{panel.icon}</span>
+          <span className="panel-number">{panel.n}</span><span className="panel-glyph"><Icon name={panel.icon as "pen" | "organize" | "open" | "flow"} size={29} /></span>
           <span className="panel-copy"><strong>{panel.title}</strong><small>{panel.body}</small></span>
-          <span className="panel-arrow" aria-hidden="true">↗</span>
+          <span className="panel-arrow" aria-hidden="true"><Icon name="external" size={14} /></span>
         </Link>)}
         <div className="roll-metal roll-metal-right" />
       </section>
@@ -86,22 +87,22 @@ export default function MotionHero() {
         <section className="section feature-intro" id="features">
           <div><div className="eyebrow"><i /> FEATURES</div><h2 className="title">Designed for<br /><em>Modern Thinkers.</em></h2></div>
           <p className="lead">Everything you need to capture, organize, and grow your ideas — in one beautifully minimal workspace.</p>
-          <Link className="see-features" href="/features">See All Features <span aria-hidden="true">→</span></Link>
+          <Link className="see-features" href="/features">See All Features <Icon name="arrow" size={17} /></Link>
         </section>
         <div className="grid feature-grid">
           {[
-            ["✎","Minimal Editor","A quiet writing surface that keeps your attention on the page."],
-            ["⬡","Smart Organization","Folders, templates and tools that keep thoughts in order."],
-            ["↗","Open & Extendable","Open-source foundations built to grow with your workflow."],
-            ["☼","Beautiful by Default","Thoughtful details, calm surfaces and a distraction-free feel."]
+            ["pen","Minimal Editor","A quiet writing surface that keeps your attention on the page."],
+            ["organize","Smart Organization","Folders, templates and tools that keep thoughts in order."],
+            ["open","Open & Extendable","Open-source foundations built to grow with your workflow."],
+            ["sun","Beautiful by Default","Thoughtful details, calm surfaces and a distraction-free feel."]
           ].map(([icon,title,body], i) => <article className="card feature-card" key={title}>
-            <span className="feature-icon">{icon}<i /></span><span className="feature-number">0{i+1} / SYSTEM</span><h3>{title}</h3><p className="muted">{body}</p><span className="card-cross" aria-hidden="true">+</span>
+            <span className="feature-icon"><Icon name={icon as "pen" | "organize" | "open" | "sun"} size={25} /><i /></span><span className="feature-number">0{i+1} / SYSTEM</span><h3>{title}</h3><p className="muted">{body}</p><span className="card-cross" aria-hidden="true">+</span>
           </article>)}
         </div>
         <section className="section lower-section" id="lower-section">
           <div className="eyebrow"><i /> BUILT FOR CONTINUITY</div><h2 className="title">Your notes. Your space.</h2>
           <p className="lead">Write offline, keep ownership of your work, and continue across supported Snote clients.</p>
-          <div className="row hero-actions"><Link className="cta" href="/download">Explore Snote →</Link><Link className="ghost-cta" href="/account">Open your account</Link></div>
+          <div className="row hero-actions"><Link className="cta" href="/download">Explore Snote <Icon name="arrow" size={17} /></Link><Link className="ghost-cta" href="/account">Open your account</Link></div>
         </section>
       </main>
     </>
