@@ -79,7 +79,7 @@ const wrap=(s:string,n:number)=>{const words=ascii(s).split(/\s+/);const lines:s
 function makePdf(doc:Doc){
  const W=595,H=842;const pages:string[]=[];
  const t=(x:number,y:number,s:string,size=10,font="F1",color="0.15 0.17 0.19")=>color+" rg BT /"+font+" "+size+" Tf "+x+" "+y+" Td ("+esc(s)+") Tj ET\n";
- let cover="0.035 0.043 0.055 rg 0 0 595 842 re f\n0.18 0.20 0.23 RG 1 w 44 44 507 754 re S\n0.9 0.92 0.94 RG 1 w 75 660 m 520 660 l S\n0.12 0.14 0.17 rg 80 674 68 68 re f\n0.96 0.97 0.98 RG 2 w 96 690 m 111 721 l 126 690 l S\n0.96 0.97 0.98 RG 2 w 96 690 m 126 690 l S\n";
+ let cover="0.035 0.043 0.055 rg 0 0 595 842 re f\n0.18 0.20 0.23 RG 1 w 44 44 507 754 re S\n0.9 0.92 0.94 RG 1 w 75 660 m 520 660 l S\n0.12 0.14 0.17 rg 80 674 68 68 re f\n0.36 0.49 1 RG 5 w 132 725 m 120 736 101 734 96 720 c 91 705 130 710 128 693 c 126 678 104 676 92 689 c S\n0.94 0.96 1 RG 2 w 123 694 m 136 707 l S\n";
  cover+=t(166,710,"snote",28,"F2","0.96 0.97 0.98")+t(80,590,doc.kind,9,"F2","0.62 0.68 0.74");
  let y=535;const tl=wrap(doc.title,25);for(let i=0;i<tl.length;i++){cover+=t(78,y,tl[i],i===0?30:27,"F2","0.97 0.97 0.95");y-=40;}
  for(const line of wrap(doc.subtitle,60)){cover+=t(80,y,line,12,"F1","0.70 0.74 0.78");y-=21;}
