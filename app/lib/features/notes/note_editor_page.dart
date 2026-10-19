@@ -2899,8 +2899,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           Positioned(
             top: 0,
             right: 0,
-            bottom: 0,
             width: 14,
+            height: 14,
             child: Tooltip(
               message: 'Drag to resize toolbar width',
               child: GestureDetector(
