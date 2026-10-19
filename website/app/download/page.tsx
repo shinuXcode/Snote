@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+export const metadata: Metadata = { title: "Download Snote — Latest Releases", description: "Check the latest published Snote version, release notes, and direct downloads for available platforms.", alternates: { canonical: "https://snote-showcase.vercel.app/download" } };
 import Link from "next/link";
 import ReleaseCenter from "../../components/ReleaseCenter";
 export default function DownloadPage(){
