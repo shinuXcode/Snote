@@ -2866,10 +2866,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
             ? Axis.vertical
             : Axis.horizontal)
         : _floatingAxis;
-    final isFloatingHorizontal = !_docked && axis == Axis.horizontal;
+    final isFloatingToolbar = !_docked;
     final constraints = axis == Axis.vertical
         ? BoxConstraints(
-            maxWidth: 84,
+            maxWidth: isFloatingToolbar ? math.max(120.0, screen.width - 16) : 84,
             maxHeight: math.max(160, screen.height - 76),
           )
         : BoxConstraints(
@@ -2883,14 +2883,14 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         Padding(
           // Reserve a narrow, dedicated grip area instead of letting the
           // resize handle cover the last tool button.
-          padding: EdgeInsets.only(right: isFloatingHorizontal ? 14 : 0),
+          padding: EdgeInsets.only(right: isFloatingToolbar ? 14 : 0),
           child: _toolbarContent(axis, docked: _docked),
         ),
       ),
     );
 
     final Widget toolbarBody;
-    if (isFloatingHorizontal) {
+    if (isFloatingToolbar) {
       final floatingToolbar = Stack(
         key: _toolbarKey,
         clipBehavior: Clip.hardEdge,
@@ -2930,8 +2930,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           ),
         ],
       );
-      // An unresized floating toolbar hugs its actual content. Once resized,
-      // its viewport uses the chosen width and scrolls rather than overflowing.
+      // An unresized floating toolbar hugs its actual content in either axis.
+      // Once resized, its viewport uses the chosen width and scrolls rather than overflowing.
       toolbarBody = _floatingToolbarWidth > 0
           ? SizedBox(
               width: _floatingToolbarWidth
