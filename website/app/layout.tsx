@@ -3,6 +3,7 @@ import "./globals.css";
 import Link from "next/link";
 import MobileNav from "../components/MobileNav";
 import ThemeToggle from "../components/ThemeToggle";
+import Icon from "../components/Icon";
 
 export const metadata:Metadata={
   title:"Snote — Notes for Creators",
@@ -35,8 +36,8 @@ export default function RootLayout({children}:{children:React.ReactNode}){
         </nav>
         <div className="nav-actions">
           <ThemeToggle />
-          <a className="nav-github" href="https://github.com/shinuXcode/Snote" target="_blank" rel="noreferrer" aria-label="Snote on GitHub"><img src="https://github.githubassets.com/favicons/favicon.svg" width="20" height="20" alt="" /></a>
-          <Link className="nav-start" href="/download">Get Started <span aria-hidden="true">→</span></Link>
+          <a className="nav-github" href="https://github.com/shinuXcode/Snote" target="_blank" rel="noreferrer" aria-label="Snote on GitHub"><Icon name="github" size={23} /></a>
+          <Link className="nav-start" href="/download">Get Started <Icon name="arrow" size={16} /></Link>
         </div>
         <MobileNav />
       </div>
