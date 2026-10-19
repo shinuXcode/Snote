@@ -8344,11 +8344,11 @@ class _EditorV2PageState extends State<EditorV2Page>
                             _toolbarPaddingTop = (_toolbarPaddingTop + verticalPadding).clamp(0.0, 28.0).toDouble();
                             _toolbarPaddingBottom = (_toolbarPaddingBottom + verticalPadding).clamp(0.0, 28.0).toDouble();
                           }),
-                          onPanEnd: (_) => unawaited(Future.wait([
-                            _settings.setDouble('editorV2ToolbarLength', _toolbarLength),
-                            _settings.setDouble('editorV2ToolbarPaddingTop', _toolbarPaddingTop),
-                            _settings.setDouble('editorV2ToolbarPaddingBottom', _toolbarPaddingBottom),
-                          ])),
+                          onPanEnd: (_) {
+                            unawaited(_settings.setDouble('editorV2ToolbarLength', _toolbarLength));
+                            unawaited(_settings.setDouble('editorV2ToolbarPaddingTop', _toolbarPaddingTop));
+                            unawaited(_settings.setDouble('editorV2ToolbarPaddingBottom', _toolbarPaddingBottom));
+                          },
                           child: Material(
                             color: Theme.of(context).colorScheme.primary,
                             shape: const CircleBorder(),
