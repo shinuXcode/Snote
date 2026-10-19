@@ -2,6 +2,7 @@ import type {Metadata} from "next";
 import "./globals.css";
 import Link from "next/link";
 import MobileNav from "../components/MobileNav";
+import ThemeToggle from "../components/ThemeToggle";
 
 export const metadata:Metadata={
   title:"Snote — Notes for Creators",
@@ -17,6 +18,7 @@ const nav=[
   ["/","Home"],
   ["/features","Features"],
   ["/how-it-works","Showcase"],
+  ["/docs","Docs"],
   ["/download","Download"],
 ];
 
@@ -32,6 +34,7 @@ export default function RootLayout({children}:{children:React.ReactNode}){
           {nav.map(([href,label])=><Link key={href} href={href}>{label}</Link>)}
         </nav>
         <div className="nav-actions">
+          <ThemeToggle />
           <a className="nav-github" href="https://github.com/shinuXcode/Snote" target="_blank" rel="noreferrer" aria-label="Snote on GitHub">◉</a>
           <Link className="nav-start" href="/download">Get Started <span aria-hidden="true">→</span></Link>
         </div>
@@ -43,7 +46,7 @@ export default function RootLayout({children}:{children:React.ReactNode}){
       <div className="shell footerin">
         <span>Snote · Open source · Offline first</span>
         <span>Android · iOS · Windows · macOS · Linux · Web</span>
-        <span className="footer-links"><Link href="/founder">Founder</Link><Link href="/account">Account</Link><Link href="/download">Download</Link></span>
+        <span className="footer-links"><Link href="/docs">Docs</Link><Link href="/features">Features</Link><Link href="/founder">Founder</Link><Link href="/account">Account</Link><Link href="/download">Download</Link></span>
       </div>
     </footer>
   </>;
