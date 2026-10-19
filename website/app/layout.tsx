@@ -35,7 +35,7 @@ export default function RootLayout({children}:{children:React.ReactNode}){
         </nav>
         <div className="nav-actions">
           <ThemeToggle />
-          <a className="nav-github" href="https://github.com/shinuXcode/Snote" target="_blank" rel="noreferrer" aria-label="Snote on GitHub">◉</a>
+          <a className="nav-github" href="https://github.com/shinuXcode/Snote" target="_blank" rel="noreferrer" aria-label="Snote on GitHub"><img src="https://github.githubassets.com/favicons/favicon.svg" width="20" height="20" alt="" /></a>
           <Link className="nav-start" href="/download">Get Started <span aria-hidden="true">→</span></Link>
         </div>
         <MobileNav />
