@@ -191,3 +191,32 @@ html[data-theme="light"] .release-error{color:#a21d1d}
 html[data-theme="light"] .release-history{background:#fff9}
 html[data-theme="light"] .release-history-item{border-color:#2222}
 @media(max-width:520px){.release-history{padding:16px}.release-history-item{align-items:flex-start;flex-direction:column;gap:7px}}
+
+/* Shared vector-icon alignment and interaction polish */
+.nav-github svg,.nav-start svg,.cta svg,.see-features svg,.ghost-cta svg,.hero-ribbon svg,.panel-glyph svg,.panel-arrow svg,.feature-icon svg,.icon-button svg,.theme-toggle svg{display:block;flex:none}
+.nav-github{width:32px;height:32px;transition:color .2s,background .2s,transform .2s}
+.nav-github:hover{transform:translateY(-1px)}
+.nav-start svg,.cta svg,.see-features svg{transition:transform .2s ease}
+.nav-start:hover svg,.cta:hover svg,.see-features:hover svg{transform:translateX(3px)}
+.ghost-cta svg{width:17px;height:17px}
+.panel-glyph{font-size:0}
+.panel-glyph svg{filter:drop-shadow(0 0 5px #fff2);transition:transform .25s ease}
+.roll-panel:hover .panel-glyph svg{transform:scale(1.08) rotate(-4deg)}
+.panel-arrow{font-size:0;transition:background .2s,border-color .2s,transform .2s}
+.roll-panel:hover .panel-arrow{background:#fff;color:#111;border-color:#fff}
+.feature-icon{font-size:0}
+.feature-icon svg{transition:transform .25s ease}
+.feature-card:hover .feature-icon svg{transform:scale(1.08) rotate(-5deg)}
+.hero-ribbon b{display:grid;place-items:center}
+.hero-ribbon b svg{filter:drop-shadow(0 0 3px #fff2)}
+.icon-button{display:grid;place-items:center;transition:background .2s,border-color .2s,transform .2s}
+.icon-button:hover{transform:translateY(-1px);border-color:#ffffff70}
+.theme-toggle svg{transition:transform .25s ease}
+.theme-toggle:hover svg{transform:rotate(12deg) scale(1.05)}
+html[data-theme="light"] .nav-github,html[data-theme="light"] .nav-start{color:#171717}
+html[data-theme="light"] .nav-start{border-color:#2228}
+html[data-theme="light"] .nav-start:hover{background:#00000008;border-color:#111}
+html[data-theme="light"] .panel-glyph{color:#f4f4f4}
+html[data-theme="light"] .panel-glyph svg{filter:none}
+html[data-theme="light"] .feature-icon svg{color:#222}
+@media(prefers-reduced-motion:reduce){.nav-github,.nav-start svg,.cta svg,.see-features svg,.panel-glyph svg,.feature-icon svg,.theme-toggle svg{transition:none!important}.roll-panel:hover .panel-glyph svg,.feature-card:hover .feature-icon svg{transform:none}}
