@@ -7332,8 +7332,10 @@ class _EditorV2PageState extends State<EditorV2Page>
                                             _pastePage(insertAfter: index);
                                           case 'duplicate':
                                             _duplicatePage(index);
+                                          case 'clear':
+                                            unawaited(_clearPageWithConfirmation(index));
                                           case 'delete':
-                                            _deletePage(index);
+                                            unawaited(_confirmDeletePage(index));
                                         }
                                       },
                                       itemBuilder: (_) => <PopupMenuEntry<String>>[
@@ -7346,7 +7348,8 @@ class _EditorV2PageState extends State<EditorV2Page>
                                         const PopupMenuItem(value: 'copy', child: ListTile(dense: true, leading: Icon(Icons.copy_rounded), title: Text('Copy page'))),
                                         PopupMenuItem(value: 'paste', enabled: _pageClipboard != null, child: const ListTile(dense: true, leading: Icon(Icons.content_paste_rounded), title: Text('Paste after'))),
                                         const PopupMenuItem(value: 'duplicate', child: ListTile(dense: true, leading: Icon(Icons.control_point_duplicate_rounded), title: Text('Duplicate'))),
-                                        const PopupMenuItem(value: 'delete', child: ListTile(dense: true, leading: Icon(Icons.delete_outline_rounded), title: Text('Delete page'))),
+                                        const PopupMenuItem(value: 'clear', child: ListTile(dense: true, leading: Icon(Icons.cleaning_services_outlined), title: Text('Clear page…'))),
+                                        const PopupMenuItem(value: 'delete', child: ListTile(dense: true, leading: Icon(Icons.delete_outline_rounded), title: Text('Delete page…'))),
                                       ],
                                       icon: const Icon(Icons.more_horiz_rounded),
                                     ),
