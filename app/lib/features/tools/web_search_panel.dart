@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+
+import '../../core/settings/app_settings.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 /// Embedded browser for search and reference lookup while keeping the user in Snote.
@@ -31,6 +34,8 @@ class _SnoteWebSearchPanelState extends State<SnoteWebSearchPanel> {
   late final WebViewController _controller;
   final List<String> _recentQueries = <String>[];
   bool _loading = false;
+  double? _windowWidth;
+  double? _windowHeight;
   bool _canGoBack = false;
   bool _canGoForward = false;
   String? _error;
@@ -42,7 +47,8 @@ class _SnoteWebSearchPanelState extends State<SnoteWebSearchPanel> {
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(NavigationDelegate(
-        onPageStarted: (_) {
+        onPageStarted: (url) {
+          unawaited(SnoteSettings.instance.setString('webSearchLastUrl', url));
           if (mounted) setState(() { _loading = true; _error = null; });
         },
         onPageFinished: (_) => _refreshNavigationState(),
@@ -67,7 +73,14 @@ class _SnoteWebSearchPanelState extends State<SnoteWebSearchPanel> {
           return NavigationDecision.navigate;
         },
       ))
-      ..loadRequest(Uri.https('www.google.com', '/'));
+      ..loadRequest(_restoreUri());
+  }
+
+  Uri _restoreUri() {
+    final saved = SnoteSettings.instance.getString('webSearchLastUrl').trim();
+    final uri = Uri.tryParse(saved);
+    if (uri != null && const {'http', 'https'}.contains(uri.scheme)) return uri;
+    return Uri.https('www.google.com', '/');
   }
 
   Future<void> _refreshNavigationState() async {
@@ -93,11 +106,27 @@ class _SnoteWebSearchPanelState extends State<SnoteWebSearchPanel> {
       _recentQueries.insert(0, query);
       if (_recentQueries.length > 8) _recentQueries.removeLast();
     });
-    await _controller.loadRequest(Uri.https(
-      'www.google.com',
-      '/search',
-      <String, String>{'q': query, 'igu': '1'},
-    ));
+    final parsed = Uri.tryParse(query);
+    final explicitWebUrl = parsed != null &&
+        const {'http', 'https'}.contains(parsed.scheme) &&
+        parsed.host.isNotEmpty;
+    final domainLike = !query.contains(RegExp(r'\\s')) &&
+        query.contains('.') &&
+        !query.startsWith('.');
+    final direct = explicitWebUrl
+        ? parsed
+        : domainLike
+            ? Uri.tryParse('https://$query')
+            : null;
+    if (direct != null && const {'http', 'https'}.contains(direct.scheme) && direct.host.isNotEmpty) {
+      await _controller.loadRequest(direct);
+    } else {
+      await _controller.loadRequest(Uri.https(
+        'www.google.com',
+        '/search',
+        <String, String>{'q': query, 'igu': '1'},
+      ));
+    }
   }
 
   @override
@@ -109,8 +138,12 @@ class _SnoteWebSearchPanelState extends State<SnoteWebSearchPanel> {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.sizeOf(context);
-    final width = math.min(900.0, math.max(250.0, media.width - 28));
-    final height = math.min(720.0, math.max(300.0, media.height - 48));
+    final maxWidth = math.max(250.0, media.width - 28);
+    final maxHeight = math.max(300.0, media.height - 48);
+    final storedWidth = SnoteSettings.instance.getDouble('webSearchWindowWidth');
+    final storedHeight = SnoteSettings.instance.getDouble('webSearchWindowHeight');
+    final width = (_windowWidth ?? (storedWidth >= 250 ? storedWidth : math.min(900.0, maxWidth))).clamp(250.0, maxWidth).toDouble();
+    final height = (_windowHeight ?? (storedHeight >= 300 ? storedHeight : math.min(720.0, maxHeight))).clamp(300.0, maxHeight).toDouble();
     final colors = Theme.of(context).colorScheme;
     return Dialog(
       insetPadding: const EdgeInsets.all(14),
@@ -153,7 +186,7 @@ class _SnoteWebSearchPanelState extends State<SnoteWebSearchPanel> {
                 textInputAction: TextInputAction.search,
                 onSubmitted: _search,
                 decoration: InputDecoration(
-                  hintText: 'Search the web',
+                  hintText: 'Enter a URL or search the web',
                   prefixIcon: const Icon(Icons.search),
                   suffixIcon: IconButton(
                     tooltip: 'Search',
@@ -186,6 +219,24 @@ class _SnoteWebSearchPanelState extends State<SnoteWebSearchPanel> {
                     itemBuilder: (_) => _recentQueries.map((q) => PopupMenuItem<String>(value: q, child: Text(q, maxLines: 1, overflow: TextOverflow.ellipsis))).toList(),
                   ),
               ]),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onPanUpdate: (details) => setState(() {
+                  _windowWidth = (width + details.delta.dx).clamp(250.0, maxWidth).toDouble();
+                  _windowHeight = (height + details.delta.dy).clamp(300.0, maxHeight).toDouble();
+                }),
+                onPanEnd: (_) {
+                  unawaited(SnoteSettings.instance.setDouble('webSearchWindowWidth', _windowWidth ?? width));
+                  unawaited(SnoteSettings.instance.setDouble('webSearchWindowHeight', _windowHeight ?? height));
+                },
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 0, 10, 6),
+                  child: Icon(Icons.open_in_full_rounded, size: 17, color: colors.secondary),
+                ),
+              ),
             ),
           ],
         ),
