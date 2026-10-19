@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/settings/app_settings.dart';
+import 'alarm_notification_service.dart';
 
 /// A draggable, edge-collapsible timer and stopwatch overlay for the editor.
 class SnoteFloatingTimerPanel extends StatefulWidget {
@@ -30,6 +32,7 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> {
   TimeOfDay? _alarmTime;
   DateTime? _alarmDeadline;
   bool _alarmArmed = false;
+  List<Map<String, Object?>> _alarms = <Map<String, Object?>>[];
   bool _collapsed = false;
   String _dockSide = 'right';
   Offset _offset = const Offset(12, 76);
@@ -40,6 +43,166 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> {
     _collapsed = SnoteSettings.instance.getBool('floatingTimerCollapsed');
     _dockSide = SnoteSettings.instance.getString('floatingTimerDockSide') == 'left' ? 'left' : 'right';
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+    unawaited(_loadAlarms());
+  }
+
+  Future<void> _loadAlarms() async {
+    final raw = SnoteSettings.instance.getString('floatingAlarms');
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        _alarms = decoded.whereType<Map>().map((item) =>
+          item.map<String, Object?>((key, value) => MapEntry(key.toString(), value))
+        ).toList();
+      }
+    } catch (error) {
+      debugPrint('[Snote][Alarm] saved alarms could not be decoded: $error');
+    }
+    try {
+      await AlarmNotificationService.instance.rescheduleAll(_alarms);
+    } catch (error) {
+      debugPrint('[Snote][Alarm] restore scheduling failed: $error');
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _persistAlarms() async {
+    await SnoteSettings.instance.setString('floatingAlarms', jsonEncode(_alarms));
+  }
+
+  Future<void> _addSavedAlarm() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.now(),
+      helpText: 'Choose alarm time',
+    );
+    if (picked == null || !mounted) return;
+    final titleController = TextEditingController(text: 'Snote alarm');
+    final title = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Name alarm'),
+        content: TextField(
+          controller: titleController,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Alarm name'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, titleController.text.trim()), child: const Text('Continue')),
+        ],
+      ),
+    );
+    titleController.dispose();
+    if (title == null || !mounted) return;
+    final repeat = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('Repeat alarm'),
+        children: [
+          SimpleDialogOption(onPressed: () => Navigator.pop(dialogContext, 'once'), child: const Text('Once')),
+          SimpleDialogOption(onPressed: () => Navigator.pop(dialogContext, 'daily'), child: const Text('Every day')),
+          SimpleDialogOption(onPressed: () => Navigator.pop(dialogContext, 'custom'), child: const Text('Choose weekdays')),
+        ],
+      ),
+    );
+    if (repeat == null || !mounted) return;
+    var weekdays = <int>[];
+    if (repeat == 'custom') {
+      final selected = <int>{};
+      weekdays = await showDialog<List<int>>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('Choose weekdays'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: List<Widget>.generate(7, (index) {
+                final day = index + 1;
+                const labels = <String>['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+                return CheckboxListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(labels[index]),
+                  value: selected.contains(day),
+                  onChanged: (value) => setDialogState(() {
+                    if (value == true) { selected.add(day); } else { selected.remove(day); }
+                  }),
+                );
+              }),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+              FilledButton(onPressed: selected.isEmpty ? null : () => Navigator.pop(dialogContext, selected.toList()..sort()), child: const Text('Save')),
+            ],
+          ),
+        ),
+      ) ?? <int>[];
+      if (weekdays.isEmpty || !mounted) return;
+    }
+    final now = DateTime.now();
+    var at = DateTime(now.year, now.month, now.day, picked.hour, picked.minute);
+    if (!at.isAfter(now)) at = at.add(const Duration(days: 1));
+    final id = (DateTime.now().millisecondsSinceEpoch % 100000000).toInt();
+    final alarm = <String, Object?>{
+      'id': id,
+      'title': title.isEmpty ? 'Snote alarm' : title,
+      'at': at.toIso8601String(),
+      'repeat': repeat,
+      'weekdays': weekdays,
+      'enabled': true,
+      'silent': false,
+    };
+    try {
+      await AlarmNotificationService.instance.schedule(
+        id: id,
+        title: alarm['title']! as String,
+        firstAt: at,
+        repeat: repeat,
+        weekdays: weekdays,
+      );
+      if (!mounted) return;
+      setState(() => _alarms.add(alarm));
+      await _persistAlarms();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not schedule alarm: $error')),
+      );
+    }
+  }
+
+  Future<void> _toggleSavedAlarm(Map<String, Object?> alarm, bool enabled) async {
+    final id = (alarm['id'] as num?)?.toInt();
+    final at = DateTime.tryParse(alarm['at']?.toString() ?? '');
+    if (id == null || at == null) return;
+    try {
+      if (enabled) {
+        await AlarmNotificationService.instance.schedule(
+          id: id,
+          title: alarm['title']?.toString() ?? 'Snote alarm',
+          firstAt: at,
+          repeat: alarm['repeat']?.toString() ?? 'once',
+          weekdays: (alarm['weekdays'] as List? ?? const <Object?>[]).whereType<num>().map((day) => day.toInt()).toList(),
+          silent: alarm['silent'] == true,
+        );
+      } else {
+        await AlarmNotificationService.instance.cancel(id);
+      }
+      setState(() => alarm['enabled'] = enabled);
+      await _persistAlarms();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update alarm: $error')),
+      );
+    }
+  }
+
+  Future<void> _deleteSavedAlarm(Map<String, Object?> alarm) async {
+    final id = (alarm['id'] as num?)?.toInt();
+    if (id != null) await AlarmNotificationService.instance.cancel(id);
+    if (!mounted) return;
+    setState(() => _alarms.removeWhere((item) => item['id'] == alarm['id']));
+    await _persistAlarms();
   }
 
   void _persistCollapsed(bool value) {
@@ -501,24 +664,63 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> {
                             ],
                           )
                         else
-                          Wrap(
-                            alignment: WrapAlignment.center,
-                            spacing: 8,
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              FilledButton.tonalIcon(
-                                onPressed: _setAlarm,
-                                icon: const Icon(Icons.alarm_add_rounded),
-                                label: const Text('Set alarm'),
-                              ),
-                              if (_alarmArmed)
-                                IconButton(
-                                  tooltip: 'Cancel alarm',
-                                  onPressed: () => setState(() {
-                                    _alarmArmed = false;
-                                    _alarmDeadline = null;
-                                  }),
-                                  icon: const Icon(Icons.alarm_off_rounded),
+                              Align(
+                                alignment: Alignment.center,
+                                child: FilledButton.tonalIcon(
+                                  onPressed: _addSavedAlarm,
+                                  icon: const Icon(Icons.alarm_add_rounded),
+                                  label: const Text('Add alarm'),
                                 ),
+                              ),
+                              const SizedBox(height: 8),
+                              if (_alarms.isEmpty)
+                                const Padding(
+                                  padding: EdgeInsets.all(8),
+                                  child: Text('No saved alarms yet.', textAlign: TextAlign.center),
+                                ),
+                              ..._alarms.map((alarm) {
+                                final at = DateTime.tryParse(alarm['at']?.toString() ?? '');
+                                final time = at == null ? '--:--' : TimeOfDay.fromDateTime(at).format(context);
+                                final repeat = alarm['repeat'] == 'daily'
+                                    ? 'Daily'
+                                    : alarm['repeat'] == 'custom'
+                                        ? 'Custom weekdays'
+                                        : 'Once';
+                                return ListTile(
+                                  dense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: const Icon(Icons.alarm_rounded),
+                                  title: Text(alarm['title']?.toString() ?? 'Alarm'),
+                                  subtitle: Text('$time · $repeat'),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Switch(
+                                        value: alarm['enabled'] == true,
+                                        onChanged: (value) => _toggleSavedAlarm(alarm, value),
+                                      ),
+                                      IconButton(
+                                        tooltip: 'Delete alarm',
+                                        visualDensity: VisualDensity.compact,
+                                        onPressed: () => _deleteSavedAlarm(alarm),
+                                        icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }),
+                              const Divider(height: 8),
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: TextButton.icon(
+                                  onPressed: _setAlarm,
+                                  icon: const Icon(Icons.alarm_on_rounded, size: 18),
+                                  label: const Text('Quick one-time alarm'),
+                                ),
+                              ),
                             ],
                           ),
                       ],
