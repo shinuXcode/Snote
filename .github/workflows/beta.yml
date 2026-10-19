@@ -70,6 +70,20 @@ jobs:
           cp native_android/*.kt android/app/src/main/kotlin/com/snote/snote/
           rm -f test/widget_test.dart
 
+      - name: Allow legacy ProGuard filename in Android WebView dependency
+        working-directory: app
+        run: |
+          set -euo pipefail
+          PROPERTIES="android/gradle.properties"
+          mkdir -p android
+          touch "$PROPERTIES"
+          if grep -q '^android\.r8\.proguardAndroidTxt\.disallowed=' "$PROPERTIES"; then
+            sed -i 's/^android\.r8\.proguardAndroidTxt\.disallowed=.*/android.r8.proguardAndroidTxt.disallowed=false/' "$PROPERTIES"
+          else
+            printf '\nandroid.r8.proguardAndroidTxt.disallowed=false\n' >> "$PROPERTIES"
+          fi
+          grep -Fx 'android.r8.proguardAndroidTxt.disallowed=false' "$PROPERTIES"
+          echo "Applied AGP 9 compatibility setting for flutter_inappwebview_android 1.1.3."
       - name: Configure and verify Android beta identity
         working-directory: app
         run: |
