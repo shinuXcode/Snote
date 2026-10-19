@@ -16,7 +16,6 @@ export const metadata: Metadata = {
  creator: "Sadab",
  publisher: "Snote",
  category: "productivity",
- alternates: { canonical: "/" },
  robots: { index: true, follow: true, googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1, "max-video-preview": -1 } },
  openGraph: { title: "Snote — Notes for Creators", description: "Ideas, structured beautifully. An open-source, local-first note-taking workspace.", url: siteUrl, siteName: "Snote", type: "website", locale: "en_US" },
  twitter: { card: "summary_large_image", title: "Snote — Notes for Creators", description: "Open-source, local-first notes for handwriting, stylus writing, and ideas." },
