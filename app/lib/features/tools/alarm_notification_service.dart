@@ -25,7 +25,7 @@ class AlarmNotificationService {
     const settings = InitializationSettings(
       android: AndroidInitializationSettings('@mipmap/ic_launcher'),
     );
-    await _plugin.initialize(settings);
+    await _plugin.initialize(settings: settings);
     final android = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
     await android?.requestNotificationsPermission();
     await android?.requestExactAlarmsPermission();
@@ -42,9 +42,9 @@ class AlarmNotificationService {
 
   Future<void> cancel(int id) async {
     await initialize();
-    await _plugin.cancel(id);
+    await _plugin.cancel(id: id);
     for (var day = 1; day <= 7; day++) {
-      await _plugin.cancel(id * 10 + day);
+      await _plugin.cancel(id: id * 10 + day);
     }
   }
 
@@ -76,7 +76,11 @@ class AlarmNotificationService {
       var target = first;
       if (!target.isAfter(now)) target = target.add(const Duration(days: 1));
       await _plugin.zonedSchedule(
-        id, title, 'Snote alarm', target, details,
+        id: id,
+        title: title,
+        body: 'Snote alarm',
+        scheduledDate: target,
+        notificationDetails: details,
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
         matchDateTimeComponents: DateTimeComponents.time,
       );
@@ -90,7 +94,11 @@ class AlarmNotificationService {
           target = target.add(const Duration(days: 1));
         }
         await _plugin.zonedSchedule(
-          notificationId, title, 'Snote alarm', target, details,
+          id: notificationId,
+          title: title,
+          body: 'Snote alarm',
+          scheduledDate: target,
+          notificationDetails: details,
           androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
           matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
         );
@@ -100,7 +108,11 @@ class AlarmNotificationService {
     var target = first;
     if (!target.isAfter(now)) target = now.add(const Duration(minutes: 1));
     await _plugin.zonedSchedule(
-      id, title, 'Snote alarm', target, details,
+      id: id,
+      title: title,
+      body: 'Snote alarm',
+      scheduledDate: target,
+      notificationDetails: details,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
     );
   }
