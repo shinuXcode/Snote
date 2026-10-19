@@ -34,6 +34,7 @@ import '../../../data/local/file_document_repository.dart';
 import '../../../data/local/note_repository.dart';
 import '../note_content_compatibility.dart';
 import 'editor_v2_document.dart';
+import 'multi_split_workspace.dart';
 import 'smart_pages_catalog.dart';
 
 import 'editor_v2_ink_painter.dart';
@@ -2587,6 +2588,67 @@ class _EditorV2PageState extends State<EditorV2Page>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Copied selection ($_selectionCount item(s)); clipboard keeps the last 4 actions.')),
     );
+  }
+
+  Future<void> _openMultiSplitWorkspace() async {
+    try {
+      final notes = await _repo.listAllVisible(limit: 300);
+      if (!mounted) return;
+      final candidates = notes.where((note) => note.id != widget.note.id).toList(growable: false);
+      if (candidates.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Create or import another note before opening split view.')),
+        );
+        return;
+      }
+      final selected = await showModalBottomSheet<LocalNote>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (sheetContext) => SizedBox(
+          height: MediaQuery.sizeOf(sheetContext).height * .7,
+          child: Column(
+            children: [
+              const ListTile(
+                leading: Icon(Icons.view_column_outlined),
+                title: Text('Choose the second note'),
+                subtitle: Text('The current note stays on the left.'),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: candidates.length,
+                  itemBuilder: (_, index) {
+                    final note = candidates[index];
+                    return ListTile(
+                      leading: const Icon(Icons.description_outlined),
+                      title: Text(note.title.isEmpty ? 'Untitled note' : note.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      subtitle: Text(note.updatedAt.toString(), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      onTap: () => Navigator.pop(sheetContext, note),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (selected == null || !mounted) return;
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => MultiSplitNoteWorkspace(
+            firstNote: widget.note,
+            secondNote: selected,
+          ),
+        ),
+      );
+    } catch (error, stackTrace) {
+      debugPrint('[Snote][EditorV2] split workspace failed: $error\n$stackTrace');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open split workspace: $error')),
+        );
+      }
+    }
   }
 
   Future<void> _showClipboardHistory() async {
@@ -6214,6 +6276,8 @@ class _EditorV2PageState extends State<EditorV2Page>
         unawaited(_showClipboardHistory());
       case 'noteSwitcher':
         unawaited(_openNoteSwitcher());
+      case 'splitView':
+        unawaited(_openMultiSplitWorkspace());
       case 'toggleNoteSwitcher':
         unawaited(_toggleNoteSwitcher());
       case 'calculator':
@@ -6561,6 +6625,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           PopupMenuItem(value: 'export', child: Text('Export pages to PDF')),
           PopupMenuItem(value: 'bookmarks', child: Text('Bookmarks')),
           PopupMenuItem(value: 'timer', child: Text('Study timer')),
+          PopupMenuItem(value: 'splitView', child: Text('Open multi-split notes')),
           PopupMenuDivider(),
           PopupMenuItem(value: 'dockTop', child: Text('Dock toolbar to top')),
           PopupMenuItem(value: 'dockLeft', child: Text('Dock toolbar to left')),
