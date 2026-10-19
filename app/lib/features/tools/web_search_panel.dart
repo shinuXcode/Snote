@@ -80,7 +80,7 @@ class _SnoteWebSearchPanelState extends State<SnoteWebSearchPanel> {
   }
 
   bool _isBlockedHost(String host) {
-    final normalized = host.toLowerCase().replaceFirst(RegExp(r'\., '');
+    final normalized = host.toLowerCase().replaceFirst(RegExp(r'\.$'), '');
     return _blockedHosts.any((domain) =>
         normalized == domain || normalized.endsWith('.$domain'));
   }
@@ -402,7 +402,7 @@ class _SnoteWebSearchPanelState extends State<SnoteWebSearchPanel> {
     final parsed = Uri.tryParse(query);
     final explicitWebUrl = parsed != null &&
         const {'http', 'https'}.contains(parsed.scheme) && parsed.host.isNotEmpty;
-    final domainLike = !query.contains(RegExp(r'\\s')) && query.contains('.') && !query.startsWith('.');
+    final domainLike = !query.contains(RegExp(r'\s')) && query.contains('.') && !query.startsWith('.');
     final direct = explicitWebUrl ? parsed : domainLike ? Uri.tryParse('https://$query') : null;
     final destination = direct != null && const {'http', 'https'}.contains(direct.scheme) && direct.host.isNotEmpty
         ? direct
