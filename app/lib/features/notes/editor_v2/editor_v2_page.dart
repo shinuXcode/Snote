@@ -4399,6 +4399,48 @@ class _EditorV2PageState extends State<EditorV2Page>
     });
   }
 
+  Widget _smartPagePreview(SmartPageTemplate template) {
+    final accent = Theme.of(context).colorScheme.primary;
+    final paper = Theme.of(context).colorScheme.surface;
+    return Container(
+      height: 42,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: paper,
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: .7)),
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (template.pageTemplate == 'cornell')
+            Container(width: 22, margin: const EdgeInsets.only(right: 4), decoration: BoxDecoration(
+              color: accent.withValues(alpha: .12),
+              border: Border(right: BorderSide(color: accent.withValues(alpha: .45))),
+            )),
+          Expanded(
+            child: template.pageTemplate == 'grid'
+                ? Column(children: List.generate(2, (_) => Expanded(child: Row(children: List.generate(7, (_) => Expanded(child: Container(
+                    margin: const EdgeInsets.all(.5),
+                    decoration: BoxDecoration(border: Border.all(color: accent.withValues(alpha: .25))),
+                  )))))))
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: List.generate(3, (index) => Row(children: [
+                      if (template.pageTemplate == 'checklist')
+                        Container(width: 6, height: 6, margin: const EdgeInsets.only(right: 4), decoration: BoxDecoration(
+                          border: Border.all(color: accent.withValues(alpha: .8)),
+                          borderRadius: BorderRadius.circular(1),
+                        )),
+                      Expanded(child: Container(height: 2, color: accent.withValues(alpha: index == 0 ? .45 : .2))),
+                    ])),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _showSmartPagesLibrary() async {
     final templates = SmartPagesCatalog.all;
     var category = 'All';
@@ -4514,8 +4556,10 @@ class _EditorV2PageState extends State<EditorV2Page>
                                           ]),
                                           Text(template.title, maxLines: 2, overflow: TextOverflow.ellipsis,
                                             style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-                                          const Spacer(),
-                                          Text(template.body.replaceAll('\n', ' • '), maxLines: 2, overflow: TextOverflow.ellipsis,
+                                          const SizedBox(height: 4),
+                                          _smartPagePreview(template),
+                                          const SizedBox(height: 3),
+                                          Text(template.body.replaceAll('\n', ' • '), maxLines: 1, overflow: TextOverflow.ellipsis,
                                             style: Theme.of(context).textTheme.bodySmall),
                                         ],
                                       ),
@@ -4596,7 +4640,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           padding: const EdgeInsets.all(16),
           child: GridView.builder(
             shrinkWrap: true,
-            itemCount: PageTemplate.values.length,
+            itemCount: PageTemplate.values.length + 1,
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 3,
               crossAxisSpacing: 10,
@@ -4604,7 +4648,34 @@ class _EditorV2PageState extends State<EditorV2Page>
               childAspectRatio: 1.1,
             ),
             itemBuilder: (_, index) {
-              final template = PageTemplate.values[index];
+              if (index == 0) {
+                return Card(
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) unawaited(_showSmartPagesLibrary());
+                      });
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.auto_awesome_rounded, size: 30, color: Theme.of(context).colorScheme.primary),
+                          const SizedBox(height: 8),
+                          const Text('Smart Pages', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w900)),
+                          const SizedBox(height: 4),
+                          Text('Planners, study notes and trackers', textAlign: TextAlign.center, style: Theme.of(context).textTheme.labelSmall),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }
+              final template = PageTemplate.values[index - 1];
               final isSelected = template.name == _pageData['template']?.toString();
               return InkWell(
                 onTap: () => Navigator.pop(sheetContext, template),
