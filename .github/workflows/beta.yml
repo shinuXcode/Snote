@@ -27,7 +27,8 @@ permissions:
   contents: write
 
 concurrency:
-  group: snote-beta-build
+  # Keep PR validation separate from the publishing push; otherwise the PR run cancels the APK release build.
+  group: snote-beta-build-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
