@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 type Asset = { id:number; name:string; size:number };
-type Release = { version:string; tag_name:string; published_at:string|null; body:string; prerelease:boolean; assets:Asset[] };
+type Release = { version:string; tag_name:string; published_at:string|null; body:string; prerelease:boolean; assets:Asset[]; stable_version:string|null; history:{tag_name:string;version:string;published_at:string|null;prerelease:boolean;html_url:string;assets_count:number}[] };
 export default function ReleaseCenter() {
  const [release,setRelease]=useState<Release|null>(null); const [error,setError]=useState(""); const [loading,setLoading]=useState(true);
  useEffect(()=>{let live=true; async function load(){try{const r=await fetch("/api/releases/latest",{cache:"no-store"});if(!r.ok)throw new Error("Latest release data is temporarily unavailable.");const d=await r.json();if(live)setRelease(d)}catch(e){if(live)setError(e instanceof Error?e.message:"Update check failed")}finally{if(live)setLoading(false)}}void load();const id=window.setInterval(load,300000);return()=>{live=false;window.clearInterval(id)}},[]);
