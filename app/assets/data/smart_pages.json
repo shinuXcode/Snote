@@ -1,0 +1,1602 @@
+[
+  {
+    "id": 1,
+    "title": "Daily Planner",
+    "category": "Daily & Daily Life",
+    "isFavorite": false,
+    "icon": "calendar_month",
+    "thumbnailKey": "daily-planner"
+  },
+  {
+    "id": 2,
+    "title": "Daily Journal",
+    "category": "Daily & Daily Life",
+    "isFavorite": false,
+    "icon": "edit_note",
+    "thumbnailKey": "daily-journal"
+  },
+  {
+    "id": 3,
+    "title": "Daily Reflection",
+    "category": "Daily & Daily Life",
+    "isFavorite": false,
+    "icon": "track_changes",
+    "thumbnailKey": "daily-reflection"
+  },
+  {
+    "id": 4,
+    "title": "Morning Routine Tracker",
+    "category": "Daily & Daily Life",
+    "isFavorite": false,
+    "icon": "checklist",
+    "thumbnailKey": "morning-routine-tracker"
+  },
+  {
+    "id": 5,
+    "title": "Evening Wind-down",
+    "category": "Daily & Daily Life",
+    "isFavorite": false,
+    "icon": "schedule",
+    "thumbnailKey": "evening-wind-down"
+  },
+  {
+    "id": 6,
+    "title": "Daily Schedule (Hourly)",
+    "category": "Daily & Daily Life",
+    "isFavorite": false,
+    "icon": "view_week",
+    "thumbnailKey": "daily-schedule-hourly"
+  },
+  {
+    "id": 7,
+    "title": "Time Blocking Matrix",
+    "category": "Daily & Daily Life",
+    "isFavorite": false,
+    "icon": "grid_view",
+    "thumbnailKey": "time-blocking-matrix"
+  },
+  {
+    "id": 8,
+    "title": "Daily Gratitude Log",
+    "category": "Daily & Daily Life",
+    "isFavorite": false,
+    "icon": "favorite",
+    "thumbnailKey": "daily-gratitude-log"
+  },
+  {
+    "id": 9,
+    "title": "Daily Priorities (Top 3)",
+    "category": "Daily & Daily Life",
+    "isFavorite": false,
+    "icon": "flag",
+    "thumbnailKey": "daily-priorities-top-3"
+  },
+  {
+    "id": 10,
+    "title": "Daily Brain Dump",
+    "category": "Daily & Daily Life",
+    "isFavorite": false,
+    "icon": "notes",
+    "thumbnailKey": "daily-brain-dump"
+  },
+  {
+    "id": 11,
+    "title": "Daily Water & Meal Tracker",
+    "category": "Daily & Daily Life",
+    "isFavorite": false,
+    "icon": "water_drop",
+    "thumbnailKey": "daily-water-meal-tracker"
+  },
+  {
+    "id": 12,
+    "title": "Daily Mood Tracker",
+    "category": "Daily & Daily Life",
+    "isFavorite": false,
+    "icon": "mood",
+    "thumbnailKey": "daily-mood-tracker"
+  },
+  {
+    "id": 13,
+    "title": "Daily Habit Checklist",
+    "category": "Daily & Daily Life",
+    "isFavorite": false,
+    "icon": "task_alt",
+    "thumbnailKey": "daily-habit-checklist"
+  },
+  {
+    "id": 14,
+    "title": "Daily Exercise Log",
+    "category": "Daily & Daily Life",
+    "isFavorite": false,
+    "icon": "fitness_center",
+    "thumbnailKey": "daily-exercise-log"
+  },
+  {
+    "id": 15,
+    "title": "Daily Affirmations",
+    "category": "Daily & Daily Life",
+    "isFavorite": false,
+    "icon": "auto_awesome",
+    "thumbnailKey": "daily-affirmations"
+  },
+  {
+    "id": 16,
+    "title": "Daily Win / Achievements",
+    "category": "Daily & Daily Life",
+    "isFavorite": false,
+    "icon": "emoji_events",
+    "thumbnailKey": "daily-win-achievements"
+  },
+  {
+    "id": 17,
+    "title": "Daily Expense Log",
+    "category": "Daily & Daily Life",
+    "isFavorite": false,
+    "icon": "payments",
+    "thumbnailKey": "daily-expense-log"
+  },
+  {
+    "id": 18,
+    "title": "Daily Focus Sheet",
+    "category": "Daily & Daily Life",
+    "isFavorite": false,
+    "icon": "center_focus_strong",
+    "thumbnailKey": "daily-focus-sheet"
+  },
+  {
+    "id": 19,
+    "title": "Daily Task List",
+    "category": "Daily & Daily Life",
+    "isFavorite": false,
+    "icon": "list_alt",
+    "thumbnailKey": "daily-task-list"
+  },
+  {
+    "id": 20,
+    "title": "Daily Medication Tracker",
+    "category": "Daily & Daily Life",
+    "isFavorite": false,
+    "icon": "medication",
+    "thumbnailKey": "daily-medication-tracker"
+  },
+  {
+    "id": 21,
+    "title": "Daily Self-Care Checklist",
+    "category": "Daily & Daily Life",
+    "isFavorite": false,
+    "icon": "spa",
+    "thumbnailKey": "daily-self-care-checklist"
+  },
+  {
+    "id": 22,
+    "title": "Daily Energy Tracker",
+    "category": "Daily & Daily Life",
+    "isFavorite": false,
+    "icon": "bolt",
+    "thumbnailKey": "daily-energy-tracker"
+  },
+  {
+    "id": 23,
+    "title": "Daily Weather & Mood Log",
+    "category": "Daily & Daily Life",
+    "isFavorite": false,
+    "icon": "cloud",
+    "thumbnailKey": "daily-weather-mood-log"
+  },
+  {
+    "id": 24,
+    "title": "Daily Reading Tracker",
+    "category": "Daily & Daily Life",
+    "isFavorite": false,
+    "icon": "menu_book",
+    "thumbnailKey": "daily-reading-tracker"
+  },
+  {
+    "id": 25,
+    "title": "Daily Overview Dashboard",
+    "category": "Daily & Daily Life",
+    "isFavorite": false,
+    "icon": "dashboard",
+    "thumbnailKey": "daily-overview-dashboard"
+  },
+  {
+    "id": 26,
+    "title": "Weekly Planner",
+    "category": "Weekly & Monthly Planning",
+    "isFavorite": false,
+    "icon": "calendar_month",
+    "thumbnailKey": "weekly-planner"
+  },
+  {
+    "id": 27,
+    "title": "Weekly Review",
+    "category": "Weekly & Monthly Planning",
+    "isFavorite": false,
+    "icon": "edit_note",
+    "thumbnailKey": "weekly-review"
+  },
+  {
+    "id": 28,
+    "title": "Weekly Goal Tracker",
+    "category": "Weekly & Monthly Planning",
+    "isFavorite": false,
+    "icon": "track_changes",
+    "thumbnailKey": "weekly-goal-tracker"
+  },
+  {
+    "id": 29,
+    "title": "Weekly Meal Planner",
+    "category": "Weekly & Monthly Planning",
+    "isFavorite": false,
+    "icon": "checklist",
+    "thumbnailKey": "weekly-meal-planner"
+  },
+  {
+    "id": 30,
+    "title": "Weekly Schedule",
+    "category": "Weekly & Monthly Planning",
+    "isFavorite": false,
+    "icon": "schedule",
+    "thumbnailKey": "weekly-schedule"
+  },
+  {
+    "id": 31,
+    "title": "Weekly Habit Grid",
+    "category": "Weekly & Monthly Planning",
+    "isFavorite": false,
+    "icon": "view_week",
+    "thumbnailKey": "weekly-habit-grid"
+  },
+  {
+    "id": 32,
+    "title": "Weekly Expense Summary",
+    "category": "Weekly & Monthly Planning",
+    "isFavorite": false,
+    "icon": "grid_view",
+    "thumbnailKey": "weekly-expense-summary"
+  },
+  {
+    "id": 33,
+    "title": "Weekly Overview",
+    "category": "Weekly & Monthly Planning",
+    "isFavorite": false,
+    "icon": "favorite",
+    "thumbnailKey": "weekly-overview"
+  },
+  {
+    "id": 34,
+    "title": "Weekly Workout Plan",
+    "category": "Weekly & Monthly Planning",
+    "isFavorite": false,
+    "icon": "flag",
+    "thumbnailKey": "weekly-workout-plan"
+  },
+  {
+    "id": 35,
+    "title": "Monthly Planner",
+    "category": "Weekly & Monthly Planning",
+    "isFavorite": false,
+    "icon": "notes",
+    "thumbnailKey": "monthly-planner"
+  },
+  {
+    "id": 36,
+    "title": "Monthly Calendar View",
+    "category": "Weekly & Monthly Planning",
+    "isFavorite": false,
+    "icon": "water_drop",
+    "thumbnailKey": "monthly-calendar-view"
+  },
+  {
+    "id": 37,
+    "title": "Monthly Budget Sheet",
+    "category": "Weekly & Monthly Planning",
+    "isFavorite": false,
+    "icon": "mood",
+    "thumbnailKey": "monthly-budget-sheet"
+  },
+  {
+    "id": 38,
+    "title": "Monthly Habit Tracker",
+    "category": "Weekly & Monthly Planning",
+    "isFavorite": false,
+    "icon": "task_alt",
+    "thumbnailKey": "monthly-habit-tracker"
+  },
+  {
+    "id": 39,
+    "title": "Monthly Reflection",
+    "category": "Weekly & Monthly Planning",
+    "isFavorite": false,
+    "icon": "fitness_center",
+    "thumbnailKey": "monthly-reflection"
+  },
+  {
+    "id": 40,
+    "title": "Monthly Goal Setting",
+    "category": "Weekly & Monthly Planning",
+    "isFavorite": false,
+    "icon": "auto_awesome",
+    "thumbnailKey": "monthly-goal-setting"
+  },
+  {
+    "id": 41,
+    "title": "Monthly Bill Tracker",
+    "category": "Weekly & Monthly Planning",
+    "isFavorite": false,
+    "icon": "emoji_events",
+    "thumbnailKey": "monthly-bill-tracker"
+  },
+  {
+    "id": 42,
+    "title": "Monthly Memories / Highlights",
+    "category": "Weekly & Monthly Planning",
+    "isFavorite": false,
+    "icon": "payments",
+    "thumbnailKey": "monthly-memories-highlights"
+  },
+  {
+    "id": 43,
+    "title": "Quarterly Planner (Q1-Q4)",
+    "category": "Weekly & Monthly Planning",
+    "isFavorite": false,
+    "icon": "center_focus_strong",
+    "thumbnailKey": "quarterly-planner-q1-q4"
+  },
+  {
+    "id": 44,
+    "title": "Quarterly Review",
+    "category": "Weekly & Monthly Planning",
+    "isFavorite": false,
+    "icon": "list_alt",
+    "thumbnailKey": "quarterly-review"
+  },
+  {
+    "id": 45,
+    "title": "Annual Goal Tracker",
+    "category": "Weekly & Monthly Planning",
+    "isFavorite": false,
+    "icon": "medication",
+    "thumbnailKey": "annual-goal-tracker"
+  },
+  {
+    "id": 46,
+    "title": "Yearly Calendar",
+    "category": "Weekly & Monthly Planning",
+    "isFavorite": false,
+    "icon": "spa",
+    "thumbnailKey": "yearly-calendar"
+  },
+  {
+    "id": 47,
+    "title": "Yearly Vision Board",
+    "category": "Weekly & Monthly Planning",
+    "isFavorite": false,
+    "icon": "bolt",
+    "thumbnailKey": "yearly-vision-board"
+  },
+  {
+    "id": 48,
+    "title": "Yearly Bucket List",
+    "category": "Weekly & Monthly Planning",
+    "isFavorite": false,
+    "icon": "cloud",
+    "thumbnailKey": "yearly-bucket-list"
+  },
+  {
+    "id": 49,
+    "title": "Yearly Major Events Log",
+    "category": "Weekly & Monthly Planning",
+    "isFavorite": false,
+    "icon": "menu_book",
+    "thumbnailKey": "yearly-major-events-log"
+  },
+  {
+    "id": 50,
+    "title": "Year-End Reflection Sheet",
+    "category": "Weekly & Monthly Planning",
+    "isFavorite": false,
+    "icon": "dashboard",
+    "thumbnailKey": "year-end-reflection-sheet"
+  },
+  {
+    "id": 51,
+    "title": "Simple To-Do List",
+    "category": "Productivity & Task Management",
+    "isFavorite": false,
+    "icon": "calendar_month",
+    "thumbnailKey": "simple-to-do-list"
+  },
+  {
+    "id": 52,
+    "title": "Eisenhower Matrix (Urgent vs Important)",
+    "category": "Productivity & Task Management",
+    "isFavorite": false,
+    "icon": "edit_note",
+    "thumbnailKey": "eisenhower-matrix-urgent-vs-important"
+  },
+  {
+    "id": 53,
+    "title": "Pomodoro Technique Log",
+    "category": "Productivity & Task Management",
+    "isFavorite": false,
+    "icon": "track_changes",
+    "thumbnailKey": "pomodoro-technique-log"
+  },
+  {
+    "id": 54,
+    "title": "GTD (Getting Things Done) Dashboard",
+    "category": "Productivity & Task Management",
+    "isFavorite": false,
+    "icon": "checklist",
+    "thumbnailKey": "gtd-getting-things-done-dashboard"
+  },
+  {
+    "id": 55,
+    "title": "Priority Checklist",
+    "category": "Productivity & Task Management",
+    "isFavorite": false,
+    "icon": "schedule",
+    "thumbnailKey": "priority-checklist"
+  },
+  {
+    "id": 56,
+    "title": "Task Delegation Sheet",
+    "category": "Productivity & Task Management",
+    "isFavorite": false,
+    "icon": "view_week",
+    "thumbnailKey": "task-delegation-sheet"
+  },
+  {
+    "id": 57,
+    "title": "Backlog Tracker",
+    "category": "Productivity & Task Management",
+    "isFavorite": false,
+    "icon": "grid_view",
+    "thumbnailKey": "backlog-tracker"
+  },
+  {
+    "id": 58,
+    "title": "Waiting On Tracker",
+    "category": "Productivity & Task Management",
+    "isFavorite": false,
+    "icon": "favorite",
+    "thumbnailKey": "waiting-on-tracker"
+  },
+  {
+    "id": 59,
+    "title": "Action Item Log",
+    "category": "Productivity & Task Management",
+    "isFavorite": false,
+    "icon": "flag",
+    "thumbnailKey": "action-item-log"
+  },
+  {
+    "id": 60,
+    "title": "Project Task List",
+    "category": "Productivity & Task Management",
+    "isFavorite": false,
+    "icon": "notes",
+    "thumbnailKey": "project-task-list"
+  },
+  {
+    "id": 61,
+    "title": "Sprint Backlog",
+    "category": "Productivity & Task Management",
+    "isFavorite": false,
+    "icon": "water_drop",
+    "thumbnailKey": "sprint-backlog"
+  },
+  {
+    "id": 62,
+    "title": "Weekly Focus Sheet",
+    "category": "Productivity & Task Management",
+    "isFavorite": false,
+    "icon": "mood",
+    "thumbnailKey": "weekly-focus-sheet"
+  },
+  {
+    "id": 63,
+    "title": "Time Audit Sheet",
+    "category": "Productivity & Task Management",
+    "isFavorite": false,
+    "icon": "task_alt",
+    "thumbnailKey": "time-audit-sheet"
+  },
+  {
+    "id": 64,
+    "title": "Distraction Log",
+    "category": "Productivity & Task Management",
+    "isFavorite": false,
+    "icon": "fitness_center",
+    "thumbnailKey": "distraction-log"
+  },
+  {
+    "id": 65,
+    "title": "Problem-Solving Sheet",
+    "category": "Productivity & Task Management",
+    "isFavorite": false,
+    "icon": "auto_awesome",
+    "thumbnailKey": "problem-solving-sheet"
+  },
+  {
+    "id": 66,
+    "title": "Brainstorming Canvas",
+    "category": "Productivity & Task Management",
+    "isFavorite": false,
+    "icon": "emoji_events",
+    "thumbnailKey": "brainstorming-canvas"
+  },
+  {
+    "id": 67,
+    "title": "Decision Matrix",
+    "category": "Productivity & Task Management",
+    "isFavorite": false,
+    "icon": "payments",
+    "thumbnailKey": "decision-matrix"
+  },
+  {
+    "id": 68,
+    "title": "Pros and Cons List",
+    "category": "Productivity & Task Management",
+    "isFavorite": false,
+    "icon": "center_focus_strong",
+    "thumbnailKey": "pros-and-cons-list"
+  },
+  {
+    "id": 69,
+    "title": "Workflow Diagram Sheet",
+    "category": "Productivity & Task Management",
+    "isFavorite": false,
+    "icon": "list_alt",
+    "thumbnailKey": "workflow-diagram-sheet"
+  },
+  {
+    "id": 70,
+    "title": "Daily Checklist",
+    "category": "Productivity & Task Management",
+    "isFavorite": false,
+    "icon": "medication",
+    "thumbnailKey": "daily-checklist"
+  },
+  {
+    "id": 71,
+    "title": "Recurring Tasks Log",
+    "category": "Productivity & Task Management",
+    "isFavorite": false,
+    "icon": "spa",
+    "thumbnailKey": "recurring-tasks-log"
+  },
+  {
+    "id": 72,
+    "title": "Batch Processing List",
+    "category": "Productivity & Task Management",
+    "isFavorite": false,
+    "icon": "bolt",
+    "thumbnailKey": "batch-processing-list"
+  },
+  {
+    "id": 73,
+    "title": "Goal Breakdown Sheet",
+    "category": "Productivity & Task Management",
+    "isFavorite": false,
+    "icon": "cloud",
+    "thumbnailKey": "goal-breakdown-sheet"
+  },
+  {
+    "id": 74,
+    "title": "Project Roadmap",
+    "category": "Productivity & Task Management",
+    "isFavorite": false,
+    "icon": "menu_book",
+    "thumbnailKey": "project-roadmap"
+  },
+  {
+    "id": 75,
+    "title": "Kanban Board Style Layout",
+    "category": "Productivity & Task Management",
+    "isFavorite": false,
+    "icon": "dashboard",
+    "thumbnailKey": "kanban-board-style-layout"
+  },
+  {
+    "id": 76,
+    "title": "Meeting Agenda",
+    "category": "Meeting & Work",
+    "isFavorite": false,
+    "icon": "calendar_month",
+    "thumbnailKey": "meeting-agenda"
+  },
+  {
+    "id": 77,
+    "title": "Meeting Notes (Standard)",
+    "category": "Meeting & Work",
+    "isFavorite": false,
+    "icon": "edit_note",
+    "thumbnailKey": "meeting-notes-standard"
+  },
+  {
+    "id": 78,
+    "title": "Meeting Action Items",
+    "category": "Meeting & Work",
+    "isFavorite": false,
+    "icon": "track_changes",
+    "thumbnailKey": "meeting-action-items"
+  },
+  {
+    "id": 79,
+    "title": "One-on-One Meeting Sheet",
+    "category": "Meeting & Work",
+    "isFavorite": false,
+    "icon": "checklist",
+    "thumbnailKey": "one-on-one-meeting-sheet"
+  },
+  {
+    "id": 80,
+    "title": "Team Sync Notes",
+    "category": "Meeting & Work",
+    "isFavorite": false,
+    "icon": "schedule",
+    "thumbnailKey": "team-sync-notes"
+  },
+  {
+    "id": 81,
+    "title": "Client Intake Form",
+    "category": "Meeting & Work",
+    "isFavorite": false,
+    "icon": "view_week",
+    "thumbnailKey": "client-intake-form"
+  },
+  {
+    "id": 82,
+    "title": "Project Brief",
+    "category": "Meeting & Work",
+    "isFavorite": false,
+    "icon": "grid_view",
+    "thumbnailKey": "project-brief"
+  },
+  {
+    "id": 83,
+    "title": "Project Timeline / Gantt Chart",
+    "category": "Meeting & Work",
+    "isFavorite": false,
+    "icon": "favorite",
+    "thumbnailKey": "project-timeline-gantt-chart"
+  },
+  {
+    "id": 84,
+    "title": "Project Status Report",
+    "category": "Meeting & Work",
+    "isFavorite": false,
+    "icon": "flag",
+    "thumbnailKey": "project-status-report"
+  },
+  {
+    "id": 85,
+    "title": "Project Post-Mortem / Review",
+    "category": "Meeting & Work",
+    "isFavorite": false,
+    "icon": "notes",
+    "thumbnailKey": "project-post-mortem-review"
+  },
+  {
+    "id": 86,
+    "title": "Client Contact Sheet",
+    "category": "Meeting & Work",
+    "isFavorite": false,
+    "icon": "water_drop",
+    "thumbnailKey": "client-contact-sheet"
+  },
+  {
+    "id": 87,
+    "title": "Freelance Invoice Draft",
+    "category": "Meeting & Work",
+    "isFavorite": false,
+    "icon": "mood",
+    "thumbnailKey": "freelance-invoice-draft"
+  },
+  {
+    "id": 88,
+    "title": "Freelance Project Quote",
+    "category": "Meeting & Work",
+    "isFavorite": false,
+    "icon": "task_alt",
+    "thumbnailKey": "freelance-project-quote"
+  },
+  {
+    "id": 89,
+    "title": "Time Sheet / Hours Tracker",
+    "category": "Meeting & Work",
+    "isFavorite": false,
+    "icon": "fitness_center",
+    "thumbnailKey": "time-sheet-hours-tracker"
+  },
+  {
+    "id": 90,
+    "title": "Work Log Sheet",
+    "category": "Meeting & Work",
+    "isFavorite": false,
+    "icon": "auto_awesome",
+    "thumbnailKey": "work-log-sheet"
+  },
+  {
+    "id": 91,
+    "title": "Bug / Issue Tracker",
+    "category": "Meeting & Work",
+    "isFavorite": false,
+    "icon": "emoji_events",
+    "thumbnailKey": "bug-issue-tracker"
+  },
+  {
+    "id": 92,
+    "title": "Feature Request Log",
+    "category": "Meeting & Work",
+    "isFavorite": false,
+    "icon": "payments",
+    "thumbnailKey": "feature-request-log"
+  },
+  {
+    "id": 93,
+    "title": "Interview Notes Form",
+    "category": "Meeting & Work",
+    "isFavorite": false,
+    "icon": "center_focus_strong",
+    "thumbnailKey": "interview-notes-form"
+  },
+  {
+    "id": 94,
+    "title": "Onboarding Checklist",
+    "category": "Meeting & Work",
+    "isFavorite": false,
+    "icon": "list_alt",
+    "thumbnailKey": "onboarding-checklist"
+  },
+  {
+    "id": 95,
+    "title": "Standard Operating Procedure (SOP)",
+    "category": "Meeting & Work",
+    "isFavorite": false,
+    "icon": "medication",
+    "thumbnailKey": "standard-operating-procedure-sop"
+  },
+  {
+    "id": 96,
+    "title": "Strategic Planning Template",
+    "category": "Meeting & Work",
+    "isFavorite": false,
+    "icon": "spa",
+    "thumbnailKey": "strategic-planning-template"
+  },
+  {
+    "id": 97,
+    "title": "Competitor Analysis Sheet",
+    "category": "Meeting & Work",
+    "isFavorite": false,
+    "icon": "bolt",
+    "thumbnailKey": "competitor-analysis-sheet"
+  },
+  {
+    "id": 98,
+    "title": "SWOT Analysis Matrix",
+    "category": "Meeting & Work",
+    "isFavorite": false,
+    "icon": "cloud",
+    "thumbnailKey": "swot-analysis-matrix"
+  },
+  {
+    "id": 99,
+    "title": "Email Draft Layout",
+    "category": "Meeting & Work",
+    "isFavorite": false,
+    "icon": "menu_book",
+    "thumbnailKey": "email-draft-layout"
+  },
+  {
+    "id": 100,
+    "title": "Presentation Outline",
+    "category": "Meeting & Work",
+    "isFavorite": false,
+    "icon": "dashboard",
+    "thumbnailKey": "presentation-outline"
+  },
+  {
+    "id": 101,
+    "title": "Monthly Budget Planner",
+    "category": "Finance & Money Management",
+    "isFavorite": false,
+    "icon": "calendar_month",
+    "thumbnailKey": "monthly-budget-planner"
+  },
+  {
+    "id": 102,
+    "title": "Daily Expense Tracker",
+    "category": "Finance & Money Management",
+    "isFavorite": false,
+    "icon": "edit_note",
+    "thumbnailKey": "daily-expense-tracker"
+  },
+  {
+    "id": 103,
+    "title": "Income Log",
+    "category": "Finance & Money Management",
+    "isFavorite": false,
+    "icon": "track_changes",
+    "thumbnailKey": "income-log"
+  },
+  {
+    "id": 104,
+    "title": "Bill Payment Checklist",
+    "category": "Finance & Money Management",
+    "isFavorite": false,
+    "icon": "checklist",
+    "thumbnailKey": "bill-payment-checklist"
+  },
+  {
+    "id": 105,
+    "title": "Debt Payoff Tracker",
+    "category": "Finance & Money Management",
+    "isFavorite": false,
+    "icon": "schedule",
+    "thumbnailKey": "debt-payoff-tracker"
+  },
+  {
+    "id": 106,
+    "title": "Savings Goal Tracker",
+    "category": "Finance & Money Management",
+    "isFavorite": false,
+    "icon": "view_week",
+    "thumbnailKey": "savings-goal-tracker"
+  },
+  {
+    "id": 107,
+    "title": "Subscription Tracker",
+    "category": "Finance & Money Management",
+    "isFavorite": false,
+    "icon": "grid_view",
+    "thumbnailKey": "subscription-tracker"
+  },
+  {
+    "id": 108,
+    "title": "Emergency Fund Tracker",
+    "category": "Finance & Money Management",
+    "isFavorite": false,
+    "icon": "favorite",
+    "thumbnailKey": "emergency-fund-tracker"
+  },
+  {
+    "id": 109,
+    "title": "Investment Portfolio Log",
+    "category": "Finance & Money Management",
+    "isFavorite": false,
+    "icon": "flag",
+    "thumbnailKey": "investment-portfolio-log"
+  },
+  {
+    "id": 110,
+    "title": "Net Worth Tracker",
+    "category": "Finance & Money Management",
+    "isFavorite": false,
+    "icon": "notes",
+    "thumbnailKey": "net-worth-tracker"
+  },
+  {
+    "id": 111,
+    "title": "Tax Prep Checklist",
+    "category": "Finance & Money Management",
+    "isFavorite": false,
+    "icon": "water_drop",
+    "thumbnailKey": "tax-prep-checklist"
+  },
+  {
+    "id": 112,
+    "title": "Shopping List & Budget",
+    "category": "Finance & Money Management",
+    "isFavorite": false,
+    "icon": "mood",
+    "thumbnailKey": "shopping-list-budget"
+  },
+  {
+    "id": 113,
+    "title": "Holiday Budget Planner",
+    "category": "Finance & Money Management",
+    "isFavorite": false,
+    "icon": "task_alt",
+    "thumbnailKey": "holiday-budget-planner"
+  },
+  {
+    "id": 114,
+    "title": "Travel Expense Log",
+    "category": "Finance & Money Management",
+    "isFavorite": false,
+    "icon": "fitness_center",
+    "thumbnailKey": "travel-expense-log"
+  },
+  {
+    "id": 115,
+    "title": "Business Expense Sheet",
+    "category": "Finance & Money Management",
+    "isFavorite": false,
+    "icon": "auto_awesome",
+    "thumbnailKey": "business-expense-sheet"
+  },
+  {
+    "id": 116,
+    "title": "Cash Flow Tracker",
+    "category": "Finance & Money Management",
+    "isFavorite": false,
+    "icon": "emoji_events",
+    "thumbnailKey": "cash-flow-tracker"
+  },
+  {
+    "id": 117,
+    "title": "Impulse Buy Wishlist (Waiting List)",
+    "category": "Finance & Money Management",
+    "isFavorite": false,
+    "icon": "payments",
+    "thumbnailKey": "impulse-buy-wishlist-waiting-list"
+  },
+  {
+    "id": 118,
+    "title": "Sinking Funds Log",
+    "category": "Finance & Money Management",
+    "isFavorite": false,
+    "icon": "center_focus_strong",
+    "thumbnailKey": "sinking-funds-log"
+  },
+  {
+    "id": 119,
+    "title": "Insurance Policy Summary",
+    "category": "Finance & Money Management",
+    "isFavorite": false,
+    "icon": "list_alt",
+    "thumbnailKey": "insurance-policy-summary"
+  },
+  {
+    "id": 120,
+    "title": "Utility Bill Log",
+    "category": "Finance & Money Management",
+    "isFavorite": false,
+    "icon": "medication",
+    "thumbnailKey": "utility-bill-log"
+  },
+  {
+    "id": 121,
+    "title": "Side Hustle Income Tracker",
+    "category": "Finance & Money Management",
+    "isFavorite": false,
+    "icon": "spa",
+    "thumbnailKey": "side-hustle-income-tracker"
+  },
+  {
+    "id": 122,
+    "title": "Receipt Organizer Sheet",
+    "category": "Finance & Money Management",
+    "isFavorite": false,
+    "icon": "bolt",
+    "thumbnailKey": "receipt-organizer-sheet"
+  },
+  {
+    "id": 123,
+    "title": "Donation / Charity Log",
+    "category": "Finance & Money Management",
+    "isFavorite": false,
+    "icon": "cloud",
+    "thumbnailKey": "donation-charity-log"
+  },
+  {
+    "id": 124,
+    "title": "Financial Goal Planner",
+    "category": "Finance & Money Management",
+    "isFavorite": false,
+    "icon": "menu_book",
+    "thumbnailKey": "financial-goal-planner"
+  },
+  {
+    "id": 125,
+    "title": "Yearly Financial Summary",
+    "category": "Finance & Money Management",
+    "isFavorite": false,
+    "icon": "dashboard",
+    "thumbnailKey": "yearly-financial-summary"
+  },
+  {
+    "id": 126,
+    "title": "Cornell Note-Taking System",
+    "category": "Education, Study & Student",
+    "isFavorite": false,
+    "icon": "calendar_month",
+    "thumbnailKey": "cornell-note-taking-system"
+  },
+  {
+    "id": 127,
+    "title": "Class Lecture Notes",
+    "category": "Education, Study & Student",
+    "isFavorite": false,
+    "icon": "edit_note",
+    "thumbnailKey": "class-lecture-notes"
+  },
+  {
+    "id": 128,
+    "title": "Course Syllabus Overview",
+    "category": "Education, Study & Student",
+    "isFavorite": false,
+    "icon": "track_changes",
+    "thumbnailKey": "course-syllabus-overview"
+  },
+  {
+    "id": 129,
+    "title": "Assignment Tracker",
+    "category": "Education, Study & Student",
+    "isFavorite": false,
+    "icon": "checklist",
+    "thumbnailKey": "assignment-tracker"
+  },
+  {
+    "id": 130,
+    "title": "Exam Study Planner",
+    "category": "Education, Study & Student",
+    "isFavorite": false,
+    "icon": "schedule",
+    "thumbnailKey": "exam-study-planner"
+  },
+  {
+    "id": 131,
+    "title": "Revision Schedule",
+    "category": "Education, Study & Student",
+    "isFavorite": false,
+    "icon": "view_week",
+    "thumbnailKey": "revision-schedule"
+  },
+  {
+    "id": 132,
+    "title": "Grade Tracker",
+    "category": "Education, Study & Student",
+    "isFavorite": false,
+    "icon": "grid_view",
+    "thumbnailKey": "grade-tracker"
+  },
+  {
+    "id": 133,
+    "title": "Study Session Log",
+    "category": "Education, Study & Student",
+    "isFavorite": false,
+    "icon": "favorite",
+    "thumbnailKey": "study-session-log"
+  },
+  {
+    "id": 134,
+    "title": "Book / Textbook Summary",
+    "category": "Education, Study & Student",
+    "isFavorite": false,
+    "icon": "flag",
+    "thumbnailKey": "book-textbook-summary"
+  },
+  {
+    "id": 135,
+    "title": "Research Paper Outline",
+    "category": "Education, Study & Student",
+    "isFavorite": false,
+    "icon": "notes",
+    "thumbnailKey": "research-paper-outline"
+  },
+  {
+    "id": 136,
+    "title": "Vocabulary / Glossary Sheet",
+    "category": "Education, Study & Student",
+    "isFavorite": false,
+    "icon": "water_drop",
+    "thumbnailKey": "vocabulary-glossary-sheet"
+  },
+  {
+    "id": 137,
+    "title": "Formula Sheet Layout",
+    "category": "Education, Study & Student",
+    "isFavorite": false,
+    "icon": "mood",
+    "thumbnailKey": "formula-sheet-layout"
+  },
+  {
+    "id": 138,
+    "title": "Essay Planning Sheet",
+    "category": "Education, Study & Student",
+    "isFavorite": false,
+    "icon": "task_alt",
+    "thumbnailKey": "essay-planning-sheet"
+  },
+  {
+    "id": 139,
+    "title": "Group Project Planner",
+    "category": "Education, Study & Student",
+    "isFavorite": false,
+    "icon": "fitness_center",
+    "thumbnailKey": "group-project-planner"
+  },
+  {
+    "id": 140,
+    "title": "Teacher / Professor Contact Log",
+    "category": "Education, Study & Student",
+    "isFavorite": false,
+    "icon": "auto_awesome",
+    "thumbnailKey": "teacher-professor-contact-log"
+  },
+  {
+    "id": 141,
+    "title": "Flashcard / Q&A Layout",
+    "category": "Education, Study & Student",
+    "isFavorite": false,
+    "icon": "emoji_events",
+    "thumbnailKey": "flashcard-q-a-layout"
+  },
+  {
+    "id": 142,
+    "title": "Scholarship Application Tracker",
+    "category": "Education, Study & Student",
+    "isFavorite": false,
+    "icon": "payments",
+    "thumbnailKey": "scholarship-application-tracker"
+  },
+  {
+    "id": 143,
+    "title": "Online Course Progress Tracker",
+    "category": "Education, Study & Student",
+    "isFavorite": false,
+    "icon": "center_focus_strong",
+    "thumbnailKey": "online-course-progress-tracker"
+  },
+  {
+    "id": 144,
+    "title": "Thesis Outline",
+    "category": "Education, Study & Student",
+    "isFavorite": false,
+    "icon": "list_alt",
+    "thumbnailKey": "thesis-outline"
+  },
+  {
+    "id": 145,
+    "title": "Lab Experiment Report",
+    "category": "Education, Study & Student",
+    "isFavorite": false,
+    "icon": "medication",
+    "thumbnailKey": "lab-experiment-report"
+  },
+  {
+    "id": 146,
+    "title": "Mind Map Layout",
+    "category": "Education, Study & Student",
+    "isFavorite": false,
+    "icon": "spa",
+    "thumbnailKey": "mind-map-layout"
+  },
+  {
+    "id": 147,
+    "title": "Daily Study Checklist",
+    "category": "Education, Study & Student",
+    "isFavorite": false,
+    "icon": "bolt",
+    "thumbnailKey": "daily-study-checklist"
+  },
+  {
+    "id": 148,
+    "title": "Semester Overview",
+    "category": "Education, Study & Student",
+    "isFavorite": false,
+    "icon": "cloud",
+    "thumbnailKey": "semester-overview"
+  },
+  {
+    "id": 149,
+    "title": "Attendance Tracker",
+    "category": "Education, Study & Student",
+    "isFavorite": false,
+    "icon": "menu_book",
+    "thumbnailKey": "attendance-tracker"
+  },
+  {
+    "id": 150,
+    "title": "Subject Topic Checklist",
+    "category": "Education, Study & Student",
+    "isFavorite": false,
+    "icon": "dashboard",
+    "thumbnailKey": "subject-topic-checklist"
+  },
+  {
+    "id": 151,
+    "title": "Workout Log (Gym / Weights)",
+    "category": "Health, Fitness & Wellness",
+    "isFavorite": false,
+    "icon": "calendar_month",
+    "thumbnailKey": "workout-log-gym-weights"
+  },
+  {
+    "id": 152,
+    "title": "Running / Cardio Tracker",
+    "category": "Health, Fitness & Wellness",
+    "isFavorite": false,
+    "icon": "edit_note",
+    "thumbnailKey": "running-cardio-tracker"
+  },
+  {
+    "id": 153,
+    "title": "Meal Planner & Grocery List",
+    "category": "Health, Fitness & Wellness",
+    "isFavorite": false,
+    "icon": "track_changes",
+    "thumbnailKey": "meal-planner-grocery-list"
+  },
+  {
+    "id": 154,
+    "title": "Calorie & Macro Log",
+    "category": "Health, Fitness & Wellness",
+    "isFavorite": false,
+    "icon": "checklist",
+    "thumbnailKey": "calorie-macro-log"
+  },
+  {
+    "id": 155,
+    "title": "Water Intake Tracker",
+    "category": "Health, Fitness & Wellness",
+    "isFavorite": false,
+    "icon": "schedule",
+    "thumbnailKey": "water-intake-tracker"
+  },
+  {
+    "id": 156,
+    "title": "Sleep Tracker Log",
+    "category": "Health, Fitness & Wellness",
+    "isFavorite": false,
+    "icon": "view_week",
+    "thumbnailKey": "sleep-tracker-log"
+  },
+  {
+    "id": 157,
+    "title": "Weight / Body Measurement Log",
+    "category": "Health, Fitness & Wellness",
+    "isFavorite": false,
+    "icon": "grid_view",
+    "thumbnailKey": "weight-body-measurement-log"
+  },
+  {
+    "id": 158,
+    "title": "Habit Tracker (30-Day)",
+    "category": "Health, Fitness & Wellness",
+    "isFavorite": false,
+    "icon": "favorite",
+    "thumbnailKey": "habit-tracker-30-day"
+  },
+  {
+    "id": 159,
+    "title": "Medical History Sheet",
+    "category": "Health, Fitness & Wellness",
+    "isFavorite": false,
+    "icon": "flag",
+    "thumbnailKey": "medical-history-sheet"
+  },
+  {
+    "id": 160,
+    "title": "Medication & Supplement Log",
+    "category": "Health, Fitness & Wellness",
+    "isFavorite": false,
+    "icon": "notes",
+    "thumbnailKey": "medication-supplement-log"
+  },
+  {
+    "id": 161,
+    "title": "Symptoms / Health Log",
+    "category": "Health, Fitness & Wellness",
+    "isFavorite": false,
+    "icon": "water_drop",
+    "thumbnailKey": "symptoms-health-log"
+  },
+  {
+    "id": 162,
+    "title": "Mental Health Journal",
+    "category": "Health, Fitness & Wellness",
+    "isFavorite": false,
+    "icon": "mood",
+    "thumbnailKey": "mental-health-journal"
+  },
+  {
+    "id": 163,
+    "title": "Therapy Notes",
+    "category": "Health, Fitness & Wellness",
+    "isFavorite": false,
+    "icon": "task_alt",
+    "thumbnailKey": "therapy-notes"
+  },
+  {
+    "id": 164,
+    "title": "Self-Care Planner",
+    "category": "Health, Fitness & Wellness",
+    "isFavorite": false,
+    "icon": "fitness_center",
+    "thumbnailKey": "self-care-planner"
+  },
+  {
+    "id": 165,
+    "title": "Recipe Card Layout",
+    "category": "Health, Fitness & Wellness",
+    "isFavorite": false,
+    "icon": "auto_awesome",
+    "thumbnailKey": "recipe-card-layout"
+  },
+  {
+    "id": 166,
+    "title": "Yoga / Meditation Log",
+    "category": "Health, Fitness & Wellness",
+    "isFavorite": false,
+    "icon": "emoji_events",
+    "thumbnailKey": "yoga-meditation-log"
+  },
+  {
+    "id": 167,
+    "title": "Skincare Routine Tracker",
+    "category": "Health, Fitness & Wellness",
+    "isFavorite": false,
+    "icon": "payments",
+    "thumbnailKey": "skincare-routine-tracker"
+  },
+  {
+    "id": 168,
+    "title": "Fasting Tracker",
+    "category": "Health, Fitness & Wellness",
+    "isFavorite": false,
+    "icon": "center_focus_strong",
+    "thumbnailKey": "fasting-tracker"
+  },
+  {
+    "id": 169,
+    "title": "Doctor Visit Notes",
+    "category": "Health, Fitness & Wellness",
+    "isFavorite": false,
+    "icon": "list_alt",
+    "thumbnailKey": "doctor-visit-notes"
+  },
+  {
+    "id": 170,
+    "title": "Grocery List Template",
+    "category": "Health, Fitness & Wellness",
+    "isFavorite": false,
+    "icon": "medication",
+    "thumbnailKey": "grocery-list-template"
+  },
+  {
+    "id": 171,
+    "title": "Allergy Tracker",
+    "category": "Health, Fitness & Wellness",
+    "isFavorite": false,
+    "icon": "spa",
+    "thumbnailKey": "allergy-tracker"
+  },
+  {
+    "id": 172,
+    "title": "Mood & Energy Grid",
+    "category": "Health, Fitness & Wellness",
+    "isFavorite": false,
+    "icon": "bolt",
+    "thumbnailKey": "mood-energy-grid"
+  },
+  {
+    "id": 173,
+    "title": "Physical Therapy Exercises Log",
+    "category": "Health, Fitness & Wellness",
+    "isFavorite": false,
+    "icon": "cloud",
+    "thumbnailKey": "physical-therapy-exercises-log"
+  },
+  {
+    "id": 174,
+    "title": "Fitness Challenge (30 Days)",
+    "category": "Health, Fitness & Wellness",
+    "isFavorite": false,
+    "icon": "menu_book",
+    "thumbnailKey": "fitness-challenge-30-days"
+  },
+  {
+    "id": 175,
+    "title": "Wellness Goal Tracker",
+    "category": "Health, Fitness & Wellness",
+    "isFavorite": false,
+    "icon": "dashboard",
+    "thumbnailKey": "wellness-goal-tracker"
+  },
+  {
+    "id": 176,
+    "title": "Reading List / Book Log",
+    "category": "Personal, Hobbies & Lifestyle",
+    "isFavorite": false,
+    "icon": "calendar_month",
+    "thumbnailKey": "reading-list-book-log"
+  },
+  {
+    "id": 177,
+    "title": "Book Review Template",
+    "category": "Personal, Hobbies & Lifestyle",
+    "isFavorite": false,
+    "icon": "edit_note",
+    "thumbnailKey": "book-review-template"
+  },
+  {
+    "id": 178,
+    "title": "Movie & TV Show Watchlist",
+    "category": "Personal, Hobbies & Lifestyle",
+    "isFavorite": false,
+    "icon": "track_changes",
+    "thumbnailKey": "movie-tv-show-watchlist"
+  },
+  {
+    "id": 179,
+    "title": "Travel Packing List",
+    "category": "Personal, Hobbies & Lifestyle",
+    "isFavorite": false,
+    "icon": "checklist",
+    "thumbnailKey": "travel-packing-list"
+  },
+  {
+    "id": 180,
+    "title": "Travel Itinerary Planner",
+    "category": "Personal, Hobbies & Lifestyle",
+    "isFavorite": false,
+    "icon": "schedule",
+    "thumbnailKey": "travel-itinerary-planner"
+  },
+  {
+    "id": 181,
+    "title": "Vacation Budget Planner",
+    "category": "Personal, Hobbies & Lifestyle",
+    "isFavorite": false,
+    "icon": "view_week",
+    "thumbnailKey": "vacation-budget-planner"
+  },
+  {
+    "id": 182,
+    "title": "Recipe Book Page",
+    "category": "Personal, Hobbies & Lifestyle",
+    "isFavorite": false,
+    "icon": "grid_view",
+    "thumbnailKey": "recipe-book-page"
+  },
+  {
+    "id": 183,
+    "title": "Gift Idea Tracker",
+    "category": "Personal, Hobbies & Lifestyle",
+    "isFavorite": false,
+    "icon": "favorite",
+    "thumbnailKey": "gift-idea-tracker"
+  },
+  {
+    "id": 184,
+    "title": "Wishlist Template",
+    "category": "Personal, Hobbies & Lifestyle",
+    "isFavorite": false,
+    "icon": "flag",
+    "thumbnailKey": "wishlist-template"
+  },
+  {
+    "id": 185,
+    "title": "Event / Party Planner",
+    "category": "Personal, Hobbies & Lifestyle",
+    "isFavorite": false,
+    "icon": "notes",
+    "thumbnailKey": "event-party-planner"
+  },
+  {
+    "id": 186,
+    "title": "Wedding Planning Sheet",
+    "category": "Personal, Hobbies & Lifestyle",
+    "isFavorite": false,
+    "icon": "water_drop",
+    "thumbnailKey": "wedding-planning-sheet"
+  },
+  {
+    "id": 187,
+    "title": "Home Cleaning Schedule",
+    "category": "Personal, Hobbies & Lifestyle",
+    "isFavorite": false,
+    "icon": "mood",
+    "thumbnailKey": "home-cleaning-schedule"
+  },
+  {
+    "id": 188,
+    "title": "Home Maintenance Log",
+    "category": "Personal, Hobbies & Lifestyle",
+    "isFavorite": false,
+    "icon": "task_alt",
+    "thumbnailKey": "home-maintenance-log"
+  },
+  {
+    "id": 189,
+    "title": "Plant Care & Watering Schedule",
+    "category": "Personal, Hobbies & Lifestyle",
+    "isFavorite": false,
+    "icon": "fitness_center",
+    "thumbnailKey": "plant-care-watering-schedule"
+  },
+  {
+    "id": 190,
+    "title": "Pet Health & Vet Log",
+    "category": "Personal, Hobbies & Lifestyle",
+    "isFavorite": false,
+    "icon": "auto_awesome",
+    "thumbnailKey": "pet-health-vet-log"
+  },
+  {
+    "id": 191,
+    "title": "Car Maintenance Tracker",
+    "category": "Personal, Hobbies & Lifestyle",
+    "isFavorite": false,
+    "icon": "emoji_events",
+    "thumbnailKey": "car-maintenance-tracker"
+  },
+  {
+    "id": 192,
+    "title": "Password Log (Personal Safety)",
+    "category": "Personal, Hobbies & Lifestyle",
+    "isFavorite": false,
+    "icon": "payments",
+    "thumbnailKey": "password-log-personal-safety"
+  },
+  {
+    "id": 193,
+    "title": "Important Contacts Sheet",
+    "category": "Personal, Hobbies & Lifestyle",
+    "isFavorite": false,
+    "icon": "center_focus_strong",
+    "thumbnailKey": "important-contacts-sheet"
+  },
+  {
+    "id": 194,
+    "title": "Content Creation Calendar (Social Media)",
+    "category": "Personal, Hobbies & Lifestyle",
+    "isFavorite": false,
+    "icon": "list_alt",
+    "thumbnailKey": "content-creation-calendar-social-media"
+  },
+  {
+    "id": 195,
+    "title": "Blog Post Outline",
+    "category": "Personal, Hobbies & Lifestyle",
+    "isFavorite": false,
+    "icon": "medication",
+    "thumbnailKey": "blog-post-outline"
+  },
+  {
+    "id": 196,
+    "title": "Podcast Episode Planner",
+    "category": "Personal, Hobbies & Lifestyle",
+    "isFavorite": false,
+    "icon": "spa",
+    "thumbnailKey": "podcast-episode-planner"
+  },
+  {
+    "id": 197,
+    "title": "YouTube Video Script Layout",
+    "category": "Personal, Hobbies & Lifestyle",
+    "isFavorite": false,
+    "icon": "bolt",
+    "thumbnailKey": "youtube-video-script-layout"
+  },
+  {
+    "id": 198,
+    "title": "Bucket List Tracker",
+    "category": "Personal, Hobbies & Lifestyle",
+    "isFavorite": false,
+    "icon": "cloud",
+    "thumbnailKey": "bucket-list-tracker"
+  },
+  {
+    "id": 199,
+    "title": "Memories / Milestone Journal",
+    "category": "Personal, Hobbies & Lifestyle",
+    "isFavorite": false,
+    "icon": "menu_book",
+    "thumbnailKey": "memories-milestone-journal"
+  },
+  {
+    "id": 200,
+    "title": "Daily Gratitude & Positivity Log",
+    "category": "Personal, Hobbies & Lifestyle",
+    "isFavorite": false,
+    "icon": "dashboard",
+    "thumbnailKey": "daily-gratitude-positivity-log"
+  }
+]

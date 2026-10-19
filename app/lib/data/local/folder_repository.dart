@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/config/account_scope.dart';
+import 'local_file_store.dart';
 import 'database.dart';
 
 const defaultFolderColor = 0xff5b6cf9;
@@ -253,6 +254,145 @@ class FolderRepository {
     });
   }
 
+
+  /// Copies a folder subtree, including note data and metadata, with new IDs.
+  /// Attachment paths and stroke files are shared read-only until the copy is edited.
+  Future<LocalFolder> duplicate(String id, {String? parentId}) async {
+    final db = await _db;
+    return db.transaction((tx) async {
+      final roots = await tx.query(
+        'folders',
+        where: 'id = ? AND owner_id = ? AND deleted_at IS NULL',
+        whereArgs: [id, SnoteAccountScope.ownerId],
+        limit: 1,
+      );
+      if (roots.isEmpty) throw ArgumentError.value(id, 'id', 'Folder not found.');
+      if (parentId != null) await _requireActiveFolder(tx, parentId);
+      final originalRoot = roots.first;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final siblings = await tx.rawQuery(
+        'SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order '
+        'FROM folders WHERE owner_id = ? AND parent_id IS ? AND deleted_at IS NULL',
+        [SnoteAccountScope.ownerId, parentId],
+      );
+      final rootOrder = (siblings.first['next_order'] as num?)?.toInt() ?? 0;
+      final newIds = <String, String>{};
+
+      Future<void> cloneFolder(String oldId, String? nextParent, bool isRoot) async {
+        if (newIds.containsKey(oldId)) return;
+        final rows = await tx.query(
+          'folders',
+          where: 'id = ? AND owner_id = ? AND deleted_at IS NULL',
+          whereArgs: [oldId, SnoteAccountScope.ownerId],
+          limit: 1,
+        );
+        if (rows.isEmpty) return;
+        final original = rows.first;
+        final newId = _uuid.v4();
+        final name = original['name']! as String;
+        newIds[oldId] = newId;
+        await tx.insert('folders', {
+          'id': newId,
+          'owner_id': SnoteAccountScope.ownerId,
+          'parent_id': nextParent,
+          'name': isRoot ? name + ' (copy)' : name,
+          'color_value': original['color_value'] ?? defaultFolderColor,
+          'icon_key': original['icon_key'] ?? 'folder',
+          'sort_order': isRoot ? rootOrder : (original['sort_order'] ?? 0),
+          'created_at': now,
+          'updated_at': now,
+          'deleted_at': null,
+        });
+        await _queue(tx, newId, 'upsert');
+        final children = await tx.query(
+          'folders',
+          columns: ['id'],
+          where: 'owner_id = ? AND parent_id = ? AND deleted_at IS NULL',
+          whereArgs: [SnoteAccountScope.ownerId, oldId],
+          orderBy: 'sort_order ASC',
+        );
+        for (final child in children) {
+          await cloneFolder(child['id']! as String, newId, false);
+        }
+      }
+
+      await cloneFolder(id, parentId, true);
+      final oldFolderIds = newIds.keys.toList(growable: false);
+      if (oldFolderIds.isNotEmpty) {
+        final placeholders = List.filled(oldFolderIds.length, '?').join(',');
+        final notes = await tx.query(
+          'notes',
+          where: 'owner_id = ? AND deleted_at IS NULL AND folder_id IN ($placeholders)',
+          whereArgs: [SnoteAccountScope.ownerId, ...oldFolderIds],
+        );
+        for (final note in notes) {
+          final oldNoteId = note['id']! as String;
+          final newNoteId = _uuid.v4();
+          final oldTitle = note['title']! as String;
+          await tx.insert('notes', {
+            ...note,
+            'id': newNoteId,
+            'owner_id': SnoteAccountScope.ownerId,
+            'title': oldTitle + ' (copy)',
+            'folder_id': newIds[note['folder_id'] as String],
+            'created_at': now,
+            'updated_at': now,
+            'deleted_at': null,
+            'version': 1,
+            'sync_state': 'pending',
+          });
+          final pages = await tx.query('pages', where: 'note_id = ?', whereArgs: [oldNoteId]);
+          for (final page in pages) {
+            final newPageId = _uuid.v4();
+            final oldStrokePath = page['stroke_file']?.toString();
+            var newStrokePath = oldStrokePath;
+            if (oldStrokePath != null && oldStrokePath.isNotEmpty) {
+              final fileName = oldStrokePath.replaceAll('\\', '/').split('/').last;
+              newStrokePath = await copyLocalFile(oldStrokePath, newPageId, fileName);
+            }
+            await tx.insert('pages', {
+              ...page,
+              'id': newPageId,
+              'note_id': newNoteId,
+              if (oldStrokePath != null) 'stroke_file': newStrokePath,
+              'created_at': now,
+              'updated_at': now,
+            });
+          }
+          final attachments = await tx.query('attachments', where: 'note_id = ?', whereArgs: [oldNoteId]);
+          for (final attachment in attachments) {
+            final newAttachmentId = _uuid.v4();
+            final oldPath = attachment['local_path']?.toString();
+            var newPath = oldPath;
+            if (oldPath != null && oldPath.isNotEmpty) {
+              final fileName = oldPath.replaceAll('\\', '/').split('/').last;
+              newPath = await copyLocalFile(oldPath, newAttachmentId, fileName);
+            }
+            await tx.insert('attachments', {
+              ...attachment,
+              'id': newAttachmentId,
+              'note_id': newNoteId,
+              if (oldPath != null) 'local_path': newPath,
+              'created_at': now,
+            });
+          }
+          await queueNote(tx, newNoteId, 'upsert');
+        }
+      }
+
+      return LocalFolder(
+        id: newIds[id]!,
+        parentId: parentId,
+        name: (originalRoot['name']! as String) + ' (copy)',
+        colorValue: (originalRoot['color_value'] as num?)?.toInt() ?? defaultFolderColor,
+        iconKey: originalRoot['icon_key']?.toString() ?? 'folder',
+        sortOrder: rootOrder,
+        createdAt: now,
+        updatedAt: now,
+      );
+    });
+  }
+
   Future<void> delete(String id) async {
     final db = await _db;
     await db.transaction((tx) async {
@@ -360,7 +500,16 @@ class FolderRepository {
       'work',
       'archive',
     };
-    return known.contains(value) ? value : 'folder';
+    if (known.contains(value)) return value;
+    final coverMatch = RegExp(r'^cover:(\d{1,2})$').firstMatch(value);
+    final coverIndex = int.tryParse(coverMatch?.group(1) ?? '');
+    if (coverIndex != null && coverIndex >= 0 && coverIndex < 100) {
+      return 'cover:$coverIndex';
+    }
+    if (RegExp(r'^cover:custom-[a-zA-Z0-9_-]{1,48}$').hasMatch(value)) {
+      return value;
+    }
+    return 'folder';
   }
 
   Future<void> _queue(DatabaseExecutor db, String id, String operation) async {
