@@ -37,13 +37,6 @@ import 'editor_v2_document.dart';
 import 'multi_split_workspace.dart';
 import 'smart_pages_catalog.dart';
 
-/// Shared regression-tested surface style for sticker/text overlays.
-const BoxDecoration snoteTransparentTextBoxDecoration = BoxDecoration(
-  color: Colors.transparent,
-  border: Border.fromBorderSide(BorderSide(color: Colors.transparent, width: 0)),
-  borderRadius: BorderRadius.all(Radius.circular(4)),
-);
-
 import 'editor_v2_ink_painter.dart';
 import 'selection_text_recognizer.dart';
 import '../../tools/screen_capture.dart';
@@ -64,6 +57,13 @@ Map<String, Object?> _decodeEditorDocumentPayload(String? content) {
 /// Replacement note editor surface. It shares only Snote's persistence and
 /// stroke-format contracts; pointer handling, selection, drawing, and painting
 /// are implemented here rather than delegated to the legacy SnoteCanvas.
+/// Shared regression-tested surface style for sticker/text overlays.
+const BoxDecoration snoteTransparentTextBoxDecoration = BoxDecoration(
+  color: Colors.transparent,
+  border: Border.fromBorderSide(BorderSide(color: Colors.transparent, width: 0)),
+  borderRadius: BorderRadius.all(Radius.circular(4)),
+);
+
 class EditorV2Page extends StatefulWidget {
   final LocalNote note;
   final Uint8List? initialPdfBytes;
