@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
@@ -55,17 +57,37 @@ class AlarmNotificationService {
     required String repeat, // once, daily, custom
     List<int> weekdays = const <int>[],
     bool silent = false,
+    String? soundUri,
   }) async {
     await initialize();
     await cancel(id);
+    final customSound = soundUri?.trim().isNotEmpty == true ? soundUri!.trim() : null;
+    final channelId = silent
+        ? 'snote_alarms_silent'
+        : customSound == null
+            ? 'snote_alarms'
+            : 'snote_alarm_\${base64Url.encode(utf8.encode(customSound)).replaceAll('=', '').substring(0, 20)}';
+    if (customSound != null && !silent) {
+      final android = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      await android?.createNotificationChannel(AndroidNotificationChannel(
+        channelId,
+        'Snote alarms · custom sound',
+        description: 'Scheduled reminders using the selected ringtone',
+        importance: Importance.max,
+        playSound: true,
+        sound: UriAndroidNotificationSound(customSound),
+        enableVibration: true,
+      ));
+    }
     final details = NotificationDetails(
       android: AndroidNotificationDetails(
-        silent ? 'snote_alarms_silent' : 'snote_alarms',
+        channelId,
         silent ? 'Snote silent alarms' : 'Snote alarms',
         channelDescription: 'Scheduled reminders and alarms',
         importance: Importance.max,
         priority: Priority.max,
         playSound: !silent,
+        sound: !silent && customSound != null ? UriAndroidNotificationSound(customSound) : null,
         enableVibration: !silent,
         category: AndroidNotificationCategory.alarm,
       ),
@@ -137,6 +159,7 @@ class AlarmNotificationService {
         repeat: alarm['repeat']?.toString() ?? 'once',
         weekdays: weekdays,
         silent: alarm['silent'] == true,
+        soundUri: alarm['soundUri']?.toString(),
       );
     }
   }
