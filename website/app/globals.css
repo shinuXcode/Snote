@@ -318,3 +318,40 @@ html[data-theme="light"] .faq-item summary strong{color:#171717}
 html[data-theme="light"] .faq-item>p{color:#30343b}
 html[data-theme="light"] .faq-index{color:#4c5f83}
 @media(prefers-reduced-motion:reduce){.faq-item,.nav,.nav-github{transition:none!important}}
+
+
+/* Final navigation/accessibility pass: tablet menu and stronger text contrast */
+.nav{background:rgba(8,10,18,.94);border-color:rgba(190,205,255,.32)}
+.links{color:#e0e5f1}
+.links a{color:#e0e5f1}
+.links a:hover,.links a:focus-visible{color:#fff}
+.hero-copy>p,.lead,.muted{color:#c9cfdb}
+.eyebrow{color:#e0e6f4}
+.mobile-menu{background:#101522;border-color:#56617a}
+.mobile-menu a{color:#edf1fa}
+.mobile-menu a:hover{background:#293247}
+.icon-button{background:#111827;color:#f7f9ff;border-color:#59657d}
+.nav-start{background:#f5f7ff;color:#111827}
+.nav-github{color:#f5f7ff}
+@media(min-width:761px) and (max-width:980px){
+  .links{display:none}
+  .mobile-nav{display:flex;align-items:center;gap:8px;margin-left:auto}
+  .nav-actions{gap:8px;margin-left:0}
+  .navin{gap:10px;padding-inline:14px}
+  .brand img{width:34px;height:34px}
+  .nav-start{padding:9px 12px;font-size:12px}
+}
+@media(max-width:760px){
+  .nav{left:3%;right:3%;top:12px;border-radius:20px}
+  .navin{height:54px;padding-inline:12px}
+  .brand img{width:34px;height:34px}
+  .brand-word{font-size:20px}
+  .mobile-nav{gap:7px}
+}
+html[data-theme="light"] .nav{background:rgba(255,255,255,.97);border-color:#777d8b}
+html[data-theme="light"] .links,html[data-theme="light"] .links a{color:#242936}
+html[data-theme="light"] .nav-github{color:#202431}
+html[data-theme="light"] .nav-start{background:#151923;color:#fff;border-color:#151923}
+html[data-theme="light"] .mobile-menu{background:#fff;border-color:#737b8c}
+html[data-theme="light"] .mobile-menu a{color:#1d2330}
+html[data-theme="light"] .icon-button{background:#fff;color:#171b25;border-color:#737b8c}
