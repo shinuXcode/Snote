@@ -106,7 +106,8 @@ const docs: Record<string, Doc> = {
 {title:"4. Publishing changes",body:["Commit the JSON edit to the website branch and wait for the deployment to complete. This is a static feed: it does not require Supabase Realtime, an admin page, or a separate notification server. Visitors see changes after the new website build is deployed."]},
 {title:"5. Action links and safety",body:["Use only HTTPS URLs for actionUrl. Add actionLabel only when a button should be shown. Check JSON syntax and confirm the deployment build succeeds before considering a notice published."]},
 {title:"6. Limitations",body:["This notification centre displays website announcements only. It does not send operating-system push notifications or guarantee immediate delivery to already-open pages. Deployment and browser caching can delay visibility."]}
-]};
+]},
+};
 const ascii=(s:string)=>s.normalize("NFKD").replace(/[^\x20-\x7E]/g,(c)=>c==="\u2014"||c==="\u2013"?"-":c==="\u2019"||c==="\u2018"?"'":c==="\u2022"?"*":"");
 const esc=(s:string)=>ascii(s).replace(/\\/g,"\\\\").replace(/\(/g,"\\(").replace(/\)/g,"\\)");
 const wrap=(s:string,n:number)=>{const words=ascii(s).split(/\s+/);const lines:string[]=[];let line="";for(const word of words){if(line&&(line+" "+word).length>n){lines.push(line);line=word;}else line=line?line+" "+word:word;}if(line)lines.push(line);return lines;};
