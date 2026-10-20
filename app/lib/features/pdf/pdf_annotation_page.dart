@@ -669,6 +669,27 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
               }),
             ),
           ),
+        if (_busy)
+          const Positioned.fill(
+            child: ColoredBox(
+              color: Color(0x33000000),
+              child: Center(
+                child: Card(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 22, vertical: 18),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5)),
+                        SizedBox(width: 12),
+                        Text('Opening PDF…'),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -686,7 +707,7 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
             ),
           ),
           SnoteCanvas(
-            key: ValueKey('pdf-annotation-\${_note?.id ?? 'empty'}-\$_page'),
+            key: ValueKey('pdf-annotation-${_note?.id ?? "empty"}-$_page'),
             pen: const PenConfig(
               type: PenType.ballpoint,
               color: Colors.indigo,
@@ -708,7 +729,7 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
         title: Text(_asset?.name ?? 'PDF workspace'),
         actions: <Widget>[
           IconButton(
-            tooltip: 'Open PDF',
+            tooltip: 'Open / replace PDF',
             onPressed: _openPdf,
             icon: const Icon(Icons.picture_as_pdf_outlined),
           ),
