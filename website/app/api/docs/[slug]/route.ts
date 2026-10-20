@@ -130,5 +130,5 @@ function makePdf(doc:Doc){
 }
 export async function GET(_:Request,context:{params:Promise<{slug:string}>}){
  const {slug}=await context.params;const doc=docs[slug];if(!doc)return NextResponse.json({error:"Document not found"},{status:404});
- const data=makePdf(doc);return new Response(new Uint8Array(data),{headers:{"Content-Type":"application/pdf","Content-Disposition":'attachment; filename="snote-'+slug+'.pdf"',"Cache-Control":"public, max-age=3600","X-Content-Type-Options":"nosniff"}});
+ const data=makePdf(doc);return new Response(new Uint8Array(data),{headers:{"Content-Type":"application/pdf","Content-Disposition":'inline; filename="snote-'+slug+'.pdf"',"Cache-Control":"public, max-age=3600","X-Content-Type-Options":"nosniff"}});
 }
