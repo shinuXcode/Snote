@@ -32,7 +32,7 @@ export default function DocsPage() {
   <div className="docs-library-heading"><div><span className="pill">9 DOCUMENTS</span><h2>Documentation library</h2></div><p className="muted">Each item is available as a browser-viewable PDF and a downloadable copy.</p></div>
   <div className="grid docs-grid">{docs.map(([n,title,body,slug])=><article className="card docs-card" key={slug}>
    <span className="feature-number">{n} / PDF</span><h2>{title}</h2><p className="muted">{body}</p>
-   <div className="docs-actions"><a className="docs-view" href={"/docs/"+slug} target="_blank" rel="noreferrer">Read online <span aria-hidden="true">↗</span></a><a className="docs-download" href={"/api/docs/"+slug} download>Download PDF <span aria-hidden="true">↓</span></a></div>
+   <div className="docs-actions"><a className="docs-view" href={"/docs/"+slug} target="_blank" rel="noreferrer">Read online <span aria-hidden="true">↗</span></a><a className="docs-download" href={"/docs/"+slug} download>Download PDF <span aria-hidden="true">↓</span></a></div>
   </article>)}</div>
   <section className="docs-faq card"><div><span className="pill">HELP CENTRE</span><h2>Frequently asked questions</h2><p className="muted">Quick answers about installation, stylus input, privacy, cloud sync, permissions, SDKs, and releases.</p></div><Link className="cta" href="/faqs">Explore all 28 FAQs <span aria-hidden="true">→</span></Link></section>
   <p className="docs-note">Legal and security documents are informational and do not replace legal advice, platform-specific permission review, or a production security audit. Features can vary by version. PDF covers credit Sadab as founder/creator; interior pages carry Snote and author footers.</p>
