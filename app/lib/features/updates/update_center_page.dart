@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/config/app_version.dart';
 import '../../data/local/notification_repository.dart';
+import '../../data/remote/website_notification_sync_service.dart';
 
 class UpdateCenterPage extends StatefulWidget {
   const UpdateCenterPage({super.key});
@@ -22,6 +23,8 @@ class _UpdateCenterPageState extends State<UpdateCenterPage> {
       Uri.parse('https://api.github.com/repos/shinuXcode/Snote/releases/latest');
 
   final _notificationRepository = NotificationRepository();
+  final _websiteNotificationSync = WebsiteNotificationSyncService();
+  Timer? _notificationRefreshTimer;
   bool _loading = true;
   bool _notificationsLoading = true;
   String? _latestVersion;
@@ -35,6 +38,17 @@ class _UpdateCenterPageState extends State<UpdateCenterPage> {
     super.initState();
     _check();
     _loadNotifications();
+    _syncWebsiteNotifications();
+    _notificationRefreshTimer = Timer.periodic(const Duration(minutes: 5), (_) => _syncWebsiteNotifications());
+  }
+
+  Future<void> _syncWebsiteNotifications() async {
+    try {
+      await _websiteNotificationSync.syncPublished();
+      if (mounted) await _loadNotifications();
+    } catch (_) {
+      // The notification centre remains usable offline; retry on the next refresh.
+    }
   }
 
   Future<void> _loadNotifications() async {
@@ -152,6 +166,12 @@ class _UpdateCenterPageState extends State<UpdateCenterPage> {
   Future<void> _markAllRead() async {
     await _notificationRepository.markAllRead();
     await _loadNotifications();
+  }
+
+  @override
+  void dispose() {
+    _notificationRefreshTimer?.cancel();
+    super.dispose();
   }
 
   @override
