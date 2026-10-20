@@ -30,7 +30,8 @@ function validSession(req: NextRequest) {
 function safeActionUrl(value: unknown) {
   if (!value) return null;
   try { const url = new URL(String(value)); return url.protocol === "https:" || url.protocol === "http:" ? url.toString().slice(0, 1000) : null; } catch { return null; }
-}\nfunction db() {
+}
+function db() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error("Configure NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Vercel.");
