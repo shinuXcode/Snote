@@ -27,6 +27,7 @@ class SnoteNotificationService {
   SnoteNotificationService(this._client);
   final SupabaseClient _client;
   RealtimeChannel? _channel;
+  StreamController<void>? _changes;
 
   Future<List<SnoteNotification>> fetchLatest({int limit = 30}) async {
     final rows = await _client.from('snote_notifications')
@@ -34,14 +35,16 @@ class SnoteNotificationService {
       .eq('published', true)
       .inFilter('target', ['all', 'app'])
       .order('published_at', ascending: false, nullsFirst: false)
-      .limit(limit.clamp(1, 100));
+      .limit(limit.clamp(1, 100).toInt());
     return rows.map((row) => SnoteNotification.fromMap(row)).toList(growable: false);
   }
 
   /// Emits refresh signals. Fetch again after a signal to respect RLS.
   Stream<void> watchChanges() {
     _channel?.unsubscribe();
+    _changes?.close();
     final controller = StreamController<void>.broadcast();
+    _changes = controller;
     _channel = _client.channel('snote-notifications-feed')
       .onPostgresChanges(event: PostgresChangeEvent.all, schema: 'public', table: 'snote_notifications', callback: (_) => controller.add(null))
       .subscribe();
@@ -52,5 +55,8 @@ class SnoteNotificationService {
     final channel = _channel;
     _channel = null;
     if (channel != null) await _client.removeChannel(channel);
+    final changes = _changes;
+    _changes = null;
+    if (changes != null) await changes.close();
   }
 }
