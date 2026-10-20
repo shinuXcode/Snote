@@ -1,28 +1,81 @@
-"use client";
-import { useEffect, useState } from "react";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-type Notice={id:string;title:string;body:string;category:string;target:string;action_url:string|null;published_at:string|null;created_at:string};
-const url=process.env.NEXT_PUBLIC_SUPABASE_URL;
-const key=process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-export default function NotificationsPage(){
- const [items,setItems]=useState<Notice[]>([]);
- const [state,setState]=useState<"loading"|"ready"|"setup"|"error">("loading");
- const [client,setClient]=useState<SupabaseClient|null>(null);
- useEffect(()=>{if(!url||!key){setState("setup");return;}const sb=createClient(url,key);setClient(sb);
- const load=async()=>{const {data,error}=await sb.from("snote_notifications").select("id,title,body,category,target,action_url,published_at,created_at").eq("published",true).in("target",["all","website"]).order("published_at",{ascending:false,nullsFirst:false}).limit(50);if(error){setState("error");return;}setItems(data??[]);setState("ready");};
- void load();const channel=sb.channel("website-notifications-page").on("postgres_changes",{event:"*",schema:"public",table:"snote_notifications"},()=>void load()).subscribe();return()=>{void sb.removeChannel(channel);};},[]);
- return <main style={{maxWidth:1040,margin:"0 auto",padding:"150px 24px 100px",minHeight:"70vh"}}>
- <div style={{fontSize:11,letterSpacing:".24em",color:"#999",textTransform:"uppercase"}}>SNOTE / LIVE UPDATES</div>
- <h1 style={{fontSize:"clamp(40px,7vw,76px)",lineHeight:1,letterSpacing:"-.06em",margin:"20px 0"}}>Notification centre<span style={{color:"#999"}}>.</span></h1>
- <p style={{color:"#aaa",maxWidth:640,lineHeight:1.7}}>Release notes, feature announcements, maintenance notices, and important Snote updates. Published changes appear automatically when the shared feed is configured.</p>
- {state==="setup"&&<section style={panel}><h2>Notifications are not connected yet</h2><p>Configure the Supabase URL and publishable key, apply the notification migration, and enable Realtime before announcements can appear here.</p></section>}
- {state==="error"&&<section style={panel}><h2>Feed unavailable</h2><p>The notification service could not be reached. Try again later.</p><button style={button} onClick={()=>location.reload()}>Retry</button></section>}
- {state==="loading"&&<p style={{color:"#999",padding:"32px 0"}}>Loading announcements…</p>}
- {state==="ready"&&items.length===0&&<section style={panel}><h2>No announcements yet</h2><p>New published Snote updates will appear here.</p></section>}
- {state==="ready"&&items.length>0&&<div style={{display:"grid",gap:14,marginTop:34}}>{items.map(n=><article key={n.id} style={panel}><div style={{display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}><span style={tag}>{n.category}</span><span style={{fontSize:12,color:"#888"}}>{n.published_at?new Date(n.published_at).toLocaleString():new Date(n.created_at).toLocaleDateString()}</span><span style={{fontSize:11,color:"#888"}}>For {n.target}</span></div><h2 style={{fontSize:24,margin:"16px 0 8px"}}>{n.title}</h2><p style={{whiteSpace:"pre-wrap",lineHeight:1.75,color:"#bbb",margin:0}}>{n.body}</p>{n.action_url&&/^https:\/\//i.test(n.action_url)&&<a href={n.action_url} target="_blank" rel="noreferrer" style={{display:"inline-block",marginTop:16,textDecoration:"underline"}}>Learn more ↗</a>}</article>)}</div>}
- <div style={{marginTop:28,fontSize:12,color:"#777"}}>Website updates use realtime refresh. In-app and OS notifications require compatible app code and, for push delivery, a configured push service.</div>
- </main>;
+import feed from "../../data/notifications.json";
+
+type Notice = {
+  id: string;
+  number: number;
+  type: "banner" | "text" | "card" | "release";
+  status: "published" | "draft";
+  category: string;
+  title: string;
+  text: string;
+  date?: string;
+  version?: string;
+  platform?: string;
+  actionLabel?: string;
+  actionUrl?: string;
+};
+
+const notices = (feed.notifications as Notice[])
+  .filter((notice) => notice.status === "published")
+  .sort((a, b) => a.number - b.number);
+
+function safeHref(value?: string) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }
-const panel={border:"1px solid #ffffff20",borderRadius:20,background:"#ffffff06",padding:24};
-const button={border:"1px solid #ffffff40",borderRadius:99,padding:"10px 16px",background:"#fff",color:"#111",cursor:"pointer"};
-const tag={border:"1px solid #ffffff25",borderRadius:99,padding:"5px 10px",fontSize:11,textTransform:"uppercase" as const,letterSpacing:".1em"};
+
+export default function NotificationsPage() {
+  return (
+    <main style={{ maxWidth: 1040, margin: "0 auto", padding: "150px 24px 100px", minHeight: "70vh" }}>
+      <div style={{ fontSize: 11, letterSpacing: ".24em", color: "#999", textTransform: "uppercase" }}>SNOTE / UPDATES</div>
+      <h1 style={{ fontSize: "clamp(40px,7vw,76px)", lineHeight: 1, letterSpacing: "-.06em", margin: "20px 0" }}>
+        Notification centre<span style={{ color: "#999" }}>.</span>
+      </h1>
+      <p style={{ color: "#aaa", maxWidth: 640, lineHeight: 1.7 }}>
+        Announcements, feature updates, maintenance notices and releases, published in sequence from the project notification feed.
+      </p>
+      {notices.length === 0 ? (
+        <section style={panel}><h2>No announcements yet</h2><p style={muted}>Check back when the next Snote update is published.</p></section>
+      ) : (
+        <div style={{ display: "grid", gap: 14, marginTop: 34 }}>
+          {notices.map((n) => {
+            const href = safeHref(n.actionUrl);
+            const meta = <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", color: "#999", fontSize: 12 }}>
+              <span style={tag}>#{String(n.number).padStart(3, "0")}</span><span style={tag}>{n.category}</span>{n.date && <time dateTime={n.date}>{n.date}</time>}
+            </div>;
+            if (n.type === "banner") return <article key={n.id} style={{ ...panel, background: "#e8edff", color: "#101321", borderColor: "#cbd4ff" }}>
+              {meta}<h2 style={{ fontSize: 23, margin: "14px 0 8px" }}>{n.title}</h2><p style={{ lineHeight: 1.7, margin: 0 }}>{n.text}</p>
+              {href && <a href={href} style={link}>{n.actionLabel || "Learn more"} ↗</a>}
+            </article>;
+            if (n.type === "release") return <article key={n.id} style={{ ...panel, borderColor: "#ffffff35" }}>
+              {meta}<div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginTop: 14 }}><span style={{ fontSize: 11, letterSpacing: ".16em", color: "#aaa" }}>RELEASE</span>{n.version && <span style={tag}>v{n.version}</span>}{n.platform && <span style={tag}>{n.platform}</span>}</div>
+              <h2 style={{ fontSize: 25, margin: "12px 0 8px" }}>{n.title}</h2><p style={body}>{n.text}</p>
+              {href && <a href={href} style={link}>{n.actionLabel || "View release"} ↗</a>}
+            </article>;
+            if (n.type === "card") return <article key={n.id} style={{ ...panel, background: "linear-gradient(135deg,#ffffff0b,#ffffff03)" }}>
+              {meta}<h2 style={{ fontSize: 23, margin: "14px 0 8px" }}>{n.title}</h2><p style={body}>{n.text}</p>
+              {href && <a href={href} style={link}>{n.actionLabel || "Read more"} ↗</a>}
+            </article>;
+            return <article key={n.id} style={{ ...panel, padding: "18px 22px" }}>
+              {meta}<p style={{ margin: "12px 0 0", lineHeight: 1.75, whiteSpace: "pre-wrap" }}>{n.text}</p>
+              {n.title && <h2 style={{ fontSize: 19, margin: "12px 0 0" }}>{n.title}</h2>}
+              {href && <a href={href} style={link}>{n.actionLabel || "Read more"} ↗</a>}
+            </article>;
+          })}
+        </div>
+      )}
+      <p style={{ marginTop: 28, fontSize: 12, color: "#777" }}>This feed is generated from a public JSON file. Updates appear after the website rebuilds and deploys.</p>
+    </main>
+  );
+}
+
+const panel = { border: "1px solid #ffffff20", borderRadius: 20, background: "#ffffff06", padding: 24 } as const;
+const muted = { color: "#aaa", lineHeight: 1.7 } as const;
+const body = { whiteSpace: "pre-wrap" as const, lineHeight: 1.75, color: "#bbb", margin: 0 };
+const tag = { border: "1px solid #ffffff25", borderRadius: 99, padding: "5px 10px", fontSize: 11, textTransform: "uppercase" as const, letterSpacing: ".08em" };
+const link = { display: "inline-block", marginTop: 16, color: "inherit", textDecoration: "underline", textUnderlineOffset: 4 };
