@@ -32,7 +32,7 @@ export default function DocsPage() {
    <div><span className="pill">START HERE</span><h2>New to Snote?</h2><p className="muted">Start with the user guide, then review privacy and permissions before enabling cloud features.</p></div>
    <div className="docs-actions"><a className="cta" href="/api/docs/user-guide" target="_blank" rel="noreferrer">Read user guide <span aria-hidden="true">↗</span></a><a className="docs-download" href="/api/docs/user-guide" download>Download PDF <span aria-hidden="true">↓</span></a></div>
   </div>
-  <div className="docs-library-heading"><div><span className="pill">11 DOCUMENTS</span><h2>Documentation library</h2></div><p className="muted">Each item is available as a browser-viewable PDF and a downloadable copy.</p></div>
+  <div className="docs-library-heading"><div><span className="pill">12 DOCUMENTS</span><h2>Documentation library</h2></div><p className="muted">Each item is available as a browser-viewable PDF and a downloadable copy.</p></div>
   <div className="grid docs-grid">{docs.map(([n,title,body,slug])=><article className="card docs-card" key={slug}>
    <span className="feature-number">{n} / PDF</span><h2>{title}</h2><p className="muted">{body}</p>
    <div className="docs-actions"><a className="docs-view" href={"/api/docs/"+slug} target="_blank" rel="noreferrer">Read online <span aria-hidden="true">↗</span></a><a className="docs-download" href={"/api/docs/"+slug} download>Download PDF <span aria-hidden="true">↓</span></a></div>
