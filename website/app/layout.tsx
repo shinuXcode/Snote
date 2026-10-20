@@ -23,7 +23,7 @@ export const metadata: Metadata = {
 };
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#080808", colorScheme: "dark light" };
 
-const nav = [["/","Home"],["/features","Features"],["/how-it-works","Showcase"],["/docs","Docs"],["/faqs","FAQs"],["/download","Download"]];
+const nav = [["/","Home"],["/features","Features"],["/how-it-works","Showcase"],["/docs","Docs"],["/notifications","Updates"],["/faqs","FAQs"],["/download","Download"]];
 const orgSchema = {
  "@context":"https://schema.org","@type":"Organization","name":"Snote","url":siteUrl,
  "logo":siteUrl+"/snote-logo.svg","founder":{"@type":"Person","name":"Sadab"},
@@ -51,7 +51,7 @@ export default function RootLayout({children}:{children:React.ReactNode}){
   {children}
   <footer className="footer"><div className="shell footerin">
    <span>Snote · Open source · Offline first</span><span>Android · iOS · Windows · macOS · Linux · Web</span>
-   <span className="footer-links"><Link href="/docs">Docs</Link><Link href="/faqs">FAQs</Link><Link href="/features">Features</Link><Link href="/founder">Founder</Link><Link href="/download">Download</Link><a href="https://github.com/shinuXcode/Snote/blob/main/LICENSE">License</a></span>
+   <span className="footer-links"><Link href="/docs">Docs</Link><Link href="/notifications">Updates</Link><Link href="/faqs">FAQs</Link><Link href="/features">Features</Link><Link href="/founder">Founder</Link><Link href="/download">Download</Link><a href="https://github.com/shinuXcode/Snote/blob/main/LICENSE">License</a></span>
   </div></footer>
  </>;
 }
