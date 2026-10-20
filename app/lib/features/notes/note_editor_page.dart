@@ -40,6 +40,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   List<Map<String, Object?>> _pages = [];
   int _page = 0;
   bool _loading = true;
+  String? _loadError;
   bool _locked = false;
   bool _unlocked = true;
   bool _draw = true;
@@ -108,45 +109,84 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   }
 
   Future<void> _prepare() async {
-    final locked = await _lock.isLocked(widget.note.id);
-    if (!mounted) return;
-    setState(() {
-      _locked = locked;
-      _unlocked = !locked;
-      _loading = locked;
-    });
-    if (!locked) await _load();
+    try {
+      final locked = await _lock.isLocked(widget.note.id);
+      if (!mounted) return;
+      if (locked) {
+        setState(() {
+          _locked = true;
+          _unlocked = false;
+          _loading = false;
+          _loadError = null;
+        });
+        return;
+      }
+      setState(() {
+        _locked = false;
+        _unlocked = true;
+        _loading = true;
+        _loadError = null;
+      });
+      await _load();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = 'Could not open this note: $error';
+      });
+    }
   }
 
   Future<void> _load() async {
-    final note = await _repo.get(widget.note.id);
-    final parsed = <Map<String, Object?>>[];
-    if (note?.contentJson != null) {
-      try {
-        final json = jsonDecode(note!.contentJson!);
-        if (json is Map<String, dynamic>) {
-          final raw = json['pages'];
-          if (raw is List) {
-            for (final item in raw) {
-              if (item is Map) parsed.add(_normalize(item.cast<String, Object?>()));
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _loadError = null;
+      });
+    }
+    try {
+      final note = await _repo.get(widget.note.id);
+      final parsed = <Map<String, Object?>>[];
+      if (note?.contentJson != null) {
+        try {
+          final json = jsonDecode(note!.contentJson!);
+          if (json is Map<String, dynamic>) {
+            final raw = json['pages'];
+            if (raw is List) {
+              for (final item in raw) {
+                if (item is Map) parsed.add(_normalize(item.cast<String, Object?>()));
+              }
+            }
+            final delta = json['text_delta'];
+            if (delta is List) {
+              try {
+                _quill.document = Document.fromJson(delta);
+              } catch (_) {}
             }
           }
-          final delta = json['text_delta'];
-          if (delta is List) {
-            try { _quill.document = Document.fromJson(delta); } catch (_) {}
-          }
-        }
-      } catch (_) {}
+        } catch (_) {}
+      }
+      if (parsed.isEmpty) parsed.add(_newPage());
+      if (!mounted) return;
+      setState(() {
+        _pages = parsed;
+        _page = 0;
+        _loading = false;
+        _loadError = null;
+      });
+      _restoreToolbar();
+      try {
+        await _keepAwake();
+      } catch (_) {
+        // Screen-awake support is optional; it must not block the editor.
+      }
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = 'Could not load this note: $error';
+      });
     }
-    if (parsed.isEmpty) parsed.add(_newPage());
-    if (!mounted) return;
-    setState(() {
-      _pages = parsed;
-      _page = 0;
-      _loading = false;
-    });
-    _restoreToolbar();
-    await _keepAwake();
   }
 
   Map<String, Object?> _normalize(Map<String, Object?> source) {
@@ -406,7 +446,38 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return _lockedView();
+    if (_loading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_locked && !_unlocked) return _lockedView();
+    if (_loadError != null && _pages.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(title: Text(widget.note.title)),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.sync_problem_rounded, size: 42),
+                const SizedBox(height: 12),
+                const Text('Note could not be loaded', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 8),
+                Text(_loadError!, textAlign: TextAlign.center),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: () => unawaited(_load()),
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Retry'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     return PopScope(
       canPop: !_settings.getBool('disableBackGesture'),
@@ -718,6 +789,12 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
         ),
       ),
       ...pencaseTools.map((tool) => _toolButton(tool, _toolIcon(tool))),
+      SizedBox(width: axis == Axis.horizontal ? 8 : 0, height: axis == Axis.vertical ? 8 : 0),
+      IconButton.filledTonal(
+        onPressed: () => _selectTool(CanvasTool.line),
+        icon: const Icon(Icons.straighten_rounded),
+        tooltip: 'Ruler / straight line',
+      ),
       IconButton.filledTonal(
         onPressed: () => setState(() => _shapePanel = !_shapePanel),
         icon: const Icon(Icons.category_outlined),
@@ -761,9 +838,19 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       ),
     ];
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
-      child: Flex(direction: axis, mainAxisSize: MainAxisSize.min, children: items),
+    final screen = MediaQuery.sizeOf(context);
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxWidth: axis == Axis.horizontal ? screen.width - 16 : 88,
+        maxHeight: axis == Axis.vertical ? screen.height - 100 : 88,
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: axis,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+          child: Flex(direction: axis, mainAxisSize: MainAxisSize.min, children: items),
+        ),
+      ),
     );
   }
 
@@ -1238,18 +1325,59 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: true,
-      builder: (_) => DefaultTabController(
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      builder: (sheetContext) => DefaultTabController(
         length: 3,
         child: SizedBox(
           height: MediaQuery.sizeOf(context).height * .88,
-          child: Column(children: [
-            const TabBar(tabs: [Tab(text: 'Paper'), Tab(text: 'Featured'), Tab(text: 'Custom')]),
-            Expanded(child: TabBarView(children: [
-              _paperTab([PageTemplate.grid, PageTemplate.lined, PageTemplate.dotted, PageTemplate.blank, PageTemplate.cornell]),
-              _paperTab([PageTemplate.dotGrid, PageTemplate.isometric, PageTemplate.planner, PageTemplate.music, PageTemplate.checklist, PageTemplate.dark]),
-              _customPaper(),
-            ])),
-          ]),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(Icons.description_outlined, color: Theme.of(context).colorScheme.onPrimaryContainer),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Paper setup', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+                          SizedBox(height: 3),
+                          Text('Choose a page, grid, colour and orientation.'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const TabBar(
+                tabs: [
+                  Tab(icon: Icon(Icons.grid_4x4_rounded), text: 'Paper'),
+                  Tab(icon: Icon(Icons.auto_awesome_outlined), text: 'Layouts'),
+                  Tab(icon: Icon(Icons.tune_rounded), text: 'Custom'),
+                ],
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    _paperTab([PageTemplate.grid, PageTemplate.lined, PageTemplate.dotted, PageTemplate.blank, PageTemplate.cornell]),
+                    _paperTab([PageTemplate.dotGrid, PageTemplate.isometric, PageTemplate.planner, PageTemplate.music, PageTemplate.checklist, PageTemplate.dark]),
+                    _customPaper(),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

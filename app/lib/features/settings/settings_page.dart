@@ -107,6 +107,7 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       ),
       _group('Display', [
+        _brightnessModeSelector(),
         _themeStyleSelector(),
         _customToggle(
           value: _theme.eInk,
@@ -189,6 +190,32 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       ]),
     ],
+  );
+
+  Widget _brightnessModeSelector() => Card(
+    margin: const EdgeInsets.only(bottom: 8),
+    child: ListTile(
+      leading: const Icon(Icons.brightness_6_outlined),
+      title: const Text('Appearance', style: TextStyle(fontWeight: FontWeight.w800)),
+      subtitle: Text(switch (_theme.brightnessMode) {
+        SnoteBrightnessMode.system => 'Follow device appearance',
+        SnoteBrightnessMode.light => 'Always use light theme',
+        SnoteBrightnessMode.dark => 'Always use dark theme',
+      }),
+      trailing: DropdownButtonHideUnderline(
+        child: DropdownButton<SnoteBrightnessMode>(
+          value: _theme.brightnessMode,
+          items: const [
+            DropdownMenuItem(value: SnoteBrightnessMode.system, child: Text('System')),
+            DropdownMenuItem(value: SnoteBrightnessMode.light, child: Text('Light')),
+            DropdownMenuItem(value: SnoteBrightnessMode.dark, child: Text('Dark')),
+          ],
+          onChanged: (mode) {
+            if (mode != null) _theme.setBrightnessMode(mode);
+          },
+        ),
+      ),
+    ),
   );
 
   Widget _themeStyleSelector() => Card(

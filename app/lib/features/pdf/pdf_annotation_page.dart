@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:cross_file/cross_file.dart';
@@ -40,23 +41,27 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
   int _pageCount = 0;
   int _page = 1;
   final Set<int> _selectedPages = <int>{};
+  final Map<int, Map<String, Object?>> _annotationPages = <int, Map<String, Object?>>{};
+  Timer? _annotationSaveTimer;
+  bool _annotationSaveInFlight = false;
+  bool _annotationSavePending = false;
 
   Future<void> _openPdf() async {
     if (_busy) return;
-    final file = await FilePicker.pickFile(
-      type: FileType.custom,
-      allowedExtensions: ['pdf'],
-    );
-    if (file == null) return;
-
     setState(() => _busy = true);
     try {
+      final file = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+      if (file == null) return;
+
       final bytes = await file.readAsBytes();
-      final note = await _notes.create(
-        title: file.name.replaceFirst(
-          RegExp(r'\.pdf$', caseSensitive: false),
-          '',
-        ),
+      final previousAsset = _asset;
+      final previousNote = _note;
+      final title = file.name.replaceFirst(RegExp(r'\.pdf$', caseSensitive: false), '');
+      final note = previousNote ?? await _notes.create(
+        title: title,
         folderId: widget.folderId,
       );
       final asset = await _documents.saveBytes(
@@ -66,16 +71,22 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
         bytes: bytes,
         metadata: <String, dynamic>{'source': 'pdf-import', 'isCover': true},
       );
-
       final controller = PdfControllerPinch(document: PdfDocument.openData(bytes));
+
       if (!mounted) {
         controller.dispose();
         await _documents.delete(asset);
-        await _notes.delete(note.id);
+        if (previousNote == null) await _notes.delete(note.id);
         return;
       }
 
-      _controller?.dispose();
+      if (previousNote != null) await _notes.rename(note.id, title);
+      final oldController = _controller;
+      _annotationSaveTimer?.cancel();
+      _annotationSaveTimer = null;
+      _annotationPages
+        ..clear()
+        ..[1] = _newAnnotationPage(1);
       setState(() {
         _bytes = bytes;
         _asset = asset;
@@ -86,10 +97,12 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
         _selectedPages.clear();
         _selectionMode = false;
       });
+      oldController?.dispose();
+      if (previousAsset != null) await _documents.delete(previousAsset);
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not open PDF: $error')),
+          SnackBar(content: Text('Could not open or replace PDF: $error')),
         );
       }
     } finally {
@@ -530,6 +543,73 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
     );
   }
 
+  Map<String, Object?> _newAnnotationPage(int page) => <String, Object?>{
+        'id': 'pdf-$page',
+        'template': PageTemplate.blank.name,
+        'paperColor': 0xffffffff,
+        'lineColor': 0xffd8dee8,
+        'lineOpacity': .85,
+        'spacing': 28.0,
+        'orientation': 'vertical',
+        'strokes': <Object?>[],
+      };
+
+  void _annotationChanged(Map<String, Object?> value) {
+    _annotationPages[_page] = <String, Object?>{
+      ..._newAnnotationPage(_page),
+      ...?_annotationPages[_page],
+      ...value,
+    };
+    if (_note == null) return;
+    _annotationSaveTimer?.cancel();
+    _annotationSaveTimer = Timer(const Duration(milliseconds: 500), () {
+      unawaited(_saveAnnotations(force: true));
+    });
+  }
+
+  Future<void> _saveAnnotations({bool force = false}) async {
+    final note = _note;
+    if (note == null) return;
+    if (_annotationSaveInFlight) {
+      _annotationSavePending = true;
+      return;
+    }
+    if (!force && !_annotationSavePending) return;
+    _annotationSavePending = false;
+    _annotationSaveInFlight = true;
+    try {
+      final count = _pageCount > _page ? _pageCount : _page;
+      final pages = List<Map<String, Object?>>.generate(count, (index) {
+        final pageNumber = index + 1;
+        final pageData = Map<String, Object?>.from(
+          _annotationPages[pageNumber] ?? _newAnnotationPage(pageNumber),
+        );
+        pageData['pdfPage'] = pageNumber;
+        return pageData;
+      });
+      await _notes.saveContent(note.id, <String, Object?>{
+        'version': 5,
+        'pages': pages,
+        'pdfAttachmentId': _asset?.id,
+      });
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not save PDF annotations: $error')),
+        );
+      }
+    } finally {
+      _annotationSaveInFlight = false;
+      if (_annotationSavePending && mounted) {
+        _annotationSavePending = false;
+        _annotationSaveTimer?.cancel();
+        _annotationSaveTimer = Timer(const Duration(milliseconds: 100), () {
+          unawaited(_saveAnnotations(force: true));
+        });
+      }
+    }
+  }
+
   Widget _pdfView() {
     final controller = _controller;
     if (controller == null) {
@@ -589,6 +669,27 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
               }),
             ),
           ),
+        if (_busy)
+          const Positioned.fill(
+            child: ColoredBox(
+              color: Color(0x33000000),
+              child: Center(
+                child: Card(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 22, vertical: 18),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5)),
+                        SizedBox(width: 12),
+                        Text('Opening PDF…'),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -606,11 +707,14 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
             ),
           ),
           SnoteCanvas(
+            key: ValueKey('pdf-annotation-${_note?.id ?? "empty"}-$_page'),
             pen: const PenConfig(
               type: PenType.ballpoint,
               color: Colors.indigo,
               size: 3,
             ),
+            initialDocument: _annotationPages[_page] ?? _newAnnotationPage(_page),
+            onChanged: _annotationChanged,
             backgroundColor: Colors.transparent,
           ),
         ],
@@ -625,7 +729,7 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
         title: Text(_asset?.name ?? 'PDF workspace'),
         actions: <Widget>[
           IconButton(
-            tooltip: 'Open PDF',
+            tooltip: 'Open / replace PDF',
             onPressed: _openPdf,
             icon: const Icon(Icons.picture_as_pdf_outlined),
           ),
@@ -665,6 +769,8 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
 
   @override
   void dispose() {
+    _annotationSaveTimer?.cancel();
+    if (_note != null) unawaited(_saveAnnotations(force: true));
     _controller?.dispose();
     super.dispose();
   }

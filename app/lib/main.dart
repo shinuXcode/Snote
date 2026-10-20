@@ -61,7 +61,11 @@ class _SnoteAppState extends State<SnoteApp> {
               colorScheme: ColorScheme.fromSeed(seedColor: styleSeed),
             ),
       darkTheme: dark,
-      themeMode: ThemeMode.system,
+      themeMode: switch (_theme.brightnessMode) {
+        SnoteBrightnessMode.system => ThemeMode.system,
+        SnoteBrightnessMode.light => ThemeMode.light,
+        SnoteBrightnessMode.dark => ThemeMode.dark,
+      },
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,

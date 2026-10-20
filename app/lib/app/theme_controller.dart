@@ -3,6 +3,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 enum SnoteThemeStyle { standard, apple, windows, mac }
 
+enum SnoteBrightnessMode { system, light, dark }
+
 class SnoteThemeController extends ChangeNotifier {
   SnoteThemeController._();
   static final instance = SnoteThemeController._();
@@ -12,6 +14,7 @@ class SnoteThemeController extends ChangeNotifier {
   bool grayscale = true;
   bool reduceMotion = false;
   SnoteThemeStyle style = SnoteThemeStyle.standard;
+  SnoteBrightnessMode brightnessMode = SnoteBrightnessMode.system;
 
   Future<void> load() async {
     eInk = (await _storage.read(key: 'snote.eink')) == 'true';
@@ -21,6 +24,11 @@ class SnoteThemeController extends ChangeNotifier {
     style = SnoteThemeStyle.values.firstWhere(
       (item) => item.name == rawStyle,
       orElse: () => SnoteThemeStyle.standard,
+    );
+    final rawBrightness = await _storage.read(key: 'snote.theme.brightness');
+    brightnessMode = SnoteBrightnessMode.values.firstWhere(
+      (item) => item.name == rawBrightness,
+      orElse: () => SnoteBrightnessMode.system,
     );
     notifyListeners();
   }
@@ -47,5 +55,11 @@ class SnoteThemeController extends ChangeNotifier {
     style = value;
     notifyListeners();
     await _storage.write(key: 'snote.theme.style', value: value.name);
+  }
+
+  Future<void> setBrightnessMode(SnoteBrightnessMode value) async {
+    brightnessMode = value;
+    notifyListeners();
+    await _storage.write(key: 'snote.theme.brightness', value: value.name);
   }
 }
