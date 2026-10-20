@@ -23,7 +23,7 @@ export const metadata: Metadata = {
 };
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#080808", colorScheme: "dark light" };
 
-const nav = [["/","Home"],["/features","Features"],["/how-it-works","Showcase"],["/docs","Docs"],["/faqs","FAQs"],["/download","Download"]];
+const nav = [["/","Home"],["/features","Features"],["/how-it-works","Showcase"],["/docs","Docs"],["/download","Download"]];
 const orgSchema = {
  "@context":"https://schema.org","@type":"Organization","name":"Snote","url":siteUrl,
  "logo":siteUrl+"/snote-logo.svg","founder":{"@type":"Person","name":"Sadab"},
