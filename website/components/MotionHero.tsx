@@ -76,7 +76,7 @@ export default function MotionHero() {
       </section>
       <section className="blueprint-roll" id="blueprint-roll" aria-label="Snote highlights">
         <div className="roll-metal roll-metal-left" />
-        {panels.map((panel) => <Link href="/features" className="roll-panel" key={panel.n}>
+        {panels.map((panel) => <Link href="/how-it-works#showcase-features" className="roll-panel" key={panel.n}>
           <span className="panel-number">{panel.n}</span><span className="panel-glyph"><Icon name={panel.icon as "pen" | "organize" | "open" | "flow"} size={29} /></span>
           <span className="panel-copy"><strong>{panel.title}</strong><small>{panel.body}</small></span>
           <span className="panel-arrow" aria-hidden="true"><Icon name="external" size={14} /></span>
@@ -87,7 +87,7 @@ export default function MotionHero() {
         <section className="section feature-intro" id="features">
           <div><div className="eyebrow"><i /> FEATURES</div><h2 className="title">Designed for<br /><em>Modern Thinkers.</em></h2></div>
           <p className="lead">Everything you need to capture, organize, and grow your ideas — in one beautifully minimal workspace.</p>
-          <Link className="see-features" href="/features">See All Features <Icon name="arrow" size={17} /></Link>
+          <Link className="see-features" href="/how-it-works#showcase-features">Explore Showcase <Icon name="arrow" size={17} /></Link>
         </section>
         <div className="grid feature-grid">
           {[
