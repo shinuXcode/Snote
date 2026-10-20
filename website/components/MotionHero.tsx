@@ -104,6 +104,28 @@ export default function MotionHero() {
           <p className="lead">Write offline, keep ownership of your work, and continue across supported Snote clients.</p>
           <div className="row hero-actions"><Link className="cta" href="/download">Explore Snote <Icon name="arrow" size={17} /></Link><Link className="ghost-cta" href="/account">Open your account</Link></div>
         </section>
+        <section className="section lower-section showcase-faq" id="faqs">
+          <div className="eyebrow"><i /> QUICK ANSWERS</div>
+          <h2 className="title">Frequently asked <em>questions.</em></h2>
+          <p className="lead">A few quick answers before you get started with Snote.</p>
+          <div className="grid feature-grid">
+            {[
+              ["Is Snote open source?","Yes. The source code and issue tracker are available on GitHub."],
+              ["Can I write with a stylus?","Snote is designed for handwriting and stylus input. Exact behavior depends on your device and app version."],
+              ["Can I use Snote offline?","Snote is designed around local-first notes. Optional cloud features depend on configuration."],
+              ["Can I annotate PDFs?","PDF workflows depend on the features available in your installed release. Check the current release notes."],
+            ].map(([question, answer], i) => (
+              <article className="card feature-card" key={question}>
+                <span className="feature-number">0{i + 1} / FAQ</span>
+                <h3>{question}</h3>
+                <p className="muted">{answer}</p>
+              </article>
+            ))}
+          </div>
+          <div className="row hero-actions">
+            <Link className="cta" href="/faqs">Browse all FAQs <Icon name="arrow" size={17} /></Link>
+          </div>
+        </section>
       </main>
     </>
   );
