@@ -2,41 +2,148 @@ import Link from "next/link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
- title: "Snote Documentation — User Guides, Licenses and Policies",
- description: "Read online or download Snote user guides, feature catalogue, open-source documentation, privacy and data handling, permissions, license notices, app overview, SDK reference, and repository audit.",
- alternates: { canonical: "https://snote-showcase.vercel.app/docs" },
- openGraph: { title: "Snote Documentation", description: "Read online or download guides, project documentation, policies, and PDF references for Snote.", url: "https://snote-showcase.vercel.app/docs", type: "website" }
+  title: "Snote Documentation — Original PDFs",
+  description:
+    "Read or download the original Snote app overview, feature catalogue, open-source guide, notifications and admin guide, permissions, license, SDK reference, terms, and repository audit PDFs.",
+  alternates: { canonical: "https://snote-showcase.vercel.app/docs" },
+  openGraph: {
+    title: "Snote Documentation",
+    description: "Browse and download the original Snote documentation PDFs.",
+    url: "https://snote-showcase.vercel.app/docs",
+    type: "website",
+  },
 };
 
 const docs = [
- ["01","User Guide","Installation, handwriting, pages, PDF workflows, backup, and troubleshooting.","user-guide"],
- ["02","Feature Catalogue","Code-informed feature areas, ink architecture, storage, and platform notes.","features"],
- ["03","Open Source Guide","Repository structure, local development, contribution standards, CI, and releases.","open-source"],
- ["04","Privacy & Data Handling","Local-first storage, optional cloud data, third parties, retention, and review notes.","privacy"],
- ["05","Permissions & Authorization","File, image, camera, network, account authorization, and release verification.","permissions"],
- ["06","License & Third-party Notices","MIT license summary, redistribution requirements, and dependency notices.","license"],
- ["07","App Overview","Product description, platform support, versioning, and upgrade guidance.","app-overview"],
- ["08","SDKs & Toolchains","Declared Flutter/Dart, Next.js, React, Supabase, and platform build requirements.","sdks"],
- ["09","Terms of Use","Plain-language usage, user content, backups, cloud services, and disclaimers.","terms"],
- ["10","Security & Disclosure","Secret handling, authorization tests, release safety, and responsible vulnerability reporting.","security"],
- ["11","Repository Audit","Source-level findings, security-sensitive areas, and outstanding verification checklist.","repository-audit"]
+  {
+    number: "01",
+    title: "App Overview",
+    description: "Product overview, platform support, versioning, and release guidance.",
+    slug: "app-overview",
+  },
+  {
+    number: "02",
+    title: "Feature Catalogue",
+    description: "Feature areas, writing engine, storage, and platform notes.",
+    slug: "features",
+  },
+  {
+    number: "03",
+    title: "Notifications & Admin",
+    description: "The original Snote notifications and administration reference.",
+    slug: "notifications-admin",
+  },
+  {
+    number: "04",
+    title: "Open Source Guide",
+    description: "Repository structure, development, contributions, CI, and releases.",
+    slug: "open-source",
+  },
+  {
+    number: "05",
+    title: "Permissions & Authorization",
+    description: "Permission inventory, account boundaries, and release verification.",
+    slug: "permissions",
+  },
+  {
+    number: "06",
+    title: "License & Notices",
+    description: "Project license summary and third-party redistribution notices.",
+    slug: "license",
+  },
+  {
+    number: "07",
+    title: "SDKs & Toolchains",
+    description: "Declared SDK versions and platform build requirements.",
+    slug: "sdks",
+  },
+  {
+    number: "08",
+    title: "Terms of Use",
+    description: "The source terms document covering use, content, backups, and services.",
+    slug: "terms",
+  },
+  {
+    number: "09",
+    title: "Repository Audit",
+    description: "Source-level findings, risk areas, and verification checklist.",
+    slug: "repository-audit",
+  },
 ] as const;
 
+const pdfUrl = (slug: (typeof docs)[number]["slug"]) => `/docs/${slug}.pdf`;
+
 export default function DocsPage() {
- return <main className="shell section docs-page">
-  <div className="eyebrow"><i/> DOCUMENTATION LIBRARY</div>
-  <h1 className="title">Everything about Snote.<br/><em>In one place.</em></h1>
-  <p className="lead">Read each document directly in your browser or download its PDF for offline reference. Guides cover users, contributors, maintainers, privacy, permissions, licensing, SDKs, and security.</p>
-  <div className="docs-callout card">
-   <div><span className="pill">START HERE</span><h2>New to Snote?</h2><p className="muted">Start with the user guide, then review privacy and permissions before enabling cloud features.</p></div>
-   <div className="docs-actions"><a className="cta" href="/api/docs/user-guide" target="_blank" rel="noreferrer">Read user guide <span aria-hidden="true">↗</span></a><a className="docs-download" href="/api/docs/user-guide" download>Download PDF <span aria-hidden="true">↓</span></a></div>
-  </div>
-  <div className="docs-library-heading"><div><span className="pill">11 DOCUMENTS</span><h2>Documentation library</h2></div><p className="muted">Each item is available as a browser-viewable PDF and a downloadable copy.</p></div>
-  <div className="grid docs-grid">{docs.map(([n,title,body,slug])=><article className="card docs-card" key={slug}>
-   <span className="feature-number">{n} / PDF</span><h2>{title}</h2><p className="muted">{body}</p>
-   <div className="docs-actions"><a className="docs-view" href={"/api/docs/"+slug} target="_blank" rel="noreferrer">Read online <span aria-hidden="true">↗</span></a><a className="docs-download" href={"/api/docs/"+slug} download>Download PDF <span aria-hidden="true">↓</span></a></div>
-  </article>)}</div>
-  <section className="docs-faq card"><div><span className="pill">HELP CENTRE</span><h2>Frequently asked questions</h2><p className="muted">Quick answers about installation, stylus input, privacy, cloud sync, permissions, SDKs, and releases.</p></div><Link className="cta" href="/faqs">Explore all 28 FAQs <span aria-hidden="true">→</span></Link></section>
-  <p className="docs-note">Legal and security documents are informational and do not replace legal advice, platform-specific permission review, or a production security audit. Features can vary by version. PDF covers credit Sadab as founder/creator; interior pages carry Snote and author footers.</p>
- </main>;
+  return (
+    <main className="shell section docs-page">
+      <div className="eyebrow">
+        <i /> DOCUMENTATION LIBRARY
+      </div>
+      <h1 className="title">
+        Snote documentation.
+        <br />
+        <em>Original PDFs, in one place.</em>
+      </h1>
+      <p className="lead">
+        Open the original documents in your browser or download the same PDF for
+        offline reference. Each action uses the original PDF file; no document is
+        generated on request.
+      </p>
+
+      <div className="docs-library-heading">
+        <div>
+          <span className="pill">9 ORIGINAL PDFS</span>
+          <h2>Documentation library</h2>
+        </div>
+        <p className="muted">
+          Read online opens the PDF in a new tab. Download PDF saves that same file.
+        </p>
+      </div>
+
+      <div className="grid docs-grid">
+        {docs.map(({ number, title, description, slug }) => {
+          const url = pdfUrl(slug);
+          return (
+            <article className="card docs-card" key={slug}>
+              <span className="feature-number">{number} / PDF</span>
+              <h2>{title}</h2>
+              <p className="muted">{description}</p>
+              <div className="docs-actions">
+                <a
+                  className="docs-view"
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Read online <span aria-hidden="true">↗</span>
+                </a>
+                <a className="docs-download" href={url} download>
+                  Download PDF <span aria-hidden="true">↓</span>
+                </a>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+
+      <section className="docs-faq card">
+        <div>
+          <span className="pill">HELP CENTRE</span>
+          <h2>Frequently asked questions</h2>
+          <p className="muted">
+            Quick answers about installation, stylus input, privacy, cloud sync,
+            permissions, SDKs, and releases.
+          </p>
+        </div>
+        <Link className="cta" href="/faqs">
+          Explore all 28 FAQs <span aria-hidden="true">→</span>
+        </Link>
+      </section>
+      <p className="docs-note">
+        These links serve the original PDF files. Documentation is informational
+        and does not replace legal advice, platform-specific permission review, or
+        a production security audit.
+      </p>
+    </main>
+  );
 }
