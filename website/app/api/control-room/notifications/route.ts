@@ -27,7 +27,7 @@ function validSession(req: NextRequest) {
   if (a.length !== b.length || !timingSafeEqual(a, b)) return false;
   try { return Number(JSON.parse(Buffer.from(payload, "base64url").toString()).exp) > Date.now(); } catch { return false; }
 }
-function db() {
+function safeActionUrl(value: unknown) {\n  if (!value) return null;\n  try { const url = new URL(String(value)); return url.protocol === "https:" || url.protocol === "http:" ? url.toString().slice(0, 1000) : null; } catch { return null; }\n}\nfunction db() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error("Configure NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Vercel.");
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     const message = String(body?.body || "").trim();
     if (!title || title.length > 120 || !message || message.length > 2000) return fail(new Error("Title is required (max 120 characters) and message must be 1–2000 characters."), 400);
     const publishedAt = body?.published ? new Date().toISOString() : null;
-    const record = { title, body: message, category: String(body?.category || "announcement").slice(0,40), action_url: body?.actionUrl ? String(body.actionUrl).slice(0,1000) : null, published_at: publishedAt, expires_at: body?.expiresAt || null, updated_at: new Date().toISOString() };
+    const record = { title, body: message, category: String(body?.category || "announcement").slice(0,40), action_url: safeActionUrl(body?.actionUrl), published_at: publishedAt, expires_at: body?.expiresAt || null, updated_at: new Date().toISOString() };
     const { data, error } = await db().from("website_notifications").insert(record).select().single();
     if (error) throw error;
     return NextResponse.json({ notification: data }, { status: 201 });
@@ -79,7 +79,7 @@ export async function PATCH(req: NextRequest) {
     if (typeof body.title === "string") patch.title = body.title.trim().slice(0,120);
     if (typeof body.body === "string") patch.body = body.body.trim().slice(0,2000);
     if (typeof body.category === "string") patch.category = body.category.slice(0,40);
-    if (typeof body.actionUrl === "string") patch.action_url = body.actionUrl.slice(0,1000) || null;
+    if (typeof body.actionUrl === "string") patch.action_url = safeActionUrl(body.actionUrl);
     if (body.expiresAt === null || typeof body.expiresAt === "string") patch.expires_at = body.expiresAt || null;
     const { data, error } = await db().from("website_notifications").update(patch).eq("id", body.id).select().single();
     if (error) throw error;
