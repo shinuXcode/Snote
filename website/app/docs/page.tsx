@@ -19,7 +19,8 @@ const docs = [
  ["08","SDKs & Toolchains","Declared Flutter/Dart, Next.js, React, Supabase, and platform build requirements.","sdks"],
  ["09","Terms of Use","Plain-language usage, user content, backups, cloud services, and disclaimers.","terms"],
  ["10","Security & Disclosure","Secret handling, authorization tests, release safety, and responsible vulnerability reporting.","security"],
- ["11","Repository Audit","Source-level findings, security-sensitive areas, and outstanding verification checklist.","repository-audit"]
+ ["11","Repository Audit","Source-level findings, security-sensitive areas, and outstanding verification checklist.","repository-audit"],
+ ["12","Notifications & Admin Guide","Shared announcement feed, admin publishing, realtime sync, and security setup.","notifications-admin"]
 ] as const;
 
 export default function DocsPage() {
