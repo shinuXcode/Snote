@@ -27,7 +27,10 @@ function validSession(req: NextRequest) {
   if (a.length !== b.length || !timingSafeEqual(a, b)) return false;
   try { return Number(JSON.parse(Buffer.from(payload, "base64url").toString()).exp) > Date.now(); } catch { return false; }
 }
-function safeActionUrl(value: unknown) {\n  if (!value) return null;\n  try { const url = new URL(String(value)); return url.protocol === "https:" || url.protocol === "http:" ? url.toString().slice(0, 1000) : null; } catch { return null; }\n}\nfunction db() {
+function safeActionUrl(value: unknown) {
+  if (!value) return null;
+  try { const url = new URL(String(value)); return url.protocol === "https:" || url.protocol === "http:" ? url.toString().slice(0, 1000) : null; } catch { return null; }
+}\nfunction db() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error("Configure NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Vercel.");
