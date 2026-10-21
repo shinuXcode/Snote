@@ -6,7 +6,6 @@ on:
     paths:
       - "app/**"
       - "website/**"
-      - "supabase/**"
       - ".github/workflows/release.yml"
       - ".github/workflows/ci.yml"
   workflow_dispatch:
@@ -45,10 +44,6 @@ jobs:
             artifact: Snote-Web.tar.gz
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
-    env:
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -139,15 +134,6 @@ jobs:
           text = manifest.read_text()
           if 'android.permission.CAMERA' not in text:
               text = text.replace('</manifest>', '    <uses-permission android:name="android.permission.CAMERA" />\n</manifest>')
-          if 'android:scheme="com.snote"' not in text:
-              callback = '''            <intent-filter>
-                  <action android:name="android.intent.action.VIEW" />
-                  <category android:name="android.intent.category.DEFAULT" />
-                  <category android:name="android.intent.category.BROWSABLE" />
-                  <data android:scheme="com.snote" android:host="auth-callback" />
-              </intent-filter>
-          '''
-              text = text.replace('</activity>', callback + '        </activity>', 1)
           if 'android:launchMode="singleTop"' in text:
               text = text.replace('android:launchMode="singleTop"', 'android:launchMode="singleTask"')
           if 'android.intent.action.SEND' not in text:
@@ -181,9 +167,6 @@ jobs:
               s = p.read_text()
               if 'NSCameraUsageDescription' not in s:
                   s = s.replace('</dict>', '  <key>NSCameraUsageDescription</key>\n  <string>Snote uses the camera to scan note transfer QR codes.</string>\n</dict>')
-              if '<string>com.snote</string>' not in s:
-                  callback = '''  <key>CFBundleURLTypes</key>\n  <array>\n    <dict>\n      <key>CFBundleTypeRole</key>\n      <string>Editor</string>\n      <key>CFBundleURLSchemes</key>\n      <array>\n        <string>com.snote</string>\n      </array>\n    </dict>\n  </array>\n'''
-                  s = s.replace('</dict>', callback + '</dict>', 1)
               p.write_text(s)
 
           podfile = Path('ios/Podfile')
@@ -258,37 +241,37 @@ jobs:
         if: matrix.target == 'android'
         working-directory: app
         shell: bash
-        run: flutter build apk --release --dart-define="SUPABASE_URL=$SUPABASE_URL" --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" --dart-define="SUPABASE_REDIRECT_URI=com.snote://auth-callback"
+        run: flutter build apk --release
 
       - name: Build Linux
         if: matrix.target == 'linux'
         working-directory: app
         shell: bash
-        run: flutter build linux --release --dart-define="SUPABASE_URL=$SUPABASE_URL" --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" --dart-define="SUPABASE_REDIRECT_URI=com.snote://auth-callback"
+        run: flutter build linux --release
 
       - name: Build Windows
         if: matrix.target == 'windows'
         working-directory: app
         shell: bash
-        run: flutter build windows --release --dart-define="SUPABASE_URL=$SUPABASE_URL" --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" --dart-define="SUPABASE_REDIRECT_URI=com.snote://auth-callback"
+        run: flutter build windows --release
 
       - name: Build macOS
         if: matrix.target == 'macos'
         working-directory: app
         shell: bash
-        run: flutter build macos --release --dart-define="SUPABASE_URL=$SUPABASE_URL" --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" --dart-define="SUPABASE_REDIRECT_URI=com.snote://auth-callback"
+        run: flutter build macos --release
 
       - name: Build iOS
         if: matrix.target == 'ios'
         working-directory: app
         shell: bash
-        run: flutter build ios --release --no-codesign --dart-define="SUPABASE_URL=$SUPABASE_URL" --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" --dart-define="SUPABASE_REDIRECT_URI=com.snote://auth-callback"
+        run: flutter build ios --release --no-codesign
 
       - name: Build Web
         if: matrix.target == 'web'
         working-directory: app
         shell: bash
-        run: flutter build web --release --dart-define="SUPABASE_URL=$SUPABASE_URL" --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" --dart-define="SUPABASE_REDIRECT_URI=com.snote://auth-callback"
+        run: flutter build web --release
 
       - name: Package Android
         if: matrix.target == 'android'

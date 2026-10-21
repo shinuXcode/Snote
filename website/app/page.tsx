@@ -10,7 +10,7 @@ const features=[
   ["01","Stylus engine","Pressure-aware vector strokes, velocity-based fountain ink, pencil texture and palm rejection."],
   ["02","Paper & canvas","A calm page system with lined, grid, dotted and Cornell templates plus zoomable workspaces."],
   ["03","PDF workspace","Keep annotation content separate from the source document so your handwriting remains editable."],
-  ["04","One identity","The same account can carry your notes between supported Snote clients and the website portal."],
+  ["04","Your data stays yours","Keep notes on your device and export portable copies whenever you choose."],
 ];
 
 export default function Home(){
@@ -31,8 +31,8 @@ export default function Home(){
         <Reveal className="card accent-panel">
           <div className="eyebrow">Built for continuity</div>
           <h2 className="title">Write offline. Continue everywhere.</h2>
-          <p className="muted">Local changes stay available immediately. When you sign in and reconnect, the sync queue reconciles the notebook with your account.</p>
-          <Link className="cta" href="/account">Open your account</Link>
+          <p className="muted">Your notebook stays on your device. Export a portable copy whenever you need a backup.</p>
+          <Link className="cta" href="/download">Get Snote</Link>
         </Reveal>
         <Reveal className="card">
           <div className="demo-page">

@@ -12,9 +12,7 @@ import '../../data/local/file_document_repository.dart';
 import '../../data/local/note_repository.dart';
 import '../../data/local/notebook_transfer_service.dart';
 import '../../data/local/shared_media_path_reader.dart';
-import '../../sync/sync_engine.dart';
 import '../../ui/snote_logo.dart';
-import '../auth/login_page.dart';
 import '../folders/folder_tree_view.dart';
 import '../folders/folder_cover_art.dart';
 import '../folders/folder_cover_library_page.dart';
@@ -31,8 +29,7 @@ import 'nextgen_editor_route.dart';
 import 'new_note_route.dart';
 
 class NotesHomePage extends StatefulWidget {
-  final bool localOnly;
-  const NotesHomePage({super.key, this.localOnly = false});
+  const NotesHomePage({super.key});
 
   @override
   State<NotesHomePage> createState() => _NotesHomePageState();
@@ -44,7 +41,6 @@ class _NotesHomePageState extends State<NotesHomePage> {
   final _notes = NoteRepository();
   final _folders = FolderRepository();
   final _transfer = NotebookTransferService(NoteRepository());
-  final _sync = SyncEngine();
   final _search = TextEditingController();
 
   List<LocalFolder> _allFolders = const [];
@@ -55,7 +51,6 @@ class _NotesHomePageState extends State<NotesHomePage> {
   final List<LocalFolder> _breadcrumbs = [];
   LocalNote? _selected;
   bool _loading = true;
-  bool _syncing = false;
   bool _searchVisible = false;
   Timer? _searchDebounce;
   int _loadGeneration = 0;
@@ -83,7 +78,6 @@ class _NotesHomePageState extends State<NotesHomePage> {
     _search.addListener(_onSearchChanged);
     unawaited(_initializeIncomingShareListener());
     unawaited(_load());
-    if (!widget.localOnly) unawaited(_startSync());
   }
 
   Future<void> _initializeIncomingShareListener() async {
@@ -157,22 +151,6 @@ class _NotesHomePageState extends State<NotesHomePage> {
       _handlingIncomingShare = false;
     }
   }
-  Future<void> _startSync() async {
-    try {
-      await _sync.start();
-      await _load();
-    } catch (error, stackTrace) {
-      debugPrint('Snote background sync initialization failed: $error\\n$stackTrace');
-      if (!mounted) return;
-      setState(() => _syncing = false);
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(
-          content: Text('Sync could not start. Your local notebook remains available.'),
-        ),
-      );
-    }
-  }
-
   void _onSearchChanged() {
     if (!mounted) return;
     _homeNoteRenderLimit = 60;
@@ -1155,20 +1133,6 @@ class _NotesHomePageState extends State<NotesHomePage> {
     }
   }
 
-  Future<void> _syncNow() async {
-    if (widget.localOnly) {
-      await Navigator.push(context, MaterialPageRoute(builder: (_) => const LoginPage()));
-      return;
-    }
-    setState(() => _syncing = true);
-    try {
-      await _sync.flush();
-      await _load();
-    } finally {
-      if (mounted) setState(() => _syncing = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final wide = _usesSplitWorkspace(context);
@@ -1326,14 +1290,8 @@ class _NotesHomePageState extends State<NotesHomePage> {
     return Row(
       children: [
         _SideRail(
-          localOnly: widget.localOnly,
-          syncing: _syncing,
           expanded: !_sidebarCollapsed,
           onToggle: () => setState(() => _sidebarCollapsed = !_sidebarCollapsed),
-          onAccount: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const LoginPage()),
-          ),
           onSettings: () => Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const SettingsPage()),
@@ -1346,12 +1304,9 @@ class _NotesHomePageState extends State<NotesHomePage> {
             children: [
               _TopBar(
                 search: _search,
-                syncing: _syncing,
-                localOnly: widget.localOnly,
                 gridView: _gridView,
                 searchVisible: _searchVisible,
                 onToggleSearch: () => setState(() { _searchVisible = !_searchVisible; if (!_searchVisible) _search.clear(); }),
-                onSync: _syncNow,
                 onToggleView: () => setState(() => _gridView = !_gridView),
               ),
               _beta79WelcomePanel(compact: true),
@@ -1462,11 +1417,6 @@ class _NotesHomePageState extends State<NotesHomePage> {
                 icon: const Icon(Icons.collections_bookmark_outlined),
               ),
               IconButton(
-                onPressed: _syncNow,
-                tooltip: widget.localOnly ? 'Account' : 'Sync',
-                icon: Icon(widget.localOnly ? Icons.cloud_outlined : Icons.sync_rounded),
-              ),
-              IconButton(
                 onPressed: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const SettingsPage()),
@@ -1570,27 +1520,20 @@ class _NotesHomePageState extends State<NotesHomePage> {
     _search.removeListener(_onSearchChanged);
     _search.dispose();
     _sharingSubscription?.cancel();
-    unawaited(_sync.dispose());
     super.dispose();
   }
 }
 
 class _SideRail extends StatelessWidget {
-  final bool localOnly;
-  final bool syncing;
   final bool expanded;
   final VoidCallback onToggle;
-  final VoidCallback onAccount;
   final VoidCallback onSettings;
   final VoidCallback onUpdates;
   final VoidCallback onCovers;
 
   const _SideRail({
-    required this.localOnly,
-    required this.syncing,
     required this.expanded,
     required this.onToggle,
-    required this.onAccount,
     required this.onSettings,
     required this.onUpdates,
     required this.onCovers,
@@ -1648,21 +1591,8 @@ class _SideRail extends StatelessWidget {
           entry(icon: Icons.auto_stories_rounded, label: 'Notebook', selected: true, onTap: () {}),
           entry(icon: Icons.notifications_none_rounded, label: 'Updates & notices', onTap: onUpdates),
           entry(icon: Icons.collections_bookmark_outlined, label: 'Cover library', onTap: onCovers),
-          entry(icon: Icons.person_outline_rounded, label: localOnly ? 'Sign in & sync' : 'Account', onTap: onAccount),
           entry(icon: Icons.settings_outlined, label: 'Settings', onTap: onSettings),
           const Spacer(),
-          if (!localOnly)
-            if (expanded)
-              ListTile(
-                leading: Icon(Icons.cloud_done_rounded),
-                title: Text(syncing ? 'Syncing…' : 'Sync ready'),
-                dense: true,
-              )
-            else
-              Tooltip(
-                message: syncing ? 'Syncing' : 'Sync ready',
-                child: const Icon(Icons.cloud_done_rounded),
-              ),
         ],
       ),
     );
@@ -1671,22 +1601,16 @@ class _SideRail extends StatelessWidget {
 
 class _TopBar extends StatelessWidget {
   final TextEditingController search;
-  final bool syncing;
-  final bool localOnly;
   final bool gridView;
   final bool searchVisible;
   final VoidCallback onToggleSearch;
-  final VoidCallback onSync;
   final VoidCallback onToggleView;
 
   const _TopBar({
     required this.search,
-    required this.syncing,
-    required this.localOnly,
     required this.gridView,
     required this.searchVisible,
     required this.onToggleSearch,
-    required this.onSync,
     required this.onToggleView,
   });
 
@@ -1712,17 +1636,6 @@ class _TopBar extends StatelessWidget {
               onPressed: onToggleView,
               tooltip: gridView ? 'Switch to list view' : 'Switch to grid view',
               icon: Icon(gridView ? Icons.view_list_rounded : Icons.grid_view_rounded),
-            ),
-            const SizedBox(width: 4),
-            FilledButton.tonalIcon(
-              onPressed: onSync,
-              icon: syncing
-                  ? const SizedBox.square(
-                      dimension: 17,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Icon(localOnly ? Icons.cloud_outlined : Icons.sync_rounded),
-              label: Text(localOnly ? 'Offline' : 'Sync'),
             ),
           ],
         ),

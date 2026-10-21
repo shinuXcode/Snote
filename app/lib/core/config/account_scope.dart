@@ -1,15 +1,8 @@
 class SnoteAccountScope {
   SnoteAccountScope._();
 
+  /// All production notes are device-local. No user identity or cloud account exists.
   static const localOwner = 'local';
-  static String _ownerId = localOwner;
-
-  static String get ownerId => _ownerId;
-
-  static void setAuthenticatedUser(String? userId) {
-    final normalized = userId?.trim();
-    _ownerId = normalized == null || normalized.isEmpty ? localOwner : normalized;
-  }
-
-  static bool get isCloudAccount => _ownerId != localOwner;
+  static const ownerId = localOwner;
+  static const isCloudAccount = false;
 }

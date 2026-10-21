@@ -4,40 +4,34 @@ Open-source, offline-first handwriting and rich-text notes for Android, iOS, Win
 
 ## Repository
 
-- app/ — Flutter client
-- website/ — multipage showcase and authenticated note portal
-- supabase/ — database/RLS migrations
-- .github/workflows/ — CI, diagnostics and release automation
+- `app/` — Flutter client and local SQLite/file storage
+- `website/` — multipage product showcase and downloads
+- `.github/workflows/` — CI, beta and release automation
 
-## Core behavior
+## Privacy and storage
 
-Snote writes locally first. Authentication and cloud sync are optional at the client layer; once configured, queued changes synchronize against the authenticated Supabase account.
-
-The same account can be used by Flutter clients and the web portal to browse and export cloud-synced notes.
+Snote is local-only in production: no Supabase, remote database, account, login, signup or cloud sync. Notes are stored on the device using SQLite and local files. Use notebook export to create portable backups. The beta workflow/version is kept separate and unchanged by this refactor.
 
 ## Local setup
 
-Flutter:
+```sh
+cd app
 flutter pub get
 flutter run
+```
 
-Cloud-enabled:
-flutter run --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_PUBLISHABLE_KEY=...
+For the showcase website:
 
-Website:
+```sh
 cd website
 npm install
 npm run typecheck
 npm run build
-npm run dev
+```
 
 ## Release
 
-Tag a version such as v0.3.2. The release workflow builds Android, Windows, Linux, macOS, iOS (unsigned) and Web artifacts, then publishes them to GitHub Releases.
-
-Required GitHub Actions secrets:
-- SUPABASE_URL
-- SUPABASE_PUBLISHABLE_KEY
+The release workflow builds Android, Windows, Linux, macOS, iOS (unsigned) and Web artifacts.
 
 ## License
 
