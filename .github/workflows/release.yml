@@ -88,27 +88,108 @@ jobs:
       - name: Configure Android
         if: matrix.target == 'android'
         working-directory: app
+        shell: bash
         run: |
+          set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          p = Path('android/app/build.gradle.kts')
-          s = p.read_text()
-          # Keep Android SDK levels aligned with the validated beta/CI build.
-          s, compile_count = __import__('re').subn(r'^([ \\t]*)compileSdk = .*
-          p = Path('android/app/src/main/AndroidManifest.xml')
-          s = p.read_text()
-          if 'android.permission.CAMERA' not in s:
-              s = s.replace('</manifest>', '    <uses-permission android:name="android.permission.CAMERA" />\n</manifest>')
-          if 'android:scheme="com.snote"' not in s:
-              callback = '''            <intent-filter>\n                <action android:name="android.intent.action.VIEW" />\n                <category android:name="android.intent.category.DEFAULT" />\n                <category android:name="android.intent.category.BROWSABLE" />\n                <data android:scheme="com.snote" android:host="auth-callback" />\n            </intent-filter>\n'''
-              s = s.replace('</activity>', callback + '        </activity>', 1)
-          p.write_text(s)
+          import re
+
+          build = Path('android/app/build.gradle.kts')
+          text = build.read_text()
+          text, compile_count = re.subn(r'^([ \\t]*)compileSdk = .*$', r'\\1compileSdk = 37', text, flags=re.MULTILINE)
+          text, min_count = re.subn(r'^([ \\t]*)minSdk = .*$', r'\\1minSdk = 24', text, flags=re.MULTILINE)
+          if compile_count != 1 or min_count != 1:
+              raise SystemExit(f'Expected one compileSdk and minSdk assignment; got {compile_count}, {min_count}')
+
+          if 'isCoreLibraryDesugaringEnabled = true' not in text:
+              marker = 'compileOptions {'
+              if marker not in text:
+                  raise SystemExit('Generated Gradle file has no compileOptions block')
+              text = text.replace(marker, marker + '\\n        isCoreLibraryDesugaringEnabled = true', 1)
+          dependency = 'coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")'
+          if dependency not in text:
+              marker = 'dependencies {'
+              if marker in text:
+                  text = text.replace(marker, marker + '\\n    ' + dependency, 1)
+              else:
+                  text = text.rstrip() + '\\n\\ndependencies {\\n    ' + dependency + '\\n}\\n'
+          build.write_text(text)
+
+          manifest = Path('android/app/src/main/AndroidManifest.xml')
+          text = manifest.read_text()
+          if 'android.permission.CAMERA' not in text:
+              text = text.replace('</manifest>', '    <uses-permission android:name="android.permission.CAMERA" />\\n</manifest>')
+          if 'android:scheme="com.snote"' not in text:
+              callback = '''            <intent-filter>
+                  <action android:name="android.intent.action.VIEW" />
+                  <category android:name="android.intent.category.DEFAULT" />
+                  <category android:name="android.intent.category.BROWSABLE" />
+                  <data android:scheme="com.snote" android:host="auth-callback" />
+              </intent-filter>
+          '''
+              text = text.replace('</activity>', callback + '        </activity>', 1)
+          if 'android:launchMode="singleTop"' in text:
+              text = text.replace('android:launchMode="singleTop"', 'android:launchMode="singleTask"')
+          if 'android.intent.action.SEND' not in text:
+              share_filters = '''            <intent-filter>
+                  <action android:name="android.intent.action.SEND" />
+                  <category android:name="android.intent.category.DEFAULT" />
+                  <data android:mimeType="image/*" />
+              </intent-filter>
+              <intent-filter>
+                  <action android:name="android.intent.action.SEND_MULTIPLE" />
+                  <category android:name="android.intent.category.DEFAULT" />
+                  <data android:mimeType="image/*" />
+              </intent-filter>
+          '''
+              text = text.replace('</activity>', share_filters + '        </activity>', 1)
+          manifest.write_text(text)
+
+          # Verify the maintained native implementation remains wired in; do not replace
+          # MainActivity, because it also implements the alarm ringtone channel.
+          for required in ['com.snote/alarm_audio', 'com.snote/screen_capture']:
+              source = Path('native_android/MainActivity.kt').read_text()
+              if required not in source:
+                  raise SystemExit(f'Missing native Android channel: {required}')
+          if 'ScreenCaptureService' not in manifest.read_text():
+              raise SystemExit('Android screen-capture service is not declared in the manifest')
+          if 'isCoreLibraryDesugaringEnabled = true' not in build.read_text():
+              raise SystemExit('Android core library desugaring is not enabled')
+          print('Verified Android SDK levels, notification desugaring, auth callback, image sharing, and native channels.')
           PY
 
-      - name: Configure native Android screen-capture bridge
-        if: matrix.target == 'android'
-        working-directory: app
-        run: python3 ../.github/scripts/configure_beta_android.py
+          cat > android/app/proguard-rules.pro <<'EOF'
+          -dontwarn com.google.mlkit.vision.text.chinese.**
+          -dontwarn com.google.mlkit.vision.text.devanagari.**
+          -dontwarn com.google.mlkit.vision.text.japanese.**
+          -dontwarn com.google.mlkit.vision.text.korean.**
+          EOF
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('android/app/build.gradle.kts')
+          text = path.read_text()
+          if 'proguard-rules.pro' not in text:
+              lines = text.splitlines()
+              out = []
+              in_build_types = False
+              inserted = False
+              for line in lines:
+                  stripped = line.strip()
+                  if stripped == 'buildTypes {':
+                      in_build_types = True
+                  elif in_build_types and stripped == 'release {':
+                      out.append(line)
+                      indent = line[:len(line) - len(line.lstrip())] + '    '
+                      out.append(indent + 'isMinifyEnabled = true')
+                      out.append(indent + 'proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")')
+                      inserted = True
+                      continue
+                  out.append(line)
+              if not inserted:
+                  raise SystemExit('Could not locate release build type in Gradle file')
+              path.write_text('\\n'.join(out) + '\\n')
+          PY
 
       - name: Configure Apple camera permission
         if: matrix.target == 'ios' || matrix.target == 'macos'
