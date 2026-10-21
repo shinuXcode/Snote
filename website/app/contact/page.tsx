@@ -1,0 +1,10 @@
+import type { Metadata } from "next";
+export const metadata: Metadata = {
+ title: "Contact Snote — Project Support",
+ description: "Contact the Snote open-source project, report reproducible bugs, and follow release updates through the official repository.",
+ alternates: { canonical: "https://snote-showcase.vercel.app/contact" },
+ openGraph: { title: "Contact Snote", description: "Reach the Snote project through official GitHub channels.", url: "https://snote-showcase.vercel.app/contact", type: "website", images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "Contact the Snote open-source project" }] },
+ twitter: { card: "summary_large_image", title: "Contact Snote", description: "Reach the Snote project through official GitHub channels.", images: ["/opengraph-image"] },
+ other: { "article:modified_time": "2026-10-21" }
+};
+export default function ContactPage(){return <main className="shell section"><div className="eyebrow"><i/> PROJECT CONTACT</div><h1 className="title">Contact <em>Snote.</em></h1><p className="lead">Snote is an open-source project. The official GitHub repository is the clearest place to report bugs, request features, and follow development.</p><section className="feature-explainer"><h2>How should I get in touch?</h2><p>For a bug report, include the app version, operating system, device type, expected behavior, actual behavior, and minimal reproduction steps. Remove private note content, passwords, access tokens, and personal information from logs before sharing.</p><ul><li><a href="https://github.com/shinuXcode/Snote/issues" target="_blank" rel="noreferrer">Report a bug or request a feature on GitHub</a>.</li><li><a href="https://github.com/shinuXcode/Snote/releases" target="_blank" rel="noreferrer">Check release notes</a> for known changes and platform-specific availability.</li><li><a href="https://github.com/shinuXcode/Snote" target="_blank" rel="noreferrer">Browse the source repository</a> for implementation and license information.</li></ul></section></main>}
