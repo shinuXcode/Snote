@@ -79,9 +79,10 @@ jobs:
               text = text.replace('compileOptions {', 'compileOptions {\n        isCoreLibraryDesugaringEnabled = true', 1)
           dependency = 'coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")'
           if dependency not in text:
-              if 'dependencies {' not in text:
-                  raise SystemExit('Generated Gradle file has no dependencies block')
-              text = text.replace('dependencies {', 'dependencies {\n    ' + dependency, 1)
+              if 'dependencies {' in text:
+                  text = text.replace('dependencies {', 'dependencies {\n    ' + dependency, 1)
+              else:
+                  text = text.rstrip() + '\n\ndependencies {\n    ' + dependency + '\n}\n'
           build.write_text(text)
 
           manifest = Path('android/app/src/main/AndroidManifest.xml')
@@ -224,6 +225,10 @@ jobs:
         run: |
           flutter create --platforms=ios,macos --org=com.snote --no-pub .
           rm -f test/widget_test.dart
+      - name: Generate CocoaPods configuration
+        working-directory: app
+        run: flutter pub get
+
       - name: Set iOS deployment target for ML Kit
         working-directory: app
         run: |
