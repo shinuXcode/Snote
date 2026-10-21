@@ -154,39 +154,37 @@ jobs:
           manifest.write_text(text)
           PY
 
-      - name: Configure Apple permissions and iOS deployment target
+      - name: Generate CocoaPods configuration
+        if: matrix.target == 'ios' || matrix.target == 'macos'
+        working-directory: app
+        run: flutter pub get
+
+      - name: Configure Apple camera permission
         if: matrix.target == 'ios' || matrix.target == 'macos'
         working-directory: app
         shell: bash
         run: |
-          set -euo pipefail
-          flutter pub get
           python3 - <<'PY'
           from pathlib import Path
-
           for raw in ['ios/Runner/Info.plist', 'macos/Runner/Info.plist']:
               p = Path(raw)
               if not p.exists():
                   continue
-              text = p.read_text()
-              if 'NSCameraUsageDescription' not in text:
-                  addition = '  <key>NSCameraUsageDescription</key>\n  <string>Snote uses the camera to scan note transfer QR codes.</string>\n'
-                  text = text.replace('</dict>', addition + '</dict>', 1)
-              if '<string>com.snote</string>' not in text:
-                  callback = '''  <key>CFBundleURLTypes</key>
-            <array>
-              <dict>
-                <key>CFBundleTypeRole</key>
-                <string>Editor</string>
-                <key>CFBundleURLSchemes</key>
-                <array>
-                  <string>com.snote</string>
-                </array>
-              </dict>
-            </array>
-          '''
-                  text = text.replace('</dict>', callback + '</dict>', 1)
-              p.write_text(text)
+              s = p.read_text()
+              if 'NSCameraUsageDescription' not in s:
+                  s = s.replace('</dict>', '  <key>NSCameraUsageDescription</key>\n  <string>Snote uses the camera to scan note transfer QR codes.</string>\n</dict>')
+              if '<string>com.snote</string>' not in s:
+                  callback = '''  <key>CFBundleURLTypes</key>\n  <array>\n    <dict>\n      <key>CFBundleTypeRole</key>\n      <string>Editor</string>\n      <key>CFBundleURLSchemes</key>\n      <array>\n        <string>com.snote</string>\n      </array>\n    </dict>\n  </array>\n'''
+                  s = s.replace('</dict>', callback + '</dict>', 1)
+              p.write_text(s)
+          PY
+
+      - name: Set iOS deployment target for ML Kit
+        if: matrix.target == 'ios'
+        working-directory: app
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
 
           podfile = Path('ios/Podfile')
           if podfile.exists():
