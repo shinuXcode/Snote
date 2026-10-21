@@ -5,6 +5,8 @@ export const metadata: Metadata = {
  title: "Snote Documentation — User Guides, Licenses and Policies",
  description: "Read online or download Snote user guides, feature catalogue, open-source documentation, privacy and data handling, permissions, license notices, app overview, SDK reference, and repository audit.",
  alternates: { canonical: "https://snote-showcase.vercel.app/docs" },
+ keywords: ["Snote documentation","Snote user guide","Snote privacy","Snote open source","Snote PDF guides"],
+ twitter: { card: "summary", title: "Snote Documentation", description: "User guides, policies, technical references, and project documentation." },
  openGraph: { title: "Snote Documentation", description: "Read online or download guides, project documentation, policies, and PDF references for Snote.", url: "https://snote-showcase.vercel.app/docs", type: "website" }
 };
 
