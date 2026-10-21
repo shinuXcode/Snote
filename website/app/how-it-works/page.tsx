@@ -8,7 +8,7 @@ export const metadata: Metadata = {
  keywords: ["how Snote works","Snote showcase","handwriting app","PDF reading","digital note-taking workflow"],
  openGraph: { title: "How Snote Works", description: "See how Snote brings handwriting, reading, and organizing into one open-source workspace.", url: "https://snote-showcase.vercel.app/how-it-works", type: "website", images:[{url:"/opengraph-image",width:1200,height:630,alt:"How Snote works"}] },
  twitter: { card: "summary_large_image", title: "How Snote Works", description: "Explore the Snote note-taking workflow.", images:["/opengraph-image"] }
-};
+, other: { "article:modified_time": "2026-10-21" }};
 const steps = [
  ["01","Capture","Start with a blank page, a paper template, or a PDF. Write by hand or type your thoughts."],
  ["02","Make it yours","Use stylus tools, rich text, shapes, images, lasso selection, and page layouts to express ideas."],
