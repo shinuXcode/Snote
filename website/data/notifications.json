@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "notifications": [
+    {
+      "id": "001",
+      "number": 1,
+      "type": "banner",
+      "status": "published",
+      "category": "announcement",
+      "title": "Snote Notification Centre",
+      "text": "Updates are published from website/data/notifications.json.",
+      "date": "2026-10-20",
+      "actionLabel": "",
+      "actionUrl": ""
+    },
+    {
+      "id": "002",
+      "number": 2,
+      "type": "text",
+      "status": "published",
+      "category": "update",
+      "title": "Website updates",
+      "text": "Release notes, feature announcements, and maintenance notices will appear here.",
+      "date": "2026-10-20",
+      "actionLabel": "",
+      "actionUrl": ""
+    },
+    {
+      "id": "003",
+      "number": 3,
+      "type": "release",
+      "status": "draft",
+      "category": "release",
+      "title": "Snote release",
+      "text": "Add release details here, then change status to published.",
+      "date": "2026-10-20",
+      "version": "",
+      "platform": "Android",
+      "actionLabel": "View release",
+      "actionUrl": "https://github.com/shinuXcode/Snote/releases"
+    }
+  ]
+}
