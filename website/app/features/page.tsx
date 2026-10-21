@@ -8,7 +8,7 @@ export const metadata: Metadata = {
  keywords: ["Snote features","stylus handwriting","PDF annotation","local-first notes","digital notebook","open-source notes"],
  openGraph: { title: "Snote Features — Handwriting and PDF Tools", description: "Explore Snote handwriting, stylus input, PDF workflows, and local-first note-taking features.", url: "https://snote-showcase.vercel.app/features", type: "website", images:[{url:"/opengraph-image",width:1200,height:630,alt:"Snote note-taking features"}] },
  twitter: { card: "summary_large_image", title: "Snote Features", description: "Explore handwriting, PDF, and notebook features in Snote.", images:["/opengraph-image"] }
-};
+, other: { "article:modified_time": "2026-10-21" }};
 const features = [
  ["Handwriting engine","Pressure-aware vector strokes, pen tools, and palm-rejection support where the device allows it."],
  ["Paper and canvas","Use notebook pages and flexible workspaces for different kinds of thinking."],
