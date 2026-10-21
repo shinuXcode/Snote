@@ -10,10 +10,10 @@ import FeedbackCenter from "../components/FeedbackCenter";
 const siteUrl = "https://snote-showcase.vercel.app";
 export const metadata: Metadata = {
  metadataBase: new URL(siteUrl),
- title: { default: "Snote — Notes that move with you", template: "%s | Snote" },
- description: "Snote is an open-source note-taking workspace for natural handwriting, PDF annotation, rich text, and ideas that stay yours.",
+ title: { default: "Snote — Open-Source Handwriting Notes & PDF Annotation", template: "%s | Snote" },
+ description: "Discover Snote, an open-source note-taking app for stylus handwriting, digital notebooks, PDF reading and annotation, and local-first notes across supported platforms.",
  applicationName: "Snote",
- keywords: ["Snote","open source notes","handwriting notes","stylus note taking","digital notebook","PDF annotation","offline notes","Flutter note taking app"],
+ keywords: ["Snote note-taking app","open-source note-taking app","handwriting notes app","stylus note-taking app","digital notebook","PDF reader and annotation","offline note-taking app","local-first notes","Flutter notes app"],
  authors: [{ name: "Sadab", url: "https://github.com/shinuXcode" }],
  creator: "Sadab", publisher: "Snote", category: "productivity",
  robots: { index: true, follow: true, googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1, "max-video-preview": -1 } },
