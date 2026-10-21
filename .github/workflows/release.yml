@@ -98,6 +98,11 @@ jobs:
           p.write_text(s)
           PY
 
+      - name: Configure native Android screen-capture bridge
+        if: matrix.target == 'android'
+        working-directory: app
+        run: python3 ../.github/scripts/configure_beta_android.py
+
       - name: Configure Apple camera permission
         if: matrix.target == 'ios' || matrix.target == 'macos'
         working-directory: app
