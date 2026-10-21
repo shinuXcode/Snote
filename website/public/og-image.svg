@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+<title id="title">Snote — Open-source notes for your ideas</title><desc id="desc">A calm paper-inspired graphic for Snote, an open-source note-taking and PDF workspace.</desc>
+<rect width="1200" height="630" fill="#f5f3ee"/><path d="M0 470 C240 420 390 535 620 485 S970 420 1200 470 V630 H0Z" fill="#e7e2d7"/>
+<rect x="790" y="88" width="285" height="390" rx="18" fill="#fffdf8" stroke="#d2ccbf" stroke-width="2"/><path d="M825 180 H1028 M825 220 H1000 M825 260 H1015 M825 300 H970 M825 340 H1020" stroke="#c8c1b5" stroke-width="4" stroke-linecap="round"/><path d="M822 390 C855 340 873 438 910 380 S970 360 1000 405 1035 410 1040 365" fill="none" stroke="#363a32" stroke-width="5" stroke-linecap="round"/>
+<rect x="90" y="90" width="82" height="82" rx="22" fill="#252820"/><text x="131" y="150" text-anchor="middle" font-family="Arial,sans-serif" font-size="54" font-weight="700" fill="#f5f3ee">s.</text>
+<text x="90" y="280" font-family="Arial,sans-serif" font-size="28" letter-spacing="5" fill="#62675d">OPEN-SOURCE NOTE-TAKING</text><text x="90" y="365" font-family="Arial,sans-serif" font-size="78" font-weight="700" fill="#252820">Make room for</text><text x="90" y="455" font-family="Georgia,serif" font-size="86" font-style="italic" fill="#525a43">your ideas.</text>
+<text x="90" y="555" font-family="Arial,sans-serif" font-size="24" fill="#62675d">Handwriting · PDFs · Local-first workflows</text></svg>
