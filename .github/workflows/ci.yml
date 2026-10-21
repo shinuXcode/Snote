@@ -76,12 +76,12 @@ jobs:
           if 'isCoreLibraryDesugaringEnabled = true' not in text:
               if 'compileOptions {' not in text:
                   raise SystemExit('Generated Gradle file has no compileOptions block')
-              text = text.replace('compileOptions {', 'compileOptions {\\n        isCoreLibraryDesugaringEnabled = true', 1)
+              text = text.replace('compileOptions {', 'compileOptions {\n        isCoreLibraryDesugaringEnabled = true', 1)
           dependency = 'coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")'
           if dependency not in text:
               if 'dependencies {' not in text:
                   raise SystemExit('Generated Gradle file has no dependencies block')
-              text = text.replace('dependencies {', 'dependencies {\\n    ' + dependency, 1)
+              text = text.replace('dependencies {', 'dependencies {\n    ' + dependency, 1)
           build.write_text(text)
 
           manifest = Path('android/app/src/main/AndroidManifest.xml')
