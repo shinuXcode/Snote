@@ -68,13 +68,20 @@ jobs:
         working-directory: app
         shell: bash
         run: |
+          set -euo pipefail
           case "${{ matrix.target }}" in
-            android) flutter create --platforms=android --org=com.snote . ;;
-            linux) flutter create --platforms=linux --org=com.snote . ;;
-            windows) flutter create --platforms=windows --org=com.snote . ;;
-            macos) flutter create --platforms=macos --org=com.snote . ;;
-            ios) flutter create --platforms=ios --org=com.snote . ;;
-            web) flutter create --platforms=web . ;;
+            android)
+              flutter create --platforms=android --org=com.snote --no-pub .
+              # Restore the app's maintained native bridge/manifest after flutter create.
+              mkdir -p android/app/src/main/kotlin/com/snote/snote
+              cp native_android/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+              cp native_android/*.kt android/app/src/main/kotlin/com/snote/snote/
+              ;;
+            linux) flutter create --platforms=linux --org=com.snote --no-pub . ;;
+            windows) flutter create --platforms=windows --org=com.snote --no-pub . ;;
+            macos) flutter create --platforms=macos --org=com.snote --no-pub . ;;
+            ios) flutter create --platforms=ios --org=com.snote --no-pub . ;;
+            web) flutter create --platforms=web --no-pub . ;;
           esac
           rm -f test/widget_test.dart
 
@@ -86,7 +93,323 @@ jobs:
           from pathlib import Path
           p = Path('android/app/build.gradle.kts')
           s = p.read_text()
-          s = s.replace('minSdk = flutter.minSdkVersion', 'minSdk = 24')
+          # Keep Android SDK levels aligned with the validated beta/CI build.
+          s, compile_count = __import__('re').subn(r'^([ \\t]*)compileSdk = .*
+          p = Path('android/app/src/main/AndroidManifest.xml')
+          s = p.read_text()
+          if 'android.permission.CAMERA' not in s:
+              s = s.replace('</manifest>', '    <uses-permission android:name="android.permission.CAMERA" />\n</manifest>')
+          if 'android:scheme="com.snote"' not in s:
+              callback = '''            <intent-filter>\n                <action android:name="android.intent.action.VIEW" />\n                <category android:name="android.intent.category.DEFAULT" />\n                <category android:name="android.intent.category.BROWSABLE" />\n                <data android:scheme="com.snote" android:host="auth-callback" />\n            </intent-filter>\n'''
+              s = s.replace('</activity>', callback + '        </activity>', 1)
+          p.write_text(s)
+          PY
+
+      - name: Configure native Android screen-capture bridge
+        if: matrix.target == 'android'
+        working-directory: app
+        run: python3 ../.github/scripts/configure_beta_android.py
+
+      - name: Configure Apple camera permission
+        if: matrix.target == 'ios' || matrix.target == 'macos'
+        working-directory: app
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          for raw in ['ios/Runner/Info.plist', 'macos/Runner/Info.plist']:
+              p = Path(raw)
+              if not p.exists():
+                  continue
+              s = p.read_text()
+              if 'NSCameraUsageDescription' not in s:
+                  s = s.replace('</dict>', '  <key>NSCameraUsageDescription</key>\n  <string>Snote uses the camera to scan note transfer QR codes.</string>\n</dict>')
+              if '<string>com.snote</string>' not in s:
+                  callback = '''  <key>CFBundleURLTypes</key>\n  <array>\n    <dict>\n      <key>CFBundleTypeRole</key>\n      <string>Editor</string>\n      <key>CFBundleURLSchemes</key>\n      <array>\n        <string>com.snote</string>\n      </array>\n    </dict>\n  </array>\n'''
+                  s = s.replace('</dict>', callback + '</dict>', 1)
+              p.write_text(s)
+          PY
+
+      - name: Install dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Clean
+        working-directory: app
+        run: flutter clean
+
+      - name: Format
+        working-directory: app
+        run: dart format .
+
+      - name: Analyze
+        working-directory: app
+        run: flutter analyze --no-fatal-infos
+      - name: Test
+        working-directory: app
+        run: flutter test
+
+      - name: Install web PDF assets
+        if: matrix.target == 'web'
+        working-directory: app
+        run: dart run pdfx:install_web
+
+      - name: Build Android
+        if: matrix.target == 'android'
+        working-directory: app
+        shell: bash
+        run: flutter build apk --release --dart-define="SUPABASE_URL=$SUPABASE_URL" --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" --dart-define="SUPABASE_REDIRECT_URI=com.snote://auth-callback"
+
+      - name: Build Linux
+        if: matrix.target == 'linux'
+        working-directory: app
+        shell: bash
+        run: flutter build linux --release --dart-define="SUPABASE_URL=$SUPABASE_URL" --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" --dart-define="SUPABASE_REDIRECT_URI=com.snote://auth-callback"
+
+      - name: Build Windows
+        if: matrix.target == 'windows'
+        working-directory: app
+        shell: bash
+        run: flutter build windows --release --dart-define="SUPABASE_URL=$SUPABASE_URL" --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" --dart-define="SUPABASE_REDIRECT_URI=com.snote://auth-callback"
+
+      - name: Build macOS
+        if: matrix.target == 'macos'
+        working-directory: app
+        shell: bash
+        run: flutter build macos --release --dart-define="SUPABASE_URL=$SUPABASE_URL" --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" --dart-define="SUPABASE_REDIRECT_URI=com.snote://auth-callback"
+
+      - name: Build iOS
+        if: matrix.target == 'ios'
+        working-directory: app
+        shell: bash
+        run: flutter build ios --release --no-codesign --dart-define="SUPABASE_URL=$SUPABASE_URL" --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" --dart-define="SUPABASE_REDIRECT_URI=com.snote://auth-callback"
+
+      - name: Build Web
+        if: matrix.target == 'web'
+        working-directory: app
+        shell: bash
+        run: flutter build web --release --dart-define="SUPABASE_URL=$SUPABASE_URL" --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" --dart-define="SUPABASE_REDIRECT_URI=com.snote://auth-callback"
+
+      - name: Package Android
+        if: matrix.target == 'android'
+        run: cp app/build/app/outputs/flutter-apk/app-release.apk Snote-Android.apk
+
+      - name: Package Linux
+        if: matrix.target == 'linux'
+        run: tar -czf Snote-Linux.tar.gz -C app/build/linux/x64/release bundle
+
+      - name: Package Windows
+        if: matrix.target == 'windows'
+        shell: pwsh
+        run: Compress-Archive -Path app/build/windows/x64/runner/Release/* -DestinationPath Snote-Windows.zip
+
+      - name: Package macOS
+        if: matrix.target == 'macos'
+        run: ditto -c -k --sequesterRsrc --keepParent app/build/macos/Build/Products/Release Snote-macOS.zip
+
+      - name: Package iOS
+        if: matrix.target == 'ios'
+        run: ditto -c -k --sequesterRsrc --keepParent app/build/ios/iphoneos Snote-iOS-unsigned.zip
+
+      - name: Package Web
+        if: matrix.target == 'web'
+        run: tar -czf Snote-Web.tar.gz -C app/build web
+
+      - name: Upload platform artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: release-*
+          merge-multiple: true
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(sed -n 's/^version: \([^+]*\).*/\1/p' app/pubspec.yaml)
+          TAG="v$VERSION"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --title "Snote $VERSION" --generate-notes --latest
+          fi, r'\\1compileSdk = 37', s, flags=__import__('re').MULTILINE)
+          s, min_count = __import__('re').subn(r'^([ \\t]*)minSdk = .*
+          p = Path('android/app/src/main/AndroidManifest.xml')
+          s = p.read_text()
+          if 'android.permission.CAMERA' not in s:
+              s = s.replace('</manifest>', '    <uses-permission android:name="android.permission.CAMERA" />\n</manifest>')
+          if 'android:scheme="com.snote"' not in s:
+              callback = '''            <intent-filter>\n                <action android:name="android.intent.action.VIEW" />\n                <category android:name="android.intent.category.DEFAULT" />\n                <category android:name="android.intent.category.BROWSABLE" />\n                <data android:scheme="com.snote" android:host="auth-callback" />\n            </intent-filter>\n'''
+              s = s.replace('</activity>', callback + '        </activity>', 1)
+          p.write_text(s)
+          PY
+
+      - name: Configure native Android screen-capture bridge
+        if: matrix.target == 'android'
+        working-directory: app
+        run: python3 ../.github/scripts/configure_beta_android.py
+
+      - name: Configure Apple camera permission
+        if: matrix.target == 'ios' || matrix.target == 'macos'
+        working-directory: app
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          for raw in ['ios/Runner/Info.plist', 'macos/Runner/Info.plist']:
+              p = Path(raw)
+              if not p.exists():
+                  continue
+              s = p.read_text()
+              if 'NSCameraUsageDescription' not in s:
+                  s = s.replace('</dict>', '  <key>NSCameraUsageDescription</key>\n  <string>Snote uses the camera to scan note transfer QR codes.</string>\n</dict>')
+              if '<string>com.snote</string>' not in s:
+                  callback = '''  <key>CFBundleURLTypes</key>\n  <array>\n    <dict>\n      <key>CFBundleTypeRole</key>\n      <string>Editor</string>\n      <key>CFBundleURLSchemes</key>\n      <array>\n        <string>com.snote</string>\n      </array>\n    </dict>\n  </array>\n'''
+                  s = s.replace('</dict>', callback + '</dict>', 1)
+              p.write_text(s)
+          PY
+
+      - name: Install dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Generate app icon
+        working-directory: app
+        run: dart run launcher_icons
+
+      - name: Clean
+        working-directory: app
+        run: flutter clean
+
+      - name: Format
+        working-directory: app
+        run: dart format .
+
+      - name: Analyze
+        working-directory: app
+        run: flutter analyze --no-fatal-infos
+      - name: Test
+        working-directory: app
+        run: flutter test
+
+      - name: Install web PDF assets
+        if: matrix.target == 'web'
+        working-directory: app
+        run: dart run pdfx:install_web
+
+      - name: Build Android
+        if: matrix.target == 'android'
+        working-directory: app
+        shell: bash
+        run: flutter build apk --release --dart-define="SUPABASE_URL=$SUPABASE_URL" --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" --dart-define="SUPABASE_REDIRECT_URI=com.snote://auth-callback"
+
+      - name: Build Linux
+        if: matrix.target == 'linux'
+        working-directory: app
+        shell: bash
+        run: flutter build linux --release --dart-define="SUPABASE_URL=$SUPABASE_URL" --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" --dart-define="SUPABASE_REDIRECT_URI=com.snote://auth-callback"
+
+      - name: Build Windows
+        if: matrix.target == 'windows'
+        working-directory: app
+        shell: bash
+        run: flutter build windows --release --dart-define="SUPABASE_URL=$SUPABASE_URL" --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" --dart-define="SUPABASE_REDIRECT_URI=com.snote://auth-callback"
+
+      - name: Build macOS
+        if: matrix.target == 'macos'
+        working-directory: app
+        shell: bash
+        run: flutter build macos --release --dart-define="SUPABASE_URL=$SUPABASE_URL" --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" --dart-define="SUPABASE_REDIRECT_URI=com.snote://auth-callback"
+
+      - name: Build iOS
+        if: matrix.target == 'ios'
+        working-directory: app
+        shell: bash
+        run: flutter build ios --release --no-codesign --dart-define="SUPABASE_URL=$SUPABASE_URL" --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" --dart-define="SUPABASE_REDIRECT_URI=com.snote://auth-callback"
+
+      - name: Build Web
+        if: matrix.target == 'web'
+        working-directory: app
+        shell: bash
+        run: flutter build web --release --dart-define="SUPABASE_URL=$SUPABASE_URL" --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" --dart-define="SUPABASE_REDIRECT_URI=com.snote://auth-callback"
+
+      - name: Package Android
+        if: matrix.target == 'android'
+        run: cp app/build/app/outputs/flutter-apk/app-release.apk Snote-Android.apk
+
+      - name: Package Linux
+        if: matrix.target == 'linux'
+        run: tar -czf Snote-Linux.tar.gz -C app/build/linux/x64/release bundle
+
+      - name: Package Windows
+        if: matrix.target == 'windows'
+        shell: pwsh
+        run: Compress-Archive -Path app/build/windows/x64/runner/Release/* -DestinationPath Snote-Windows.zip
+
+      - name: Package macOS
+        if: matrix.target == 'macos'
+        run: ditto -c -k --sequesterRsrc --keepParent app/build/macos/Build/Products/Release Snote-macOS.zip
+
+      - name: Package iOS
+        if: matrix.target == 'ios'
+        run: ditto -c -k --sequesterRsrc --keepParent app/build/ios/iphoneos Snote-iOS-unsigned.zip
+
+      - name: Package Web
+        if: matrix.target == 'web'
+        run: tar -czf Snote-Web.tar.gz -C app/build web
+
+      - name: Upload platform artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: release-*
+          merge-multiple: true
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(sed -n 's/^version: \([^+]*\).*/\1/p' app/pubspec.yaml)
+          TAG="v$VERSION"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --title "Snote $VERSION" --generate-notes --latest
+          fi, r'\\1minSdk = 24', s, flags=__import__('re').MULTILINE)
+          if compile_count != 1 or min_count != 1:
+              raise SystemExit(f'Expected one compileSdk and minSdk assignment; got {compile_count}, {min_count}')
           p.write_text(s)
           p = Path('android/app/src/main/AndroidManifest.xml')
           s = p.read_text()
