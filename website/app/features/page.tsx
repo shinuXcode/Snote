@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Reveal from "../../components/Reveal";
-export const metadata: Metadata = { title: "Snote Features — Handwriting, Notes and Documents", description: "Explore Snote's handwriting engine, stylus input, local-first storage, organization, and document workflows.", alternates: { canonical: "https://snote-showcase.vercel.app/features" } };
+export const metadata: Metadata = { title: "Snote Features — Handwriting, Notes and Documents", description: "Explore Snote's handwriting engine, stylus input, local-first storage, organization, and document workflows.", alternates: { canonical: "https://snote-showcase.vercel.app/features" }, keywords: ["Snote features","stylus handwriting","PDF annotation","local-first notes","digital notebook","open-source notes"], openGraph: { title: "Snote Features — Handwriting and PDF Tools", description: "Explore Snote handwriting, stylus input, PDF workflows, and local-first note-taking features.", url: "https://snote-showcase.vercel.app/features", type: "website" }, twitter: { card: "summary", title: "Snote Features", description: "Explore handwriting, PDF, and notebook features in Snote." } };
 const features = [
  ["Handwriting engine","Pressure-aware vector strokes, pen tools, and palm-rejection support where the device allows it."],
  ["Paper and canvas","Use notebook pages and flexible workspaces for different kinds of thinking."],
