@@ -172,7 +172,7 @@ jobs:
                   continue
               text = p.read_text()
               if 'NSCameraUsageDescription' not in text:
-                  text = text.replace('</dict>', '  <key>NSCameraUsageDescription</key>\\n  <string>Snote uses the camera to scan note transfer QR codes.</string>\\n</dict>')
+                  text = text.replace('</dict>', '  <key>NSCameraUsageDescription</key>\n  <string>Snote uses the camera to scan note transfer QR codes.</string>\n</dict>')
               if '<string>com.snote</string>' not in text:
                   callback = '''  <key>CFBundleURLTypes</key>
             <array>
@@ -192,8 +192,8 @@ jobs:
           podfile = Path('ios/Podfile')
           if podfile.exists():
               pod = podfile.read_text()
-              if re.search(r'^\\s*platform :ios,', pod, re.MULTILINE):
-                  pod = re.sub(r'^\\s*platform :ios,.*
+              if re.search(r'^\s*platform :ios,', pod, re.MULTILINE):
+                  pod = re.sub(r'^\s*platform :ios,.*
           PY
 
       - name: Install dependencies
