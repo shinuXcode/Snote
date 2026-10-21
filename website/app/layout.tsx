@@ -18,7 +18,8 @@ export const metadata: Metadata = {
  creator: "Sadab", publisher: "Snote", category: "productivity",
  robots: { index: true, follow: true, googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1, "max-video-preview": -1 } },
  openGraph: { title: "Snote — Notes that move with you", description: "Open-source notes for handwriting, reading, and thinking.", url: siteUrl, siteName: "Snote", type: "website", locale: "en_US" },
- twitter: { card: "summary_large_image", title: "Snote — Notes that move with you", description: "Open-source note-taking for handwriting, PDFs, and ideas." },
+ twitter: { card: "summary_large_image", title: "Snote — Notes that move with you", description: "Open-source note-taking for handwriting, PDFs, and ideas.", images: ["/snote-logo.svg"] },
+ icons: { icon: "/snote-logo.svg", shortcut: "/snote-logo.svg", apple: "/snote-logo.svg" },
  other: { "geo.region": "IN", "content-language": "en" }
 };
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#f5f3ee", colorScheme: "light" };
