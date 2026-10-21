@@ -6,8 +6,9 @@ export const metadata: Metadata = {
  description: "Read online or download Snote user guides, feature catalogue, open-source documentation, privacy and data handling, permissions, license notices, app overview, SDK reference, and repository audit.",
  alternates: { canonical: "https://snote-showcase.vercel.app/docs" },
  keywords: ["Snote documentation","Snote user guide","Snote privacy","Snote open source","Snote PDF guides"],
- twitter: { card: "summary", title: "Snote Documentation", description: "User guides, policies, technical references, and project documentation." },
- openGraph: { title: "Snote Documentation", description: "Read online or download guides, project documentation, policies, and PDF references for Snote.", url: "https://snote-showcase.vercel.app/docs", type: "website" }
+ twitter: { card: "summary_large_image", title: "Snote Documentation", description: "User guides, policies, technical references, and project documentation.", images: ["/og-image.svg"] },
+ openGraph: { title: "Snote Documentation", description: "Read online or download guides, project documentation, policies, and PDF references for Snote.", url: "https://snote-showcase.vercel.app/docs", type: "website", images: [{ url: "/og-image.svg", width: 1200, height: 630, alt: "Snote documentation library" }] },
+ other: { "article:modified_time": "2026-10-21" }
 };
 
 const docs = [
@@ -37,6 +38,7 @@ export default function DocsPage() {
    <div className="docs-actions"><a className="docs-view" href={"/docs/"+slug} target="_blank" rel="noreferrer">Read online <span aria-hidden="true">↗</span></a><a className="docs-download" href={"/docs/"+slug} download>Download PDF <span aria-hidden="true">↓</span></a></div>
   </article>)}</div>
   <section className="docs-faq card"><div><span className="pill">HELP CENTRE</span><h2>Frequently asked questions</h2><p className="muted">Quick answers about installation, stylus input, privacy, cloud sync, permissions, SDKs, and releases.</p></div><Link className="cta" href="/faqs">Explore all 28 FAQs <span aria-hidden="true">→</span></Link></section>
+  <section className="card source-note"><h2>Official references</h2><p className="muted">For authoritative project details, compare these documents with the published repository and license. The PDFs on this page are project documentation and should not be treated as a substitute for a security review or legal advice.</p><ul><li><a href="https://github.com/shinuXcode/Snote" target="_blank" rel="noreferrer">Snote source repository</a> — code, releases, and issue history.</li><li><a href="https://github.com/shinuXcode/Snote/blob/main/LICENSE" target="_blank" rel="noreferrer">Published license</a> — license text in the repository.</li></ul></section>
   <p className="docs-note">Legal and security documents are informational and do not replace legal advice, platform-specific permission review, or a production security audit. Features can vary by version. PDF covers credit Sadab as founder/creator; interior pages carry Snote and author footers.</p>
  </main>;
 }
