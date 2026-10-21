@@ -5,7 +5,7 @@ const features = [
   ["Paper & canvas","Infinite-style workspace plus A4, A3, Letter and custom page templates."],
   ["PDF workspace","Keep an annotation layer independent from the original document so handwriting stays editable."],
   ["Local first","The editor writes locally before it talks to the network."],
-  ["Account sync","The same Supabase identity can synchronize notes across supported Snote clients."],
+  ["Private by default","Notes stay in local storage; no account or remote database is required."],
   ["Export freedom","Download portable Snote JSON and keep a copy outside the app."],
 ];
 
