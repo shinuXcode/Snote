@@ -106,9 +106,10 @@ jobs:
                       <data android:mimeType="image/*" />
                   </intent-filter>
               '''
-              if '</activity>' not in text:
-                  raise SystemExit('Could not find activity closing tag for Android image share filters')
-              text = text.replace('</activity>', share_filters + '\n        </activity>', 1)
+              if '</activity>' in text:
+                  text = text.replace('</activity>', share_filters + '\n        </activity>', 1)
+              else:
+                  raise SystemExit('Android activity is missing from manifest; inspect native_android/AndroidManifest.xml')
           manifest.write_text(text)
           if 'android.intent.action.SEND' not in manifest.read_text():
               raise SystemExit('Android image share filters were not configured')
