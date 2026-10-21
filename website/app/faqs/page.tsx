@@ -36,7 +36,7 @@ export const metadata: Metadata = {
  keywords: ["Snote FAQ","Snote offline","Snote handwriting","Snote PDF annotation","Snote privacy","Snote troubleshooting"],
  openGraph: { title: "Snote FAQs — Answers and Troubleshooting", description: "Answers about Snote installation, handwriting, PDFs, privacy, backups, and releases.", url: "https://snote-showcase.vercel.app/faqs", type: "website", images:[{url:"/opengraph-image",width:1200,height:630,alt:"Snote frequently asked questions"}] },
  twitter: { card: "summary_large_image", title: "Snote FAQs", description: "Answers about installing, using, and troubleshooting Snote.", images:["/opengraph-image"] },
-};
+ other: { "article:modified_time": "2026-10-21" }};
 const schema = { "@context":"https://schema.org", "@type":"FAQPage", mainEntity: faqs.map(([q,a])=>({ "@type":"Question", name:q, acceptedAnswer:{ "@type":"Answer", text:a } })) };
 export default function FaqPage() {
  return <main className="shell section docs-page faq-page">
