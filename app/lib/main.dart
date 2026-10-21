@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 
-import 'app/auth_gate.dart';
+import 'app/app_entry.dart';
 import 'app/theme_controller.dart';
 import 'core/settings/app_settings.dart';
 import 'ui/snote_theme.dart';
@@ -190,7 +190,7 @@ class _SnoteAppState extends State<SnoteApp> {
       home: _bootstrapping
           ? const _StartupPage()
           : _startupError == null
-              ? const AuthGate()
+              ? const AppEntry()
               : _StartupFailurePage(
                   details: _startupError!,
                   onRetry: _retryBootstrap,
