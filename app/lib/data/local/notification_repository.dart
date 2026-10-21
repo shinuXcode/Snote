@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 
+import '../../core/config/account_scope.dart';
 import 'database.dart';
 
 class AppNotification {
@@ -50,8 +51,8 @@ class NotificationRepository {
     await db.insert(
       'app_notifications',
       {
-        'id': id,
-        'owner_id': 'local',
+        'id': '${SnoteAccountScope.ownerId}:$id',
+        'owner_id': SnoteAccountScope.ownerId,
         'category': category,
         'title': title,
         'body': body,
@@ -68,7 +69,7 @@ class NotificationRepository {
     final rows = await db.query(
       'app_notifications',
       where: 'owner_id = ?',
-      whereArgs: ['local'],
+      whereArgs: [SnoteAccountScope.ownerId],
       orderBy: 'created_at DESC',
       limit: limit.clamp(1, 500).toInt(),
     );
@@ -81,7 +82,7 @@ class NotificationRepository {
       'app_notifications',
       {'read_at': DateTime.now().millisecondsSinceEpoch},
       where: 'id = ? AND owner_id = ? AND read_at IS NULL',
-      whereArgs: [id, 'local'],
+      whereArgs: [id, SnoteAccountScope.ownerId],
     );
   }
 
@@ -91,7 +92,7 @@ class NotificationRepository {
       'app_notifications',
       {'read_at': DateTime.now().millisecondsSinceEpoch},
       where: 'owner_id = ? AND read_at IS NULL',
-      whereArgs: ['local'],
+      whereArgs: [SnoteAccountScope.ownerId],
     );
   }
 
@@ -100,7 +101,7 @@ class NotificationRepository {
     await db.delete(
       'app_notifications',
       where: 'id = ? AND owner_id = ?',
-      whereArgs: [id, 'local'],
+      whereArgs: [id, SnoteAccountScope.ownerId],
     );
   }
 }
