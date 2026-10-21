@@ -13,7 +13,6 @@ const nav=[
   ["/how-it-works","How it works"],
   ["/download","Download"],
   ["/founder","Founder"],
-  ["/account","Account"],
 ];
 
 export default function RootLayout({children}:{children:React.ReactNode}){
