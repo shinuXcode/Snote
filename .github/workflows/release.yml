@@ -160,11 +160,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Flutter creates the CocoaPods Podfile during dependency resolution.
           flutter pub get
           python3 - <<'PY'
           from pathlib import Path
-          import re
 
           for raw in ['ios/Runner/Info.plist', 'macos/Runner/Info.plist']:
               p = Path(raw)
@@ -172,7 +170,8 @@ jobs:
                   continue
               text = p.read_text()
               if 'NSCameraUsageDescription' not in text:
-                  text = text.replace('</dict>', '  <key>NSCameraUsageDescription</key>\n  <string>Snote uses the camera to scan note transfer QR codes.</string>\n</dict>')
+                  addition = '  <key>NSCameraUsageDescription</key>\n  <string>Snote uses the camera to scan note transfer QR codes.</string>\n'
+                  text = text.replace('</dict>', addition + '</dict>', 1)
               if '<string>com.snote</string>' not in text:
                   callback = '''  <key>CFBundleURLTypes</key>
             <array>
@@ -191,9 +190,21 @@ jobs:
 
           podfile = Path('ios/Podfile')
           if podfile.exists():
-              pod = podfile.read_text()
-              if re.search(r'^\s*platform :ios,', pod, re.MULTILINE):
-                  pod = re.sub(r'^\s*platform :ios,.*
+              lines = podfile.read_text().splitlines()
+              found = False
+              for index, line in enumerate(lines):
+                  if line.strip().startswith('platform :ios,'):
+                      lines[index] = "platform :ios, '15.5'"
+                      found = True
+              if not found:
+                  lines.insert(0, "platform :ios, '15.5'")
+              podfile.write_text('\n'.join(lines) + '\n')
+
+          project_file = Path('ios/Runner.xcodeproj/project.pbxproj')
+          if project_file.exists():
+              lines = project_file.read_text().splitlines()
+              lines = [line.split('IPHONEOS_DEPLOYMENT_TARGET =', 1)[0] + 'IPHONEOS_DEPLOYMENT_TARGET = 15.5;' if 'IPHONEOS_DEPLOYMENT_TARGET =' in line else line for line in lines]
+              project_file.write_text('\n'.join(lines) + '\n')
           PY
 
       - name: Install dependencies
