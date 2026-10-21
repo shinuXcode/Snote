@@ -1,6 +1,6 @@
 # Snote
 
-> Snote is an open-source, local-first note-taking project focused on handwriting, stylus input, rich text, and document workflows.
+> Snote is an open-source, local-first note-taking project focused on handwriting, stylus input, rich text, and document workflows. Exact capabilities can vary by release and platform.
 
 ## Canonical pages
 - https://snote-showcase.vercel.app/
@@ -10,14 +10,20 @@
 - https://snote-showcase.vercel.app/faqs
 - https://snote-showcase.vercel.app/download
 - https://snote-showcase.vercel.app/founder
+- https://snote-showcase.vercel.app/contact
+- https://snote-showcase.vercel.app/privacy
+- https://snote-showcase.vercel.app/terms
 
 ## Project source and license
 - Repository: https://github.com/shinuXcode/Snote
-- License: https://github.com/shinuXcode/Snote/blob/main/LICENSE
+- Published license: https://github.com/shinuXcode/Snote/blob/main/LICENSE
 - Founder/creator: Sadab
 
-## Documentation
-The /docs page links to PDF user guides, feature catalogue, SDK and native toolchain reference, open-source guide, privacy and data-handling overview, permissions and authorization guide, license notices, terms, security guide, app overview, and source-level repository audit. SDK references are sourced from app/pubspec.yaml and website/package.json; native platform SDK versions are marked unpinned unless verified in the matching build configuration. Documents are informational and note where platform behavior or deployment configuration must be verified.
+## Documentation and verification
+The /docs page links to user guides, feature documentation, permissions, license notices, terms, SDK references, app overview, and repository audit material. Documents are informational and may require version-specific verification.
+- Official releases: https://github.com/shinuXcode/Snote/releases
+- Source and issue tracker: https://github.com/shinuXcode/Snote
+- License text: https://github.com/shinuXcode/Snote/blob/main/LICENSE
 
 ## Accuracy notes
 Snote is designed for local-first use; optional cloud features depend on configuration. Exact features, permissions, platform support, signing status, and release availability can vary by version. Do not infer security certification or legal guarantees from project documentation.
