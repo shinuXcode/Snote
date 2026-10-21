@@ -1,110 +1,33 @@
 import Link from "next/link";
-import SectionIndex from "./SectionIndex";
 import Icon from "./Icon";
 
-const panels = [
-  { n: "01", title: "Write Freely", body: "A clean, distraction-free editor.", icon: "pen" },
-  { n: "02", title: "Organize Beautifully", body: "Keep your thoughts in check.", icon: "organize" },
-  { n: "03", title: "Open Source", body: "Built by the community, for everyone.", icon: "open" },
-  { n: "04", title: "Designed for Flow", body: "A seamless and intuitive experience.", icon: "flow" },
+const features = [
+ ["pen","Natural handwriting","A writing surface designed around pen input, quick capture, and staying in flow."],
+ ["organize","Notes that make sense","Keep pages, ideas, and reference material together instead of scattered across apps."],
+ ["open","Open-source by nature","Follow development, inspect the code, and help shape the next version."],
+ ["flow","PDFs and paper","Read, annotate, and build a workflow around the documents you already use."]
 ];
-
-function BlueprintArtwork() {
-  return (
-    <div className="blueprint-art" aria-label="Monochrome architectural blueprint with a rolled drawing and stylus" role="img">
-      <div className="art-halo" />
-      <svg className="art-orbits" viewBox="0 0 800 700" aria-hidden="true">
-        <ellipse cx="420" cy="350" rx="330" ry="230" transform="rotate(-24 420 350)" />
-        <ellipse cx="420" cy="350" rx="270" ry="160" transform="rotate(28 420 350)" />
-        <path d="M35 535 C190 340 290 610 430 360 S680 170 770 75" />
-        <path d="M95 120 L700 570 M180 50 L590 650" />
-        <path d="M385 22v28m-14-14h28 M690 480v34m-17-17h34" />
-        <circle cx="93" cy="530" r="4" /><circle cx="710" cy="95" r="4" /><circle cx="555" cy="590" r="3" />
-      </svg>
-      <div className="roll roll-back"><span /><span /><span /></div>
-      <div className="blueprint-sheet">
-        <div className="sheet-grid" />
-        <svg className="sheet-drawing" viewBox="0 0 600 440" aria-hidden="true">
-          <g fill="none" stroke="currentColor" strokeWidth=".8">
-            <path d="M40 60L520 20 565 350 85 410Z M80 95L485 60 520 320 110 365Z" />
-            <path d="M80 95L520 320 M485 60L110 365 M280 78L305 350 M90 220L505 190" />
-            <circle cx="305" cy="220" r="90" /><circle cx="305" cy="220" r="55" />
-            <path d="M215 220h180M305 130v180M245 160l120 120M365 160L245 280" />
-            <rect x="120" y="125" width="92" height="58" /><rect x="390" y="245" width="88" height="54" />
-            <path d="M120 115v-18m0 9h92m0 9v-18M100 125h-18m9 0v58m9 0h-18" />
-            <path d="M145 205v40h65v-40z M420 100h65v40h-65z" />
-            <path d="M90 390l-14 2m8-8l4 14 M540 345l14-2m-8-8l-4 14" />
-          </g>
-          <g fill="currentColor" fontFamily="monospace" fontSize="8" letterSpacing="2">
-            <text x="40" y="40">SN / 001 — FIELD NOTES</text><text x="390" y="42">FIG. 01 / STUDY</text>
-            <text x="120" y="115">AXIS A</text><text x="390" y="235">SECTION B</text>
-            <text x="80" y="430">SCALE 1:24</text><text x="445" y="395">REV. 01</text>
-          </g>
-        </svg>
-        <div className="sheet-brand"><strong>Snote</strong><span>IDEAS<br />STRUCTURED.<br />BEAUTIFULLY.</span></div>
-        <div className="sheet-stamp">STUDIO / NOTE<br />SYSTEM 001</div>
-      </div>
-      <div className="stylus"><span className="stylus-tip" /><span className="stylus-band" /></div>
-      <div className="roll roll-front"><span /><span /><span /></div>
-      <div className="roll-end" />
-      <div className="art-tag">IDEA<br />SKETCH<br />NOTE<br />ORGANIZE<br />CREATE</div>
-      <div className="art-version"><strong>v1.0</strong><span>// OPEN SOURCE</span><span>// BUILT FOR CREATORS</span><span>// DESIGNED TO FLOW</span></div>
-    </div>
-  );
+const steps = [
+ ["01","Capture the thought","Open a blank page or bring a document into your workspace."],
+ ["02","Work your way","Write with a stylus, type, sketch, and shape ideas into something clear."],
+ ["03","Keep what matters","Organize your notes and use available export options to keep control of your work."]
+];
+function WorkspacePreview() {
+ return <div className="workspace-preview" aria-label="Illustration of the Snote writing workspace">
+  <div className="preview-window"><div className="preview-window-top"><span className="window-dots"><i/><i/><i/></span><span>Biology / Cell structure</span><span className="preview-status">SAVED</span></div>
+   <div className="preview-body"><aside className="preview-rail"><span>⌂</span><span>▤</span><span>✎</span><span>＋</span></aside><div className="preview-paper"><div className="preview-paper-meta">STUDY NOTES · 04</div><h3>Cell structure<br/><em>& function</em></h3><p>Every cell is a small system, built from parts that work together.</p><div className="cell-diagram"><div className="cell-core"><span/></div><div className="diagram-label label-one">NUCLEUS</div><div className="diagram-label label-two">CELL MEMBRANE</div><svg viewBox="0 0 300 90" aria-hidden="true"><path d="M10 55 C30 20 45 80 65 48 S105 22 124 55 165 80 188 45 225 18 245 48 275 60 290 28" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg></div><div className="preview-lines"><i/><i/><i/></div></div></div>
+  </div><div className="preview-tool-float"><span>✎</span><span>⌁</span><span>◯</span><span>▱</span><i/><span className="preview-ink"/></div><div className="preview-sticker sticker-top">PEN · 0.5</div><div className="preview-sticker sticker-bottom"><Icon name="check" size={13}/> SAVED LOCALLY</div>
+ </div>;
 }
-
 export default function MotionHero() {
-  return (
-    <>
-      <section className="hero" id="home">
-        <div className="hero-grid" aria-hidden="true" />
-        <div className="blueprint-glow" aria-hidden="true" />
-        <SectionIndex />
-        <div className="hero-inner">
-          <div className="hero-copy">
-            <div className="eyebrow"><i /> YOUR IDEAS, BEAUTIFULLY ORGANIZED</div>
-            <h1><span className="headline-sans">Notes for</span><em>Creators.</em></h1>
-            <p>Snote is a minimal, powerful note-taking space for modern minds. Write, organize, and bring your ideas to life — beautifully.</p>
-            <div className="row hero-actions">
-              <Link className="cta" href="/download">Get Started <Icon name="arrow" size={17} /></Link>
-              <a className="ghost-cta" href="https://github.com/shinuXcode/Snote" target="_blank" rel="noreferrer"><Icon name="github" size={17} /> View on GitHub</a>
-            </div>
-            <div className="hero-ribbon"><span><b><Icon name="fast" size={14} /></b> Fast</span><span><b><Icon name="cube" size={14} /></b> Open Source</span><span><b><Icon name="lock" size={14} /></b> Privacy First</span></div>
-          </div>
-          <BlueprintArtwork />
-        </div>
-      </section>
-      <section className="blueprint-roll" id="blueprint-roll" aria-label="Snote highlights">
-        <div className="roll-metal roll-metal-left" />
-        {panels.map((panel) => <Link href="/features" className="roll-panel" key={panel.n}>
-          <span className="panel-number">{panel.n}</span><span className="panel-glyph"><Icon name={panel.icon as "pen" | "organize" | "open" | "flow"} size={29} /></span>
-          <span className="panel-copy"><strong>{panel.title}</strong><small>{panel.body}</small></span>
-          <span className="panel-arrow" aria-hidden="true"><Icon name="external" size={14} /></span>
-        </Link>)}
-        <div className="roll-metal roll-metal-right" />
-      </section>
-      <main className="shell">
-        <section className="section feature-intro" id="features">
-          <div><div className="eyebrow"><i /> FEATURES</div><h2 className="title">Designed for<br /><em>Modern Thinkers.</em></h2></div>
-          <p className="lead">Everything you need to capture, organize, and grow your ideas — in one beautifully minimal workspace.</p>
-          <Link className="see-features" href="/features">See All Features <Icon name="arrow" size={17} /></Link>
-        </section>
-        <div className="grid feature-grid">
-          {[
-            ["pen","Minimal Editor","A quiet writing surface that keeps your attention on the page."],
-            ["organize","Smart Organization","Folders, templates and tools that keep thoughts in order."],
-            ["open","Open & Extendable","Open-source foundations built to grow with your workflow."],
-            ["sun","Beautiful by Default","Thoughtful details, calm surfaces and a distraction-free feel."]
-          ].map(([icon,title,body], i) => <article className="card feature-card" key={title}>
-            <span className="feature-icon"><Icon name={icon as "pen" | "organize" | "open" | "sun"} size={25} /><i /></span><span className="feature-number">0{i+1} / SYSTEM</span><h3>{title}</h3><p className="muted">{body}</p><span className="card-cross" aria-hidden="true">+</span>
-          </article>)}
-        </div>
-        <section className="section lower-section" id="lower-section">
-          <div className="eyebrow"><i /> BUILT FOR CONTINUITY</div><h2 className="title">Your notes. Your space.</h2>
-          <p className="lead">Write offline, keep ownership of your work, and continue across supported Snote clients.</p>
-          <div className="row hero-actions"><Link className="cta" href="/download">Explore Snote <Icon name="arrow" size={17} /></Link><Link className="ghost-cta" href="/account">Open your account</Link></div>
-        </section>
-      </main>
-    </>
-  );
+ return <>
+  <main>
+   <section className="hero" id="home"><div className="hero-inner shell"><div className="hero-copy"><div className="eyebrow"><i/> OPEN-SOURCE NOTE-TAKING</div><h1>Make space<br/>for <em>thinking.</em></h1><p>Snote brings handwriting, documents, and everyday ideas into one calm workspace. Made for people who think on paper — and everywhere else.</p><div className="row hero-actions"><Link className="cta" href="/download">Download Snote <Icon name="arrow" size={16}/></Link><a className="ghost-cta" href="https://github.com/shinuXcode/Snote" target="_blank" rel="noreferrer"><Icon name="github" size={16}/> Explore the source</a></div><div className="hero-proof"><span><Icon name="check" size={14}/> Open source</span><span><Icon name="check" size={14}/> Offline-friendly</span><span><Icon name="check" size={14}/> Built for stylus</span></div></div><WorkspacePreview/></div><div className="hero-bottom shell"><span>DESIGNED FOR THE WAY YOU THINK</span><span>SN / 001 — NOTE SYSTEM</span></div></section>
+   <section className="intro-strip shell"><span className="intro-label">MEET YOUR NEW<br/>THINKING SPACE</span><p>Less interface to fight. More room for ideas to become something.</p><Link className="text-link" href="/how-it-works">See how it works <span>↗</span></Link></section>
+   <section className="section shell home-features"><div className="section-intro"><div><div className="eyebrow"><i/> MADE FOR THE DETAILS</div><h2 className="title">Your thoughts,<br/><em>without the friction.</em></h2></div><p className="lead">From quick notes to long study sessions, Snote is built to help you capture an idea before it disappears.</p></div><div className="home-feature-grid">{features.map(([icon,title,body],i)=><article className="home-feature-card" key={title}><div className="feature-card-top"><span className="feature-icon"><Icon name={icon as "pen"|"organize"|"open"|"flow"} size={21}/></span><span>0{i+1} / 04</span></div><h3>{title}</h3><p>{body}</p><span className="feature-card-line"/></article>)}</div><div className="section-link-row"><span>THE SNOTE TOOLKIT</span><Link className="text-link" href="/features">Explore all features <span>↗</span></Link></div></section>
+   <section className="workflow-section"><div className="shell workflow-inner"><div className="workflow-heading"><div className="eyebrow"><i/> A SIMPLE WORKFLOW</div><h2 className="title">From first mark<br/><em>to finished thought.</em></h2><p className="muted">Your process stays yours. Snote gives your ideas a place to land, grow, and connect.</p></div><div className="workflow-steps">{steps.map(([n,title,body])=><article key={n}><span>{n}</span><div><h3>{title}</h3><p>{body}</p></div><Icon name="arrow" size={18}/></article>)}</div></div></section>
+   <section className="shell founder-teaser"><div className="founder-teaser-art"><div className="teaser-paper"><span>THE IDEA</span><strong>Build tools<br/>that get out<br/>of the way.</strong><i>— Snote principles</i></div><div className="teaser-number">SN / NOTEBOOK 001</div></div><div className="founder-teaser-copy"><div className="eyebrow"><i/> BUILT IN THE OPEN</div><h2 className="title">A small project<br/>with <em>big intent.</em></h2><p className="lead">Snote is built by Sadab as an independent open-source project — with a focus on useful tools, thoughtful details, and software that respects your work.</p><Link className="text-link" href="/founder">Meet the founder <span>↗</span></Link></div></section>
+   <section className="shell home-cta"><div><div className="eyebrow"><i/> YOUR NEXT IDEA STARTS HERE</div><h2>Ready to make<br/><em>room for it?</em></h2><p>Try the latest build, read the docs, or help improve Snote in public.</p></div><div className="home-cta-actions"><Link className="cta" href="/download">Get Snote <Icon name="arrow" size={16}/></Link><Link className="ghost-cta" href="/docs">Read the docs</Link></div></section>
+  </main>
+ </>;
 }
