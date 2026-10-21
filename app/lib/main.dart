@@ -7,7 +7,6 @@ import 'package:flutter_quill/flutter_quill.dart';
 import 'app/auth_gate.dart';
 import 'app/theme_controller.dart';
 import 'core/settings/app_settings.dart';
-import 'data/remote/supabase_service.dart';
 import 'ui/snote_theme.dart';
 
 void _installSnoteErrorLogging() {
@@ -106,7 +105,6 @@ class _SnoteAppState extends State<SnoteApp> {
     }
 
     try {
-      await SnoteSupabase.initialize();
       await _theme.load();
       await SnoteSettings.instance.load();
       if (!mounted) return;
