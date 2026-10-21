@@ -1,7 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../core/config/account_scope.dart';
 import 'local_file_store.dart';
 import 'database.dart';
 
@@ -87,14 +86,13 @@ class FolderRepository {
       if (parentId != null) await _requireActiveFolder(tx, parentId);
       final siblings = await tx.rawQuery(
         'SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order '
-        'FROM folders WHERE owner_id = ? AND parent_id IS ? AND deleted_at IS NULL',
-        [SnoteAccountScope.ownerId, parentId],
+        'FROM folders WHERE parent_id IS ? AND deleted_at IS NULL',
+        [parentId],
       );
       final order = (siblings.first['next_order'] as num?)?.toInt() ?? 0;
       await tx.insert('folders', {
         'id': folder.id,
-        'owner_id': SnoteAccountScope.ownerId,
-        'parent_id': parentId,
+                'parent_id': parentId,
         'name': folder.name,
         'color_value': folder.colorValue,
         'icon_key': folder.iconKey,
@@ -103,8 +101,7 @@ class FolderRepository {
         'updated_at': now,
         'deleted_at': null,
       });
-      await _queue(tx, folder.id, 'upsert');
-    });
+          });
     return folder;
   }
 
@@ -113,11 +110,9 @@ class FolderRepository {
     final rows = await db.query(
       'folders',
       where: parentId == null
-          ? 'owner_id = ? AND parent_id IS NULL AND deleted_at IS NULL'
-          : 'owner_id = ? AND parent_id = ? AND deleted_at IS NULL',
-      whereArgs: parentId == null
-          ? [SnoteAccountScope.ownerId]
-          : [SnoteAccountScope.ownerId, parentId],
+          ? 'parent_id IS NULL AND deleted_at IS NULL'
+          : 'parent_id = ? AND deleted_at IS NULL',
+      whereArgs: parentId == null ? null : [parentId],
       orderBy: 'sort_order ASC, name COLLATE NOCASE ASC',
     );
     return rows.map(LocalFolder.fromMap).toList();
@@ -127,8 +122,8 @@ class FolderRepository {
     final db = await _db;
     final rows = await db.query(
       'folders',
-      where: 'owner_id = ? AND deleted_at IS NULL',
-      whereArgs: [SnoteAccountScope.ownerId],
+      where: 'deleted_at IS NULL',
+      whereArgs: ,
       orderBy: 'sort_order ASC, name COLLATE NOCASE ASC',
     );
     return rows.map(LocalFolder.fromMap).toList();
@@ -138,8 +133,8 @@ class FolderRepository {
     final db = await _db;
     final rows = await db.query(
       'folders',
-      where: 'id = ? AND owner_id = ? AND deleted_at IS NULL',
-      whereArgs: [id, SnoteAccountScope.ownerId],
+      where: 'id = ? AND deleted_at IS NULL',
+      whereArgs: [id],
       limit: 1,
     );
     return rows.isEmpty ? null : LocalFolder.fromMap(rows.first);
@@ -156,11 +151,10 @@ class FolderRepository {
           'name': normalizedName,
           'updated_at': DateTime.now().millisecondsSinceEpoch,
         },
-        where: 'id = ? AND owner_id = ? AND deleted_at IS NULL',
-        whereArgs: [id, SnoteAccountScope.ownerId],
+        where: 'id = ? AND deleted_at IS NULL',
+        whereArgs: [id],
       );
-      if (count > 0) await _queue(tx, id, 'upsert');
-    });
+      if (count > 0)     });
   }
 
   Future<void> updateAppearance(
@@ -177,11 +171,10 @@ class FolderRepository {
           'icon_key': _normalizeIconKey(iconKey),
           'updated_at': DateTime.now().millisecondsSinceEpoch,
         },
-        where: 'id = ? AND owner_id = ? AND deleted_at IS NULL',
-        whereArgs: [id, SnoteAccountScope.ownerId],
+        where: 'id = ? AND deleted_at IS NULL',
+        whereArgs: [id],
       );
-      if (count > 0) await _queue(tx, id, 'upsert');
-    });
+      if (count > 0)     });
   }
 
   /// Moves a folder to the root or inside another folder, rejecting cycles.
@@ -207,8 +200,8 @@ class FolderRepository {
           final rows = await tx.query(
             'folders',
             columns: ['parent_id'],
-            where: 'id = ? AND owner_id = ? AND deleted_at IS NULL',
-            whereArgs: [ancestor, SnoteAccountScope.ownerId],
+            where: 'id = ? AND deleted_at IS NULL',
+            whereArgs: [ancestor],
             limit: 1,
           );
           if (rows.isEmpty) {
@@ -220,8 +213,8 @@ class FolderRepository {
 
       final siblings = await tx.rawQuery(
         'SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order '
-        'FROM folders WHERE owner_id = ? AND parent_id IS ? AND deleted_at IS NULL',
-        [SnoteAccountScope.ownerId, parentId],
+        'FROM folders WHERE parent_id IS ? AND deleted_at IS NULL',
+        [parentId],
       );
       final order = (siblings.first['next_order'] as num?)?.toInt() ?? 0;
       await tx.update(
@@ -231,11 +224,10 @@ class FolderRepository {
           'sort_order': order,
           'updated_at': DateTime.now().millisecondsSinceEpoch,
         },
-        where: 'id = ? AND owner_id = ? AND deleted_at IS NULL',
-        whereArgs: [id, SnoteAccountScope.ownerId],
+        where: 'id = ? AND deleted_at IS NULL',
+        whereArgs: [id],
       );
-      await _queue(tx, id, 'upsert');
-    });
+          });
   }
 
   Future<void> reorder(String id, int sortOrder) async {
@@ -247,11 +239,10 @@ class FolderRepository {
           'sort_order': sortOrder,
           'updated_at': DateTime.now().millisecondsSinceEpoch,
         },
-        where: 'id = ? AND owner_id = ? AND deleted_at IS NULL',
-        whereArgs: [id, SnoteAccountScope.ownerId],
+        where: 'id = ? AND deleted_at IS NULL',
+        whereArgs: [id],
       );
-      if (count > 0) await _queue(tx, id, 'upsert');
-    });
+      if (count > 0)     });
   }
 
 
@@ -262,8 +253,8 @@ class FolderRepository {
     return db.transaction((tx) async {
       final roots = await tx.query(
         'folders',
-        where: 'id = ? AND owner_id = ? AND deleted_at IS NULL',
-        whereArgs: [id, SnoteAccountScope.ownerId],
+        where: 'id = ? AND deleted_at IS NULL',
+        whereArgs: [id],
         limit: 1,
       );
       if (roots.isEmpty) throw ArgumentError.value(id, 'id', 'Folder not found.');
@@ -272,8 +263,8 @@ class FolderRepository {
       final now = DateTime.now().millisecondsSinceEpoch;
       final siblings = await tx.rawQuery(
         'SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order '
-        'FROM folders WHERE owner_id = ? AND parent_id IS ? AND deleted_at IS NULL',
-        [SnoteAccountScope.ownerId, parentId],
+        'FROM folders WHERE parent_id IS ? AND deleted_at IS NULL',
+        [parentId],
       );
       final rootOrder = (siblings.first['next_order'] as num?)?.toInt() ?? 0;
       final newIds = <String, String>{};
@@ -282,7 +273,7 @@ class FolderRepository {
         if (newIds.containsKey(oldId)) return;
         final rows = await tx.query(
           'folders',
-          where: 'id = ? AND owner_id = ? AND deleted_at IS NULL',
+          where: 'id = ? AND deleted_at IS NULL',
           whereArgs: [oldId, SnoteAccountScope.ownerId],
           limit: 1,
         );
@@ -293,8 +284,7 @@ class FolderRepository {
         newIds[oldId] = newId;
         await tx.insert('folders', {
           'id': newId,
-          'owner_id': SnoteAccountScope.ownerId,
-          'parent_id': nextParent,
+                    'parent_id': nextParent,
           'name': isRoot ? name + ' (copy)' : name,
           'color_value': original['color_value'] ?? defaultFolderColor,
           'icon_key': original['icon_key'] ?? 'folder',
@@ -303,12 +293,11 @@ class FolderRepository {
           'updated_at': now,
           'deleted_at': null,
         });
-        await _queue(tx, newId, 'upsert');
-        final children = await tx.query(
+                final children = await tx.query(
           'folders',
           columns: ['id'],
-          where: 'owner_id = ? AND parent_id = ? AND deleted_at IS NULL',
-          whereArgs: [SnoteAccountScope.ownerId, oldId],
+          where: 'parent_id = ? AND deleted_at IS NULL',
+          whereArgs: [oldId],
           orderBy: 'sort_order ASC',
         );
         for (final child in children) {
@@ -322,8 +311,8 @@ class FolderRepository {
         final placeholders = List.filled(oldFolderIds.length, '?').join(',');
         final notes = await tx.query(
           'notes',
-          where: 'owner_id = ? AND deleted_at IS NULL AND folder_id IN ($placeholders)',
-          whereArgs: [SnoteAccountScope.ownerId, ...oldFolderIds],
+          where: 'deleted_at IS NULL AND folder_id IN ($placeholders)',
+          whereArgs: [...oldFolderIds],
         );
         for (final note in notes) {
           final oldNoteId = note['id']! as String;
@@ -332,15 +321,13 @@ class FolderRepository {
           await tx.insert('notes', {
             ...note,
             'id': newNoteId,
-            'owner_id': SnoteAccountScope.ownerId,
-            'title': oldTitle + ' (copy)',
+                        'title': oldTitle + ' (copy)',
             'folder_id': newIds[note['folder_id'] as String],
             'created_at': now,
             'updated_at': now,
             'deleted_at': null,
             'version': 1,
-            'sync_state': 'pending',
-          });
+                      });
           final pages = await tx.query('pages', where: 'note_id = ?', whereArgs: [oldNoteId]);
           for (final page in pages) {
             final newPageId = _uuid.v4();
@@ -376,8 +363,7 @@ class FolderRepository {
               'created_at': now,
             });
           }
-          await queueNote(tx, newNoteId, 'upsert');
-        }
+                  }
       }
 
       return LocalFolder(
@@ -405,22 +391,20 @@ class FolderRepository {
       final notes = await tx.query(
         'notes',
         columns: ['id'],
-        where: 'owner_id = ? AND deleted_at IS NULL AND folder_id IN ($placeholders)',
-        whereArgs: [SnoteAccountScope.ownerId, ...folderIds],
+        where: 'deleted_at IS NULL AND folder_id IN ($placeholders)',
+        whereArgs: [...folderIds],
       );
       await tx.update(
         'notes',
         {
           'folder_id': null,
           'updated_at': now,
-          'sync_state': 'pending',
-        },
-        where: 'owner_id = ? AND deleted_at IS NULL AND folder_id IN ($placeholders)',
-        whereArgs: [SnoteAccountScope.ownerId, ...folderIds],
+                  },
+        where: 'deleted_at IS NULL AND folder_id IN ($placeholders)',
+        whereArgs: [...folderIds],
       );
       for (final row in notes) {
-        await queueNote(tx, row['id']! as String, 'upsert');
-      }
+              }
       await _deleteRecursive(tx, id, now, <String>{});
     });
   }
@@ -434,8 +418,8 @@ class FolderRepository {
     final current = await tx.query(
       'folders',
       columns: ['id'],
-      where: 'id = ? AND owner_id = ? AND deleted_at IS NULL',
-      whereArgs: [id, SnoteAccountScope.ownerId],
+      where: 'id = ? AND deleted_at IS NULL',
+      whereArgs: [id],
       limit: 1,
     );
     if (current.isEmpty) return;
@@ -443,8 +427,8 @@ class FolderRepository {
     final children = await tx.query(
       'folders',
       columns: ['id'],
-      where: 'owner_id = ? AND parent_id = ? AND deleted_at IS NULL',
-      whereArgs: [SnoteAccountScope.ownerId, id],
+      where: 'parent_id = ? AND deleted_at IS NULL',
+      whereArgs: [id],
     );
     for (final child in children) {
       await _collectDescendants(tx, child['id']! as String, output);
@@ -461,8 +445,8 @@ class FolderRepository {
     final children = await tx.query(
       'folders',
       columns: ['id'],
-      where: 'owner_id = ? AND parent_id = ? AND deleted_at IS NULL',
-      whereArgs: [SnoteAccountScope.ownerId, id],
+      where: 'parent_id = ? AND deleted_at IS NULL',
+      whereArgs: [id],
     );
     for (final child in children) {
       await _deleteRecursive(tx, child['id']! as String, now, visited);
@@ -470,18 +454,17 @@ class FolderRepository {
     await tx.update(
       'folders',
       {'deleted_at': now, 'updated_at': now},
-      where: 'id = ? AND owner_id = ? AND deleted_at IS NULL',
-      whereArgs: [id, SnoteAccountScope.ownerId],
+      where: 'id = ? AND deleted_at IS NULL',
+      whereArgs: [id],
     );
-    await _queue(tx, id, 'delete');
-  }
+      }
 
   Future<void> _requireActiveFolder(DatabaseExecutor tx, String id) async {
     final rows = await tx.query(
       'folders',
       columns: ['id'],
-      where: 'id = ? AND owner_id = ? AND deleted_at IS NULL',
-      whereArgs: [id, SnoteAccountScope.ownerId],
+      where: 'id = ? AND deleted_at IS NULL',
+      whereArgs: [id],
       limit: 1,
     );
     if (rows.isEmpty) {
@@ -512,41 +495,4 @@ class FolderRepository {
     return 'folder';
   }
 
-  Future<void> _queue(DatabaseExecutor db, String id, String operation) async {
-    await db.delete(
-      'sync_queue',
-      where: 'entity_type = ? AND entity_id = ? AND owner_id = ?',
-      whereArgs: ['folder', id, SnoteAccountScope.ownerId],
-    );
-    await db.insert('sync_queue', {
-      'id': _uuid.v4(),
-      'owner_id': SnoteAccountScope.ownerId,
-      'entity_type': 'folder',
-      'entity_id': id,
-      'operation': operation,
-      'created_at': DateTime.now().millisecondsSinceEpoch,
-      'attempts': 0,
-    });
-  }
-
-  Future<void> queueNote(
-    DatabaseExecutor db,
-    String noteId,
-    String operation,
-  ) async {
-    await db.delete(
-      'sync_queue',
-      where: 'entity_type = ? AND entity_id = ? AND owner_id = ?',
-      whereArgs: ['note', noteId, SnoteAccountScope.ownerId],
-    );
-    await db.insert('sync_queue', {
-      'id': _uuid.v4(),
-      'owner_id': SnoteAccountScope.ownerId,
-      'entity_type': 'note',
-      'entity_id': noteId,
-      'operation': operation,
-      'created_at': DateTime.now().millisecondsSinceEpoch,
-      'attempts': 0,
-    });
-  }
 }
