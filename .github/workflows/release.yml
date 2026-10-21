@@ -73,7 +73,6 @@ jobs:
           case "${{ matrix.target }}" in
             android)
               flutter create --platforms=android --org=com.snote --no-pub .
-              # Restore the app's maintained native bridge/manifest after flutter create.
               mkdir -p android/app/src/main/kotlin/com/snote/snote
               cp native_android/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
               cp native_android/*.kt android/app/src/main/kotlin/com/snote/snote/
@@ -89,30 +88,37 @@ jobs:
       - name: Configure Android
         if: matrix.target == 'android'
         working-directory: app
-        shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          import re
 
           build = Path('android/app/build.gradle.kts')
-          text = build.read_text()
-          text, compile_count = re.subn(r'^([ \t]*)compileSdk = .*$', r'\1compileSdk = 37', text, flags=re.MULTILINE)
-          text, min_count = re.subn(r'^([ \t]*)minSdk = .*$', r'\1minSdk = 24', text, flags=re.MULTILINE)
+          lines = build.read_text().splitlines()
+          updated = []
+          compile_count = 0
+          min_count = 0
+          for line in lines:
+              stripped = line.strip()
+              indent = line[:len(line) - len(line.lstrip())]
+              if stripped.startswith('compileSdk ='):
+                  line = indent + 'compileSdk = 37'
+                  compile_count += 1
+              elif stripped.startswith('minSdk ='):
+                  line = indent + 'minSdk = 24'
+                  min_count += 1
+              updated.append(line)
           if compile_count != 1 or min_count != 1:
               raise SystemExit(f'Expected one compileSdk and minSdk assignment; got {compile_count}, {min_count}')
-
+          text = '\n'.join(updated) + '\n'
           if 'isCoreLibraryDesugaringEnabled = true' not in text:
-              marker = 'compileOptions {'
-              if marker not in text:
+              if 'compileOptions {' not in text:
                   raise SystemExit('Generated Gradle file has no compileOptions block')
-              text = text.replace(marker, marker + '\n        isCoreLibraryDesugaringEnabled = true', 1)
+              text = text.replace('compileOptions {', 'compileOptions {\n        isCoreLibraryDesugaringEnabled = true', 1)
           dependency = 'coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")'
           if dependency not in text:
-              marker = 'dependencies {'
-              if marker in text:
-                  text = text.replace(marker, marker + '\n    ' + dependency, 1)
+              if 'dependencies {' in text:
+                  text = text.replace('dependencies {', 'dependencies {\n    ' + dependency, 1)
               else:
                   text = text.rstrip() + '\n\ndependencies {\n    ' + dependency + '\n}\n'
           build.write_text(text)
@@ -146,50 +152,6 @@ jobs:
           '''
               text = text.replace('</activity>', share_filters + '        </activity>', 1)
           manifest.write_text(text)
-
-          # Verify the maintained native implementation remains wired in; do not replace
-          # MainActivity, because it also implements the alarm ringtone channel.
-          for required in ['com.snote/alarm_audio', 'com.snote/screen_capture']:
-              source = Path('native_android/MainActivity.kt').read_text()
-              if required not in source:
-                  raise SystemExit(f'Missing native Android channel: {required}')
-          if 'ScreenCaptureService' not in manifest.read_text():
-              raise SystemExit('Android screen-capture service is not declared in the manifest')
-          if 'isCoreLibraryDesugaringEnabled = true' not in build.read_text():
-              raise SystemExit('Android core library desugaring is not enabled')
-          print('Verified Android SDK levels, notification desugaring, auth callback, image sharing, and native channels.')
-          PY
-
-          cat > android/app/proguard-rules.pro <<'EOF'
-          -dontwarn com.google.mlkit.vision.text.chinese.**
-          -dontwarn com.google.mlkit.vision.text.devanagari.**
-          -dontwarn com.google.mlkit.vision.text.japanese.**
-          -dontwarn com.google.mlkit.vision.text.korean.**
-          EOF
-          python3 - <<'PY'
-          from pathlib import Path
-          path = Path('android/app/build.gradle.kts')
-          text = path.read_text()
-          if 'proguard-rules.pro' not in text:
-              lines = text.splitlines()
-              out = []
-              in_build_types = False
-              inserted = False
-              for line in lines:
-                  stripped = line.strip()
-                  if stripped == 'buildTypes {':
-                      in_build_types = True
-                  elif in_build_types and stripped == 'release {':
-                      out.append(line)
-                      indent = line[:len(line) - len(line.lstrip())] + '    '
-                      out.append(indent + 'isMinifyEnabled = true')
-                      out.append(indent + 'proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")')
-                      inserted = True
-                      continue
-                  out.append(line)
-              if not inserted:
-                  raise SystemExit('Could not locate release build type in Gradle file')
-              path.write_text('\n'.join(out) + '\n')
           PY
 
       - name: Configure Apple camera permission
@@ -215,326 +177,6 @@ jobs:
       - name: Install dependencies
         working-directory: app
         run: flutter pub get
-
-      - name: Clean
-        working-directory: app
-        run: flutter clean
-
-      - name: Format
-        working-directory: app
-        run: dart format .
-
-      - name: Analyze
-        working-directory: app
-        run: flutter analyze --no-fatal-infos
-      - name: Test
-        working-directory: app
-        run: flutter test
-
-      - name: Install web PDF assets
-        if: matrix.target == 'web'
-        working-directory: app
-        run: dart run pdfx:install_web
-
-      - name: Build Android
-        if: matrix.target == 'android'
-        working-directory: app
-        shell: bash
-        run: flutter build apk --release --dart-define="SUPABASE_URL=$SUPABASE_URL" --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" --dart-define="SUPABASE_REDIRECT_URI=com.snote://auth-callback"
-
-      - name: Build Linux
-        if: matrix.target == 'linux'
-        working-directory: app
-        shell: bash
-        run: flutter build linux --release --dart-define="SUPABASE_URL=$SUPABASE_URL" --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" --dart-define="SUPABASE_REDIRECT_URI=com.snote://auth-callback"
-
-      - name: Build Windows
-        if: matrix.target == 'windows'
-        working-directory: app
-        shell: bash
-        run: flutter build windows --release --dart-define="SUPABASE_URL=$SUPABASE_URL" --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" --dart-define="SUPABASE_REDIRECT_URI=com.snote://auth-callback"
-
-      - name: Build macOS
-        if: matrix.target == 'macos'
-        working-directory: app
-        shell: bash
-        run: flutter build macos --release --dart-define="SUPABASE_URL=$SUPABASE_URL" --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" --dart-define="SUPABASE_REDIRECT_URI=com.snote://auth-callback"
-
-      - name: Build iOS
-        if: matrix.target == 'ios'
-        working-directory: app
-        shell: bash
-        run: flutter build ios --release --no-codesign --dart-define="SUPABASE_URL=$SUPABASE_URL" --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" --dart-define="SUPABASE_REDIRECT_URI=com.snote://auth-callback"
-
-      - name: Build Web
-        if: matrix.target == 'web'
-        working-directory: app
-        shell: bash
-        run: flutter build web --release --dart-define="SUPABASE_URL=$SUPABASE_URL" --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" --dart-define="SUPABASE_REDIRECT_URI=com.snote://auth-callback"
-
-      - name: Package Android
-        if: matrix.target == 'android'
-        run: cp app/build/app/outputs/flutter-apk/app-release.apk Snote-Android.apk
-
-      - name: Package Linux
-        if: matrix.target == 'linux'
-        run: tar -czf Snote-Linux.tar.gz -C app/build/linux/x64/release bundle
-
-      - name: Package Windows
-        if: matrix.target == 'windows'
-        shell: pwsh
-        run: Compress-Archive -Path app/build/windows/x64/runner/Release/* -DestinationPath Snote-Windows.zip
-
-      - name: Package macOS
-        if: matrix.target == 'macos'
-        run: ditto -c -k --sequesterRsrc --keepParent app/build/macos/Build/Products/Release Snote-macOS.zip
-
-      - name: Package iOS
-        if: matrix.target == 'ios'
-        run: ditto -c -k --sequesterRsrc --keepParent app/build/ios/iphoneos Snote-iOS-unsigned.zip
-
-      - name: Package Web
-        if: matrix.target == 'web'
-        run: tar -czf Snote-Web.tar.gz -C app/build web
-
-      - name: Upload platform artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-${{ matrix.target }}
-          path: ${{ matrix.artifact }}
-          if-no-files-found: error
-
-  publish:
-    name: Publish release
-    needs: build
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Download release artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-          pattern: release-*
-          merge-multiple: true
-
-      - name: Create or update GitHub release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          VERSION=$(sed -n 's/^version: \([^+]*\).*/\1/p' app/pubspec.yaml)
-          TAG="v$VERSION"
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"
-          else
-            gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --title "Snote $VERSION" --generate-notes --latest
-          fi, r'\\1compileSdk = 37', s, flags=__import__('re').MULTILINE)
-          s, min_count = __import__('re').subn(r'^([ \\t]*)minSdk = .*
-          p = Path('android/app/src/main/AndroidManifest.xml')
-          s = p.read_text()
-          if 'android.permission.CAMERA' not in s:
-              s = s.replace('</manifest>', '    <uses-permission android:name="android.permission.CAMERA" />\n</manifest>')
-          if 'android:scheme="com.snote"' not in s:
-              callback = '''            <intent-filter>\n                <action android:name="android.intent.action.VIEW" />\n                <category android:name="android.intent.category.DEFAULT" />\n                <category android:name="android.intent.category.BROWSABLE" />\n                <data android:scheme="com.snote" android:host="auth-callback" />\n            </intent-filter>\n'''
-              s = s.replace('</activity>', callback + '        </activity>', 1)
-          p.write_text(s)
-          PY
-
-      - name: Configure native Android screen-capture bridge
-        if: matrix.target == 'android'
-        working-directory: app
-        run: python3 ../.github/scripts/configure_beta_android.py
-
-      - name: Configure Apple camera permission
-        if: matrix.target == 'ios' || matrix.target == 'macos'
-        working-directory: app
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          for raw in ['ios/Runner/Info.plist', 'macos/Runner/Info.plist']:
-              p = Path(raw)
-              if not p.exists():
-                  continue
-              s = p.read_text()
-              if 'NSCameraUsageDescription' not in s:
-                  s = s.replace('</dict>', '  <key>NSCameraUsageDescription</key>\n  <string>Snote uses the camera to scan note transfer QR codes.</string>\n</dict>')
-              if '<string>com.snote</string>' not in s:
-                  callback = '''  <key>CFBundleURLTypes</key>\n  <array>\n    <dict>\n      <key>CFBundleTypeRole</key>\n      <string>Editor</string>\n      <key>CFBundleURLSchemes</key>\n      <array>\n        <string>com.snote</string>\n      </array>\n    </dict>\n  </array>\n'''
-                  s = s.replace('</dict>', callback + '</dict>', 1)
-              p.write_text(s)
-          PY
-
-      - name: Install dependencies
-        working-directory: app
-        run: flutter pub get
-
-      - name: Generate app icon
-        working-directory: app
-        run: dart run launcher_icons
-
-      - name: Clean
-        working-directory: app
-        run: flutter clean
-
-      - name: Format
-        working-directory: app
-        run: dart format .
-
-      - name: Analyze
-        working-directory: app
-        run: flutter analyze --no-fatal-infos
-      - name: Test
-        working-directory: app
-        run: flutter test
-
-      - name: Install web PDF assets
-        if: matrix.target == 'web'
-        working-directory: app
-        run: dart run pdfx:install_web
-
-      - name: Build Android
-        if: matrix.target == 'android'
-        working-directory: app
-        shell: bash
-        run: flutter build apk --release --dart-define="SUPABASE_URL=$SUPABASE_URL" --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" --dart-define="SUPABASE_REDIRECT_URI=com.snote://auth-callback"
-
-      - name: Build Linux
-        if: matrix.target == 'linux'
-        working-directory: app
-        shell: bash
-        run: flutter build linux --release --dart-define="SUPABASE_URL=$SUPABASE_URL" --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" --dart-define="SUPABASE_REDIRECT_URI=com.snote://auth-callback"
-
-      - name: Build Windows
-        if: matrix.target == 'windows'
-        working-directory: app
-        shell: bash
-        run: flutter build windows --release --dart-define="SUPABASE_URL=$SUPABASE_URL" --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" --dart-define="SUPABASE_REDIRECT_URI=com.snote://auth-callback"
-
-      - name: Build macOS
-        if: matrix.target == 'macos'
-        working-directory: app
-        shell: bash
-        run: flutter build macos --release --dart-define="SUPABASE_URL=$SUPABASE_URL" --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" --dart-define="SUPABASE_REDIRECT_URI=com.snote://auth-callback"
-
-      - name: Build iOS
-        if: matrix.target == 'ios'
-        working-directory: app
-        shell: bash
-        run: flutter build ios --release --no-codesign --dart-define="SUPABASE_URL=$SUPABASE_URL" --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" --dart-define="SUPABASE_REDIRECT_URI=com.snote://auth-callback"
-
-      - name: Build Web
-        if: matrix.target == 'web'
-        working-directory: app
-        shell: bash
-        run: flutter build web --release --dart-define="SUPABASE_URL=$SUPABASE_URL" --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" --dart-define="SUPABASE_REDIRECT_URI=com.snote://auth-callback"
-
-      - name: Package Android
-        if: matrix.target == 'android'
-        run: cp app/build/app/outputs/flutter-apk/app-release.apk Snote-Android.apk
-
-      - name: Package Linux
-        if: matrix.target == 'linux'
-        run: tar -czf Snote-Linux.tar.gz -C app/build/linux/x64/release bundle
-
-      - name: Package Windows
-        if: matrix.target == 'windows'
-        shell: pwsh
-        run: Compress-Archive -Path app/build/windows/x64/runner/Release/* -DestinationPath Snote-Windows.zip
-
-      - name: Package macOS
-        if: matrix.target == 'macos'
-        run: ditto -c -k --sequesterRsrc --keepParent app/build/macos/Build/Products/Release Snote-macOS.zip
-
-      - name: Package iOS
-        if: matrix.target == 'ios'
-        run: ditto -c -k --sequesterRsrc --keepParent app/build/ios/iphoneos Snote-iOS-unsigned.zip
-
-      - name: Package Web
-        if: matrix.target == 'web'
-        run: tar -czf Snote-Web.tar.gz -C app/build web
-
-      - name: Upload platform artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-${{ matrix.target }}
-          path: ${{ matrix.artifact }}
-          if-no-files-found: error
-
-  publish:
-    name: Publish release
-    needs: build
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Download release artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-          pattern: release-*
-          merge-multiple: true
-
-      - name: Create or update GitHub release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          VERSION=$(sed -n 's/^version: \([^+]*\).*/\1/p' app/pubspec.yaml)
-          TAG="v$VERSION"
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"
-          else
-            gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --title "Snote $VERSION" --generate-notes --latest
-          fi, r'\\1minSdk = 24', s, flags=__import__('re').MULTILINE)
-          if compile_count != 1 or min_count != 1:
-              raise SystemExit(f'Expected one compileSdk and minSdk assignment; got {compile_count}, {min_count}')
-          p.write_text(s)
-          p = Path('android/app/src/main/AndroidManifest.xml')
-          s = p.read_text()
-          if 'android.permission.CAMERA' not in s:
-              s = s.replace('</manifest>', '    <uses-permission android:name="android.permission.CAMERA" />\n</manifest>')
-          if 'android:scheme="com.snote"' not in s:
-              callback = '''            <intent-filter>\n                <action android:name="android.intent.action.VIEW" />\n                <category android:name="android.intent.category.DEFAULT" />\n                <category android:name="android.intent.category.BROWSABLE" />\n                <data android:scheme="com.snote" android:host="auth-callback" />\n            </intent-filter>\n'''
-              s = s.replace('</activity>', callback + '        </activity>', 1)
-          p.write_text(s)
-          PY
-
-      - name: Configure native Android screen-capture bridge
-        if: matrix.target == 'android'
-        working-directory: app
-        run: python3 ../.github/scripts/configure_beta_android.py
-
-      - name: Configure Apple camera permission
-        if: matrix.target == 'ios' || matrix.target == 'macos'
-        working-directory: app
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          for raw in ['ios/Runner/Info.plist', 'macos/Runner/Info.plist']:
-              p = Path(raw)
-              if not p.exists():
-                  continue
-              s = p.read_text()
-              if 'NSCameraUsageDescription' not in s:
-                  s = s.replace('</dict>', '  <key>NSCameraUsageDescription</key>\n  <string>Snote uses the camera to scan note transfer QR codes.</string>\n</dict>')
-              if '<string>com.snote</string>' not in s:
-                  callback = '''  <key>CFBundleURLTypes</key>\n  <array>\n    <dict>\n      <key>CFBundleTypeRole</key>\n      <string>Editor</string>\n      <key>CFBundleURLSchemes</key>\n      <array>\n        <string>com.snote</string>\n      </array>\n    </dict>\n  </array>\n'''
-                  s = s.replace('</dict>', callback + '</dict>', 1)
-              p.write_text(s)
-          PY
-
-      - name: Install dependencies
-        working-directory: app
-        run: flutter pub get
-
-      - name: Generate app icon
-        working-directory: app
-        run: dart run launcher_icons
 
       - name: Clean
         working-directory: app
