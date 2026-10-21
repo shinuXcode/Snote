@@ -8,7 +8,7 @@ export const metadata: Metadata = {
  keywords: ["Snote documentation","Snote user guide","Snote privacy","Snote open source","Snote PDF guides"],
  twitter: { card: "summary_large_image", title: "Snote Documentation", description: "User guides, policies, technical references, and project documentation.", images:["/opengraph-image"] },
  openGraph: { title: "Snote Documentation", description: "Read Snote user guides, technical references, policies, and PDF documentation.", url: "https://snote-showcase.vercel.app/docs", type: "website", images:[{url:"/opengraph-image",width:1200,height:630,alt:"Snote documentation library"}] }
-};
+, other: { "article:modified_time": "2026-10-21" }};
 
 const docs = [
  ["01","App Overview","Product overview, platform support, and upgrade guidance.","app-overview.pdf"],
