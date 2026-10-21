@@ -1,4 +1,4 @@
-const databaseVersion = 9;
+const databaseVersion = 8;
 const createNotesTable = '''
 CREATE TABLE notes (
   id TEXT PRIMARY KEY,
@@ -11,6 +11,7 @@ CREATE TABLE notes (
   updated_at INTEGER NOT NULL,
   deleted_at INTEGER,
   version INTEGER NOT NULL DEFAULT 1,
+  sync_state TEXT NOT NULL DEFAULT 'pending'
 )''';
 
 const createFoldersTable = '''
@@ -46,9 +47,23 @@ CREATE TABLE attachments (
   note_id TEXT NOT NULL,
   type TEXT NOT NULL,
   local_path TEXT NOT NULL,
+  remote_path TEXT,
   size INTEGER,
   metadata_json TEXT,
   created_at INTEGER NOT NULL
+)''';
+
+const createSyncQueueTable = '''
+CREATE TABLE sync_queue (
+  id TEXT PRIMARY KEY,
+  owner_id TEXT NOT NULL DEFAULT 'local',
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  operation TEXT NOT NULL,
+  payload_path TEXT,
+  created_at INTEGER NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT
 )''';
 
 const createAppNotificationsTable = '''
