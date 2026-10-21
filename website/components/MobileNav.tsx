@@ -3,7 +3,7 @@
 import {useState} from "react";
 import Link from "next/link";
 
-const items=[["/features","Features"],["/how-it-works","How it works"],["/download","Download"],["/founder","Founder"],["/account","Account"]];
+const items=[["/features","Features"],["/how-it-works","How it works"],["/download","Download"],["/founder","Founder"]];
 
 export default function MobileNav(){
   const[open,setOpen]=useState(false);
