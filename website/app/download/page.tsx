@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-export const metadata: Metadata = { title: "Download Snote — Latest Releases", description: "Check the latest published Snote version, release notes, and direct downloads for available platforms.", alternates: { canonical: "https://snote-showcase.vercel.app/download" } };
+export const metadata: Metadata = { title: "Download Snote — Latest Releases", description: "Check the latest published Snote version, release notes, and direct downloads for available platforms.", alternates: { canonical: "https://snote-showcase.vercel.app/download" }, keywords: ["download Snote","Snote releases","Snote Android","open-source notes app"], openGraph: { title: "Download Snote", description: "Check published Snote releases and available downloads.", url: "https://snote-showcase.vercel.app/download", type: "website" }, twitter: { card: "summary", title: "Download Snote", description: "Find the latest published Snote releases." } };
 import Link from "next/link";
 import ReleaseCenter from "../../components/ReleaseCenter";
 export default function DownloadPage(){
