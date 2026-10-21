@@ -1,10 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:snote/data/local/schema.dart';
+import 'package:snote/core/config/account_scope.dart';
 
 void main() {
-  test('local schema excludes remote synchronization structures', () {
-    expect(databaseVersion, 9);
-    expect(createNotesTable, isNot(contains('sync_state')));
-    expect(createAttachmentsTable, isNot(contains('remote_path')));
+  test('production notes always use the local owner scope', () {
+    expect(SnoteAccountScope.ownerId, SnoteAccountScope.localOwner);
+    expect(SnoteAccountScope.isCloudAccount, isFalse);
   });
 }
