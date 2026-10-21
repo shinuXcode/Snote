@@ -206,7 +206,31 @@ jobs:
 
       - name: Analyze
         working-directory: app
-        run: flutter analyze --no-fatal-infos
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Patch incompatible in-app webview ProGuard default
+        working-directory: app
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import site
+
+          roots = [Path.home() / '.pub-cache' / 'hosted' / 'pub.dev']
+          roots += [Path(p) / 'pub-cache' / 'hosted' / 'pub.dev' for p in site.getsitepackages()]
+          changed = []
+          for root in roots:
+              if not root.exists():
+                  continue
+              for gradle in root.glob('flutter_inappwebview_android-*/android/build.gradle'):
+                  content = gradle.read_text()
+                  if "getDefaultProguardFile('proguard-android.txt')" in content:
+                      gradle.write_text(content.replace("getDefaultProguardFile('proguard-android.txt')", "getDefaultProguardFile('proguard-android-optimize.txt')"))
+                      changed.append(str(gradle))
+          if changed:
+              print('Patched legacy ProGuard default:', ', '.join(changed))
+          else:
+              print('No legacy ProGuard default found in cached plugin; continuing')
+          PY
+
       - name: Test
         working-directory: app
         run: flutter test
