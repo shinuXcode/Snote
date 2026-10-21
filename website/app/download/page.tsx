@@ -9,7 +9,7 @@ export const metadata: Metadata = {
  keywords: ["download Snote","Snote releases","Snote Android","open-source notes app"],
  openGraph: { title: "Download Snote — Latest Releases", description: "Find Snote builds, release notes, and supported platform downloads.", url: "https://snote-showcase.vercel.app/download", type: "website", images: [{url:"/opengraph-image",width:1200,height:630,alt:"Download Snote releases"}] },
  twitter: { card: "summary_large_image", title: "Download Snote — Latest Releases", description: "Find Snote builds, release notes, and supported platform downloads.", images:["/opengraph-image"] }
-};
+, other: { "article:modified_time": "2026-10-21" }};
 
 export default function DownloadPage(){
  return <main className="shell section download-page">
