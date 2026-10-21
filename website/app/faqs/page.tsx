@@ -34,8 +34,9 @@ export const metadata: Metadata = {
  description: "Answers to common questions about Snote installation, offline use, handwriting, PDFs, backups, permissions, cloud sync, licensing, and updates.",
  alternates: { canonical: "https://snote-showcase.vercel.app/faqs" },
  keywords: ["Snote FAQ","Snote offline","Snote handwriting","Snote PDF annotation","Snote privacy","Snote troubleshooting"],
- openGraph: { title: "Snote FAQs — Answers and Troubleshooting", description: "Answers about Snote installation, handwriting, PDFs, privacy, backups, and releases.", url: "https://snote-showcase.vercel.app/faqs", type: "website" },
- twitter: { card: "summary", title: "Snote FAQs", description: "Answers about installing, using, and troubleshooting Snote." },
+ openGraph: { title: "Snote FAQs — Answers and Troubleshooting", description: "Answers about Snote installation, handwriting, PDFs, privacy, backups, and releases.", url: "https://snote-showcase.vercel.app/faqs", type: "website", images: [{ url: "/og-image.svg", width: 1200, height: 630, alt: "Snote help and frequently asked questions" }] },
+ twitter: { card: "summary_large_image", title: "Snote FAQs", description: "Answers about installing, using, and troubleshooting Snote.", images: ["/og-image.svg"] },
+ other: { "article:modified_time": "2026-10-21" },
 };
 const schema = { "@context":"https://schema.org", "@type":"FAQPage", mainEntity: faqs.map(([q,a])=>({ "@type":"Question", name:q, acceptedAnswer:{ "@type":"Answer", text:a } })) };
 export default function FaqPage() {
@@ -44,6 +45,7 @@ export default function FaqPage() {
   <div className="eyebrow"><i/> HELP CENTRE</div>
   <h1 className="title">Questions, <em>answered.</em></h1>
   <p className="lead">Practical answers about installation, writing, data, permissions, releases, and contributing. Details can vary by version and platform.</p>
+  <section className="card source-note"><h2>Where are these answers verified?</h2><p className="muted">Product behavior changes across releases. Check the project’s official source and release notes before relying on a feature, especially for backups, PDF annotations, permissions, or cloud configuration.</p><ul><li><a href="https://github.com/shinuXcode/Snote" target="_blank" rel="noreferrer">Official Snote repository</a> — implementation and issue tracker.</li><li><a href="https://github.com/shinuXcode/Snote/releases" target="_blank" rel="noreferrer">Published releases</a> — version-specific assets and release notes.</li></ul></section>
   <div className="faq-list">{faqs.map(([q,a],i)=><details className="card faq-item" key={q}><summary><span className="feature-number">{String(i+1).padStart(2,"0")}</span><strong>{q}</strong><span className="faq-plus" aria-hidden="true">+</span></summary><p className="muted">{a}</p></details>)}</div>
  </main>;
 }
