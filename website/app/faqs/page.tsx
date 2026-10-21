@@ -44,6 +44,7 @@ export default function FaqPage() {
   <div className="eyebrow"><i/> HELP CENTRE</div>
   <h1 className="title">Questions, <em>answered.</em></h1>
   <p className="lead">Practical answers about installation, writing, data, permissions, releases, and contributing. Details can vary by version and platform.</p>
+  <section className="feature-explainer"><h2>Where can I verify answers?</h2><p>Product behavior can change by release and platform. For the latest implementation and supported assets, check the <a href="https://github.com/shinuXcode/Snote" target="_blank" rel="noreferrer">official Snote repository</a> and <a href="https://github.com/shinuXcode/Snote/releases" target="_blank" rel="noreferrer">published release notes</a>. Review the <a href="https://github.com/shinuXcode/Snote/blob/main/LICENSE" target="_blank" rel="noreferrer">published license</a> before redistributing the software.</p></section>
   <div className="faq-list">{faqs.map(([q,a],i)=><details className="card faq-item" key={q}><summary><span className="feature-number">{String(i+1).padStart(2,"0")}</span><strong>{q}</strong><span className="faq-plus" aria-hidden="true">+</span></summary><p className="muted">{a}</p></details>)}</div>
  </main>;
 }
