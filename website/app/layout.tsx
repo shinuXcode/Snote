@@ -26,7 +26,7 @@ const nav = [["/how-it-works","Showcase"],["/features","Features"],["/docs","Doc
 const orgSchema = { "@context":"https://schema.org","@type":"Organization","name":"Snote","url":siteUrl,"logo":siteUrl+"/snote-logo.svg","founder":{"@type":"Person","name":"Sadab"},"sameAs":["https://github.com/shinuXcode/Snote"] };
 const appSchema = { "@context":"https://schema.org","@type":"SoftwareApplication","name":"Snote","applicationCategory":"ProductivityApplication","operatingSystem":"Android, iOS, Windows, macOS, Linux, Web","description":"Open-source note-taking for handwriting, stylus input, rich text, and document workflows.","url":siteUrl,"downloadUrl":siteUrl+"/download","author":{"@type":"Person","name":"Sadab"},"license":"https://github.com/shinuXcode/Snote/blob/main/LICENSE","codeRepository":"https://github.com/shinuXcode/Snote","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"} };
 export default function RootLayout({children}:{children:React.ReactNode}) {
- return <html lang="en"><body>
+ return <>
   <script type="application/ld+json" dangerouslySetInnerHTML={{__html:JSON.stringify(orgSchema)}} />
   <script type="application/ld+json" dangerouslySetInnerHTML={{__html:JSON.stringify(appSchema)}} />
   <header className="nav"><div className="navin shell">
@@ -43,5 +43,5 @@ export default function RootLayout({children}:{children:React.ReactNode}) {
    <span className="footer-copy">Open source. Built for your ideas. © {new Date().getFullYear()} Snote.</span>
   </div></footer>
   <FeedbackCenter/>
- </body></html>;
+ </>;
 }
