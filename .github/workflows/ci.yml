@@ -81,9 +81,9 @@ jobs:
           mlkit_dependency = 'implementation("com.google.mlkit:text-recognition-chinese:16.0.1")'
           if mlkit_dependency not in text:
               if 'dependencies {' in text:
-                  text = text.replace('dependencies {', 'dependencies {\\n    ' + mlkit_dependency, 1)
+                  text = text.replace('dependencies {', 'dependencies {\n    ' + mlkit_dependency, 1)
               else:
-                  text = text.rstrip() + '\\n\\ndependencies {\\n    ' + mlkit_dependency + '\\n}\\n'
+                  text = text.rstrip() + '\n\ndependencies {\n    ' + mlkit_dependency + '\n}\n'
           if dependency not in text:
               if 'dependencies {' in text:
                   text = text.replace('dependencies {', 'dependencies {\n    ' + dependency, 1)
