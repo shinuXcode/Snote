@@ -27,6 +27,7 @@ class SnoteDatabase {
         await db.execute(createNotesTable);
         await db.execute(createPagesTable);
         await db.execute(createAttachmentsTable);
+        await db.execute(createSyncQueueTable);
         await db.execute(createAppNotificationsTable);
         await db.execute(createFolderCoversTable);
       },
@@ -62,12 +63,6 @@ class SnoteDatabase {
         }
         if (oldVersion < 7) {
           await db.execute(createFolderCoversTable);
-        }
-
-        if (oldVersion < 9) {
-          await db.execute('DROP TABLE IF EXISTS sync_queue');
-          await _dropColumnIfPresent(db, 'notes', 'sync_state');
-          await _dropColumnIfPresent(db, 'attachments', 'remote_path');
         }
       },
       onOpen: (db) async {
@@ -116,33 +111,13 @@ class SnoteDatabase {
           'CREATE INDEX IF NOT EXISTS idx_folder_covers_created '
           'ON folder_covers(created_at DESC)',
         );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_sync_queue_owner_entity '
+          'ON sync_queue(owner_id, entity_type, entity_id, created_at)',
+        );
       },
     );
     return _db!;
-  }
-
-  static Future<void> _dropColumnIfPresent(DatabaseExecutor db, String table, String column) async {
-    final columns = await db.rawQuery('PRAGMA table_info($table)');
-    if (!columns.any((row) => row['name'] == column)) return;
-    final definitions = <String>[];
-    final names = <String>[];
-    for (final row in columns) {
-      final name = row['name']! as String;
-      if (name == column) continue;
-      names.add(name);
-      final type = row['type']?.toString() ?? '';
-      final notNull = (row['notnull'] as num?)?.toInt() == 1 ? ' NOT NULL' : '';
-      final defaultValue = row['dflt_value'] == null ? '' : ' DEFAULT ${row['dflt_value']}';
-      final primaryKey = (row['pk'] as num?)?.toInt() == 1 ? ' PRIMARY KEY' : '';
-      definitions.add('${name} ${type}${primaryKey}${notNull}${defaultValue}');
-    }
-    await db.transaction((tx) async {
-      await tx.execute('ALTER TABLE $table RENAME TO ${table}_legacy_v9');
-      await tx.execute('CREATE TABLE $table (${definitions.join(', ')})');
-      final columnList = names.join(', ');
-      await tx.execute('INSERT INTO $table ($columnList) SELECT $columnList FROM ${table}_legacy_v9');
-      await tx.execute('DROP TABLE ${table}_legacy_v9');
-    });
   }
 
   static Future<void> _addColumnIfMissing(
