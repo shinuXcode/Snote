@@ -238,7 +238,7 @@ class _SettingsPageState extends State<SettingsPage> {
         _toggle('showPenCaseStrokeSize', 'Show pen case stroke size', 'Display current stroke width.'),
         _toggle('horizontalContinuousScroll', 'Horizontal continuous scroll', 'Experimental continuous scrolling.'),
         _toggle('showPenFloatSettings', 'Show pen float settings', 'Keep floating tool customization visible.'),
-        _toggle('autoSyncNote', 'Auto sync note', 'Queue and synchronize local changes when available.'),
+
         _toggle('autoBackupLocal', 'Auto backup note to local', 'Keep local recovery data.'),
         _toggle('writingPostureRightHand', 'Writing posture — right hand', 'Optimize floating controls for right-handed writing.'),
         _toggle('disableBackGesture', 'Disable back gesture', 'Use the visible editor back button.'),
