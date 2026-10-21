@@ -1,21 +1,22 @@
 # Snote Flutter app
 
+Snote is a local-only notebook. Notes, folders, settings and attachments stay on this device; the app has no account, login, signup, remote database or cloud-sync requirement.
+
 ## Run locally
 
-Set the optional cloud configuration when you want account sync:
-
-flutter run --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_PUBLISHABLE_KEY=...
-
-For Google OAuth on a native build, also set:
-
---dart-define=SUPABASE_REDIRECT_URI=com.snote://auth-callback
-
-Without Supabase variables, Snote remains a local-first notebook.
+```sh
+flutter pub get
+flutter run
+```
 
 ## Supported targets
 
 Android, iOS, macOS, Windows, Linux and Web.
 
+## Storage
+
+The app uses its local SQLite database and platform-local file storage. Export notebooks regularly if you need a portable backup.
+
 ## Release builds
 
-Platform workflows generate native project files, launcher icons and release artifacts in GitHub Actions. iOS builds in CI are intentionally unsigned; App Store distribution still needs Apple signing configured by the owner.
+Platform workflows generate native project files and release artifacts in GitHub Actions. iOS CI builds are unsigned; App Store distribution requires Apple signing.
