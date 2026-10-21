@@ -1,13 +1,13 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
 const MAX_MESSAGE_LENGTH = 2000;
 const allowedKinds = new Set(["General feedback", "Bug report", "Feature request", "Accessibility", "Website issue"]);
 
 export async function POST(request: Request) {
-  const token = process.env.GITHUB_TOKEN;
-  const repository = process.env.GITHUB_REPOSITORY || "shinuXcode/Snote";
+  const token = process.env.SNOTE_FEEDBACK_GITHUB_TOKEN;
+  const repository = process.env.SNOTE_FEEDBACK_REPOSITORY || "shinuXcode/Snote";
   if (!token) return Response.json({ error: "Feedback storage is not configured yet. No feedback was saved." }, { status: 503 });
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) return Response.json({ error: "Feedback repository configuration is invalid." }, { status: 500 });
 
   let body: unknown;
   try { body = await request.json(); } catch { return Response.json({ error: "Invalid request body." }, { status: 400 }); }
@@ -24,30 +24,19 @@ export async function POST(request: Request) {
 
   const title = `[Website Feedback] ${rating}/5 — ${kind}`;
   const issueBody = [
-    "## Snote website feedback",
-    "",
+    "## Snote website feedback", "",
     `- **Rating:** ${rating}/5`,
     `- **Category:** ${kind}`,
-    `- **Source:** Snote Showcase website`,
-    contact ? `- **Contact requested by submitter:** ${contact}` : "- **Contact:** Not provided",
-    "",
-    "## Message",
-    message,
-    "",
-    "---",
+    "- **Source:** Snote Showcase website",
+    contact ? `- **Contact (public):** ${contact}` : "- **Contact:** Not provided",
+    "", "## Message", message, "", "---",
     "Submitted through the Snote Showcase feedback form."
   ].join("\n");
-
   try {
     const response = await fetch(`https://api.github.com/repos/${repository}/issues`, {
       method: "POST",
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${token}`,
-        "X-GitHub-Api-Version": "2022-11-28",
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ title, body: issueBody, labels: ["website-feedback"] }),
+      headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${token}`, "X-GitHub-Api-Version": "2022-11-28", "Content-Type": "application/json" },
+      body: JSON.stringify({ title, body: issueBody }),
       cache: "no-store"
     });
     if (!response.ok) {
