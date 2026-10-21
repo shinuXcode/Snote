@@ -17,7 +17,7 @@ class SnoteSettings extends ChangeNotifier {
     'showPageNumbers': true, 'showVisitedHistory': true, 'showPagePreview': true,
     'showUndoOnRight': false, 'screenshotNotification': false, 'clickHyperlink': true,
     'doubleClickHyperlink': true, 'jumpToNewPage': true, 'showPenCaseStrokeSize': false,
-    'horizontalContinuousScroll': true, 'showPenFloatSettings': true, 'autoSyncNote': true,
+    'horizontalContinuousScroll': true, 'showPenFloatSettings': true,
     'autoBackupLocal': true, 'writingPostureRightHand': true, 'disableBackGesture': false,
     'turnOffPush': false, 'pageSwipe': true, 'autoAddPage': true,
     'securePagePreviews': false, 'eInk': false, 'grayscaleEInk': true, 'reduceMotion': false,
