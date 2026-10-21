@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Reveal from "../../components/Reveal";
-export const metadata: Metadata = { title: "Snote Showcase — A notebook built for thinking", description: "Explore Snote's handwriting, stylus input, local-first storage, PDF annotation, and note-taking workflows.", alternates: { canonical: "https://snote-showcase.vercel.app/how-it-works" } };
+export const metadata: Metadata = { title: "Snote Showcase — A notebook built for thinking", description: "Explore Snote's handwriting, stylus input, local-first storage, PDF annotation, and note-taking workflows.", alternates: { canonical: "https://snote-showcase.vercel.app/how-it-works" }, keywords: ["how Snote works","Snote showcase","handwriting app","PDF reading","digital note-taking workflow"], openGraph: { title: "How Snote Works", description: "See how Snote brings handwriting, reading, and organizing into one open-source workspace.", url: "https://snote-showcase.vercel.app/how-it-works", type: "website" }, twitter: { card: "summary", title: "How Snote Works", description: "Explore the Snote note-taking workflow." } };
 const steps = [
  ["01","Capture","Start with a blank page, a paper template, or a PDF. Write by hand or type your thoughts."],
  ["02","Make it yours","Use stylus tools, rich text, shapes, images, lasso selection, and page layouts to express ideas."],
