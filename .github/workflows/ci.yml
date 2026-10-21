@@ -78,12 +78,18 @@ jobs:
                   raise SystemExit('Generated Gradle file has no compileOptions block')
               text = text.replace('compileOptions {', 'compileOptions {\n        isCoreLibraryDesugaringEnabled = true', 1)
           dependency = 'coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")'
-          mlkit_dependency = 'implementation("com.google.mlkit:text-recognition-chinese:16.0.1")'
-          if mlkit_dependency not in text:
-              if 'dependencies {' in text:
-                  text = text.replace('dependencies {', 'dependencies {\n    ' + mlkit_dependency, 1)
-              else:
-                  text = text.rstrip() + '\n\ndependencies {\n    ' + mlkit_dependency + '\n}\n'
+          mlkit_dependencies = [
+              'implementation("com.google.mlkit:text-recognition-chinese:16.0.1")',
+              'implementation("com.google.mlkit:text-recognition-devanagari:16.0.1")',
+              'implementation("com.google.mlkit:text-recognition-japanese:16.0.1")',
+              'implementation("com.google.mlkit:text-recognition-korean:16.0.1")',
+          ]
+          for mlkit_dependency in mlkit_dependencies:
+              if mlkit_dependency not in text:
+                  if 'dependencies {' in text:
+                      text = text.replace('dependencies {', 'dependencies {\n    ' + mlkit_dependency, 1)
+                  else:
+                      text = text.rstrip() + '\n\ndependencies {\n    ' + mlkit_dependency + '\n}\n'
           if dependency not in text:
               if 'dependencies {' in text:
                   text = text.replace('dependencies {', 'dependencies {\n    ' + dependency, 1)
@@ -136,6 +142,33 @@ jobs:
       - name: Analyze
         working-directory: app
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Patch incompatible in-app webview ProGuard default
+        working-directory: app
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import site
+
+          roots = [Path.home() / '.pub-cache' / 'hosted' / 'pub.dev']
+          roots += [Path(p) / 'pub-cache' / 'hosted' / 'pub.dev' for p in site.getsitepackages()]
+          changed = []
+          for root in roots:
+              if not root.exists():
+                  continue
+              for gradle in root.glob('flutter_inappwebview_android-*/android/build.gradle'):
+                  content = gradle.read_text()
+                  old = "getDefaultProguardFile('proguard-android.txt')"
+                  new = "getDefaultProguardFile('proguard-android-optimize.txt')"
+                  if old in content:
+                      gradle.write_text(content.replace(old, new))
+                      changed.append(str(gradle))
+          if changed:
+              print('Patched legacy ProGuard default:', ', '.join(changed))
+          else:
+              print('No legacy ProGuard default found in cached plugin; continuing')
+          PY
 
       - name: Test
         working-directory: app
