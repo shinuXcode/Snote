@@ -6,7 +6,7 @@ export const metadata: Metadata = {
  alternates: { canonical: "https://snote-showcase.vercel.app/founder" },
  openGraph: { title: "About Sadab — Creator of Snote", description: "Meet the independent creator and learn about the principles behind the open-source Snote note-taking project.", url: "https://snote-showcase.vercel.app/founder", type: "profile", images: [{ url: "/opengraph-image", width:1200, height:630, alt: "Snote and its open-source creator" }] },
  twitter: { card: "summary_large_image", title: "About Sadab — Creator of Snote", description: "Meet the independent creator behind Snote.", images:["/opengraph-image"] }
-};
+, other: { "article:modified_time": "2026-10-21" }};
 export default function FounderPage() {
  return <main className="shell section founder-page">
   <div className="eyebrow"><i/> THE PERSON BEHIND THE PROJECT</div>
