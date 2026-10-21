@@ -6,7 +6,6 @@ on:
     paths:
       - "app/**"
       - "website/**"
-      - "supabase/**"
       - ".github/workflows/**"
   pull_request:
     branches: [main]
