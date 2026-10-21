@@ -73,7 +73,6 @@ class FileDocumentRepository {
       'note_id': noteId,
       'type': type,
       'local_path': path,
-      'remote_path': null,
       'size': bytes.length,
       'metadata_json': jsonEncode(data),
       'created_at': DateTime.now().millisecondsSinceEpoch,
