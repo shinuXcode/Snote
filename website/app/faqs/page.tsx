@@ -34,8 +34,8 @@ export const metadata: Metadata = {
  description: "Answers to common questions about Snote installation, offline use, handwriting, PDFs, backups, permissions, cloud sync, licensing, and updates.",
  alternates: { canonical: "https://snote-showcase.vercel.app/faqs" },
  keywords: ["Snote FAQ","Snote offline","Snote handwriting","Snote PDF annotation","Snote privacy","Snote troubleshooting"],
- openGraph: { title: "Snote FAQs — Answers and Troubleshooting", description: "Answers about Snote installation, handwriting, PDFs, privacy, backups, and releases.", url: "https://snote-showcase.vercel.app/faqs", type: "website" },
- twitter: { card: "summary", title: "Snote FAQs", description: "Answers about installing, using, and troubleshooting Snote." },
+ openGraph: { title: "Snote FAQs — Answers and Troubleshooting", description: "Answers about Snote installation, handwriting, PDFs, privacy, backups, and releases.", url: "https://snote-showcase.vercel.app/faqs", type: "website", images:[{url:"/opengraph-image",width:1200,height:630,alt:"Snote frequently asked questions"}] },
+ twitter: { card: "summary_large_image", title: "Snote FAQs", description: "Answers about installing, using, and troubleshooting Snote.", images:["/opengraph-image"] },
 };
 const schema = { "@context":"https://schema.org", "@type":"FAQPage", mainEntity: faqs.map(([q,a])=>({ "@type":"Question", name:q, acceptedAnswer:{ "@type":"Answer", text:a } })) };
 export default function FaqPage() {
