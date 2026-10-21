@@ -22,7 +22,7 @@ export default function Page() {
         <div className="eyebrow">Download center</div>
         <h1 className="title">Snote {version}</h1>
         <p className="lead">
-          One notebook format, one account identity, multiple platforms.
+          One local notebook experience across multiple platforms.
         </p>
       </Reveal>
 
@@ -76,7 +76,6 @@ export default function Page() {
             The release pipeline runs dependency installation, launcher-icon generation,
             static analysis, tests and a release build before publishing artifacts.
           </p>
-          <Link href="/account">Open the note portal →</Link>
         </div>
       </Reveal>
     </main>
