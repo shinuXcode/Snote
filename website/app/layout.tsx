@@ -6,8 +6,9 @@ import ThemeToggle from "../components/ThemeToggle";
 import Icon from "../components/Icon";
 import NotificationCenter from "../components/NotificationCenter";
 import FeedbackCenter from "../components/FeedbackCenter";
+import BrandLoader from "../components/BrandLoader";
 
-const siteUrl = "https://snote-showcase.vercel.app";
+const siteUrl = "https://snotee.vercel.app";
 export const metadata: Metadata = {
  metadataBase: new URL(siteUrl),
  title: { default: "Snote — Notes that move with you", template: "%s | Snote" },
@@ -30,14 +31,15 @@ export default function RootLayout({children}:{children:React.ReactNode}) {
   <script type="application/ld+json" dangerouslySetInnerHTML={{__html:JSON.stringify(orgSchema)}} />
   <script type="application/ld+json" dangerouslySetInnerHTML={{__html:JSON.stringify(appSchema)}} />
   <header className="nav"><div className="navin shell">
-   <Link href="/" className="brand" aria-label="Snote home"><img src="/snote-logo.svg" alt="" /><span className="brand-mark">s.</span><span>snote</span></Link>
+   <Link href="/" className="brand" aria-label="Snote home"><img src="/snote-logo.svg" alt="" /><span>snote</span></Link>
    <nav className="links" aria-label="Main navigation">{nav.map(([href,label])=><Link key={href} href={href}>{label}</Link>)}</nav>
    <div className="nav-actions"><NotificationCenter/><ThemeToggle/><a className="nav-github" href="https://github.com/shinuXcode/Snote" target="_blank" rel="noreferrer" aria-label="Snote on GitHub"><Icon name="github" size={19}/></a><Link className="nav-start" href="/download">Download <Icon name="arrow" size={15}/></Link></div>
    <MobileNav/>
   </div></header>
+  <BrandLoader />
   {children}
   <footer className="footer"><div className="shell footerin">
-   <Link href="/" className="footer-brand"><span className="brand-mark">s.</span> Snote</Link>
+   <Link href="/" className="footer-brand"><img src="/snote-logo.svg" alt="" /> Snote</Link>
    <p>Make room for better thinking.</p>
    <div className="footer-links"><Link href="/features">Features</Link><Link href="/docs">Docs</Link><Link href="/faqs">FAQs</Link><Link href="/founder">Founder</Link><Link href="/download">Download</Link><a href="https://github.com/shinuXcode/Snote" target="_blank" rel="noreferrer">GitHub ↗</a></div>
    <span className="footer-copy">Open source. Built for your ideas. © {new Date().getFullYear()} Snote.</span>
