@@ -7,7 +7,7 @@ export default function MotionHero() {
       <div className="orb orb-b" />
       <div className="hero-grid" />
       <div className="shell hero-content">
-        <img className="hero-logo hero-logo-float" src="/snote-logo.svg" alt="" />
+        <img className="hero-logo hero-logo-float" src="/snote-logo.png" alt="" />
         <div className="hero-copy hero-copy-in">
           <div className="eyebrow">Open source · offline first · cross platform</div>
           <h1>
