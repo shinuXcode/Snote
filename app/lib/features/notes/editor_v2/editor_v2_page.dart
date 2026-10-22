@@ -241,7 +241,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   final Map<String, Set<String>> _toolPlacements = <String, Set<String>>{};
   List<String> _toolbarOrder = <String>[];
   bool _showNoteSwitcherInTitleBar = true;
-  bool _showTabsBar = true;
+  bool _showTabsBar = false;
   Future<List<LocalNote>>? _noteTabsFuture;
   List<Map<String, Object?>>? _selectionTransformImageSnapshot;
   List<Map<String, Object?>>? _selectionTransformTextSnapshot;
@@ -8334,14 +8334,13 @@ class _EditorV2PageState extends State<EditorV2Page>
                   ? _buildErrorBody()
                   : Column(
                       children: [
-                        // Keep the tab strip's height reserved when hidden so toggling tabs never
-                        // shifts the canvas or changes the current viewport transform.
-                        SizedBox(
-                          height: 44,
-                          child: _showTabsBar && !_fullScreenMode
-                              ? _buildNoteTabs()
-                              : const SizedBox.shrink(),
-                        ),
+                        // Keep the canvas flush to the app bar while tabs are hidden.
+                        // When enabled, the compact strip appears directly beneath the title bar.
+                        if (_showTabsBar && !_fullScreenMode)
+                          SizedBox(
+                            height: 34,
+                            child: _buildNoteTabs(),
+                          ),
                         Expanded(child: _buildEditorLayout()),
                       ],
                     ),
@@ -8436,7 +8435,7 @@ class _EditorV2PageState extends State<EditorV2Page>
               top: 8,
               right: 52,
               child: Material(
-                color: Theme.of(context).colorScheme.primaryContainer,
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 shape: const CircleBorder(),
                 elevation: 5,
                 child: IconButton(
@@ -8455,7 +8454,7 @@ class _EditorV2PageState extends State<EditorV2Page>
               right: 0,
               top: 96,
               child: Material(
-                color: Theme.of(context).colorScheme.primaryContainer,
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 borderRadius: const BorderRadius.horizontal(left: Radius.circular(14)),
                 elevation: 7,
                 child: InkWell(
