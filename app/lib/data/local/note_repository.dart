@@ -87,16 +87,25 @@ class NoteRepository {
 
   Future<Database> get _db => SnoteDatabase.open();
 
+  /// Creates any note type in the same local library. Existing callers keep
+  /// creating handwriting notebooks by default.
   Future<LocalNote> create({
     String title = 'Untitled note',
     String? folderId,
+    String noteType = 'handwriting',
+    Map<String, Object?>? initialContent,
   }) async {
+    const supportedTypes = {'handwriting', 'quick_note', 'checklist', 'document'};
+    if (!supportedTypes.contains(noteType)) {
+      throw ArgumentError.value(noteType, 'noteType', 'Unsupported note type');
+    }
     final now = DateTime.now().millisecondsSinceEpoch;
     final note = LocalNote(
       id: _uuid.v4(),
       title: title.trim().isEmpty ? 'Untitled note' : title.trim(),
       folderId: folderId,
-      noteType: 'handwriting',
+      noteType: noteType,
+      contentJson: initialContent == null ? null : jsonEncode(initialContent),
       createdAt: now,
       updatedAt: now,
       version: 1,
