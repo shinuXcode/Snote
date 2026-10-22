@@ -7444,6 +7444,17 @@ class _EditorV2PageState extends State<EditorV2Page>
                                             unawaited(_clearPageWithConfirmation(index));
                                           case 'share':
                                             unawaited(_sharePage(index));
+                                          case 'bookmark':
+                                            setState(() {
+                                              final pageNumber = index + 1;
+                                              if (_bookmarkedPages.contains(pageNumber)) {
+                                                _bookmarkedPages.remove(pageNumber);
+                                              } else {
+                                                _bookmarkedPages.add(pageNumber);
+                                                _bookmarkedPages.sort();
+                                              }
+                                            });
+                                            _scheduleSave();
                                           case 'delete':
                                             unawaited(_confirmDeletePage(index));
                                         }
@@ -7460,6 +7471,14 @@ class _EditorV2PageState extends State<EditorV2Page>
                                         const PopupMenuItem(value: 'duplicate', child: ListTile(dense: true, leading: Icon(Icons.control_point_duplicate_rounded), title: Text('Duplicate'))),
                                         const PopupMenuItem(value: 'clear', child: ListTile(dense: true, leading: Icon(Icons.cleaning_services_outlined), title: Text('Clear page…'))),
                                         const PopupMenuItem(value: 'share', child: ListTile(dense: true, leading: Icon(Icons.share_outlined), title: Text('Share page'))),
+                                        PopupMenuItem(
+                                          value: 'bookmark',
+                                          child: ListTile(
+                                            dense: true,
+                                            leading: Icon(_bookmarkedPages.contains(index + 1) ? Icons.bookmark_remove_outlined : Icons.bookmark_add_outlined),
+                                            title: Text(_bookmarkedPages.contains(index + 1) ? 'Remove bookmark' : 'Bookmark page'),
+                                          ),
+                                        ),
                                         const PopupMenuItem(value: 'delete', child: ListTile(dense: true, leading: Icon(Icons.delete_outline_rounded), title: Text('Delete page…'))),
                                       ],
                                       icon: const Icon(Icons.more_horiz_rounded),
