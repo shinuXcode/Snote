@@ -29,6 +29,8 @@ import '../updates/update_center_page.dart';
 import '../onboarding/welcome_guide_page.dart';
 import 'nextgen_editor_route.dart';
 import 'new_note_route.dart';
+import 'quick_note_editor_page.dart';
+import 'document_editor_page.dart';
 
 class NotesHomePage extends StatefulWidget {
   final bool localOnly;
@@ -336,47 +338,42 @@ class _NotesHomePageState extends State<NotesHomePage> {
   }
 
   Future<void> _createNote() async {
-    final folderId = _folderId;
-    debugPrint(
-      '[Snote][Navigation] New Note requested '
-      'platform=${defaultTargetPlatform.name} folder=${folderId ?? 'root'}',
+    final choice = await showModalBottomSheet<String>(
+      context: context, showDragHandle: true,
+      builder: (sheetContext) => SafeArea(child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Create in Snotee', style: Theme.of(sheetContext).textTheme.titleLarge),
+          ListTile(leading: const Icon(Icons.draw_outlined), title: const Text('Notebook'), subtitle: const Text('Handwriting and PDF annotation'), onTap: () => Navigator.pop(sheetContext, 'handwriting')),
+          ListTile(leading: const Icon(Icons.sticky_note_2_outlined), title: const Text('Quick note'), subtitle: const Text('Capture text quickly'), onTap: () => Navigator.pop(sheetContext, 'quick_note')),
+          ListTile(leading: const Icon(Icons.checklist_outlined), title: const Text('Checklist'), subtitle: const Text('Tasks and tick boxes'), onTap: () => Navigator.pop(sheetContext, 'checklist')),
+          ListTile(leading: const Icon(Icons.article_outlined), title: const Text('Document'), subtitle: const Text('Structured notes and study pages'), onTap: () => Navigator.pop(sheetContext, 'document')),
+        ]),
+      )),
     );
+    if (choice == null || !mounted) return;
     try {
-      final created = await _notes.create(folderId: folderId);
-      if (created.id.trim().isEmpty) {
-        throw StateError('The local note repository returned an empty note ID.');
-      }
-
-      // Verify that the exact record being passed to the route exists in the
-      // local database. This catches route/state mismatches before mounting
-      // an editor that cannot reload its document.
+      final title = choice == 'quick_note' ? 'Quick note' : choice == 'checklist' ? 'Checklist' : choice == 'document' ? 'Untitled document' : 'Untitled note';
+      final Map<String, Object?>? initial = choice == 'checklist'
+          ? {'noteType':'checklist','kind':'checklist','text':'','items':<Map<String,Object?>>[]}
+          : choice == 'quick_note'
+              ? {'noteType':'quick_note','kind':'text','text':'','items':<Map<String,Object?>>[]}
+              : choice == 'document'
+                  ? {'noteType':'document','kind':'document','text':'','blocks':<Map<String,Object?>>[]}
+                  : null;
+      final created = await _notes.create(title: title, folderId: _folderId, noteType: choice, initialContent: initial);
       final note = await _notes.get(created.id);
-      if (note == null) {
-        throw StateError('The new note was created but could not be read back from local storage.');
-      }
+      if (note == null) throw StateError('The new item could not be loaded from local storage.');
       if (!mounted) return;
-
-      debugPrint('[Snote][Navigation] persisted new note id=${note.id}');
       setState(() => _selected = note);
-      // Always open New Note in its own full-screen route. In particular,
-      // do not mount a just-created note inside the split-workspace editor:
-      // this isolates its lifecycle and constraints from the home layout.
-      debugPrint('[Snote][Navigation] push dedicated new-note route noteId=${note.id}');
-      await Navigator.of(context).push<void>(
-        MaterialPageRoute<void>(
-          settings: RouteSettings(name: '/new-note/${note.id}'),
-          builder: (_) => NewNoteRoute(note: note),
-        ),
-      );
-      debugPrint('[Snote][Navigation] dedicated new-note route returned noteId=${note.id}');
+      await Navigator.of(context).push<void>(MaterialPageRoute<void>(
+        settings: RouteSettings(name: '/'+choice+'/'+note.id),
+        builder: (_) => choice == 'handwriting' ? NewNoteRoute(note: note) : choice == 'document' ? DocumentEditorPage(note: note) : QuickNoteEditorPage(note: note),
+      ));
       await _load();
     } catch (error, stackTrace) {
-      debugPrint('[Snote][Navigation] New Note failed: $error\n$stackTrace');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not open a new note: $error')),
-        );
-      }
+      debugPrint('[Snotee][Create] failed: $error\\n$stackTrace');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not create this item: $error')));
     }
   }
 
@@ -430,6 +427,11 @@ class _NotesHomePageState extends State<NotesHomePage> {
         return FlashcardPage(folderId: note.folderId, note: note);
       case 'mindmap':
         return MindMapPage(folderId: note.folderId, note: note);
+      case 'quick_note':
+      case 'checklist':
+        return QuickNoteEditorPage(note: note);
+      case 'document':
+        return DocumentEditorPage(note: note);
       default:
         return SnoteNextEditorRoute(note: note);
     }
