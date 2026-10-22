@@ -189,3 +189,20 @@ body{background:#030303;color:#f5f2ef;font-family:'DM Sans',Inter,ui-sans-serif,
  .template-final-cta h2{font-size:43px}
  .template-final-cta .home-cta-actions{margin-top:24px}
 }
+
+/* Snote brand mark and short, reduced-motion-friendly startup reveal */
+.brand img{display:block;width:38px;height:38px;object-fit:contain;flex:none}
+.brand{gap:8px}
+.footer-brand img{width:32px;height:32px;object-fit:contain}
+.founder-photo-wrap{background:var(--surface-2);display:grid;place-items:center;min-height:420px;overflow:hidden}
+.founder-photo.founder-logo-placeholder{width:min(76%,360px);height:auto;max-height:360px;object-fit:contain;filter:drop-shadow(0 18px 28px #20211f16)}
+.brand-loader{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:var(--bg);color:var(--ink);animation:loader-enter .25s ease-out both}
+.brand-loader-mark{width:clamp(92px,20vw,140px);height:clamp(92px,20vw,140px);display:grid;place-items:center;animation:loader-float 1.5s ease-in-out infinite}
+.brand-loader-mark img{width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 10px 25px #20211f12)}
+.brand-loader-word{font-size:clamp(24px,5vw,30px);font-weight:800;letter-spacing:-.08em}
+.brand-loader-track{width:88px;height:3px;overflow:hidden;border-radius:99px;background:var(--line)}
+.brand-loader-track i{display:block;width:45%;height:100%;border-radius:99px;background:var(--accent);animation:loader-progress .85s ease-in-out infinite}
+@keyframes loader-enter{from{opacity:0}to{opacity:1}}
+@keyframes loader-float{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-5px) scale(1.025)}}
+@keyframes loader-progress{from{transform:translateX(-110%)}to{transform:translateX(240%)}}
+@media(prefers-reduced-motion:reduce){.brand-loader,.brand-loader-mark,.brand-loader-track i{animation:none}.brand-loader{transition:none}}
