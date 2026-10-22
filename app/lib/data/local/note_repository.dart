@@ -184,8 +184,12 @@ class NoteRepository {
     final db = await _db;
     final rows = await db.query(
       'notes',
-      where: 'owner_id = ? AND deleted_at IS NULL AND title LIKE ?',
-      whereArgs: [SnoteAccountScope.ownerId, '%$normalized%'],
+      where: 'owner_id = ? AND deleted_at IS NULL AND (title LIKE ? OR content_json LIKE ?)',
+      whereArgs: [
+        SnoteAccountScope.ownerId,
+        '%$normalized%',
+        '%$normalized%',
+      ],
       orderBy: 'updated_at DESC',
       limit: limit.clamp(1, 10000).toInt(),
       offset: offset > 0 ? offset : null,
