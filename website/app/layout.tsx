@@ -20,7 +20,7 @@ export default function RootLayout({children}:{children:React.ReactNode}){
     <header className="nav">
       <div className="shell navin">
         <Link href="/" className="brand">
-          <img src="/snote-logo.svg" alt="Snote" />
+          <img src="/snote-logo.png" alt="Snote" />
           <span>Snote</span>
         </Link>
         <nav className="links">
