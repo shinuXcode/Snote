@@ -1,4 +1,3 @@
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/widgets.dart';
 
 class SnoteLogo extends StatelessWidget {
@@ -16,11 +15,11 @@ class SnoteLogo extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        SvgPicture.asset(
-          'assets/branding/snote-logo.svg',
+        Image.asset(
+          'assets/branding/snote-logo.png',
           width: size,
           height: size,
-          semanticsLabel: 'Snote',
+          semanticLabel: 'Snote',
         ),
         if (showWordmark) ...[
           const SizedBox(width: 10),
