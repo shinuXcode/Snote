@@ -87,16 +87,25 @@ class NoteRepository {
 
   Future<Database> get _db => SnoteDatabase.open();
 
+  /// Creates any note type in the same local library. Existing callers keep
+  /// creating handwriting notebooks by default.
   Future<LocalNote> create({
     String title = 'Untitled note',
     String? folderId,
+    String noteType = 'handwriting',
+    Map<String, Object?>? initialContent,
   }) async {
+    const supportedTypes = {'handwriting', 'quick_note', 'checklist', 'document'};
+    if (!supportedTypes.contains(noteType)) {
+      throw ArgumentError.value(noteType, 'noteType', 'Unsupported note type');
+    }
     final now = DateTime.now().millisecondsSinceEpoch;
     final note = LocalNote(
       id: _uuid.v4(),
       title: title.trim().isEmpty ? 'Untitled note' : title.trim(),
       folderId: folderId,
-      noteType: 'handwriting',
+      noteType: noteType,
+      contentJson: initialContent == null ? null : jsonEncode(initialContent),
       createdAt: now,
       updatedAt: now,
       version: 1,
@@ -175,8 +184,12 @@ class NoteRepository {
     final db = await _db;
     final rows = await db.query(
       'notes',
-      where: 'owner_id = ? AND deleted_at IS NULL AND title LIKE ?',
-      whereArgs: [SnoteAccountScope.ownerId, '%$normalized%'],
+      where: 'owner_id = ? AND deleted_at IS NULL AND (title LIKE ? OR content_json LIKE ?)',
+      whereArgs: [
+        SnoteAccountScope.ownerId,
+        '%$normalized%',
+        '%$normalized%',
+      ],
       orderBy: 'updated_at DESC',
       limit: limit.clamp(1, 10000).toInt(),
       offset: offset > 0 ? offset : null,

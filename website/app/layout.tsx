@@ -4,7 +4,7 @@ import Link from "next/link";
 import MobileNav from "../components/MobileNav";
 
 export const metadata:Metadata={
-  title:"Snote — Write without limits",
+  title:"Snotee — Your personal workspace",
   description:"Open-source, offline-first handwriting and rich-text notes."
 };
 
@@ -21,8 +21,8 @@ export default function RootLayout({children}:{children:React.ReactNode}){
     <header className="nav">
       <div className="shell navin">
         <Link href="/" className="brand">
-          <img src="/snote-logo.svg" alt="Snote" />
-          <span>Snote</span>
+          <img src="/snote-logo.svg" alt="Snotee" />
+          <span>Snotee</span>
         </Link>
         <nav className="links">
           {nav.map(([href,label])=><Link key={href} href={href}>{label}</Link>)}
@@ -33,7 +33,7 @@ export default function RootLayout({children}:{children:React.ReactNode}){
     {children}
     <footer className="footer">
       <div className="shell footerin">
-        <span>Snote · Open source · Offline first</span>
+        <span>Snotee · Open source · Offline first</span>
         <span>Android · iOS · Windows · macOS · Linux · Web</span>
       </div>
     </footer>

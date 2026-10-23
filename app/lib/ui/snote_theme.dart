@@ -15,6 +15,7 @@ class SnoteTheme {
     final scheme = ColorScheme.fromSeed(
       seedColor: violet,
       brightness: Brightness.light,
+      contrastLevel: 1.0,
       surface: panel,
     ).copyWith(
       primary: violet,
@@ -26,8 +27,8 @@ class SnoteTheme {
       surfaceContainerLowest: const Color(0xFFFFFFFF),
       surfaceContainerLow: const Color(0xFFF8FAFD),
       surfaceContainer: const Color(0xFFEAF0F8),
-      outline: const Color(0xFFC9D3E1),
-      outlineVariant: const Color(0xFFE1E7EF),
+      outline: const Color(0xFF68758A),
+      outlineVariant: const Color(0xFF8793A5),
     );
 
     final shape = RoundedRectangleBorder(
@@ -35,7 +36,7 @@ class SnoteTheme {
     );
     final fieldBorder = OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
-      borderSide: const BorderSide(color: Color(0xFFD5DDE8)),
+      borderSide: const BorderSide(color: Color(0xFF68758A)),
     );
 
     return ThemeData(
@@ -66,7 +67,7 @@ class SnoteTheme {
         surfaceTintColor: Colors.transparent,
         margin: EdgeInsets.zero,
         shape: shape.copyWith(
-          side: const BorderSide(color: Color(0xFFE2E8F0)),
+          side: const BorderSide(color: Color(0xFF8793A5)),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
@@ -102,7 +103,7 @@ class SnoteTheme {
       chipTheme: ChipThemeData(
         backgroundColor: const Color(0xFFF1F4F9),
         selectedColor: const Color(0xFFDCE7F7),
-        side: const BorderSide(color: Color(0xFFD5DDE9)),
+        side: const BorderSide(color: Color(0xFF68758A)),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         labelStyle: const TextStyle(fontWeight: FontWeight.w600),
       ),
@@ -130,7 +131,7 @@ class SnoteTheme {
         ),
       ),
       dividerTheme: const DividerThemeData(
-        color: Color(0xFFE1E7EF),
+        color: Color(0xFF8793A5),
         thickness: 1,
         space: 1,
       ),
@@ -146,6 +147,7 @@ class SnoteTheme {
     final scheme = ColorScheme.fromSeed(
       seedColor: teal,
       brightness: Brightness.dark,
+      contrastLevel: 1.0,
       surface: surface,
     ).copyWith(
       primary: teal,
@@ -157,8 +159,8 @@ class SnoteTheme {
       surfaceContainerLowest: const Color(0xFF111A29),
       surfaceContainerLow: const Color(0xFF1C2738),
       surfaceContainer: const Color(0xFF222F43),
-      outline: const Color(0xFF3B4D67),
-      outlineVariant: const Color(0xFF2B3B53),
+      outline: const Color(0xFF8292AA),
+      outlineVariant: const Color(0xFF5D6E87),
     );
 
     return ThemeData(
@@ -187,7 +189,7 @@ class SnoteTheme {
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(18),
-          side: const BorderSide(color: Color(0xFF2B3B53)),
+          side: const BorderSide(color: Color(0xFF5D6E87)),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
@@ -236,7 +238,7 @@ class SnoteTheme {
         ),
       ),
       dividerTheme: const DividerThemeData(
-        color: Color(0xFF2B3B53),
+        color: Color(0xFF5D6E87),
         thickness: 1,
         space: 1,
       ),

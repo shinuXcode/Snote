@@ -124,6 +124,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   bool _docked = true;
   String _dockSide = 'left';
   Axis _floatingAxis = Axis.vertical;
+  // Zero means content-sized; a positive value is the user's saved floating width.
+  double _floatingToolbarWidth = 0;
   // Keep the free toolbox outside the fixed left rail by default.
   double _toolbarX = 16;
   double _toolbarY = 0;
@@ -203,6 +205,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
     );
     WidgetsBinding.instance.addObserver(this);
     _title.text = widget.note.title;
+    _floatingToolbarWidth = _settings.getDouble('floatingToolbarWidth').clamp(0.0, 2000.0).toDouble();
     _registerCurrentOpenTab();
     _snoteOpenNoteTabs.addListener(_onOpenTabsChanged);
     try {
@@ -2863,24 +2866,94 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
             ? Axis.vertical
             : Axis.horizontal)
         : _floatingAxis;
+    final isFloatingToolbar = !_docked;
     final constraints = axis == Axis.vertical
         ? BoxConstraints(
-            maxWidth: 84,
+            maxWidth: isFloatingToolbar ? math.max(120.0, screen.width - 16) : 84,
             maxHeight: math.max(160, screen.height - 76),
           )
         : BoxConstraints(
             maxWidth: math.max(120, screen.width - 16),
             maxHeight: 92,
           );
+
+    final surface = _toolbarSurface(
+      _toolDropArea(
+        'toolbar',
+        Padding(
+          // Reserve a narrow, dedicated grip area instead of letting the
+          // resize handle cover the last tool button.
+          padding: EdgeInsets.only(right: isFloatingToolbar ? 14 : 0),
+          child: _toolbarContent(axis, docked: _docked),
+        ),
+      ),
+    );
+
+    final Widget toolbarBody;
+    if (isFloatingToolbar) {
+      final floatingToolbar = Stack(
+        key: _toolbarKey,
+        clipBehavior: Clip.hardEdge,
+        children: <Widget>[
+          surface,
+          Positioned(
+            top: 0,
+            right: 0,
+            width: 14,
+            height: 14,
+            child: Tooltip(
+              message: 'Drag to resize toolbar width',
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onPanUpdate: (details) {
+                  final renderObject = _toolbarKey.currentContext?.findRenderObject();
+                  final measuredWidth = renderObject is RenderBox ? renderObject.size.width : 240.0;
+                  final currentWidth = _floatingToolbarWidth > 0
+                      ? _floatingToolbarWidth
+                      : measuredWidth;
+                  final maxWidth = math.max(140.0, MediaQuery.sizeOf(context).width - 16);
+                  final nextWidth = (currentWidth + details.delta.dx)
+                      .clamp(140.0, maxWidth)
+                      .toDouble();
+                  setState(() => _floatingToolbarWidth = nextWidth);
+                  unawaited(_settings.setDouble('floatingToolbarWidth', nextWidth));
+                },
+                child: Center(
+                  child: Icon(
+                    Icons.drag_indicator_rounded,
+                    size: 14,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+      // An unresized floating toolbar hugs its actual content in either axis.
+      // Once resized, its viewport uses the chosen width and scrolls rather than overflowing.
+      toolbarBody = _floatingToolbarWidth > 0
+          ? SizedBox(
+              width: _floatingToolbarWidth
+                  .clamp(140.0, math.max(140.0, screen.width - 16))
+                  .toDouble(),
+              child: floatingToolbar,
+            )
+          : Align(
+              alignment: Alignment.centerLeft,
+              widthFactor: 1,
+              child: floatingToolbar,
+            );
+    } else {
+      toolbarBody = _toolbarSurface(
+        _toolDropArea('toolbar', _toolbarContent(axis, docked: _docked)),
+        key: _toolbarKey,
+      );
+    }
+
     final toolbar = ConstrainedBox(
       constraints: constraints,
-      child: _toolbarSurface(
-        _toolDropArea(
-          'toolbar',
-          _toolbarContent(axis, docked: _docked),
-        ),
-        key: _toolbarKey,
-      ),
+      child: toolbarBody,
     );
 
     // Always keep the same Positioned -> toolbar subtree. Only the position
@@ -2899,9 +2972,16 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
           );
         }
 
+        final measuredObject = _toolbarKey.currentContext?.findRenderObject();
+        final measuredWidth = measuredObject is RenderBox ? measuredObject.size.width : 144.0;
+        final effectiveWidth = _floatingToolbarWidth > 0
+            ? _floatingToolbarWidth
+            : measuredWidth;
         final fallbackY = screen.height - math.min(screen.height - 72, 112);
         return Positioned(
-          left: offset.dx.clamp(4.0, math.max(4.0, screen.width - 144)).toDouble(),
+          left: offset.dx
+              .clamp(4.0, math.max(4.0, screen.width - effectiveWidth - 4))
+              .toDouble(),
           top: (offset.dy == 0 ? fallbackY : offset.dy)
               .clamp(_full ? 4.0 : 54.0, math.max(_full ? 4.0 : 54.0, screen.height - 104))
               .toDouble(),
