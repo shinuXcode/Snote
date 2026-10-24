@@ -281,7 +281,7 @@ jobs:
           print("### Largest Web output files")
           print()
           print("| File | Bytes |")
-          print("|---|---:|---|")
+          print("|---|---:|")
           for path in sorted((p for p in web_dir.rglob("*") if p.is_file()), key=lambda p: p.stat().st_size, reverse=True)[:10]:
               print(f"| {path.relative_to(root).as_posix()} | {path.stat().st_size} |")
           PY
