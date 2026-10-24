@@ -188,6 +188,18 @@ jobs:
         working-directory: app
         run: flutter build linux --release
 
+      - name: Build per-ABI release APKs
+        working-directory: app
+        run: flutter build apk --release --split-per-abi
+
+      - name: Build Android App Bundle
+        working-directory: app
+        run: flutter build appbundle --release
+
+      - name: Capture dependency graph
+        working-directory: app
+        run: flutter pub deps --json > /tmp/snote-pub-deps.json
+
       - name: Record release artifact size baseline
         shell: bash
         run: |
@@ -199,16 +211,92 @@ jobs:
           apk_bytes="$(stat -c '%s' "$apk")"
           web_bytes="$(du -sb "$web" | cut -f1)"
           apk_sha="$(sha256sum "$apk" | cut -d ' ' -f1)"
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          import zipfile
+          from pathlib import Path
+          from collections import defaultdict
+
+          root = Path("app")
+          universal = root / "build/app/outputs/flutter-apk/app-release.apk"
+          bundle = root / "build/app/outputs/bundle/release/app-release.aab"
+          split_dir = root / "build/app/outputs/flutter-apk"
+          web_dir = root / "build/web"
+          print("## Build and source baseline")
+          print()
+          print("| Measurement | Value |")
+          print("|---|---:|")
+          print(f"| Universal release APK | {universal.stat().st_size} bytes |")
+          if bundle.exists():
+              print(f"| Release AAB | {bundle.stat().st_size} bytes |")
+          for path in sorted(split_dir.glob("app-*-release.apk")):
+              print(f"| Split APK {path.name} | {path.stat().st_size} bytes |")
+          print(f"| Web output directory (uncompressed) | {sum(p.stat().st_size for p in web_dir.rglob('*') if p.is_file())} bytes |")
+
+          deps_file = Path("/tmp/snote-pub-deps.json")
+          if deps_file.exists():
+              data = json.loads(deps_file.read_text())
+              packages = data.get("packages", [])
+              kinds = defaultdict(int)
+              for package in packages:
+                  kind = str(package.get("kind", package.get("dependencyKind", "unknown"))).lower()
+                  kinds[kind] += 1
+              print(f"| Pub packages in dependency graph | {len(packages)} |")
+              print("| Dependency-kind counts | " + ", ".join(f"{k}: {v}" for k, v in sorted(kinds.items())) + " |")
+
+          dart_files = [p for p in (root / "lib").rglob("*.dart") if p.is_file()]
+          print(f"| Dart source files under app/lib | {len(dart_files)} |")
+          print(f"| Dart source bytes under app/lib | {sum(p.stat().st_size for p in dart_files)} |")
+          print()
+          print("### Largest Dart source files")
+          print()
+          print("| File | Bytes |")
+          print("|---|---:|")
+          for path in sorted(dart_files, key=lambda p: p.stat().st_size, reverse=True)[:15]:
+              print(f"| {path.as_posix()} | {path.stat().st_size} |")
+
+          print()
+          print("### Universal APK contents (uncompressed entry bytes)")
+          print()
+          print("| Group | Uncompressed bytes |")
+          print("|---|---:|")
+          groups = defaultdict(int)
+          with zipfile.ZipFile(universal) as zf:
+              for info in zf.infolist():
+                  name = info.filename
+                  if name.startswith("lib/"):
+                      parts = name.split("/")
+                      group = f"native lib / {parts[1]}" if len(parts) > 2 else "native libs"
+                  elif name.startswith("assets/"):
+                      group = "assets"
+                  elif name.startswith("classes") and name.endswith(".dex"):
+                      group = "DEX"
+                  else:
+                      group = "other"
+                  groups[group] += info.file_size
+          for group, size in sorted(groups.items(), key=lambda item: item[1], reverse=True):
+              print(f"| {group} | {size} |")
+
+          print()
+          print("### Largest Web output files")
+          print()
+          print("| File | Bytes |")
+          print("|---|---:|")
+          for path in sorted((p for p in web_dir.rglob("*") if p.is_file()), key=lambda p: p.stat().st_size, reverse=True)[:10]:
+              print(f"| {path.relative_to(root).as_posix()} | {path.stat().st_size} |")
+          PY
           {
             echo "## Release artifact size baseline"
             echo
             echo "| Artifact | Bytes | SHA-256 |"
             echo "|---|---:|---|"
-            echo "| Android release APK | $apk_bytes | $apk_sha |"
+            echo "| Android universal release APK | $apk_bytes | $apk_sha |"
             echo "| Web build directory (uncompressed) | $web_bytes | — |"
             echo
             echo "Commit: $GITHUB_SHA"
             echo "Flutter version: 3.47.3"
+            echo "Dart version: see Flutter toolchain output above"
+            echo "Analyzer/tests: see completed Analyze and Test steps"
           } >> "$GITHUB_STEP_SUMMARY"
           printf 'Android APK: %s bytes (sha256 %s)\nWeb build directory: %s bytes uncompressed\n' "$apk_bytes" "$apk_sha" "$web_bytes"
 
