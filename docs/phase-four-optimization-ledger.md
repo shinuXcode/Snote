@@ -67,8 +67,8 @@ For every proposed change, record category (correctness, duplication, performanc
 | `app/lib/canvas_engine/input/stylus_gesture_lock.dart` | 850 | Not audited | Pending | — | — |
 | `app/lib/canvas_engine/input/viewport_transform.dart` | 597 | Not audited | Pending | — | — |
 | `app/lib/canvas_engine/models/pen_config.dart` | 16753 | Not audited | Pending | — | — |
-| `app/lib/canvas_engine/models/stroke_codec.dart` | 4819 | Not audited | Pending | — | — |
-| `app/lib/canvas_engine/models/stroke.dart` | 1858 | Not audited | Pending | — | — |
+| `app/lib/canvas_engine/models/stroke_codec.dart` | 4819 | Audited | Correctness / compatibility | Complete codec read; callers traced in `snote_canvas.dart`, legacy editor thumbnail decoding, QR transfer, and tests for codec round-trip, live ink, undo/redo, selection transform and Editor V2. Codec emits version 4 and supplies defaults/clamps for older/malformed fields. | No serialization change: stored format compatibility is critical. Existing tests cover round-trip and workflows but malformed legacy payload coverage should be reviewed before any optimization. |
+| `app/lib/canvas_engine/models/stroke.dart` | 1858 | Audited | Maintainability / correctness review | Complete model read; `StrokePoint` stores position, pressure, timestamp, tilt and orientation; `Stroke` carries shape/fill/sticker metadata and pen config. Shared by renderer, codec, legacy editor, Editor V2, and tests. | No model changes: nullable `copyWith` fields cannot be explicitly cleared, but changing this API could alter callers; requires a dedicated compatibility test and caller review before adjustment. |
 | `app/lib/canvas_engine/painters/canvas_painter.dart` | 46660 | Not audited | Pending | — | — |
 | `app/lib/canvas_engine/performance/ink_engine_metrics.dart` | 819 | Not audited | Pending | — | — |
 | `app/lib/canvas_engine/performance/stroke_spatial_index.dart` | 1831 | Not audited | Pending | — | — |
@@ -195,6 +195,14 @@ For every proposed change, record category (correctness, duplication, performanc
 | `website/public/snote-logo.png` | 1298678 | Not audited | Pending | — | — |
 | `website/scripts/guard-design.mjs` | 1276 | Not audited | Pending | — | — |
 | `website/tsconfig.json` | 299 | Not audited | Pending | — | — |
+
+## Focused audit: stroke model and codec
+
+**Responsibility:** `Stroke` / `StrokePoint` define the persisted drawing model; `StrokeCodec` maps the model to a version-4 document envelope and decodes document maps with defaults and clamping for compatibility.
+
+**Callers inspected:** the legacy canvas reloads and enqueues encoded documents; the legacy editor decodes stroke data for thumbnail rendering; QR transfer encodes a note payload; tests cover codec round-trip, live stroke commit, undo/redo, selection transforms, and Editor V2 workspace data.
+
+**Decision:** both files are marked Audited, not Validated. No change is justified in this batch: serialized note data is a compatibility boundary, and `copyWith`'s nullable fields have semantics that may be relied on by callers. Before altering codec behavior, add malformed/legacy document tests and verify reopen/undo/redo paths.
 
 ## Focused audit: ink renderer (initial batch)
 
