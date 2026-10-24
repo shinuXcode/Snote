@@ -27,7 +27,7 @@ export default function DocsPage() {
   <p className="lead">Read the original Snotee PDFs directly in your browser or download them for offline reference.</p>
   <div className="docs-callout card">
    <div><span className="pill">START HERE</span><h2>New to Snotee?</h2><p className="muted">Start with the app overview, then explore the feature and repository documentation.</p></div>
-   <div className="docs-actions"><a className="cta" href="/api/docs/app-overview.pdf" target="_blank" rel="noreferrer">Read app overview <span aria-hidden="true">↗</span></a><a className="docs-download" href="/api/docs/app-overview.pdf" download>Download PDF <span aria-hidden="true">↓</span></a></div>
+   <div className="docs-actions"><a className="cta" href="/api/docs/app-overview.pdf" target="_blank" rel="noreferrer">Read app overview <span aria-hidden="true">↗</span></a><a className="docs-download" href="/api/docs/app-overview.pdf?download=1" download>Download PDF <span aria-hidden="true">↓</span></a></div>
   </div>
   <div className="docs-library-heading"><div><span className="pill">9 DOCUMENTS</span><h2>Documentation library</h2></div><p className="muted">Each item is available as a browser-viewable PDF and a downloadable copy.</p></div>
   <div className="grid docs-grid">{docs.map(([n,title,body,slug])=><article className="card docs-card" key={slug}>
