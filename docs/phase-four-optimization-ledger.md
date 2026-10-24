@@ -196,6 +196,17 @@ For every proposed change, record category (correctness, duplication, performanc
 | `website/scripts/guard-design.mjs` | 1276 | Not audited | Pending | — | — |
 | `website/tsconfig.json` | 299 | Not audited | Pending | — | — |
 
+## Phase Four–Nine execution status
+
+| Phase | Status | Evidence so far | Next gate |
+|---|---|---|---|
+| 4 — File-by-file optimization | In progress | Full tracked-file inventory created; focused reads/caller checks logged for ink renderer, stroke model, codec and renderer tests. | Continue batches; mark each file only after implementation and callers are reviewed. |
+| 5 — Release artifact size | Baseline established; optimization validation pending | Universal APK 129,841,617 bytes; web output 46,511,458 bytes uncompressed; Actions artifact ZIP 76,648,181 bytes (not a release artifact size). | Compare the same toolchain/build type after the dependency change; extract AAB/per-ABI values where available. |
+| 6 — Performance and memory | Blocked on profiling baseline | Existing CI has compile/analyze/test coverage, but no measured device handwriting latency, frame timings, memory, PDF open/scroll or allocation profile. | Establish repeatable device/emulator measurements before optimizing renderer allocations or caches. |
+| 7 — Dependency and architecture review | In progress | `webview_flutter` direct dependency removed after zero repository code-search matches for its import/widget; `flutter_inappwebview` has a real call site. Both `pdf` and `pdfx` have observed call sites. | Confirm resolved dependency graph and build results; continue package-by-package usage/licensing/platform review. |
+| 8 — Testing and regression prevention | In progress | Baseline CI run #40078790734 passed all four jobs. Phase Three run #40079759189 had website and Windows jobs pass at last check; Apple and Flutter jobs were still running. Phase Four run #40080497868 was queued/pending at last check. | Require Phase Four CI completion, inspect any failures, and use physical-device checks for critical handwriting/PDF behavior. |
+| 9 — Safe cleanup | In progress | No files/assets deleted. One unused direct dependency removed after code search; validation pending. | For every deletion, verify source, generated/platform, manifest and runtime references; preserve data formats and license notices. |
+
 ## Focused audit: stroke model and codec
 
 **Responsibility:** `Stroke` / `StrokePoint` define the persisted drawing model; `StrokeCodec` maps the model to a version-4 document envelope and decodes document maps with defaults and clamping for compatibility.
