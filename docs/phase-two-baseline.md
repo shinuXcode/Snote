@@ -33,12 +33,14 @@ Warnings observed in the Android job:
 - Android build log includes `Caught exception: Already watching path: .../app/android`, but the build continued and succeeded.
 - CI actions emit Node.js 20 deprecation warnings for some action versions.
 
+No active failing job was reported by the completed current-main release workflow. This is not proof that there are no latent regressions; the build is a smoke/release check, not an end-to-end device regression suite. The version metadata mismatch documented in `docs/repository-dry-size-optimization.md` remains unresolved.
+
 No measured startup time, memory profile, frame timing, handwriting latency, or PDF loading/scrolling benchmark is currently available. These require a defined device/test scenario and should not be fabricated from hosted CI timings.
 
 ## Source-size snapshot
 
 The tracked-file inventory at commit `d734a393ccc1b231553eda9f70f585f656789bb2` counted 151 blobs:
-- 83 Dart files under `app/lib/`.
+- 83 Dart files under `app/lib/`, totaling **1,407,086 bytes** of Dart source at the inventory snapshot.
 - 19 test files.
 - 34 website files.
 - `website/public/snote-logo.png`: 1,298,678 bytes.
