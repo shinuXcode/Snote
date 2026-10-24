@@ -57,7 +57,7 @@ For every proposed change, record category (correctness, duplication, performanc
 | `app/lib/canvas_engine/algorithms/shape_recognizer.dart` | 3555 | Not audited | Pending | — | — |
 | `app/lib/canvas_engine/algorithms/stroke_geometry.dart` | 4235 | Not audited | Pending | — | — |
 | `app/lib/canvas_engine/algorithms/velocity_calculator.dart` | 1149 | Not audited | Pending | — | — |
-| `app/lib/canvas_engine/ink_renderer.dart` | 9808 | Not audited | Pending | — | — |
+| `app/lib/canvas_engine/ink_renderer.dart` | 9808 | Audited | Maintainability / performance review | Complete 279-line implementation read; imports used; callers confirmed in `snote_canvas.dart`, `canvas_painter.dart`, and `note_editor_page.dart`; fountain and one-point rendering covered in `canvas_engine_test.dart` | No independent code edit yet: the pressure-width duplication is already isolated in Phase Three PR #34; avoid duplicating that change. Further allocation changes require profiling. |
 | `app/lib/canvas_engine/input/ink_gesture_policy.dart` | 790 | Not audited | Pending | — | — |
 | `app/lib/canvas_engine/input/ink_input_pipeline.dart` | 5041 | Not audited | Pending | — | — |
 | `app/lib/canvas_engine/input/ink_prediction.dart` | 1781 | Not audited | Pending | — | — |
@@ -139,7 +139,7 @@ For every proposed change, record category (correctness, duplication, performanc
 | `app/README.md` | 648 | Not audited | Pending | — | — |
 | `app/test/account_scope_test.dart` | 316 | Not audited | Pending | — | — |
 | `app/test/app_color_themes_test.dart` | 741 | Not audited | Pending | — | — |
-| `app/test/canvas_engine_test.dart` | 6090 | Not audited | Pending | — | — |
+| `app/test/canvas_engine_test.dart` | 6090 | Audited | Correctness / regression coverage | Complete test file read; covers stroke codec round-trip, fountain width/opacity, visible fountain rendering including taps, shape-tool pixel visibility, and page templates | Existing tests provide a rendering smoke check but do not measure frame latency, allocations, or pressure-width equivalence. No test changes yet. |
 | `app/test/editor_surface_layout_test.dart` | 2674 | Not audited | Pending | — | — |
 | `app/test/editor_v2_document_test.dart` | 7471 | Not audited | Pending | — | — |
 | `app/test/editor_v2_ink_painter_test.dart` | 2657 | Not audited | Pending | — | — |
@@ -195,6 +195,20 @@ For every proposed change, record category (correctness, duplication, performanc
 | `website/public/snote-logo.png` | 1298678 | Not audited | Pending | — | — |
 | `website/scripts/guard-design.mjs` | 1276 | Not audited | Pending | — | — |
 | `website/tsconfig.json` | 299 | Not audited | Pending | — | — |
+
+## Focused audit: ink renderer (initial batch)
+
+**Responsibility:** `InkRenderer.drawInk` selects the standard ribbon path or fountain-specific path. Fountain rendering smooths samples, computes variable-width edges and per-sample opacity, then fills one ribbon. `_radiusFor` combines pressure, velocity, pen-type multipliers, and tilt.
+
+**Dependencies and callers:** `stroke_geometry.dart` supplies ribbon geometry; `velocity_calculator.dart` supplies pressure/velocity helpers; models come from `pen_config.dart` and `stroke.dart`; Flutter canvas/paint primitives come from `material.dart`; `dart:math` is used for numeric geometry. Code search found production call sites in `snote_canvas.dart`, `canvas_painter.dart`, and `note_editor_page.dart`. The focused test file invokes the renderer directly.
+
+**Evidence-based findings:**
+- Imports in this file are all used; no unused import or obvious dead public helper was found.
+- The renderer allocates a smoothed sample list plus left/right edge lists and a path for fountain strokes. This is a profiling candidate, not proof of a bottleneck; changing it without frame/allocation measurements risks altering nib geometry.
+- Current tests verify that fountain strokes produce visible pixels and that pressure/speed affect opacity/width helpers, but they do not establish device-level latency or pixel-level curve equivalence.
+- A repeated pressure-width expression is being addressed separately in Phase Three PR #34; it is intentionally not duplicated into this Phase Four branch.
+
+**Decision:** mark the file Audited, not Validated. No renderer code changed in this batch. Next inspect the complete painter and canvas lifecycle before proposing cross-renderer consolidation.
 
 ## First observations (not yet changes)
 
