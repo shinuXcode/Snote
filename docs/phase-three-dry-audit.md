@@ -26,6 +26,28 @@ For each candidate, trace:
 | Data repositories | `app/lib/data/local/folder_repository.dart`, `note_repository.dart`, and `file_document_repository.dart` own persistence concerns. | Potential repeated database initialization, serialization, path handling, and error reporting. | High: data loss, migration, offline-first guarantees, and file/database consistency. | Trace repository call graph and transactions; add fixture-based persistence/import/export tests before extraction. |
 | Website styling | `website/app/globals.css` is 46,312 bytes; `website/public/snote-logo.png` is 1,298,678 bytes. | Possible repeated CSS declarations; image size is a separate asset optimization candidate, not DRY logic. | Medium for CSS; low-to-medium for asset replacement if visual references are updated. | Run a duplicate CSS declaration scan and inspect actual asset imports/routes. Preserve the logo and its visual dimensions; measure production output after any image change. |
 
+## Source-search findings (main snapshot)
+
+Exact repository-wide code-search queries were run against the current main snapshot. Search hits are leads, not proof that every occurrence has identical semantics.
+
+| Search pattern | Hits | Files / interpretation |
+|---|---:|---|
+| `withValues(alpha: .55)` | 6 | Onboarding, notes home, legacy editor, SnoteCanvas, legacy painter, Editor V2 painter. Likely visual constants in several contexts; compare intended colors/opacity before centralizing. |
+| `Rect.fromCenter` | 3 | SnoteCanvas, legacy painter, Editor V2 painter. Includes eraser/overlay geometry; review dimensions and coordinate spaces before extraction. |
+| `clamp(.5, 60)` | 6 | Stroke codec, ink renderer, SnoteCanvas, legacy editor, legacy painter, Editor V2 painter. Similar range is reused for persisted input validation, tool editing, and rendering; do not automatically force all call sites through one helper. |
+| `catch (e)` | 2 | QR import page and settings page. The query is narrow and does not establish that error handling elsewhere is consistent. |
+| `getDefaultProguardFile` | 4 | CI, beta, release workflows and beta Android setup script. This confirms overlapping Android build configuration that should be compared for idempotence and workflow-specific differences. |
+
+### Exact low-risk-looking repetition requiring tests
+
+In `app/lib/canvas_engine/ink_renderer.dart`, the pressure-width multiplication
+
+```dart
+width *= .82 + pressure * (.18 + pen.pressureSensitivity * .34);
+```
+
+appears in both the `index > 0` and `else` branches of `_radiusFor` (currently around lines 258 and 260 in main). The branches differ because the first also applies a velocity factor. Moving the identical pressure-width expression after the conditional may remove duplication without changing its order relative to the velocity factor, but this is **not changed in the baseline PR**. Before accepting it, add or use focused tests for first-point, non-first-point, and fountain strokes and compare renderer output for representative stroke fixtures.
+
 ## Initial audit status
 
 - [x] Identify large source files and architecture boundaries from the tracked-file inventory.
