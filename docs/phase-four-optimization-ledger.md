@@ -135,7 +135,7 @@ For every proposed change, record category (correctness, duplication, performanc
 | `app/native_android/MainActivity.kt` | 4874 | Not audited | Pending | — | — |
 | `app/native_android/ScreenCaptureBridge.kt` | 900 | Not audited | Pending | — | — |
 | `app/native_android/ScreenCaptureService.kt` | 8190 | Not audited | Pending | — | — |
-| `app/pubspec.yaml` | 1175 | Not audited | Pending | — | — |
+| `app/pubspec.yaml` | 1175 | Changed | Binary size / maintainability | Removed direct `webview_flutter: ^4.13.0`; repository code search returned zero matches for its import and `WebViewWidget`. The actual web-search feature imports `flutter_inappwebview` in `web_search_panel.dart`. No tracked `app/pubspec.lock` exists in the current tree. | CI dependency resolution, analyzer/tests and all platform smoke builds pending. Confirm transitive graph and compare release sizes before claiming a binary-size gain. |
 | `app/README.md` | 648 | Not audited | Pending | — | — |
 | `app/test/account_scope_test.dart` | 316 | Not audited | Pending | — | — |
 | `app/test/app_color_themes_test.dart` | 741 | Not audited | Pending | — | — |
@@ -215,6 +215,6 @@ For every proposed change, record category (correctness, duplication, performanc
 - `app/lib/features/notes/editor_v2/editor_v2_page.dart` is the largest Dart source file in the tree (416334 bytes). Size alone is not evidence that splitting it is safe; inspect responsibilities and callers first.
 - `app/lib/features/notes/note_editor_page.dart` and `app/lib/features/notes/editor_v2/editor_v2_page.dart` both appear to be editor entry points by path. Trace navigation and feature flags before any consolidation.
 - `app/lib/features/notes/editor_v2/editor_v2_ink_painter.dart` and `app/lib/canvas_engine/painters/canvas_painter.dart` are candidates for comparison only; no shared implementation should be extracted until geometry, lifecycle, repaint invalidation and tests are compared.
-- `app/pubspec.yaml` contains both `pdf` and `pdfx`, plus both `webview_flutter` and `flutter_inappwebview`. This is not proof of redundancy; trace each platform-specific call site and plugin requirements before changing them.
+- `app/pubspec.yaml` retains both `pdf` and `pdfx`, each with observed use in the app. The unused direct `webview_flutter` dependency was removed after repository-wide searches found no imports or `WebViewWidget` use; `web_search_panel.dart` uses `flutter_inappwebview`. CI and artifact-size validation are pending.
 - `website/public/snote-logo.png` is 1298678 bytes. Asset compression is a possible binary/transfer-size investigation, but preserve the exact branding and all references.
 - No code has been changed by this initial inventory commit. These are hypotheses to validate, not findings of dead code or proven bottlenecks.
