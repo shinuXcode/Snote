@@ -38,6 +38,20 @@ Exact repository-wide code-search queries were run against the current main snap
 | `catch (e)` | 2 | QR import page and settings page. The query is narrow and does not establish that error handling elsewhere is consistent. |
 | `getDefaultProguardFile` | 4 | CI, beta, release workflows and beta Android setup script. This confirms overlapping Android build configuration that should be compared for idempotence and workflow-specific differences. |
 
+Additional repository-wide search results (main snapshot):
+
+| Search pattern | Hits | Candidate review |
+|---|---:|---|
+| `kIsWeb` | 3 | QR import, notes home, legacy editor. Compare whether platform-specific branches encode the same capability check or different fallback behavior. |
+| `defaultTargetPlatform` | 4 | QR import, PDF annotation, notes home, legacy editor. Review the feature-level capability matrix; do not replace with a single global flag without preserving desktop/mobile differences. |
+| `jsonEncode(` | 9 | QR transfer, note lock, web search, legacy editor, timer, file-document repository, note repository, Editor V2 document codec, tests. Most encode different schemas; focus on shared note/document serialization boundaries rather than generic JSON wrappers. |
+| `jsonDecode(` | 14 | Note/editor, lock, QR import/transfer, notebook transfer, repositories, tools, updates. Different schemas and trust boundaries mean generic extraction is risky; identify schema-specific duplicates and error-handling consistency first. |
+| `SnoteSettings.instance` | 8 | Main, settings, notes home/editor, split workspace, PDF annotation and tools. The singleton itself may be intentional; review repeated initialization, reads/writes, and lifecycle rather than introducing another dependency layer. |
+| `catch (error)` | 11 | Screenshot import, selection OCR, editor/document, timer, notes home, alarms, update center, PDF, folder covers, website feedback. This query misses other catch variable names. Compare error recovery/logging per feature; avoid swallowing errors or changing user-visible messages. |
+| `Platform.isAndroid` | 1 | Editor V2 selection OCR IO implementation. This is not proof platform branching is centralized; search all platform APIs and conditional imports before changing. |
+
+These counts are exact-pattern search results on the snapshot, not counts of all semantically equivalent operations. Each result must be read in context before classifying as duplicate behavior.
+
 ### Exact low-risk-looking repetition requiring tests
 
 In `app/lib/canvas_engine/ink_renderer.dart`, the pressure-width multiplication
