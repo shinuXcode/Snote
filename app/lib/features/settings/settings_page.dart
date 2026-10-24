@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../app/theme_controller.dart';
+import '../../core/config/app_version.dart';
 import '../../core/settings/app_settings.dart';
 import '../../data/local/notebook_transfer_service.dart';
 import '../../data/local/note_repository.dart';
@@ -300,9 +301,9 @@ class _SettingsPageState extends State<SettingsPage> {
         Card(
           child: ListTile(
             leading: const Icon(Icons.info_outline_rounded),
-            title: const Text('Snote 0.7.0', style: TextStyle(fontWeight: FontWeight.w900)),
+            title: const Text('Snote $snoteVersionName', style: TextStyle(fontWeight: FontWeight.w900)),
             subtitle: const Text('Offline-first handwriting and rich-text notes.'),
-            onTap: () => showAboutDialog(context: context, applicationName: 'Snote', applicationVersion: '1.0.0'),
+            onTap: () => showAboutDialog(context: context, applicationName: 'Snote', applicationVersion: snoteVersionName),
           ),
         ),
       ]),
