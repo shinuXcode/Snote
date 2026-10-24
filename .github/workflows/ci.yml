@@ -204,10 +204,10 @@ jobs:
             echo
             echo "| Artifact | Bytes | SHA-256 |"
             echo "|---|---:|---|"
-            echo "| Android release APK | $apk_bytes | `$apk_sha` |"
+            echo "| Android release APK | $apk_bytes | $apk_sha |"
             echo "| Web build directory (uncompressed) | $web_bytes | — |"
             echo
-            echo "Commit: `$GITHUB_SHA`"
+            echo "Commit: $GITHUB_SHA"
             echo "Flutter version: 3.47.3"
           } >> "$GITHUB_STEP_SUMMARY"
           printf 'Android APK: %s bytes (sha256 %s)\nWeb build directory: %s bytes uncompressed\n' "$apk_bytes" "$apk_sha" "$web_bytes"
