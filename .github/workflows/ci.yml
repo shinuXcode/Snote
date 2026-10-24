@@ -220,6 +220,48 @@ jobs:
             app/build/web
           if-no-files-found: error
 
+      # Measurement-only experiment: keep the universal APK above as the existing smoke artifact.
+      - name: Build split-per-ABI APKs (size experiment)
+        working-directory: app
+        run: flutter build apk --release --split-per-abi
+
+      - name: Build Android App Bundle (size experiment)
+        working-directory: app
+        run: flutter build appbundle --release
+
+      - name: Record split APK and AAB sizes
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk_dir="app/build/app/outputs/flutter-apk"
+          aab="app/build/app/outputs/bundle/release/app-release.aab"
+          test -s "$aab"
+          {
+            echo "## Android distribution size experiment"
+            echo
+            echo "| Artifact | Bytes | SHA-256 |"
+            echo "|---|---:|---|"
+            for apk in "$apk_dir"/app-*-release.apk; do
+              test -s "$apk"
+              bytes="$(stat -c '%s' "$apk")"
+              sha="$(sha256sum "$apk" | cut -d ' ' -f1)"
+              printf '| %s | %s | %s |\n' "$(basename "$apk")" "$bytes" "$sha"
+            done
+            bytes="$(stat -c '%s' "$aab")"
+            sha="$(sha256sum "$aab" | cut -d ' ' -f1)"
+            printf '| app-release.aab | %s | %s |\n' "$bytes" "$sha"
+            echo
+            echo "These are package-file sizes, not installed size. The AAB is not directly installable; no distribution policy is changed by this experiment."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: snote-android-size-experiment
+          path: |
+            app/build/app/outputs/flutter-apk/app-*-release.apk
+            app/build/app/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+
   windows:
     name: Windows smoke build
     runs-on: windows-2022
