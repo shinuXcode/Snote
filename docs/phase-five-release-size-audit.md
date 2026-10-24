@@ -2,14 +2,14 @@
 
 ## Status
 
-**In progress — baseline archive inspected; same-configuration comparison pending.** No artifact has been optimized or reduced yet. This report separates measured facts from hypotheses.
+**Measurement pass complete; optimization decisions remain pending.** The post-change workflow completed successfully on all four smoke-build jobs. Universal APK/web outputs are slightly smaller in this run, but the differences are too small to attribute confidently to removing one direct dependency without repeated controlled builds. No artifact or release-distribution policy was changed.
 
 ## Baseline source and build
 
 - Repository base: `main` snapshot `25d1277e3b0035a8ddf51591d2651ba72ad1a77e`.
 - Baseline workflow run: [#40078790734](https://github.com/shinuXcode/Snote/actions/runs/40078790734), commit `881592e1865474f0346d9edf4d23bd80554e5c69`.
 - Flutter version declared in workflow: `3.47.3`.
-- Workflow builds a release APK, Flutter web release output and Linux desktop release. It does **not** currently build an Android App Bundle (AAB) or per-ABI APKs.
+- Baseline workflow builds a release APK, Flutter web release output and Linux desktop release. The Phase Four follow-up added measurement-only split-per-ABI APK and AAB experiments; the existing universal APK artifact remains intact.
 - Artifact downloaded and inspected: `snote-smoke-builds`, GitHub artifact ID `12554179251`, archive SHA-256 from GitHub metadata `3e5b419cd79e30ce4df15a5c5e2f1c114c607451f0a53915bf9d079e00dbdb2c`.
 
 ## Exact measured baseline
@@ -95,15 +95,29 @@ The web archive also contains multiple CanvasKit JavaScript/WASM variants and sy
 - **Interpretation:** Do not mix Next.js showcase bundle size with Flutter app web-output size.
 - **Safe next step:** Report them as separate products if the website's own production artifact size is later measured.
 
-## Dependency cleanup currently under validation
+## Phase Four post-change comparison
 
-Phase Four PR #35 removes direct `webview_flutter` from `app/pubspec.yaml` after repository-wide searches returned no import or `WebViewWidget` call sites. `flutter_inappwebview` remains and has a real call site. This audit does not yet prove any APK/web size reduction; compare only after the new workflow finishes.
+- Follow-up workflow: [#40081818701](https://github.com/shinuXcode/Snote/actions/runs/40081818701), completed successfully on Showcase website, Windows smoke build, Flutter smoke build, and Apple platform smoke builds.
+- Universal release APK: **129,822,357 bytes**, SHA-256 `a8c49d696cf30593cd51898602bade2af1f555cbd6c6cd570394a7696ce9bb33`.
+- Web build directory: **46,509,777 bytes**.
+- Smoke-build artifact ZIP: **76,611,499 bytes** (artifact ID `12555608283`).
+- Android size experiment artifact: [download metadata](https://api.github.com/repos/shinuXcode/Snote/actions/artifacts/12555567590/zip), artifact ID `12555567590`; includes split APKs and AAB.
+- Split APKs built successfully: `app-armeabi-v7a-release.apk` (~42.1 MB), `app-arm64-v8a-release.apk` (~49.5 MB), `app-x86_64-release.apk` (~52.7 MB).
+- AAB built successfully: `app-release.aab` (~102.1 MB). The AAB is not directly installable.
+
+| Measure | Baseline | Follow-up | Delta | Relative change |
+|---|---:|---:|---:|---:|
+| Universal APK | 129,841,617 B | 129,822,357 B | -19,260 B | -0.0148% |
+| Web output directory | 46,511,458 B | 46,509,777 B | -1,681 B | -0.0036% |
+| Smoke artifact ZIP | 76,648,181 B | 76,611,499 B | -36,682 B | -0.0479% |
+
+**Interpretation:** these are observed output differences, not proof that removing `webview_flutter` caused the reductions. Small byte changes can arise from build nondeterminism or other differences. The dependency removal passed CI but should not be advertised as a meaningful size optimization without repeated controlled builds. Exact split/AAB byte values and their SHA-256 values are recorded in the workflow step summary/artifact; the rounded MB labels above are not exact sizes.
 
 ## Next validation gates
 
-1. Wait for the Phase Four workflow to complete and inspect all failed steps, if any.
-2. Capture its release APK/web measurements from the same workflow/toolchain and calculate exact byte deltas against the baseline above.
-3. Add an isolated CI experiment for AAB and split-per-ABI sizes; keep current artifacts unchanged until evidence supports a distribution change.
-4. Review generated Android release shrink/minification configuration; the checked-in tree does not contain a tracked `app/android/**` runner, and CI generates platform runners.
-5. Audit OCR/barcode feature call sites and web runtime asset selection before proposing further dependency/asset changes.
-6. Do not mark Phase Five complete until measurements and regression checks are recorded.
+1. Inspect the generated split APK/AAB artifact and record exact byte sizes and hashes from the workflow summary.
+2. Keep the universal APK and existing release workflow unchanged until install/runtime compatibility and distribution requirements are verified.
+3. Review generated Android release shrink/minification configuration; the checked-in tree does not contain a tracked `app/android/**` runner, and CI generates platform runners.
+4. Trace OCR/barcode API call sites and dependency graph before proposing optional delivery or removal.
+5. Inspect Flutter 3.47.3 web loader/runtime asset selection and hosting/cache behavior before excluding WASM or symbol files.
+6. Phase Six performance/memory work requires repeatable device/emulator measurements; CI smoke-build success is not a handwriting-latency or memory benchmark.
