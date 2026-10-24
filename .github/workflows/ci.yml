@@ -188,6 +188,30 @@ jobs:
         working-directory: app
         run: flutter build linux --release
 
+      - name: Record release artifact size baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="app/build/app/outputs/flutter-apk/app-release.apk"
+          web="app/build/web"
+          test -s "$apk"
+          test -d "$web"
+          apk_bytes="$(stat -c '%s' "$apk")"
+          web_bytes="$(du -sb "$web" | cut -f1)"
+          apk_sha="$(sha256sum "$apk" | cut -d ' ' -f1)"
+          {
+            echo "## Release artifact size baseline"
+            echo
+            echo "| Artifact | Bytes | SHA-256 |"
+            echo "|---|---:|---|"
+            echo "| Android release APK | $apk_bytes | `$apk_sha` |"
+            echo "| Web build directory (uncompressed) | $web_bytes | — |"
+            echo
+            echo "Commit: `$GITHUB_SHA`"
+            echo "Flutter version: 3.47.3"
+          } >> "$GITHUB_STEP_SUMMARY"
+          printf 'Android APK: %s bytes (sha256 %s)\nWeb build directory: %s bytes uncompressed\n' "$apk_bytes" "$apk_sha" "$web_bytes"
+
       - uses: actions/upload-artifact@v4
         with:
           name: snote-smoke-builds
