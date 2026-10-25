@@ -5,7 +5,9 @@ import 'local_file_store_path.dart';
 final Map<String, Uint8List> _memoryFiles = <String, Uint8List>{};
 
 Future<String> writeLocalFile(String folder, String name, List<int> bytes) async {
-  final key = 'memory://${sanitizeLocalFileSegment(folder)}/${sanitizeLocalFileSegment(name)}';
+  final safeFolder = sanitizeLocalFileSegment(folder);
+  final safeName = sanitizeLocalFileSegment(name);
+  final key = 'memory://$safeFolder/$safeName';
   _memoryFiles[key] = Uint8List.fromList(bytes);
   return key;
 }
