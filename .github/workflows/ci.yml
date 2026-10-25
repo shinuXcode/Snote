@@ -175,7 +175,9 @@ jobs:
 
       - name: Configure Web SQLite and PDF.js
         working-directory: app
-        run: dart run pdfx:install_web
+        run: |
+          dart run sqflite_common_ffi_web:setup
+          dart run pdfx:install_web
 
       - name: Build Android APK
         working-directory: app
