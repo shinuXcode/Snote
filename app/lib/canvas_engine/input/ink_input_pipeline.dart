@@ -120,11 +120,10 @@ class InkInputPipeline {
 
     _append(sample, actual);
 
-    final result = _stabilizer.finalize(_buffer.points);
-    if (result.isNotEmpty) {
-      result[result.length - 1] = actual;
-    }
-    return result;
+    // _append keeps the physical endpoint's position/pressure/tilt while
+    // canonicalizing a non-monotonic timestamp. Do not replace that sample
+    // with the raw event here, or a stale pen-up timestamp can break ordering.
+    return _stabilizer.finalize(_buffer.points);
   }
 
   InkFrame _frame(StrokePoint? prediction, StrokePoint actual) {
