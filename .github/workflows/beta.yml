@@ -183,7 +183,7 @@ jobs:
               raise SystemExit('Clipboard provider paths file is missing')
           PY
 
-      - name: Configure native in-memory screenshot capture
+      - name: Verify maintained Android integration
         working-directory: app
         run: python3 ../.github/scripts/configure_beta_android.py
       - name: Configure optional ML Kit classes for release shrinking
