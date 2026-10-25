@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 
+import 'database_factory.dart';
 import 'schema.dart';
 
 class SnoteDatabase {
@@ -10,9 +12,18 @@ class SnoteDatabase {
   static Future<Database> open() async {
     if (_db?.isOpen == true) return _db!;
 
-    final dir = await getApplicationDocumentsDirectory();
+    await initializeDatabaseFactory();
+    final String databasePath;
+    if (kIsWeb) {
+      // The web factory stores this logical path in IndexedDB; path_provider's
+      // native documents directory is not available in browser runtimes.
+      databasePath = 'snote.db';
+    } else {
+      final dir = await getApplicationDocumentsDirectory();
+      databasePath = p.join(dir.path, 'snote.db');
+    }
     _db = await openDatabase(
-      p.join(dir.path, 'snote.db'),
+      databasePath,
       version: databaseVersion,
       onConfigure: (db) async {
         try { await db.execute('PRAGMA foreign_keys = ON'); } catch (_) {}
