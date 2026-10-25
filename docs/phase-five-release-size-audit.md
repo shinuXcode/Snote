@@ -121,3 +121,17 @@ The web archive also contains multiple CanvasKit JavaScript/WASM variants and sy
 4. Trace OCR/barcode API call sites and dependency graph before proposing optional delivery or removal.
 5. Inspect Flutter 3.47.3 web loader/runtime asset selection and hosting/cache behavior before excluding WASM or symbol files.
 6. Phase Six performance/memory work requires repeatable device/emulator measurements; CI smoke-build success is not a handwriting-latency or memory benchmark.
+
+
+## Follow-up measurement — unused direct dependencies (PR #40)
+
+PR #40 removed the direct `flutter_riverpod` and `collection` declarations after the tracked app and test Dart sources were import-scanned. The same workflow build mode/toolchain was used for the before/after comparison.
+
+| Measure | Before (run #40081818701) | After (run #40145828586) | Delta |
+|---|---:|---:|---:|
+| Universal release APK | 129,822,357 bytes | 129,822,245 bytes | −112 bytes |
+| APK SHA-256 | `a8c49d696cf30593cd51898602bade2af1f555cbd6c6cd570394a7696ce9bb33` | `95d4e6ad416672767e2a2d0b1512bbe625d4f3e5b922a110042d7a7f8562d567` | Different artifact hash |
+| Web output payload | 46,509,777 bytes | 46,508,551 bytes | −1,226 bytes |
+| CI artifact ZIP | 76,611,499 bytes | 76,611,343 bytes | −156 bytes |
+
+The post-change smoke artifact was inspected from artifact ID `12580708004`. The ZIP size is the compressed Actions artifact, not the APK size. These small differences are exact measurements, but one before/after pair cannot establish that the dependency removal caused the changes; they are not material release-size savings. No release distribution policy changed.
