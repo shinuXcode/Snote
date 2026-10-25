@@ -11,7 +11,6 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
-  flutter_riverpod: ^2.6.1
   flutter_svg: ^2.3.0
   sqflite: ^2.4.2
   sqflite_common_ffi: ^2.4.3
@@ -35,7 +34,6 @@ dependencies:
   archive: ^4.0.9
   wakelock_plus: ^1.8.1
   http: ^1.6.0
-  collection: ^1.19.1
   url_launcher: ^6.3.3
   flutter_inappwebview: ^6.1.5
   flutter_local_notifications: ^22.3.2
