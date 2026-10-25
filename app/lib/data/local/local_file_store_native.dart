@@ -33,9 +33,9 @@ Future<void> deleteLocalFile(String path) async {
 
 Future<String> copyLocalFile(String path, String folder, String name) async {
   final root = await _root();
-  final dir = Directory(p.join(root.path, _safe(folder)));
+  final dir = Directory(p.join(root.path, sanitizeLocalFileSegment(folder)));
   await dir.create(recursive: true);
-  final target = p.join(dir.path, _safe(name));
+  final target = p.join(dir.path, sanitizeLocalFileSegment(name));
   await File(path).copy(target);
   return target;
 }
