@@ -30,11 +30,11 @@ No runtime change should be made solely to reduce source-file size. For every pr
 
 | File | Git blob bytes | Audit status | Evidence / remaining work |
 |---|---:|---|---|
-| `.github/scripts/configure_beta_android.py` | 15269 | Not audited | Workflow/script behavior and generated platform configuration not yet traced end-to-end. |
-| `.github/workflows/beta.yml` | 17139 | Not audited | Workflow/script behavior and generated platform configuration not yet traced end-to-end. |
-| `.github/workflows/ci.yml` | 14898 | Not audited | Workflow/script behavior and generated platform configuration not yet traced end-to-end. |
-| `.github/workflows/release.yml` | 12777 | Not audited | Workflow/script behavior and generated platform configuration not yet traced end-to-end. |
-| `app/assets/branding/snote-logo.png` | 2171 | Blocked — binary/runtime asset | Binary contents or runtime loading behavior not fully verified from source inventory; reference and delivery checks required before removal. |
+| `.github/scripts/configure_beta_android.py` | 15269 | Partial review | Implementation and workflow call sites reviewed; replacement validator is in PR #41 and requires CI validation. |
+| `.github/workflows/beta.yml` | 17139 | Partial review | Runner generation, native source copy, signing flow and former duplicate-capture step inspected; full release run remains pending. |
+| `.github/workflows/ci.yml` | 14898 | Partial review | Runner generation, native source copy, manifest setup and build/size steps inspected; CI job execution is the validation gate. |
+| `.github/workflows/release.yml` | 12777 | Partial review | Platform matrix, Android native copy, Gradle setup and artifact naming inspected; complete release matrix still requires successful CI. |
+| `app/assets/branding/snote-logo.png` | 2171 | Blocked — binary/runtime asset | Binary contents/runtime references not inspected; confirm all asset references and compare image compression/decoding before replacing or removing. |
 | `app/lib/app/app_entry.dart` | 241 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/app/theme_controller.dart` | 3287 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/canvas_engine/algorithms/adaptive_stabilizer.dart` | 1713 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
@@ -57,25 +57,25 @@ No runtime change should be made solely to reduce source-file size. For every pr
 | `app/lib/canvas_engine/models/stroke_codec.dart` | 4819 | Audited (prior ledger) | Prior ledger records source/caller review; no new change proposed without profiling/regression evidence. |
 | `app/lib/canvas_engine/models/stroke.dart` | 1858 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/canvas_engine/painters/canvas_painter.dart` | 46660 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
-| `app/lib/canvas_engine/performance/ink_engine_metrics.dart` | 819 | Partial review | Metrics fields/methods inspected; caller wiring and lifetime/reset semantics pending. |
+| `app/lib/canvas_engine/performance/ink_engine_metrics.dart` | 819 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/canvas_engine/performance/stroke_spatial_index.dart` | 1831 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
-| `app/lib/canvas_engine/performance/writing_performance.dart` | 5015 | Partial review | Metrics implementation inspected; fixed 60 Hz budget was identified; correction is in PR #39 and requires CI. |
+| `app/lib/canvas_engine/performance/writing_performance.dart` | 5015 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/canvas_engine/persistence/ink_commit_queue.dart` | 667 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/canvas_engine/widgets/notebook_viewport.dart` | 4586 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/canvas_engine/widgets/page_background.dart` | 4831 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/canvas_engine/widgets/snote_canvas_controller.dart` | 3845 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
-| `app/lib/canvas_engine/widgets/snote_canvas.dart` | 57807 | Partial review | Focused live repaint/input imports and metrics wiring; full pointer lifecycle/renderer audit pending. |
+| `app/lib/canvas_engine/widgets/snote_canvas.dart` | 57807 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/core/config/account_scope.dart` | 254 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/core/config/app_version.dart` | 212 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/core/security/note_lock_service.dart` | 2329 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/core/settings/app_settings.dart` | 6080 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/data/local/database.dart` | 4656 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
-| `app/lib/data/local/file_document_repository.dart` | 3972 | Partial review | Focused attachment persistence path inspected; cleanup/rollback and cross-platform file-store call graph pending. |
+| `app/lib/data/local/file_document_repository.dart` | 3972 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/data/local/folder_repository.dart` | 18388 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/data/local/local_file_store_native.dart` | 1381 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/data/local/local_file_store_stub.dart` | 724 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/data/local/local_file_store.dart` | 93 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
-| `app/lib/data/local/note_repository.dart` | 12592 | Partial review | Focused note serialization and SQLite repository inspection; transaction/query/migration call graph pending. |
+| `app/lib/data/local/note_repository.dart` | 12592 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/data/local/notebook_transfer_service.dart` | 7119 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/data/local/notification_repository.dart` | 2944 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/data/local/schema.dart` | 2113 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
@@ -98,15 +98,15 @@ No runtime change should be made solely to reduce source-file size. For every pr
 | `app/lib/features/notes/new_note_route.dart` | 772 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/features/notes/nextgen_editor_route.dart` | 3024 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/features/notes/note_content_compatibility.dart` | 11850 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
-| `app/lib/features/notes/note_editor_page.dart` | 296631 | Partial review | Focused import, state/cache and PDF/export path inspection; complete class/lifecycle audit pending. |
-| `app/lib/features/notes/notes_home_page.dart` | 90578 | Partial review | Focused imports, incoming-share subscription and list-loading path inspection; full route/caller audit pending. |
+| `app/lib/features/notes/note_editor_page.dart` | 296631 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
+| `app/lib/features/notes/notes_home_page.dart` | 90578 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/features/notes/workspace_layout.dart` | 584 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/features/onboarding/welcome_guide_page.dart` | 8770 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
-| `app/lib/features/pdf/pdf_annotation_page.dart` | 22979 | Partial review | Focused imports and PDF import/cleanup/navigation path inspection; full rendering/disposal path pending. |
+| `app/lib/features/pdf/pdf_annotation_page.dart` | 22979 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/features/settings/settings_page.dart` | 26605 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/features/share/qr_import_page.dart` | 5351 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/features/share/qr_transfer_page.dart` | 3928 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
-| `app/lib/features/tools/alarm_notification_service.dart` | 6116 | Partial review | Focused timezone/notification dependency and native capability inspection; all alarm callers/platform behavior pending. |
+| `app/lib/features/tools/alarm_notification_service.dart` | 6116 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/features/tools/flashcard_page.dart` | 12741 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/features/tools/floating_timer_panel.dart` | 30760 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/features/tools/mind_map_page.dart` | 16836 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
@@ -118,12 +118,12 @@ No runtime change should be made solely to reduce source-file size. For every pr
 | `app/lib/main.dart` | 9769 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/ui/snote_logo.dart` | 811 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/ui/snote_theme.dart` | 8622 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
-| `app/native_android/AndroidManifest.xml` | 2998 | Partial review | Manifest permissions, sharing intents, capture service and notification receivers inspected; generated merged manifest/platform build registration pending. |
-| `app/native_android/MainActivity.kt` | 4874 | Partial review | Ringtone and screen-capture MethodChannels inspected; bridge/service lifecycle and all callers pending. |
-| `app/native_android/ScreenCaptureBridge.kt` | 900 | Not audited | Source/callers/platform/runtime references not yet reviewed end-to-end. |
-| `app/native_android/ScreenCaptureService.kt` | 8190 | Not audited | Source/callers/platform/runtime references not yet reviewed end-to-end. |
-| `app/pubspec.yaml` | 1148 | Partial review | Direct dependency declarations checked; full transitive/plugin graph still pending. |
-| `app/README.md` | 648 | Not audited | Source/callers/platform/runtime references not yet reviewed end-to-end. |
+| `app/native_android/AndroidManifest.xml` | 2998 | Not audited | Semantic/runtime review remains pending; do not delete or refactor until references, generated use and platform behavior are verified. |
+| `app/native_android/MainActivity.kt` | 4874 | Not audited | Semantic/runtime review remains pending; do not delete or refactor until references, generated use and platform behavior are verified. |
+| `app/native_android/ScreenCaptureBridge.kt` | 900 | Partial review | MethodChannel result lifecycle and its callers in MainActivity/ScreenCaptureService inspected; runtime cancellation/interrupt behavior needs device test. |
+| `app/native_android/ScreenCaptureService.kt` | 8190 | Partial review | MediaProjection lifecycle and ScreenCaptureBridge completion paths inspected; Android device capture remains untested. |
+| `app/pubspec.yaml` | 1148 | Not audited | Semantic/runtime review remains pending; do not delete or refactor until references, generated use and platform behavior are verified. |
+| `app/README.md` | 648 | Partial review | Local storage/offline-first and generated-platform workflow claims reviewed; database runtime behavior on web/desktop remains unverified. |
 | `app/test/account_scope_test.dart` | 316 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/test/app_color_themes_test.dart` | 741 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/test/canvas_engine_test.dart` | 6090 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
@@ -137,54 +137,54 @@ No runtime change should be made solely to reduce source-file size. For every pr
 | `app/test/ink_pipeline_test.dart` | 5750 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/test/ink_renderer_test.dart` | 1045 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/test/lasso_geometry_test.dart` | 1495 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
-| `app/test/live_ink_widget_test.dart` | 11263 | Partial review | Focused live-stroke visibility test inspected; full suite/runtime-device coverage pending. |
-| `app/test/new_note_route_test.dart` | 1128 | Partial review | Focused new-note route smoke test inspected; async restoration and visual canvas coverage are limited. |
-| `app/test/note_content_compatibility_test.dart` | 8775 | Partial review | Focused legacy note/PDF compatibility cases inspected; all migration versions still need review. |
+| `app/test/live_ink_widget_test.dart` | 11263 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
+| `app/test/new_note_route_test.dart` | 1128 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
+| `app/test/note_content_compatibility_test.dart` | 8775 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/test/rendering_geometry_test.dart` | 4618 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/test/sticker_transparency_test.dart` | 799 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/test/workspace_layout_test.dart` | 1113 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
-| `docs/editor-engine-rebuild.md` | 4937 | Not audited | Documentation consistency and cross-links not yet reviewed end-to-end. |
-| `docs/IN_APP_SCREENSHOT_TO_CANVAS.md` | 2913 | Not audited | Documentation consistency and cross-links not yet reviewed end-to-end. |
-| `docs/phase-five-release-size-audit.md` | 9572 | Partial review | Measurements and caveats reviewed; repeated controlled builds remain outstanding. |
-| `docs/phase-four-optimization-ledger.md` | 25466 | Partial review | Existing ledger reviewed; it explicitly contains unaudited files and prior focused audits. |
-| `docs/phase-six-performance-memory-baseline.md` | 6463 | Partial review | Protocol reviewed; no device trace is attached, so measured performance remains blocked. |
-| `docs/repository-dry-size-optimization.md` | 4615 | Not audited | Documentation consistency and cross-links not yet reviewed end-to-end. |
-| `docs/repository-file-inventory.md` | 32309 | Partial review | Tracked counts and large-file inventory refreshed; not a semantic review of every listed file. |
-| `README.md` | 899 | Not audited | Source/callers/platform/runtime references not yet reviewed end-to-end. |
-| `website/.env.example` | 31 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/app/.env.example` | 0 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/app/api/docs/[filename]/route.ts` | 1517 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/app/api/download/[assetId]/route.ts` | 1757 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/app/api/feedback/route.ts` | 3316 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/app/api/notifications/route.ts` | 1131 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/app/api/releases/latest/route.ts` | 1547 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/app/docs/page.tsx` | 3973 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/app/download/page.tsx` | 1060 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/app/faqs/page.tsx` | 6571 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/app/features/page.tsx` | 2147 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/app/founder/page.tsx` | 2231 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/app/globals.css` | 46312 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/app/how-it-works/page.tsx` | 4623 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/app/layout.tsx` | 4432 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/app/page.tsx` | 628 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/app/robots.ts` | 280 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/app/sitemap.ts` | 454 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/components/BrandLoader.tsx` | 672 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/components/FeedbackCenter.tsx` | 4534 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/components/Icon.tsx` | 3835 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/components/MobileNav.tsx` | 849 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/components/MotionHero.tsx` | 8942 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/components/NotificationCenter.tsx` | 2706 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/components/ReleaseCenter.tsx` | 4066 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/components/Reveal.tsx` | 192 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/components/SectionIndex.tsx` | 855 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/components/ThemeToggle.tsx` | 2053 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/FEEDBACK_SETUP.md` | 1207 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/package.json` | 572 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/public/googled7a4d739c13c2090.html` | 54 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/public/snote-logo.png` | 1298678 | Blocked — binary/runtime asset | Binary contents or runtime loading behavior not fully verified from source inventory; reference and delivery checks required before removal. |
-| `website/scripts/guard-design.mjs` | 1276 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
-| `website/tsconfig.json` | 299 | Not audited | Website imports/routes/runtime asset references not yet reviewed end-to-end. |
+| `docs/editor-engine-rebuild.md` | 4937 | Partial review | Architecture and release gate guidance reviewed; implementation progress and current route contracts need revalidation. |
+| `docs/IN_APP_SCREENSHOT_TO_CANVAS.md` | 2913 | Partial review | Permission/consent behavior and generated Android wiring reviewed; docs need synchronization after PR #41 validation. |
+| `docs/phase-five-release-size-audit.md` | 9572 | Partial review | Exact measured baseline and follow-up reviewed; repeated same-commit builds still needed to quantify noise. |
+| `docs/phase-four-optimization-ledger.md` | 25466 | Partial review | Historical per-file statuses and dependency/size findings reviewed; stale row sizes/counts require reconciliation with current tree. |
+| `docs/phase-six-performance-memory-baseline.md` | 6463 | Partial review | Repeatable protocol reviewed; no device trace is attached, so performance/memory metrics remain blocked. |
+| `docs/repository-dry-size-optimization.md` | 4615 | Partial review | DRY and dependency findings reviewed; some historical baseline commit references predate current main and require reconciliation. |
+| `docs/repository-file-inventory.md` | 32309 | Partial review | Tree inventory and high-risk file list reviewed; it is triage, not proof of semantic audit. |
+| `README.md` | 899 | Partial review | Build/platform claims reviewed at a high level; final release links and version claims need consistency review. |
+| `website/.env.example` | 31 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/app/.env.example` | 0 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/app/api/docs/[filename]/route.ts` | 1517 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/app/api/download/[assetId]/route.ts` | 1757 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/app/api/feedback/route.ts` | 3316 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/app/api/notifications/route.ts` | 1131 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/app/api/releases/latest/route.ts` | 1547 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/app/docs/page.tsx` | 3973 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/app/download/page.tsx` | 1060 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/app/faqs/page.tsx` | 6571 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/app/features/page.tsx` | 2147 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/app/founder/page.tsx` | 2231 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/app/globals.css` | 46312 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/app/how-it-works/page.tsx` | 4623 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/app/layout.tsx` | 4432 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/app/page.tsx` | 628 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/app/robots.ts` | 280 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/app/sitemap.ts` | 454 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/components/BrandLoader.tsx` | 672 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/components/FeedbackCenter.tsx` | 4534 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/components/Icon.tsx` | 3835 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/components/MobileNav.tsx` | 849 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/components/MotionHero.tsx` | 8942 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/components/NotificationCenter.tsx` | 2706 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/components/ReleaseCenter.tsx` | 4066 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/components/Reveal.tsx` | 192 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/components/SectionIndex.tsx` | 855 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/components/ThemeToggle.tsx` | 2053 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/FEEDBACK_SETUP.md` | 1207 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/package.json` | 572 | Partial review | Build scripts/dependencies reviewed at a glance; production build is CI gate. |
+| `website/public/googled7a4d739c13c2090.html` | 54 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/public/snote-logo.png` | 1298678 | Blocked — binary/runtime asset | Binary contents/runtime references not inspected; confirm all asset references and compare image compression/decoding before replacing or removing. |
+| `website/scripts/guard-design.mjs` | 1276 | Static source scan only | Tracked route/component/config/asset references and source size inspected; semantic behavior, browser runtime, environment wiring and all route callers not fully audited. |
+| `website/tsconfig.json` | 299 | Partial review | TypeScript compiler configuration reviewed at a glance; production typecheck is CI gate. |
 
 ## Findings from the source-level pass
 
