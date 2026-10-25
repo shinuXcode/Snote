@@ -152,6 +152,11 @@ jobs:
           manifest.write_text(text)
           PY
 
+      - name: Verify maintained Android integration
+        if: matrix.target == 'android'
+        working-directory: app
+        run: python3 ../.github/scripts/configure_beta_android.py
+
       - name: Configure Apple camera permission
         if: matrix.target == 'ios' || matrix.target == 'macos'
         working-directory: app
