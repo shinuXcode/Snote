@@ -118,11 +118,11 @@ No runtime change should be made solely to reduce source-file size. For every pr
 | `app/lib/main.dart` | 9769 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/ui/snote_logo.dart` | 811 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/lib/ui/snote_theme.dart` | 8622 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
-| `app/native_android/AndroidManifest.xml` | 2998 | Not audited | Semantic/runtime review remains pending; do not delete or refactor until references, generated use and platform behavior are verified. |
-| `app/native_android/MainActivity.kt` | 4874 | Not audited | Semantic/runtime review remains pending; do not delete or refactor until references, generated use and platform behavior are verified. |
+| `app/native_android/AndroidManifest.xml` | 2998 | Partial review | Permissions, image-sharing intents, capture service and notification receivers inspected; generated merged manifest still needs build/runtime verification. |
+| `app/native_android/MainActivity.kt` | 4874 | Partial review | Ringtone and screen-capture MethodChannels/callers inspected; device runtime and cancellation behavior remain untested. |
 | `app/native_android/ScreenCaptureBridge.kt` | 900 | Partial review | MethodChannel result lifecycle and its callers in MainActivity/ScreenCaptureService inspected; runtime cancellation/interrupt behavior needs device test. |
 | `app/native_android/ScreenCaptureService.kt` | 8190 | Partial review | MediaProjection lifecycle and ScreenCaptureBridge completion paths inspected; Android device capture remains untested. |
-| `app/pubspec.yaml` | 1148 | Not audited | Semantic/runtime review remains pending; do not delete or refactor until references, generated use and platform behavior are verified. |
+| `app/pubspec.yaml` | 1148 | Partial review | Direct dependencies compared with all tracked Dart import scans; full transitive dependency graph and generated plugin registration still pending. |
 | `app/README.md` | 648 | Partial review | Local storage/offline-first and generated-platform workflow claims reviewed; database runtime behavior on web/desktop remains unverified. |
 | `app/test/account_scope_test.dart` | 316 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
 | `app/test/app_color_themes_test.dart` | 741 | Static import scan only | Import/export and lifecycle-marker scan completed; full semantics, callers, conditional/runtime references and platform behavior still need review. |
