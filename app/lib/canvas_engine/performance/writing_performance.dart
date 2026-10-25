@@ -184,7 +184,7 @@ class WritingPerformanceOverlay extends StatelessWidget {
                   'Ptr/s ${stats.pointerEventsPerSecond.toStringAsFixed(0)}  '
                   'Pts/s ${stats.renderedPointsPerSecond.toStringAsFixed(0)}\n'
                   'Dropped ${stats.droppedFrames}  '
-                  'Latency ${stats.estimatedLatencyMs.toStringAsFixed(1)} ms\n'
+                  'Input→frame ${stats.estimatedLatencyMs.toStringAsFixed(1)} ms\n'
                   'Predict ${stats.predictionHorizonMs.toStringAsFixed(1)} ms  '
                   'Strokes ${stats.strokeCount} / ${stats.visibleStrokes}\n'
                   'Image cache ${(stats.imageCacheBytes / 1024).round()} KB',
