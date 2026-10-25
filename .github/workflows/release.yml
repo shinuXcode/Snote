@@ -232,10 +232,12 @@ jobs:
         working-directory: app
         run: flutter test
 
-      - name: Install web PDF assets
+      - name: Install web SQLite and PDF assets
         if: matrix.target == 'web'
         working-directory: app
-        run: dart run pdfx:install_web
+        run: |
+          dart run sqflite_common_ffi_web:setup
+          dart run pdfx:install_web
 
       - name: Build Android
         if: matrix.target == 'android'
