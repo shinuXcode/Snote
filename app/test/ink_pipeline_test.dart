@@ -96,6 +96,38 @@ void main() {
     expect(finalPoints.last.position, const Offset(60, 0));
   });
 
+  test('pen-up endpoint preserves monotonic canonical timestamp', () {
+    final pipeline = InkInputPipeline();
+    pipeline.begin(
+      const PointerDownEvent(
+        pointer: 2,
+        kind: PointerDeviceKind.stylus,
+        position: Offset(0, 0),
+        timeStamp: Duration(milliseconds: 10),
+      ),
+    );
+    pipeline.update(
+      const PointerMoveEvent(
+        pointer: 2,
+        kind: PointerDeviceKind.stylus,
+        position: Offset(30, 0),
+        timeStamp: Duration(milliseconds: 20),
+      ),
+    );
+
+    final points = pipeline.finish(
+      const PointerUpEvent(
+        pointer: 2,
+        kind: PointerDeviceKind.stylus,
+        position: Offset(60, 0),
+        timeStamp: Duration(milliseconds: 5),
+      ),
+    );
+
+    expect(points.last.position, const Offset(60, 0));
+    expect(points.last.timestamp, greaterThan(points[points.length - 2].timestamp));
+  });
+
   test('prediction confidence actually reconciles against the next real sample', () {
     final predictor = InkPrediction();
     const points = <StrokePoint>[
