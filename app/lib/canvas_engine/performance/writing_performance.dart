@@ -18,12 +18,31 @@ class WritingPerformanceStats extends ChangeNotifier {
   int _lastWindowPointer = 0;
   int _lastWindowPoints = 0;
   int _lastWindowFrames = 0;
+  double _frameBudgetMs;
 
-  WritingPerformanceStats({this.enabled = kDebugMode});
+  WritingPerformanceStats({
+    this.enabled = kDebugMode,
+    double? refreshRateHz,
+  }) : _frameBudgetMs = _budgetForRefreshRate(
+          refreshRateHz ?? _currentRefreshRateHz(),
+        );
+
+  static double _currentRefreshRateHz() {
+    final views = PlatformDispatcher.instance.views;
+    if (views.isEmpty) return 60;
+    final refreshRate = views.first.display.refreshRate;
+    return refreshRate.isFinite && refreshRate > 0 ? refreshRate : 60;
+  }
+
+  static double _budgetForRefreshRate(double refreshRateHz) {
+    if (!refreshRateHz.isFinite || refreshRateHz <= 0) return 1000 / 60;
+    return 1000 / refreshRateHz;
+  }
 
   double get pointerEventsPerSecond => _lastWindowPointer.toDouble();
   double get renderedPointsPerSecond => _lastWindowPoints.toDouble();
   double get fps => _lastWindowFrames.toDouble();
+  double get frameBudgetMs => _frameBudgetMs;
 
   double get frameTimeMs {
     if (_frameDurations.isEmpty) return 0;
@@ -91,6 +110,8 @@ class WritingPerformanceStats extends ChangeNotifier {
 
   void attachScheduler() {
     if (!enabled) return;
+    // Refresh rate can change between widget creation and attachment.
+    _frameBudgetMs = _budgetForRefreshRate(_currentRefreshRateHz());
     SchedulerBinding.instance.addTimingsCallback(_timings);
   }
 
@@ -103,7 +124,7 @@ class WritingPerformanceStats extends ChangeNotifier {
     for (final timing in timings) {
       frame(
         timing.totalSpan,
-        frameBudgetMs: 16.667,
+        frameBudgetMs: _frameBudgetMs,
       );
     }
   }
@@ -163,7 +184,7 @@ class WritingPerformanceOverlay extends StatelessWidget {
                   'Ptr/s ${stats.pointerEventsPerSecond.toStringAsFixed(0)}  '
                   'Pts/s ${stats.renderedPointsPerSecond.toStringAsFixed(0)}\n'
                   'Dropped ${stats.droppedFrames}  '
-                  'Latency ${stats.estimatedLatencyMs.toStringAsFixed(1)} ms\n'
+                  'Input→frame ${stats.estimatedLatencyMs.toStringAsFixed(1)} ms\n'
                   'Predict ${stats.predictionHorizonMs.toStringAsFixed(1)} ms  '
                   'Strokes ${stats.strokeCount} / ${stats.visibleStrokes}\n'
                   'Image cache ${(stats.imageCacheBytes / 1024).round()} KB',
