@@ -12,6 +12,7 @@ on:
       - feat/snote-beta83-pro-ui-fountain-ocr
       - restore/oct14-beta92
       - feat/snote-beta96-workspace-overhaul
+      - feat/writing-engine-touch-notes-refresh
     paths:
       - "app/**"
       - ".github/workflows/beta.yml"
