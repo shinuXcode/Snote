@@ -735,6 +735,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   }
 
   void _restoreToolbar() {
+    final savedPressureSensitivity = _settings.getDouble('pressureSensitivity');
+    if (savedPressureSensitivity > 0) {
+      _pressureSensitivity = savedPressureSensitivity.clamp(0.0, 1.0).toDouble();
+    }
     _showcaseDock = _settings.getString('toolShowcaseDockSide');
     _showcaseX = _settings.getDouble('toolShowcaseX') == 0 ? 12 : _settings.getDouble('toolShowcaseX');
     _showcaseY = _settings.getDouble('toolShowcaseY') == 0 ? 140 : _settings.getDouble('toolShowcaseY');
