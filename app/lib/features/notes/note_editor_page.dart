@@ -2558,9 +2558,19 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
       right: 0,
       top: 0,
       child: Material(
-        color: Theme.of(context).colorScheme.surface.withValues(alpha: .98),
-        child: SizedBox(
-          height: 46,
+        elevation: SnoteThemeController.instance.eInk ? 0 : 5,
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: .985),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: .7),
+                width: 1,
+              ),
+            ),
+          ),
+          child: SizedBox(
+          height: 48,
           child: Row(
             children: [
               _compactAction(
@@ -2748,6 +2758,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                   ],
                 ),
             ],
+          ),
+        ),
           ),
         ),
       ),
@@ -2993,15 +3005,25 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
   }
 
   Widget _toolbarSurface(Widget child, {Key? key}) {
-    final blur = SnoteThemeController.instance.eInk ? 0.0 : 12.0;
+    final theme = Theme.of(context);
+    final eInk = SnoteThemeController.instance.eInk;
+    final blur = eInk ? 0.0 : 14.0;
     return ClipRRect(
       key: key,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(20),
       child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: math.min(5, blur), sigmaY: math.min(5, blur)),
+        filter: ui.ImageFilter.blur(sigmaX: math.min(7, blur), sigmaY: math.min(7, blur)),
         child: Material(
-          elevation: SnoteThemeController.instance.eInk ? 0 : 4,
-          color: Theme.of(context).colorScheme.surface.withValues(alpha: .88),
+          elevation: eInk ? 0 : 10,
+          color: theme.colorScheme.surface.withValues(alpha: .96),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(
+              color: theme.colorScheme.outlineVariant.withValues(alpha: .72),
+              width: 1,
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
           child: child,
         ),
       ),
@@ -3460,6 +3482,38 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
                                 unawaited(_commitToolOptions(target: target, size: value, color: color, opacity: opacity, fill: fill));
                               },
                             ),
+                            if (target.isPen) ...[
+                              Row(children: [
+                                const Icon(Icons.gesture_rounded, size: 18),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Pressure response  ${(_pressureSensitivity * 100).round()}%',
+                                    style: const TextStyle(fontWeight: FontWeight.w800),
+                                  ),
+                                ),
+                              ]),
+                              Slider(
+                                value: _pressureSensitivity.clamp(0, 1).toDouble(),
+                                min: 0,
+                                max: 1,
+                                divisions: 20,
+                                label: '${(_pressureSensitivity * 100).round()}%',
+                                onChanged: (value) {
+                                  setState(() => _pressureSensitivity = value);
+                                  unawaited(_settings.setDouble('pressureSensitivity', value));
+                                  setPopup(() {});
+                                },
+                              ),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text('Gentle', style: Theme.of(dialogContext).textTheme.labelSmall),
+                                  Text('Firm', style: Theme.of(dialogContext).textTheme.labelSmall),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                            ],
                             Row(children: [
                     const Icon(Icons.opacity_rounded, size: 18),
                     const SizedBox(width: 8),
