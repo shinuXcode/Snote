@@ -2764,7 +2764,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> with WidgetsBindingObse
             ],
           ),
         ),
-          ),
         ),
       ),
     );
