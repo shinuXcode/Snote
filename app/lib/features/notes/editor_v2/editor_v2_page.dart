@@ -4207,13 +4207,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                             borderRadius: BorderRadius.circular(9),
                             onTap: () => Navigator.pop(sheetContext, sticker),
                             child: Ink(
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.surfaceContainerHigh,
-                                borderRadius: BorderRadius.circular(9),
-                                border: Border.all(
-                                  color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: .5),
-                                ),
-                              ),
+                              decoration: const BoxDecoration(),
                               child: Stack(
                                 fit: StackFit.expand,
                                 children: [
@@ -7281,18 +7275,19 @@ class _EditorV2PageState extends State<EditorV2Page>
                   ),
                 ),
               ),
-              Positioned(
-                right: 0,
-                top: 0,
-                child: IconButton(
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(width: 22, height: 22),
-                  tooltip: 'Remove text box',
-                  onPressed: () => _removeTextBox(id),
-                  icon: const Icon(Icons.close_rounded, size: 12),
+              if (box['sticker'] != true || _selectedTextBoxIds.contains(id))
+                Positioned(
+                  right: 0,
+                  top: 0,
+                  child: IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(width: 22, height: 22),
+                    tooltip: 'Remove text box',
+                    onPressed: () => _removeTextBox(id),
+                    icon: const Icon(Icons.close_rounded, size: 12),
+                  ),
                 ),
-              ),
             ],
           ),
           ),
