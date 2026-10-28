@@ -1979,7 +1979,16 @@ class _EditorV2PageState extends State<EditorV2Page>
         );
       }
     } else if (_tool == CanvasTool.lasso) {
-      _selectInPolygon(completedPoints.map((sample) => sample.position).toList());
+      final lassoPath = completedPoints.map((sample) => sample.position).toList();
+      final pathLength = lassoPath.length < 2
+          ? 0.0
+          : List.generate(lassoPath.length - 1, (i) => (lassoPath[i + 1] - lassoPath[i]).distance)
+              .fold<double>(0, (sum, distance) => sum + distance);
+      if (pathLength < 10) {
+        _selectStrokeAt(end, radius: math.max(14, _size * 2));
+      } else {
+        _selectInPolygon(lassoPath);
+      }
     } else if (_tool == CanvasTool.fill) {
       _fillShapeAt(end);
     } else if (completedPoints.isNotEmpty) {
