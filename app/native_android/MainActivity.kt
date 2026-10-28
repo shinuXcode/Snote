@@ -4,6 +4,8 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.media.projection.MediaProjectionManager
+import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -11,9 +13,39 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private val captureRequestCode = 49201
+    private val ringtoneRequestCode = 49202
+    private var pendingRingtoneResult: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.snote/alarm_audio")
+            .setMethodCallHandler { call, result ->
+                if (call.method != "pickRingtone") {
+                    result.notImplemented()
+                    return@setMethodCallHandler
+                }
+                if (pendingRingtoneResult != null) {
+                    result.error("picker_busy", "A ringtone picker is already open.", null)
+                    return@setMethodCallHandler
+                }
+                try {
+                    val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+                        putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM)
+                        putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Choose Snote alarm sound")
+                        putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+                        putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                        val existing = call.argument<String>("existingUri")
+                        if (!existing.isNullOrBlank()) {
+                            putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, Uri.parse(existing))
+                        }
+                    }
+                    pendingRingtoneResult = result
+                    startActivityForResult(intent, ringtoneRequestCode)
+                } catch (error: Exception) {
+                    pendingRingtoneResult = null
+                    result.error("picker_failed", error.message ?: "Could not open ringtone picker.", null)
+                }
+            }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.snote/screen_capture")
             .setMethodCallHandler { call, result ->
                 if (call.method != "captureDisplay") {
@@ -36,6 +68,19 @@ class MainActivity : FlutterActivity() {
     @Deprecated("Deprecated Android Activity result API, retained for Flutter host compatibility")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == ringtoneRequestCode) {
+            val callback = pendingRingtoneResult
+            pendingRingtoneResult = null
+            if (callback != null) {
+                if (resultCode != Activity.RESULT_OK || data == null) {
+                    callback.success(null)
+                } else {
+                    val uri = data.getParcelableExtra<Uri>(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+                    callback.success(uri?.toString())
+                }
+            }
+            return
+        }
         if (requestCode != captureRequestCode) return
         if (resultCode != Activity.RESULT_OK || data == null) {
             ScreenCaptureBridge.complete(null, null)

@@ -21,7 +21,7 @@ class SnoteSettings extends ChangeNotifier {
     'autoBackupLocal': true, 'writingPostureRightHand': true, 'disableBackGesture': false,
     'turnOffPush': false, 'pageSwipe': true, 'autoAddPage': true,
     'securePagePreviews': false, 'eInk': false, 'grayscaleEInk': true, 'reduceMotion': false,
-    'welcomeGuideSeen': false, 'editorV2FloatingToolbar': false, 'editorV2FavoritesVertical': false, 'editorV2FloatingPageNavigation': false, 'editorV2ShowFavoritesShowcase': true, 'editorV2ShowNoteSwitcher': true,
+    'welcomeGuideSeen': false, 'editorV2FloatingToolbar': false, 'editorV2FavoritesVertical': false, 'editorV2FloatingPageNavigation': false, 'editorV2ShowFavoritesShowcase': true, 'editorV2ShowNoteSwitcher': true, 'editorV2RememberLastPage': true, 'editorV2CompactFullscreenToolbar': true, 'timerAlertEnabled': true, 'showTitleBarTimer': true, 'showTitleBarSearch': true, 'editorV2ShowTabs': true, 'editorV2ToolbarCollapsed': false, 'editorV2FavoriteCollapsed': false, 'editorV2CalculatorCollapsed': false, 'floatingTimerCollapsed': false, 'editorV2ToolbarDimensionsLocked': false,
   };
 
   static const doubleDefaults = <String, double>{
@@ -32,6 +32,16 @@ class SnoteSettings extends ChangeNotifier {
     'noteZoom': 1.0,
     'toolPencaseX': -1.0,
     'toolPencaseY': 170.0,
+    'editorV2ToolbarLength': 360.0,
+    'editorV2ToolbarThickness': 34.0,
+    'editorV2ToolbarMarginLeft': 0.0,
+    'editorV2ToolbarMarginTop': 0.0,
+    'editorV2ToolbarMarginRight': 0.0,
+    'editorV2ToolbarMarginBottom': 0.0,
+    'editorV2ToolbarPaddingLeft': 2.0,
+    'editorV2ToolbarPaddingTop': 1.0,
+    'editorV2ToolbarPaddingRight': 2.0,
+    'editorV2ToolbarPaddingBottom': 1.0,
   };
 
   static const stringDefaults = <String, String>{
@@ -56,6 +66,11 @@ class SnoteSettings extends ChangeNotifier {
     'toolDashed': '{}',
     'lassoStyle': 'solid',
     'eraserMode': 'stroke',
+    'timerAlertSound': 'alert',
+    'floatingTimerDockSide': 'right',
+    'editorV2FavoriteOffset': '{"dx":16,"dy":220}',
+    'editorV2SmartPageFavorites': '[]',
+    'floatingAlarms': '[]',
   };
 
   bool getBool(String key) => (_values[key] as bool?) ?? boolDefaults[key] ?? false;
@@ -63,6 +78,7 @@ class SnoteSettings extends ChangeNotifier {
   String getString(String key) => (_values[key] as String?) ?? stringDefaults[key] ?? '';
 
   Future<void> load() async {
+    await _storage.delete(key: 'snote.setting.geminiApiKey');
     for (final entry in boolDefaults.entries) {
       final raw = await _storage.read(key: 'snote.setting.' + entry.key);
       if (raw != null) _values[entry.key] = raw == 'true';
@@ -75,14 +91,8 @@ class SnoteSettings extends ChangeNotifier {
       final raw = await _storage.read(key: 'snote.setting.' + entry.key);
       if (raw != null) _values[entry.key] = raw;
     }
-
-    // One-time migration for users who already saved a customized toolbox
-    // before the measuring instruments were exposed in the default toolbox.
     if (_values['toolInstrumentDefaultsV1'] != 'done') {
-      final current = getString('pencaseTools')
-          .split(',')
-          .where((tool) => tool.isNotEmpty)
-          .toList();
+      final current = getString('pencaseTools').split(',').where((tool) => tool.isNotEmpty).toList();
       for (final instrument in const ['ruler', 'compass', 'protractor', 'divider']) {
         if (!current.contains(instrument)) current.add(instrument);
       }

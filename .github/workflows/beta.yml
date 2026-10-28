@@ -11,6 +11,13 @@ on:
       - feat/snote-beta82-editor-polish-ocr
       - feat/snote-beta83-pro-ui-fountain-ocr
       - restore/oct14-beta92
+      - feat/snote-beta96-workspace-overhaul
+    paths:
+      - "app/**"
+      - ".github/workflows/beta.yml"
+  pull_request:
+    branches:
+      - restore/oct14-beta92
     paths:
       - "app/**"
       - ".github/workflows/beta.yml"
@@ -20,7 +27,8 @@ permissions:
   contents: write
 
 concurrency:
-  group: snote-beta-build
+  # Keep PR validation separate from the publishing push; otherwise the PR run cancels the APK release build.
+  group: snote-beta-build-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
@@ -44,7 +52,7 @@ jobs:
           set -euo pipefail
           VERSION="$(awk '/^version:/ {sub(/^version:[[:space:]]*/, ""); print; exit}' app/pubspec.yaml)"
           case "$VERSION" in
-            1.1.0-beta.*+*) ;;
+            1.1.0-beta.*+*|0.0.2+*) ;;
             *) echo "Unexpected beta version in app/pubspec.yaml: $VERSION"; exit 1 ;;
           esac
           RELEASE_VERSION="${VERSION%%+*}"
@@ -62,6 +70,20 @@ jobs:
           cp native_android/*.kt android/app/src/main/kotlin/com/snote/snote/
           rm -f test/widget_test.dart
 
+      - name: Allow legacy ProGuard filename in Android WebView dependency
+        working-directory: app
+        run: |
+          set -euo pipefail
+          PROPERTIES="android/gradle.properties"
+          mkdir -p android
+          touch "$PROPERTIES"
+          if grep -q '^android\.r8\.proguardAndroidTxt\.disallowed=' "$PROPERTIES"; then
+            sed -i 's/^android\.r8\.proguardAndroidTxt\.disallowed=.*/android.r8.proguardAndroidTxt.disallowed=false/' "$PROPERTIES"
+          else
+            printf '\nandroid.r8.proguardAndroidTxt.disallowed=false\n' >> "$PROPERTIES"
+          fi
+          grep -Fx 'android.r8.proguardAndroidTxt.disallowed=false' "$PROPERTIES"
+          echo "Applied AGP 9 compatibility setting for flutter_inappwebview_android 1.1.3."
       - name: Configure and verify Android beta identity
         working-directory: app
         run: |
@@ -106,7 +128,8 @@ jobs:
           text = manifest.read_text()
           if 'android.permission.CAMERA' not in text:
               text = text.replace('</manifest>', '    <uses-permission android:name="android.permission.CAMERA" />\n</manifest>')
-          text = text.replace('android:label="snote"', 'android:label="Snote Beta"')
+          import re
+          text = re.sub(r'android:label="[^"]*"', 'android:label="Snote Beta"', text, count=1)
           if 'android:launchMode="singleTop"' in text:
               text = text.replace('android:launchMode="singleTop"', 'android:launchMode="singleTask"')
           if 'android.intent.action.SEND' not in text:
@@ -203,6 +226,32 @@ jobs:
           build.write_text(chr(10).join(out) + chr(10))
           print('Configured release R8 rules for optional ML Kit language recognizers.')
           PY
+      - name: Enable Android core library desugaring for notifications
+        working-directory: app
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('android/app/build.gradle.kts')
+          text = path.read_text()
+          if 'isCoreLibraryDesugaringEnabled = true' not in text:
+              marker = 'compileOptions {'
+              if marker not in text:
+                  raise SystemExit('Generated Gradle file has no compileOptions block')
+              text = text.replace(marker, marker + '\n        isCoreLibraryDesugaringEnabled = true', 1)
+          dependency = 'coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")'
+          if dependency not in text:
+              marker = 'dependencies {'
+              if marker in text:
+                  text = text.replace(marker, marker + '\n    ' + dependency, 1)
+              else:
+                  text = text.rstrip() + '\n\ndependencies {\n    ' + dependency + '\n}\n'
+          path.write_text(text)
+          assert 'isCoreLibraryDesugaringEnabled = true' in text
+          assert dependency in text
+          print('Enabled core library desugaring required by flutter_local_notifications.')
+          PY
+
       - name: Install dependencies
         working-directory: app
         run: flutter pub get
@@ -302,23 +351,4 @@ jobs:
             gh release edit "$RELEASE_TAG" --title "Snote $PACKAGE_VERSION" --notes "$NOTES" --prerelease --repo "$GITHUB_REPOSITORY"
           else
             gh release create "$RELEASE_TAG" Snote-Android-Beta.apk Snote-Android-Beta.sha256 --repo "$GITHUB_REPOSITORY" --title "Snote $PACKAGE_VERSION" --notes "$NOTES" --target "$GITHUB_SHA" --prerelease
-          fi
-
-      - name: Remove superseded beta release after replacement publishes
-        if: success() && github.event_name == 'push'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CURRENT_TAG: ${{ steps.beta_version.outputs.tag }}
-        run: |
-          set -euo pipefail
-          OLD_TAG="v1.1.0-beta.79"
-          if [ "$CURRENT_TAG" = "$OLD_TAG" ]; then
-            echo "Skipping cleanup because the current release is the old beta."
-            exit 0
-          fi
-          if gh release view "$OLD_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release delete "$OLD_TAG" --yes --cleanup-tag --repo "$GITHUB_REPOSITORY"
-            echo "Removed superseded release and tag $OLD_TAG after $CURRENT_TAG was published."
-          else
-            echo "Superseded release $OLD_TAG is already absent."
           fi

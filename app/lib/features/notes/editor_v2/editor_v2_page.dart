@@ -7,8 +7,9 @@ import 'dart:ui' as ui;
 
 import 'package:archive/archive.dart' as zip;
 import 'package:crypto/crypto.dart';
+import 'package:cross_file/cross_file.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
+import 'package:flutter/foundation.dart' show compute, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -19,6 +20,7 @@ import 'package:pdf/pdf.dart' as pdfcore;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdfx/pdfx.dart';
 import 'package:pasteboard/pasteboard.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../../canvas_engine/models/pen_config.dart';
@@ -32,13 +34,36 @@ import '../../../data/local/file_document_repository.dart';
 import '../../../data/local/note_repository.dart';
 import '../note_content_compatibility.dart';
 import 'editor_v2_document.dart';
+import 'multi_split_workspace.dart';
+import 'smart_pages_catalog.dart';
+
 import 'editor_v2_ink_painter.dart';
 import 'selection_text_recognizer.dart';
 import '../../tools/screen_capture.dart';
+import '../../tools/floating_timer_panel.dart';
+import '../../tools/web_search_panel.dart';
+
+/// Decode large note envelopes away from the UI isolate so returning to a
+/// notebook does not block the first interactive frame on JSON parsing.
+Map<String, Object?> _decodeEditorDocumentPayload(String? content) {
+  final root = EditorV2DocumentCodec.decodeRoot(content ?? '');
+  return <String, Object?>{
+    'root': root,
+    'pages': EditorV2DocumentCodec.decodePages(root),
+  };
+}
+
 
 /// Replacement note editor surface. It shares only Snote's persistence and
 /// stroke-format contracts; pointer handling, selection, drawing, and painting
 /// are implemented here rather than delegated to the legacy SnoteCanvas.
+/// Shared regression-tested surface style for sticker/text overlays.
+const BoxDecoration snoteTransparentTextBoxDecoration = BoxDecoration(
+  color: Colors.transparent,
+  border: Border.fromBorderSide(BorderSide(color: Colors.transparent, width: 0)),
+  borderRadius: BorderRadius.all(Radius.circular(4)),
+);
+
 class EditorV2Page extends StatefulWidget {
   final LocalNote note;
   final Uint8List? initialPdfBytes;
@@ -188,6 +213,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   bool _panMode = false;
   bool _textMode = false;
   bool _floatingToolbar = false;
+  bool _compactFloatingToolbar = false;
   bool _favoritesVertical = false;
   bool _fitInitialized = false;
   bool _exporting = false;
@@ -215,6 +241,8 @@ class _EditorV2PageState extends State<EditorV2Page>
   final Map<String, Set<String>> _toolPlacements = <String, Set<String>>{};
   List<String> _toolbarOrder = <String>[];
   bool _showNoteSwitcherInTitleBar = true;
+  bool _showTabsBar = true;
+  Future<List<LocalNote>>? _noteTabsFuture;
   List<Map<String, Object?>>? _selectionTransformImageSnapshot;
   List<Map<String, Object?>>? _selectionTransformTextSnapshot;
   bool _showFavoritesShowcase = true;
@@ -222,6 +250,9 @@ class _EditorV2PageState extends State<EditorV2Page>
   bool _showPagePreview = true;
   bool _floatingPageNavigation = false;
   bool _fullScreenMode = false;
+  bool _showFloatingTimer = false;
+  bool _toolbarCollapsedToEdge = false;
+  bool _calculatorCollapsed = false;
   bool _showViewportHud = false;
   bool _viewportLocked = false;
   bool _watermarkCoverMode = false;
@@ -234,6 +265,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   bool _pressureEraseActive = false;
   CanvasTool? _toolBeforePressureErase;
   Offset _favoriteOffset = const Offset(16, 220);
+  bool _favoriteCollapsed = false;
   Offset _toolSettingsAnchor = const Offset(20, 120);
   Offset _pageNavOffset = const Offset(8, 280);
   double _calculatorWidth = 330;
@@ -244,6 +276,14 @@ class _EditorV2PageState extends State<EditorV2Page>
   Rect? _selectionTransformBounds;
   Offset _selectionTransformDelta = Offset.zero;
   bool _selectionTransformIsResize = false;
+  Offset _selectionResizeDirection = const Offset(1, 1);
+  double _toolbarLength = 360;
+  double _toolbarThickness = 34;
+  double _toolbarMarginLeft = 0, _toolbarMarginTop = 0;
+  double _toolbarMarginRight = 0, _toolbarMarginBottom = 0;
+  double _toolbarPaddingLeft = 2, _toolbarPaddingTop = 1;
+  double _toolbarPaddingRight = 2, _toolbarPaddingBottom = 1;
+  bool _toolbarDimensionsLocked = false;
 
   bool get _hasPdfBackgroundPages => _pages.any((page) {
         if (page['pdfLazyRender'] == true) return true;
@@ -275,6 +315,23 @@ class _EditorV2PageState extends State<EditorV2Page>
         ? _settings.getString('editorV2ToolbarDock')
         : 'top';
     _floatingToolbar = _settings.getBool('editorV2FloatingToolbar');
+    _compactFloatingToolbar = _settings.getBool('editorV2CompactFloatingToolbar');
+    _showTabsBar = _settings.getBool('editorV2ShowTabs');
+    _noteTabsFuture = _repo.listAllVisible(limit: 12);
+    _toolbarCollapsedToEdge = _settings.getBool('editorV2ToolbarCollapsed');
+    _toolbarLength = _settings.getDouble('editorV2ToolbarLength').clamp(180.0, 900.0).toDouble();
+    _toolbarThickness = _settings.getDouble('editorV2ToolbarThickness').clamp(28.0, 96.0).toDouble();
+    _toolbarMarginLeft = _settings.getDouble('editorV2ToolbarMarginLeft').clamp(0.0, 24.0).toDouble();
+    _toolbarMarginTop = _settings.getDouble('editorV2ToolbarMarginTop').clamp(0.0, 24.0).toDouble();
+    _toolbarMarginRight = _settings.getDouble('editorV2ToolbarMarginRight').clamp(0.0, 24.0).toDouble();
+    _toolbarMarginBottom = _settings.getDouble('editorV2ToolbarMarginBottom').clamp(0.0, 24.0).toDouble();
+    _toolbarPaddingLeft = _settings.getDouble('editorV2ToolbarPaddingLeft').clamp(0.0, 20.0).toDouble();
+    _toolbarPaddingTop = _settings.getDouble('editorV2ToolbarPaddingTop').clamp(0.0, 20.0).toDouble();
+    _toolbarPaddingRight = _settings.getDouble('editorV2ToolbarPaddingRight').clamp(0.0, 20.0).toDouble();
+    _toolbarPaddingBottom = _settings.getDouble('editorV2ToolbarPaddingBottom').clamp(0.0, 20.0).toDouble();
+    _toolbarDimensionsLocked = _settings.getBool('editorV2ToolbarDimensionsLocked');
+    _favoriteCollapsed = _settings.getBool('editorV2FavoriteCollapsed');
+    _calculatorCollapsed = _settings.getBool('editorV2CalculatorCollapsed');
     _favoritesVertical = _settings.getBool('editorV2FavoritesVertical');
     _showPageNavigation = _settings.getBool('showPageNavigation');
     _showPagePreview = _settings.getBool('showPagePreview');
@@ -371,7 +428,11 @@ class _EditorV2PageState extends State<EditorV2Page>
     if (saved == null) {
       throw StateError('This note no longer exists in the current local account.');
     }
-    final root = EditorV2DocumentCodec.decodeRoot(saved.contentJson);
+    final decoded = await compute(_decodeEditorDocumentPayload, saved.contentJson);
+    final root = Map<String, Object?>.from(decoded['root'] as Map);
+    final pages = (decoded['pages'] as List)
+        .map((page) => Map<String, Object?>.from(page as Map))
+        .toList();
     final delta = root['text_delta'];
     if (delta is List) {
       try {
@@ -380,8 +441,6 @@ class _EditorV2PageState extends State<EditorV2Page>
         debugPrint('[Snote][EditorV2] rich-text delta restore failed: $error\n$stackTrace');
       }
     }
-    final pages = EditorV2DocumentCodec.decodePages(root);
-
     Uint8List? pdfBytes = widget.initialPdfBytes;
     String? pdfName = widget.initialPdfName;
     DocumentAsset? sourcePdf;
@@ -574,7 +633,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           });
         }
       }
-      final maxDimension = thumbnail ? 320.0 : 1600.0;
+      final maxDimension = thumbnail ? 320.0 : 2800.0;
       final scale = math.min(maxDimension / page.width, maxDimension / page.height);
       final rendered = await page.render(
         width: (page.width * scale).clamp(1.0, maxDimension).toDouble(),
@@ -639,7 +698,11 @@ class _EditorV2PageState extends State<EditorV2Page>
           _pdfRasterCache.values.fold<int>(0, (total, bytes) => total + bytes.length) >
               _maxPdfRasterCacheBytes) {
         if (_pdfRasterCache.isEmpty) break;
-        _pdfRasterCache.remove(_pdfRasterCache.keys.first);
+        final evictedKey = _pdfRasterCache.keys.first;
+        _pdfRasterCache.remove(evictedKey);
+        // Keep the byte budget meaningful: a completed Future also retains its
+        // Uint8List, so evict its entry together with the raster bytes.
+        _pdfRasterFutureCache.remove(evictedKey);
       }
     }).catchError((Object error) {
       debugPrint('[Snote][EditorV2] lazy PDF page render failed ($pageNumber): $error');
@@ -696,7 +759,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       for (var index = 1; index <= totalPages; index++) {
         final pdfPage = await document.getPage(index);
         try {
-          const maxDimension = 1500.0;
+          const maxDimension = 2400.0;
           final scale = math.min(maxDimension / pdfPage.width, maxDimension / pdfPage.height);
           final rendered = await pdfPage.render(
             width: (pdfPage.width * scale).roundToDouble(),
@@ -817,7 +880,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     for (final tool in CanvasTool.values) {
       if (!_toolbarOrder.contains(tool.name)) _toolbarOrder.add(tool.name);
     }
-    for (final key in const <String>['calculator', 'screenshot']) {
+    for (final key in const <String>['calculator', 'screenshot', 'timer', 'webSearch']) {
       if (!_toolbarOrder.contains(key)) _toolbarOrder.add(key);
     }
   }
@@ -837,7 +900,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       _placementsFor(tool).contains(location);
 
   bool _isSpecialToolKey(String key) =>
-      const <String>{'calculator', 'screenshot'}.contains(key);
+      const <String>{'calculator', 'screenshot', 'timer', 'webSearch'}.contains(key);
 
   Set<String> _locationsForToolKey(String key) {
     final tool = CanvasTool.values.where((candidate) => candidate.name == key).firstOrNull;
@@ -1052,15 +1115,31 @@ class _EditorV2PageState extends State<EditorV2Page>
       _openCalculator();
     } else if (key == 'screenshot') {
       unawaited(_captureScreenToCanvas());
+    } else if (key == 'timer') {
+      setState(() => _showFloatingTimer = true);
+    } else if (key == 'webSearch') {
+      unawaited(SnoteWebSearchPanel.show(context));
     }
   }
 
   Widget _specialToolButton(String key, String location) {
     final calculator = key == 'calculator';
+    final timer = key == 'timer';
+    final webSearch = key == 'webSearch';
     final icon = calculator
         ? Icons.calculate_outlined
-        : Icons.screenshot_monitor_rounded;
-    final title = calculator ? 'Calculator' : 'Capture screen to canvas';
+        : timer
+            ? Icons.timer_outlined
+            : webSearch
+                ? Icons.travel_explore_rounded
+                : Icons.screenshot_monitor_rounded;
+    final title = calculator
+        ? 'Calculator'
+        : timer
+            ? 'Timer, alarm and stopwatch'
+            : webSearch
+                ? 'Google/web search'
+                : 'Capture screen to canvas';
     return DragTarget<Object>(
       onAcceptWithDetails: (details) => unawaited(
         _moveDroppedTool(details.data, location, target: key),
@@ -1388,7 +1467,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   bool _strokeMostlyInsidePolygon(
     List<Offset> points,
     List<Offset> polygon, {
-    double minimumInsideFraction = .65,
+    double minimumInsideFraction = .5,
   }) {
     if (points.isEmpty || polygon.length < 3) return false;
     if (points.length == 1) return _pointInPolygon(points.first, polygon);
@@ -1405,7 +1484,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       final b = points[i];
       final length = (b - a).distance;
       if (length <= 1e-8) continue;
-      final samples = math.max(1, math.min(512, (length / 2).ceil()));
+      final samples = math.max(1, math.min(1024, (length / 1.5).ceil()));
       final sampleLength = length / samples;
       for (var sample = 0; sample < samples; sample++) {
         final point = Offset.lerp(a, b, (sample + .5) / samples)!;
@@ -2396,7 +2475,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     object['y'] = (rect.top / _pageHeight).clamp(0.0, math.max(0.0, 1 - height)).toDouble();
   }
 
-  void _startSelectionTransform({required bool resize}) {
+  void _startSelectionTransform({required bool resize, Offset resizeDirection = const Offset(1, 1)}) {
     final bounds = _selectionBounds();
     if (bounds == null || _selectionCount == 0) return;
     _pushUndo();
@@ -2416,6 +2495,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     _selectionTransformBounds = bounds;
     _selectionTransformDelta = Offset.zero;
     _selectionTransformIsResize = resize;
+    _selectionResizeDirection = resizeDirection;
   }
 
   void _updateSelectionTransform(Offset delta) {
@@ -2427,7 +2507,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     final scale = _transform.value.getMaxScaleOnAxis().clamp(.25, 4).toDouble();
     _selectionTransformDelta += delta / scale;
     final factor = _selectionTransformIsResize
-        ? (1 + (_selectionTransformDelta.dx + _selectionTransformDelta.dy) / math.max(40, bounds.longestSide)).clamp(.35, 3.0).toDouble()
+        ? (1 + ((_selectionTransformDelta.dx * _selectionResizeDirection.dx) + (_selectionTransformDelta.dy * _selectionResizeDirection.dy)) / math.max(40, bounds.longestSide)).clamp(.35, 3.0).toDouble()
         : 1.0;
     final offset = _selectionTransformIsResize ? Offset.zero : _selectionTransformDelta;
     final center = bounds.center;
@@ -2519,6 +2599,67 @@ class _EditorV2PageState extends State<EditorV2Page>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Copied selection ($_selectionCount item(s)); clipboard keeps the last 4 actions.')),
     );
+  }
+
+  Future<void> _openMultiSplitWorkspace() async {
+    try {
+      final notes = await _repo.listAllVisible(limit: 300);
+      if (!mounted) return;
+      final candidates = notes.where((note) => note.id != widget.note.id).toList(growable: false);
+      if (candidates.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Create or import another note before opening split view.')),
+        );
+        return;
+      }
+      final selected = await showModalBottomSheet<LocalNote>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (sheetContext) => SizedBox(
+          height: MediaQuery.sizeOf(sheetContext).height * .7,
+          child: Column(
+            children: [
+              const ListTile(
+                leading: Icon(Icons.view_column_outlined),
+                title: Text('Choose the second note'),
+                subtitle: Text('The current note stays on the left.'),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: candidates.length,
+                  itemBuilder: (_, index) {
+                    final note = candidates[index];
+                    return ListTile(
+                      leading: const Icon(Icons.description_outlined),
+                      title: Text(note.title.isEmpty ? 'Untitled note' : note.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      subtitle: Text(note.updatedAt.toString(), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      onTap: () => Navigator.pop(sheetContext, note),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (selected == null || !mounted) return;
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => MultiSplitNoteWorkspace(
+            firstNote: widget.note,
+            secondNote: selected,
+          ),
+        ),
+      );
+    } catch (error, stackTrace) {
+      debugPrint('[Snote][EditorV2] split workspace failed: $error\n$stackTrace');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open split workspace: $error')),
+        );
+      }
+    }
   }
 
   Future<void> _showClipboardHistory() async {
@@ -2769,6 +2910,70 @@ class _EditorV2PageState extends State<EditorV2Page>
   Future<void> _toggleNoteSwitcher() async {
     setState(() => _showNoteSwitcherInTitleBar = !_showNoteSwitcherInTitleBar);
     await _settings.setBool('editorV2ShowNoteSwitcher', _showNoteSwitcherInTitleBar);
+  }
+
+  Future<void> _toggleTabsBar() async {
+    final next = !_showTabsBar;
+    setState(() {
+      _showTabsBar = next;
+      _noteTabsFuture ??= _repo.listAllVisible(limit: 12);
+    });
+    await _settings.setBool('editorV2ShowTabs', next);
+  }
+
+  Future<void> _openNoteTab(LocalNote note) async {
+    if (note.id == widget.note.id) return;
+    await _flushSave();
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(MaterialPageRoute<void>(
+      builder: (_) => EditorV2Page(note: note),
+    ));
+  }
+
+  Widget _buildNoteTabs() {
+    return Material(
+      color: Theme.of(context).colorScheme.surfaceContainerLow,
+      child: SizedBox(
+        height: 44,
+        child: FutureBuilder<List<LocalNote>>(
+          future: _noteTabsFuture ??= _repo.listAllVisible(limit: 12),
+          builder: (context, snapshot) {
+            final notes = snapshot.data ?? const <LocalNote>[];
+            if (snapshot.hasError) {
+              return Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Could not load note tabs', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              );
+            }
+            if (notes.isEmpty) return const SizedBox.shrink();
+            return ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              itemCount: notes.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 5),
+              itemBuilder: (context, index) {
+                final note = notes[index];
+                final active = note.id == widget.note.id;
+                return ChoiceChip(
+                  visualDensity: VisualDensity.compact,
+                  selected: active,
+                  avatar: Icon(active ? Icons.edit_note_rounded : Icons.note_outlined, size: 16),
+                  label: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 170),
+                    child: Text(
+                      note.title.trim().isEmpty ? 'Untitled note' : note.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  onSelected: (_) => unawaited(_openNoteTab(note)),
+                );
+              },
+            );
+          },
+        ),
+      ),
+    );
   }
 
   Future<void> _openNoteSwitcher() async {
@@ -3633,6 +3838,60 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
   }
 
+  Future<Rect?> _chooseCaptureRegion() => showGeneralDialog<Rect>(
+        context: context,
+        barrierDismissible: false,
+        barrierLabel: 'Select screenshot region',
+        barrierColor: Colors.transparent,
+        transitionDuration: Duration.zero,
+        pageBuilder: (dialogContext, animation, secondaryAnimation) =>
+            const _CaptureRegionSelector(),
+      );
+
+  Future<Uint8List> _cropScreenshotToRegion(
+    Uint8List bytes,
+    Rect region,
+    Size logicalScreenSize,
+  ) async {
+    final codec = await ui.instantiateImageCodec(bytes);
+    final frame = await codec.getNextFrame();
+    final source = frame.image;
+    try {
+      final scaleX = source.width / math.max(1.0, logicalScreenSize.width);
+      final scaleY = source.height / math.max(1.0, logicalScreenSize.height);
+      final left = (region.left * scaleX).round().clamp(0, source.width - 1).toInt();
+      final top = (region.top * scaleY).round().clamp(0, source.height - 1).toInt();
+      final right = (region.right * scaleX).round().clamp(left + 1, source.width).toInt();
+      final bottom = (region.bottom * scaleY).round().clamp(top + 1, source.height).toInt();
+      final sourceRect = Rect.fromLTRB(
+        left.toDouble(), top.toDouble(), right.toDouble(), bottom.toDouble(),
+      );
+      final width = math.max(1, right - left);
+      final height = math.max(1, bottom - top);
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      canvas.drawImageRect(
+        source,
+        sourceRect,
+        Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
+        Paint()..filterQuality = FilterQuality.high,
+      );
+      final picture = recorder.endRecording();
+      final cropped = await picture.toImage(width, height);
+      picture.dispose();
+      try {
+        final data = await cropped.toByteData(format: ui.ImageByteFormat.png);
+        if (data == null) throw StateError('Could not encode the selected screenshot region.');
+        return data.buffer.asUint8List();
+      } finally {
+        cropped.dispose();
+      }
+    } finally {
+      source.dispose();
+      codec.dispose();
+    }
+  }
+
   Future<void> _captureScreenToCanvas() async {
     if (_pageData['locked'] == true) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -3643,10 +3902,20 @@ class _EditorV2PageState extends State<EditorV2Page>
     try {
       Uint8List? bytes;
       if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-        // Android MediaProjection requires user consent; PNG bytes return
-        // directly from native code, with no MediaStore/gallery write.
-        bytes = await SnoteScreenCapture.captureDisplay();
-        if (!mounted || bytes == null) return;
+        // Select the area first. Android's public MediaProjection API returns
+        // a display frame, so Snote crops the chosen region in memory without
+        // showing a second post-capture crop screen or writing to the gallery.
+        final logicalScreenSize = MediaQuery.sizeOf(context);
+        final selectedRegion = await _chooseCaptureRegion();
+        if (!mounted || selectedRegion == null) return;
+        final fullFrame = await SnoteScreenCapture.captureDisplay();
+        if (!mounted || fullFrame == null) return;
+        bytes = await _cropScreenshotToRegion(
+          fullFrame,
+          selectedRegion,
+          logicalScreenSize,
+        );
+        if (!mounted) return;
       } else {
         // iOS/desktop captures the active Snote canvas. iOS does not allow
         // third-party apps to capture another app's screen.
@@ -4205,6 +4474,231 @@ class _EditorV2PageState extends State<EditorV2Page>
     });
   }
 
+  Widget _smartPagePreview(SmartPageTemplate template) {
+    final accent = Theme.of(context).colorScheme.primary;
+    final paper = Theme.of(context).colorScheme.surface;
+    return Container(
+      height: 42,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: paper,
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: .7)),
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (template.pageTemplate == 'cornell')
+            Container(width: 22, margin: const EdgeInsets.only(right: 4), decoration: BoxDecoration(
+              color: accent.withValues(alpha: .12),
+              border: Border(right: BorderSide(color: accent.withValues(alpha: .45))),
+            )),
+          Expanded(
+            child: template.pageTemplate == 'grid'
+                ? Column(children: List.generate(2, (_) => Expanded(child: Row(children: List.generate(7, (_) => Expanded(child: Container(
+                    margin: const EdgeInsets.all(.5),
+                    decoration: BoxDecoration(border: Border.all(color: accent.withValues(alpha: .25))),
+                  )))))))
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: List.generate(3, (index) => Row(children: [
+                      if (template.pageTemplate == 'checklist')
+                        Container(width: 6, height: 6, margin: const EdgeInsets.only(right: 4), decoration: BoxDecoration(
+                          border: Border.all(color: accent.withValues(alpha: .8)),
+                          borderRadius: BorderRadius.circular(1),
+                        )),
+                      Expanded(child: Container(height: 2, color: accent.withValues(alpha: index == 0 ? .45 : .2))),
+                    ])),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showSmartPagesLibrary() async {
+    final templates = SmartPagesCatalog.all;
+    var category = 'All';
+    var query = '';
+    var favoritesOnly = false;
+    Set<String> favorites = <String>{};
+    try {
+      final saved = jsonDecode(_settings.getString('editorV2SmartPageFavorites'));
+      if (saved is List) favorites = saved.whereType<String>().toSet();
+    } catch (_) {
+      // Ignore malformed favorites without hiding the template library.
+    }
+    final categories = <String>['All'];
+    categories.addAll(templates.map((template) => template.category).toSet().toList()..sort());
+    final selected = await showModalBottomSheet<SmartPageTemplate>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final filtered = templates.where((template) {
+            final matchesCategory = category == 'All' || template.category == category;
+            final matchesFavorite = !favoritesOnly || favorites.contains(template.id);
+            final term = query.toLowerCase();
+            final matchesQuery = term.isEmpty ||
+                template.title.toLowerCase().contains(term) ||
+                template.category.toLowerCase().contains(term);
+            return matchesCategory && matchesFavorite && matchesQuery;
+          }).toList(growable: false);
+          return SafeArea(
+            child: SizedBox(
+              height: MediaQuery.sizeOf(context).height * .82,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+                child: Column(
+                  children: [
+                    Row(children: [
+                      Expanded(child: Text('Smart Pages • ${templates.length} templates', style: Theme.of(context).textTheme.titleLarge)),
+                      IconButton(
+                        tooltip: favoritesOnly ? 'Show all templates' : 'Show favorites',
+                        onPressed: () => setSheetState(() => favoritesOnly = !favoritesOnly),
+                        icon: Icon(favoritesOnly ? Icons.star_rounded : Icons.star_border_rounded),
+                      ),
+                    ]),
+                    TextField(
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.search_rounded),
+                        hintText: 'Search calendars, planners, routines…',
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (value) => setSheetState(() => query = value.trim()),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 40,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        children: categories.map((value) => Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: ChoiceChip(
+                            label: Text(value),
+                            selected: category == value,
+                            onSelected: (_) => setSheetState(() => category = value),
+                          ),
+                        )).toList(),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: filtered.isEmpty
+                          ? const Center(child: Text('No templates match this filter.'))
+                          : GridView.builder(
+                              itemCount: filtered.length,
+                              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: 230,
+                                mainAxisSpacing: 8,
+                                crossAxisSpacing: 8,
+                                childAspectRatio: 1.48,
+                              ),
+                              itemBuilder: (_, index) {
+                                final template = filtered[index];
+                                final favorite = favorites.contains(template.id);
+                                return Card(
+                                  clipBehavior: Clip.antiAlias,
+                                  child: InkWell(
+                                    onTap: () => Navigator.pop(sheetContext, template),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(10),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(children: [
+                                            Expanded(child: Text(template.category, maxLines: 1, overflow: TextOverflow.ellipsis,
+                                              style: Theme.of(context).textTheme.labelSmall)),
+                                            IconButton(
+                                              visualDensity: VisualDensity.compact,
+                                              constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+                                              padding: EdgeInsets.zero,
+                                              tooltip: favorite ? 'Remove favorite' : 'Add favorite',
+                                              onPressed: () async {
+                                                setSheetState(() {
+                                                  if (favorite) {
+                                                    favorites.remove(template.id);
+                                                  } else {
+                                                    favorites.add(template.id);
+                                                  }
+                                                });
+                                                await _settings.setString('editorV2SmartPageFavorites', jsonEncode(favorites.toList()));
+                                              },
+                                              icon: Icon(favorite ? Icons.star_rounded : Icons.star_border_rounded, size: 18),
+                                            ),
+                                          ]),
+                                          Text(template.title, maxLines: 2, overflow: TextOverflow.ellipsis,
+                                            style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                                          const SizedBox(height: 4),
+                                          _smartPagePreview(template),
+                                          const SizedBox(height: 3),
+                                          Text(template.body.replaceAll('\n', ' • '), maxLines: 1, overflow: TextOverflow.ellipsis,
+                                            style: Theme.of(context).textTheme.bodySmall),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    if (selected == null || !mounted) return;
+    if (_pageData['locked'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unlock this page before inserting a Smart Page.')),
+      );
+      return;
+    }
+    _pushUndo();
+    final id = DateTime.now().microsecondsSinceEpoch.toString();
+    final titleBoxId = '$id-smart-title';
+    final bodyBoxId = '$id-smart-body';
+    final nextPage = EditorV2DocumentCodec.normalizePage(<String, Object?>{
+      ...Map<String, Object?>.from(_pageData),
+      'id': '$id-smart-page',
+      'template': selected.pageTemplate,
+      'strokes': <Object?>[],
+      'images': <Object?>[],
+      'textBoxes': <Object?>[
+        <String, Object?>{
+          'id': titleBoxId, 'x': .06, 'y': .035, 'width': .88, 'height': .075,
+          'text': selected.title, 'fontSize': 30.0, 'bold': true,
+          'color': 0xff17202a, 'textAlign': 'left',
+        },
+        <String, Object?>{
+          'id': bodyBoxId, 'x': .06, 'y': .13, 'width': .88, 'height': .82,
+          'text': selected.body, 'fontSize': 17.0,
+          'color': 0xff263238, 'textAlign': 'left',
+        },
+      ],
+      'backgroundImage': null,
+      'pdfLazyRender': false,
+      'smartPageTemplateId': selected.id,
+    });
+    _textControllers[titleBoxId] = TextEditingController(text: selected.title);
+    _textControllers[bodyBoxId] = TextEditingController(text: selected.body);
+    setState(() {
+      _pages.insert((_page + 1).clamp(0, _pages.length).toInt(), nextPage);
+      _page = (_page + 1).clamp(0, _pages.length - 1).toInt();
+      _clearSelectionIds();
+      _lassoRect = null;
+    });
+    _scheduleSave();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _resetCanvasView();
+    });
+  }
+
   Future<void> _chooseTemplate() async {
     if (_pageData['locked'] == true) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -4221,7 +4715,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           padding: const EdgeInsets.all(16),
           child: GridView.builder(
             shrinkWrap: true,
-            itemCount: PageTemplate.values.length,
+            itemCount: PageTemplate.values.length + 1,
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 3,
               crossAxisSpacing: 10,
@@ -4229,7 +4723,34 @@ class _EditorV2PageState extends State<EditorV2Page>
               childAspectRatio: 1.1,
             ),
             itemBuilder: (_, index) {
-              final template = PageTemplate.values[index];
+              if (index == 0) {
+                return Card(
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) unawaited(_showSmartPagesLibrary());
+                      });
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.auto_awesome_rounded, size: 30, color: Theme.of(context).colorScheme.primary),
+                          const SizedBox(height: 8),
+                          const Text('Smart Pages', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w900)),
+                          const SizedBox(height: 4),
+                          Text('Planners, study notes and trackers', textAlign: TextAlign.center, style: Theme.of(context).textTheme.labelSmall),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }
+              final template = PageTemplate.values[index - 1];
               final isSelected = template.name == _pageData['template']?.toString();
               return InkWell(
                 onTap: () => Navigator.pop(sheetContext, template),
@@ -4928,6 +5449,110 @@ class _EditorV2PageState extends State<EditorV2Page>
     _pastePage(insertAfter: index);
   }
 
+  Future<void> _confirmDeletePage(int index) async {
+    if (index < 0 || index >= _pages.length) return;
+    if (_pages[index]['locked'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Unlock this page before deleting it.')));
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete page?'),
+        content: Text('Delete page ${index + 1}?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(dialogContext).colorScheme.error),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) _deletePage(index);
+  }
+
+  Future<void> _clearPageWithConfirmation(int index) async {
+    if (index < 0 || index >= _pages.length) return;
+    final page = _pages[index];
+    if (page['locked'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Unlock this page before clearing it.')));
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Clear page content?'),
+        content: const Text('Remove all handwriting, images and text? The paper template will remain.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(dialogContext).colorScheme.error),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Clear page'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    _pushUndo();
+    final rawBoxes = page['textBoxes'];
+    if (rawBoxes is List) {
+      for (final item in rawBoxes.whereType<Map>()) {
+        final id = item['id']?.toString();
+        if (id != null) _textControllers.remove(id)?.dispose();
+      }
+    }
+    page['strokes'] = <Object?>[];
+    page['images'] = <Object?>[];
+    page['textBoxes'] = <Object?>[];
+    setState(() {
+      if (index == _page) _clearSelectionIds();
+      _lassoRect = null;
+    });
+    _scheduleSave();
+  }
+
+  Future<void> _sharePage(int index) async {
+    if (index < 0 || index >= _pages.length) return;
+    if (_pages[index]['locked'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Unlock this page before sharing it.')));
+      return;
+    }
+    final originalPage = _page;
+    try {
+      await _flushSave();
+      if (!mounted) return;
+      setState(() => _page = index);
+      await WidgetsBinding.instance.endOfFrame;
+      final object = _pageCaptureKey.currentContext?.findRenderObject();
+      if (object is! RenderRepaintBoundary) throw StateError('Page ${index + 1} is not ready to share.');
+      final image = await object.toImage(pixelRatio: 1.5);
+      try {
+        final data = await image.toByteData(format: ui.ImageByteFormat.png);
+        if (data == null) throw StateError('Could not capture page ${index + 1}.');
+        final bytes = data.buffer.asUint8List();
+        final filename = '${_safeFilename(_title.text)}-page-${index + 1}.png';
+        if (kIsWeb) {
+          await FilePicker.saveFile(fileName: filename, bytes: bytes, mimeType: 'image/png');
+        } else {
+          await SharePlus.instance.share(ShareParams(
+            title: '${_title.text} — Page ${index + 1}',
+            files: <XFile>[XFile.fromData(bytes, mimeType: 'image/png', name: filename)],
+          ));
+        }
+      } finally {
+        image.dispose();
+      }
+    } catch (error, stackTrace) {
+      debugPrint('[Snote][EditorV2] page share failed: $error\n$stackTrace');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not share page: $error')));
+    } finally {
+      if (mounted) setState(() => _page = EditorV2DocumentCodec.clampPage(originalPage, _pages.length));
+    }
+  }
+
   void _deletePage(int index) {
     if (index < 0 || index >= _pages.length) return;
     if (_pages[index]['locked'] == true) {
@@ -4971,6 +5596,23 @@ class _EditorV2PageState extends State<EditorV2Page>
     _scheduleSave();
   }
 
+  void _warmAdjacentPdfPages(int pageIndex) {
+    // Render only the neighboring PDF pages after the active page is visible.
+    // Current-page rendering stays demand-driven so navigation is not blocked.
+    for (final index in <int>[pageIndex - 1, pageIndex + 1]) {
+      if (index < 0 || index >= _pages.length) continue;
+      final record = _pages[index];
+      if (record['pdfLazyRender'] != true) continue;
+      final assetId = record['pdfSourceAssetId']?.toString();
+      final sourcePage = (record['pdfSourcePage'] as num?)?.toInt();
+      if (assetId == null || assetId.isEmpty || sourcePage == null) continue;
+      unawaited(_lazyPdfPageRaster(assetId, sourcePage).catchError((Object error) {
+        debugPrint('[Snote][PDF] adjacent-page prefetch failed: $error');
+        return null;
+      }));
+    }
+  }
+
   void _goToPage(int index) {
     if (index < 0 || index >= _pages.length || index == _page) return;
     setState(() {
@@ -4979,6 +5621,9 @@ class _EditorV2PageState extends State<EditorV2Page>
       _lassoRect = null;
     });
     _scheduleSave();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _page == index) _warmAdjacentPdfPages(index);
+    });
   }
 
   void _toggleBookmark() {
@@ -5240,6 +5885,11 @@ class _EditorV2PageState extends State<EditorV2Page>
   Future<void> _toggleFloatingToolbar() async {
     setState(() => _floatingToolbar = !_floatingToolbar);
     await _settings.setBool('editorV2FloatingToolbar', _floatingToolbar);
+  }
+
+  Future<void> _toggleCompactFloatingToolbar() async {
+    setState(() => _compactFloatingToolbar = !_compactFloatingToolbar);
+    await _settings.setBool('editorV2CompactFloatingToolbar', _compactFloatingToolbar);
   }
 
   Future<void> _toggleFavoritesOrientation() async {
@@ -5626,7 +6276,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       case 'addPage':
         _addPage();
       case 'text':
-        _addTextBox();
+        break;
       case 'image':
         unawaited(_addImage());
       case 'clipboardImage':
@@ -5637,10 +6287,14 @@ class _EditorV2PageState extends State<EditorV2Page>
         unawaited(_showClipboardHistory());
       case 'noteSwitcher':
         unawaited(_openNoteSwitcher());
+      case 'splitView':
+        unawaited(_openMultiSplitWorkspace());
       case 'toggleNoteSwitcher':
         unawaited(_toggleNoteSwitcher());
       case 'calculator':
         _openCalculator();
+      case 'toolbarLayout':
+        unawaited(_showToolbarLayoutSettings());
       case 'calculatorSettings':
         unawaited(_specialToolSettingsSheet('calculator'));
       case 'screenshotSettings':
@@ -5655,10 +6309,14 @@ class _EditorV2PageState extends State<EditorV2Page>
         unawaited(_exportPdf());
       case 'template':
         unawaited(_chooseTemplate());
+      case 'smartPages':
+        unawaited(_showSmartPagesLibrary());
       case 'bookmarks':
         unawaited(_showBookmarks());
       case 'timer':
-        unawaited(_startStudyTimer());
+        setState(() => _showFloatingTimer = true);
+      case 'webSearch':
+        unawaited(SnoteWebSearchPanel.show(context));
       case 'favorite':
         unawaited(_addFavoritePen());
       case 'dockTop':
@@ -5671,6 +6329,8 @@ class _EditorV2PageState extends State<EditorV2Page>
         unawaited(_setToolbarDock('right'));
       case 'float':
         unawaited(_toggleFloatingToolbar());
+      case 'compactToolbar':
+        unawaited(_toggleCompactFloatingToolbar());
       case 'favoritesOrientation':
         unawaited(_toggleFavoritesOrientation());
       case 'favoritesShowcase':
@@ -5776,6 +6436,116 @@ class _EditorV2PageState extends State<EditorV2Page>
     );
   }
 
+  Future<void> _showToolbarLayoutSettings() async {
+    var length = _toolbarLength, thickness = _toolbarThickness;
+    var ml = _toolbarMarginLeft, mt = _toolbarMarginTop;
+    var mr = _toolbarMarginRight, mb = _toolbarMarginBottom;
+    var pl = _toolbarPaddingLeft, pt = _toolbarPaddingTop;
+    var pr = _toolbarPaddingRight, pb = _toolbarPaddingBottom;
+    var locked = _toolbarDimensionsLocked;
+    final result = await showDialog<Map<String, Object?>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          Widget slider(String label, double value, double min, double max,
+              ValueChanged<double> onChanged, {int divisions = 24}) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Expanded(child: Text(label)),
+                  Text(value.toStringAsFixed(0), style: Theme.of(context).textTheme.labelMedium),
+                ]),
+                Slider(
+                  value: value.clamp(min, max).toDouble(),
+                  min: min, max: max, divisions: divisions,
+                  onChanged: locked ? null : onChanged,
+                ),
+              ],
+            );
+          }
+          return AlertDialog(
+            title: const Text('Toolbar size & spacing'),
+            content: SizedBox(
+              width: 440,
+              child: SingleChildScrollView(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Lock toolbar dimensions'),
+                    subtitle: const Text('Prevents accidental layout adjustments.'),
+                    value: locked,
+                    onChanged: (value) => setDialogState(() => locked = value),
+                  ),
+                  slider('Horizontal length', length, 180, 900, (v) => setDialogState(() => length = v), divisions: 36),
+                  slider('Vertical width / thickness', thickness, 28, 96, (v) => setDialogState(() => thickness = v), divisions: 34),
+                  const Divider(),
+                  Text('Outer margin by direction', style: Theme.of(context).textTheme.titleSmall),
+                  slider('Left margin', ml, 0, 24, (v) => setDialogState(() => ml = v)),
+                  slider('Top margin', mt, 0, 24, (v) => setDialogState(() => mt = v)),
+                  slider('Right margin', mr, 0, 24, (v) => setDialogState(() => mr = v)),
+                  slider('Bottom margin', mb, 0, 24, (v) => setDialogState(() => mb = v)),
+                  const Divider(),
+                  Text('Inner padding by direction', style: Theme.of(context).textTheme.titleSmall),
+                  slider('Left padding', pl, 0, 20, (v) => setDialogState(() => pl = v)),
+                  slider('Top padding', pt, 0, 20, (v) => setDialogState(() => pt = v)),
+                  slider('Right padding', pr, 0, 20, (v) => setDialogState(() => pr = v)),
+                  slider('Bottom padding', pb, 0, 20, (v) => setDialogState(() => pb = v)),
+                ]),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+              TextButton(
+                onPressed: () => setDialogState(() {
+                  length = 360; thickness = 34;
+                  ml = 0; mt = 0; mr = 0; mb = 0;
+                  pl = 2; pt = 1; pr = 2; pb = 1;
+                }),
+                child: const Text('Reset'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, <String, Object?>{
+                  'length': length, 'thickness': thickness,
+                  'ml': ml, 'mt': mt, 'mr': mr, 'mb': mb,
+                  'pl': pl, 'pt': pt, 'pr': pr, 'pb': pb, 'locked': locked,
+                }),
+                child: const Text('Apply'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      _toolbarLength = (result['length'] as num).toDouble();
+      _toolbarThickness = (result['thickness'] as num).toDouble();
+      _toolbarMarginLeft = (result['ml'] as num).toDouble();
+      _toolbarMarginTop = (result['mt'] as num).toDouble();
+      _toolbarMarginRight = (result['mr'] as num).toDouble();
+      _toolbarMarginBottom = (result['mb'] as num).toDouble();
+      _toolbarPaddingLeft = (result['pl'] as num).toDouble();
+      _toolbarPaddingTop = (result['pt'] as num).toDouble();
+      _toolbarPaddingRight = (result['pr'] as num).toDouble();
+      _toolbarPaddingBottom = (result['pb'] as num).toDouble();
+      _toolbarDimensionsLocked = result['locked'] == true;
+    });
+    await Future.wait([
+      _settings.setDouble('editorV2ToolbarLength', _toolbarLength),
+      _settings.setDouble('editorV2ToolbarThickness', _toolbarThickness),
+      _settings.setDouble('editorV2ToolbarMarginLeft', _toolbarMarginLeft),
+      _settings.setDouble('editorV2ToolbarMarginTop', _toolbarMarginTop),
+      _settings.setDouble('editorV2ToolbarMarginRight', _toolbarMarginRight),
+      _settings.setDouble('editorV2ToolbarMarginBottom', _toolbarMarginBottom),
+      _settings.setDouble('editorV2ToolbarPaddingLeft', _toolbarPaddingLeft),
+      _settings.setDouble('editorV2ToolbarPaddingTop', _toolbarPaddingTop),
+      _settings.setDouble('editorV2ToolbarPaddingRight', _toolbarPaddingRight),
+      _settings.setDouble('editorV2ToolbarPaddingBottom', _toolbarPaddingBottom),
+      _settings.setBool('editorV2ToolbarDimensionsLocked', _toolbarDimensionsLocked),
+    ]);
+  }
+
   Widget _buildToolbar({required bool vertical}) {
     Widget action({
       required String tooltip,
@@ -5800,7 +6570,6 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
     final actions = <Widget>[
       action(tooltip: _panMode ? 'Exit pan mode' : 'Pan / zoom', icon: _panMode ? Icons.pan_tool : Icons.pan_tool_outlined, onPressed: () => setState(() => _panMode = !_panMode)),
-      action(tooltip: _textMode ? 'Handwriting mode' : 'Rich text mode', icon: _textMode ? Icons.draw_rounded : Icons.text_fields_rounded, onPressed: () => setState(() { _textMode = !_textMode; _scheduleSave(); })),
       action(
         tooltip: 'Color palette & opacity',
         icon: Icons.palette_outlined,
@@ -5808,7 +6577,6 @@ class _EditorV2PageState extends State<EditorV2Page>
         captureAnchor: true,
         onPressed: () => unawaited(_strokeSettings(null, _toolSettingsAnchor)),
       ),
-      action(tooltip: 'Text box', icon: Icons.text_fields_rounded, onPressed: _addTextBox),
       action(tooltip: 'Capture screen to canvas', icon: Icons.screenshot_monitor_rounded, onPressed: () => unawaited(_captureScreenToCanvas())),
       if (_hasPdfBackgroundPages)
         action(
@@ -5823,7 +6591,6 @@ class _EditorV2PageState extends State<EditorV2Page>
       action(tooltip: 'Selection clipboard history', icon: Icons.content_paste_go_rounded, onPressed: () => unawaited(_showClipboardHistory())),
       action(tooltip: 'Shape box', icon: Icons.category_outlined, onPressed: () => _openToolPicker(initialCategory: 'Shapes & diagrams')),
       action(tooltip: 'Sticker library', icon: Icons.emoji_emotions_outlined, onPressed: () => unawaited(_addSticker())),
-      action(tooltip: 'All tools / categories', icon: Icons.apps_rounded, onPressed: _openToolPicker),
     ];
     final quickButtons = _toolKeysForLocation('toolbar')
         .map((key) => Padding(
@@ -5832,6 +6599,15 @@ class _EditorV2PageState extends State<EditorV2Page>
             ))
         .toList();
     final children = <Widget>[
+      if (_floatingToolbar || _fullScreenMode)
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onPanUpdate: (details) => setState(() => _floatingOffset += details.delta),
+          child: Tooltip(
+            message: 'Drag toolbar from here',
+            child: SizedBox(width: 28, height: 28, child: Icon(Icons.drag_indicator_rounded, size: 18, color: Theme.of(context).colorScheme.primary)),
+          ),
+        ),
       ...actions,
       if (!vertical) const VerticalDivider(width: 5, indent: 6, endIndent: 6),
       ...quickButtons,
@@ -5842,7 +6618,6 @@ class _EditorV2PageState extends State<EditorV2Page>
         constraints: const BoxConstraints.tightFor(width: 28, height: 28),
         onSelected: _onMenuSelected,
         itemBuilder: (_) => <PopupMenuEntry<String>>[
-          PopupMenuItem(value: 'text', child: Text('Insert text box')),
           PopupMenuItem(value: 'image', child: Text('Insert image from file')),
           if (_specialToolLocations('screenshot').isNotEmpty)
             PopupMenuItem(value: 'clipboardImage', child: Text('Paste screenshot from clipboard')),
@@ -5850,6 +6625,8 @@ class _EditorV2PageState extends State<EditorV2Page>
           PopupMenuItem(value: 'clipboardHistory', enabled: _selectionClipboardHistory.isNotEmpty, child: Text('Clipboard history (last 4)')),
           if (_specialToolLocations('calculator').isNotEmpty)
             PopupMenuItem(value: 'calculator', child: Text('Scientific calculator')),
+          const PopupMenuItem(value: 'toolbarLayout', child: Text('Toolbar size, margins & padding')),
+          const PopupMenuItem(value: 'smartPages', child: Text('Smart Pages library (200+)')),
           const PopupMenuItem(value: 'calculatorSettings', child: Text('Calculator placement / settings')),
           const PopupMenuItem(value: 'screenshotSettings', child: Text('Screenshot tool placement / settings')),
           PopupMenuItem(value: 'sticker', child: Text('Sticker library')),
@@ -5859,11 +6636,13 @@ class _EditorV2PageState extends State<EditorV2Page>
           PopupMenuItem(value: 'export', child: Text('Export pages to PDF')),
           PopupMenuItem(value: 'bookmarks', child: Text('Bookmarks')),
           PopupMenuItem(value: 'timer', child: Text('Study timer')),
+          PopupMenuItem(value: 'splitView', child: Text('Open multi-split notes')),
           PopupMenuDivider(),
           PopupMenuItem(value: 'dockTop', child: Text('Dock toolbar to top')),
           PopupMenuItem(value: 'dockLeft', child: Text('Dock toolbar to left')),
           PopupMenuItem(value: 'dockRight', child: Text('Dock toolbar to right')),
           PopupMenuItem(value: 'float', child: Text('Toggle floating toolbar')),
+          PopupMenuItem(value: 'compactToolbar', child: Text(_compactFloatingToolbar ? 'Disable compact floating toolbar' : 'Enable compact floating toolbar')),
           PopupMenuItem(value: 'favoritesShowcase', child: Text('Show / hide favorite pen case')),
           PopupMenuItem(value: 'favoritesOrientation', child: Text('Rotate pen case')),
           PopupMenuItem(value: 'pageSettings', child: Text('Note page and editor settings')),
@@ -5876,14 +6655,31 @@ class _EditorV2PageState extends State<EditorV2Page>
         icon: const Icon(Icons.more_horiz_rounded, size: 20),
       ),
     ];
-    return Material(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: .97),
-      elevation: 2,
-      borderRadius: BorderRadius.circular(vertical ? 12 : 10),
-      child: SingleChildScrollView(
-        padding: EdgeInsets.symmetric(horizontal: vertical ? 1 : 2, vertical: vertical ? 2 : 1),
-        scrollDirection: vertical ? Axis.vertical : Axis.horizontal,
-        child: vertical ? Column(mainAxisSize: MainAxisSize.min, children: children) : Row(mainAxisSize: MainAxisSize.min, children: children),
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final compactWidth = vertical
+        ? _toolbarThickness.clamp(28.0, 96.0).toDouble()
+        : math.min(
+            math.max(1.0, screenWidth - 12),
+            math.min(_toolbarLength, actions.length * 28.0 + quickButtons.length * 30.0 + 69.0),
+          );
+    return Container(
+      margin: (_compactFloatingToolbar || _fullScreenMode)
+          ? EdgeInsets.zero
+          : EdgeInsets.fromLTRB(_toolbarMarginLeft, _toolbarMarginTop, _toolbarMarginRight, _toolbarMarginBottom),
+      child: Material(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: _compactFloatingToolbar ? .78 : .97),
+      elevation: _compactFloatingToolbar ? 1 : 2,
+      borderRadius: BorderRadius.circular(_compactFloatingToolbar ? 7 : (vertical ? 12 : 10)),
+      child: SizedBox(
+        width: compactWidth,
+        child: SingleChildScrollView(
+          padding: (_compactFloatingToolbar || _fullScreenMode)
+              ? EdgeInsets.zero
+              : EdgeInsets.fromLTRB(_toolbarPaddingLeft, _toolbarPaddingTop, _toolbarPaddingRight, _toolbarPaddingBottom),
+          scrollDirection: vertical ? Axis.vertical : Axis.horizontal,
+          child: vertical ? Column(mainAxisSize: MainAxisSize.min, children: children) : Row(mainAxisSize: MainAxisSize.min, children: children),
+        ),
+      ),
       ),
     );
   }
@@ -5927,6 +6723,33 @@ class _EditorV2PageState extends State<EditorV2Page>
       ...favoriteChips,
     ];
     final screen = MediaQuery.sizeOf(context);
+    if (_favoriteCollapsed) {
+      final dockLeft = _favoriteOffset.dx < screen.width / 2;
+      return Positioned(
+        left: dockLeft ? 0 : null,
+        right: dockLeft ? null : 0,
+        top: _favoriteOffset.dy.clamp(72.0, math.max(72.0, screen.height - 80)).toDouble(),
+        child: Material(
+          elevation: 7,
+          color: Theme.of(context).colorScheme.primaryContainer,
+          borderRadius: BorderRadius.horizontal(
+            left: Radius.circular(dockLeft ? 0 : 14),
+            right: Radius.circular(dockLeft ? 14 : 0),
+          ),
+          child: InkWell(
+            onTap: () {
+              setState(() => _favoriteCollapsed = false);
+              unawaited(_settings.setBool('editorV2FavoriteCollapsed', false));
+            },
+            child: const SizedBox(
+              width: 30,
+              height: 68,
+              child: Tooltip(message: 'Expand favorite pens and tools', child: Icon(Icons.favorite_rounded)),
+            ),
+          ),
+        ),
+      );
+    }
     return Positioned(
       left: _favoriteOffset.dx.clamp(0, math.max(0, screen.width - (_favoritesVertical ? 62 : 120))).toDouble(),
       top: _favoriteOffset.dy.clamp(0, math.max(0, screen.height - 120)).toDouble(),
@@ -5967,7 +6790,22 @@ class _EditorV2PageState extends State<EditorV2Page>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.drag_indicator_rounded, size: 14),
+                  IconButton(
+                    tooltip: 'Collapse pen showcase to screen edge',
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(width: 22, height: 22),
+                    onPressed: () {
+                      final dockLeft = _favoriteOffset.dx < screen.width / 2;
+                      setState(() {
+                        _favoriteCollapsed = true;
+                        _favoriteOffset = Offset(dockLeft ? 0 : screen.width - 30, _favoriteOffset.dy);
+                        unawaited(_settings.setBool('editorV2FavoriteCollapsed', true));
+                      });
+                      unawaited(_settings.setString('editorV2FavoriteDock', dockLeft ? 'left' : 'right'));
+                    },
+                    icon: const Icon(Icons.favorite_rounded, size: 15),
+                  ),
                   const SizedBox(width: 3),
                   InkWell(
                     onTap: _toggleFavoritesOrientation,
@@ -6019,6 +6857,33 @@ class _EditorV2PageState extends State<EditorV2Page>
     final screen = MediaQuery.sizeOf(context);
     final width = _calculatorWidth.clamp(270.0, math.max(270.0, screen.width - 16)).toDouble();
     final height = _calculatorHeight.clamp(360.0, math.max(360.0, screen.height - 32)).toDouble();
+    if (_calculatorCollapsed) {
+      final dockLeft = _calculatorOffset.dx < screen.width / 2;
+      return Positioned(
+        left: dockLeft ? 0 : null,
+        right: dockLeft ? null : 0,
+        top: _calculatorOffset.dy.clamp(8.0, math.max(8.0, screen.height - 82)).toDouble(),
+        child: Material(
+          elevation: 7,
+          color: Theme.of(context).colorScheme.primaryContainer,
+          borderRadius: BorderRadius.horizontal(
+            left: Radius.circular(dockLeft ? 0 : 14),
+            right: Radius.circular(dockLeft ? 14 : 0),
+          ),
+          child: InkWell(
+            onTap: () {
+              setState(() => _calculatorCollapsed = false);
+              unawaited(_settings.setBool('editorV2CalculatorCollapsed', false));
+            },
+            child: const SizedBox(
+              width: 32,
+              height: 72,
+              child: Tooltip(message: 'Expand calculator', child: Icon(Icons.calculate_rounded)),
+            ),
+          ),
+        ),
+      );
+    }
     return Positioned(
       left: _calculatorOffset.dx.clamp(0, math.max(0, screen.width - width)).toDouble(),
       top: _calculatorOffset.dy.clamp(0, math.max(0, screen.height - height)).toDouble(),
@@ -6030,6 +6895,14 @@ class _EditorV2PageState extends State<EditorV2Page>
           _calculatorHeight = size.height;
         }),
         onMove: (delta) => setState(() => _calculatorOffset += delta),
+        onCollapse: () {
+          final dockLeft = _calculatorOffset.dx < screen.width / 2;
+          setState(() {
+            _calculatorCollapsed = true;
+            _calculatorOffset = Offset(dockLeft ? 0 : screen.width - 32, _calculatorOffset.dy);
+          });
+          unawaited(_settings.setBool('editorV2CalculatorCollapsed', true));
+        },
         onClose: () => setState(() => _calculatorVisible = false),
       ),
     );
@@ -6048,7 +6921,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           final bytes = snapshot.data;
           if (bytes != null && bytes.isNotEmpty) {
             return Image.memory(bytes, fit: BoxFit.fill,
-              filterQuality: thumbnail ? FilterQuality.low : FilterQuality.medium,
+              filterQuality: thumbnail ? FilterQuality.low : FilterQuality.high,
               errorBuilder: (_, error, stackTrace) => const ColoredBox(color: Color(0xfffff8e7), child: Center(child: Icon(Icons.broken_image_outlined))),
             );
           }
@@ -6148,6 +7021,109 @@ class _EditorV2PageState extends State<EditorV2Page>
     return Stack(clipBehavior: Clip.none, children: children);
   }
 
+  void _updateTextBoxField(String id, String key, Object? value) {
+    final raw = _pageData['textBoxes'];
+    if (raw is! List) return;
+    for (final item in raw.whereType<Map>()) {
+      if (item['id']?.toString() == id) {
+        item[key] = value;
+        return;
+      }
+    }
+  }
+
+  List<Map<String, Object?>> _decodeTextFormatRanges(Object? raw) {
+    if (raw is! List) return <Map<String, Object?>>[];
+    return raw.whereType<Map>().map((range) => range.map<String, Object?>(
+      (key, value) => MapEntry(key.toString(), value),
+    )).where((range) => range['start'] is num && range['end'] is num).toList();
+  }
+
+  void _applyTextBoxFormatSelection(
+    String id,
+    String key,
+    TextEditingController controller,
+  ) {
+    final selection = controller.selection;
+    if (!selection.isValid || selection.isCollapsed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select some text first to apply formatting.')),
+      );
+      return;
+    }
+    final raw = _pageData['textBoxes'];
+    if (raw is! List) return;
+    for (final item in raw.whereType<Map>()) {
+      if (item['id']?.toString() != id) continue;
+      final ranges = _decodeTextFormatRanges(item['formatRanges']);
+      bool? current;
+      for (final range in ranges) {
+        final start = (range['start'] as num).toInt();
+        final end = (range['end'] as num).toInt();
+        if (start <= selection.start && end >= selection.end && range.containsKey(key)) {
+          current = range[key] == true;
+        }
+      }
+      ranges.add(<String, Object?>{
+        'start': selection.start,
+        'end': selection.end,
+        key: current != true,
+      });
+      item['formatRanges'] = ranges;
+      if (controller is _FormattedTextEditingController) {
+        controller.formatRanges = ranges;
+      }
+      setState(() {});
+      _scheduleSave();
+      return;
+    }
+  }
+
+  void _adjustTextBoxFontSize(String id, double delta) {
+    final raw = _pageData['textBoxes'];
+    if (raw is! List) return;
+    for (final item in raw.whereType<Map>()) {
+      if (item['id']?.toString() == id) {
+        final size = (item['fontSize'] as num?)?.toDouble() ?? 18.0;
+        item['fontSize'] = (size + delta).clamp(8.0, 96.0).toDouble();
+        setState(() {});
+        _scheduleSave();
+        return;
+      }
+    }
+  }
+
+  void _setTextBoxAlignment(String id, String alignment) {
+    final raw = _pageData['textBoxes'];
+    if (raw is! List) return;
+    for (final item in raw.whereType<Map>()) {
+      if (item['id']?.toString() == id) {
+        item['textAlign'] = alignment;
+        setState(() {});
+        _scheduleSave();
+        return;
+      }
+    }
+  }
+
+  void _resetTextBoxFormatting(String id) {
+    final raw = _pageData['textBoxes'];
+    if (raw is! List) return;
+    for (final item in raw.whereType<Map>()) {
+      if (item['id']?.toString() == id) {
+        for (final key in const ['bold', 'italic', 'underline', 'strikethrough']) {
+          item[key] = false;
+        }
+        item['fontSize'] = 18.0;
+        item['textAlign'] = 'left';
+        item['formatRanges'] = <Map<String, Object?>>[];
+        setState(() {});
+        _scheduleSave();
+        return;
+      }
+    }
+  }
+
   Widget _buildTextBoxes(Map<String, Object?> page) {
     final raw = page['textBoxes'];
     if (raw is! List) return const SizedBox.shrink();
@@ -6158,8 +7134,12 @@ class _EditorV2PageState extends State<EditorV2Page>
       if (id.isEmpty) continue;
       final controller = _textControllers.putIfAbsent(
         id,
-        () => TextEditingController(text: box['text']?.toString() ?? ''),
+        () => _FormattedTextEditingController(text: box['text']?.toString() ?? ''),
       );
+      final formatRanges = _decodeTextFormatRanges(box['formatRanges']);
+      if (controller is _FormattedTextEditingController) {
+        controller.formatRanges = formatRanges;
+      }
       final x = (box['x'] as num?)?.toDouble() ?? .12;
       final y = (box['y'] as num?)?.toDouble() ?? .12;
       final width = (box['width'] as num?)?.toDouble() ?? .68;
@@ -6174,15 +7154,8 @@ class _EditorV2PageState extends State<EditorV2Page>
         child: IgnorePointer(
           ignoring: _tool == CanvasTool.lasso,
           child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: Colors.transparent,
-            border: Border.all(
-              color: _selectedTextBoxIds.contains(id)
-                  ? Theme.of(context).colorScheme.primary.withValues(alpha: .55)
-                  : Colors.transparent,
-            ),
-            borderRadius: BorderRadius.circular(4),
-          ),
+          // Text boxes and stickers stay transparent; selection is shown by handles.
+          decoration: snoteTransparentTextBoxDecoration,
           child: Stack(
             children: [
               Positioned.fill(
@@ -6191,12 +7164,54 @@ class _EditorV2PageState extends State<EditorV2Page>
                   maxLines: null,
                   expands: true,
                   textAlignVertical: TextAlignVertical.top,
-                  style: TextStyle(fontSize: fontSize, color: color, height: 1.15),
+                  textAlign: switch (box['textAlign']?.toString()) {
+                    'center' => TextAlign.center,
+                    'right' => TextAlign.right,
+                    'justify' => TextAlign.justify,
+                    _ => TextAlign.start,
+                  },
+                  style: TextStyle(
+                    fontSize: fontSize,
+                    color: color,
+                    height: 1.15,
+                    fontWeight: box['bold'] == true ? FontWeight.bold : FontWeight.normal,
+                    fontStyle: box['italic'] == true ? FontStyle.italic : FontStyle.normal,
+                    decoration: TextDecoration.combine(<TextDecoration>[
+                      if (box['underline'] == true) TextDecoration.underline,
+                      if (box['strikethrough'] == true) TextDecoration.lineThrough,
+                    ]),
+                  ),
+                  contextMenuBuilder: (context, editableTextState) {
+                    final baseItems = editableTextState.contextMenuButtonItems;
+                    return AdaptiveTextSelectionToolbar.buttonItems(
+                      anchors: editableTextState.contextMenuAnchors,
+                      buttonItems: <ContextMenuButtonItem>[
+                        ...baseItems,
+                        ContextMenuButtonItem(label: 'Bold selection', onPressed: () { editableTextState.hideToolbar(); _applyTextBoxFormatSelection(id, 'bold', controller); }),
+                        ContextMenuButtonItem(label: 'Italic selection', onPressed: () { editableTextState.hideToolbar(); _applyTextBoxFormatSelection(id, 'italic', controller); }),
+                        ContextMenuButtonItem(label: 'Underline selection', onPressed: () { editableTextState.hideToolbar(); _applyTextBoxFormatSelection(id, 'underline', controller); }),
+                        ContextMenuButtonItem(label: 'Strikethrough selection', onPressed: () { editableTextState.hideToolbar(); _applyTextBoxFormatSelection(id, 'strikethrough', controller); }),
+                        ContextMenuButtonItem(label: 'Increase text size', onPressed: () { editableTextState.hideToolbar(); _adjustTextBoxFontSize(id, 2); }),
+                        ContextMenuButtonItem(label: 'Decrease text size', onPressed: () { editableTextState.hideToolbar(); _adjustTextBoxFontSize(id, -2); }),
+                        ContextMenuButtonItem(label: 'Align center', onPressed: () { editableTextState.hideToolbar(); _setTextBoxAlignment(id, 'center'); }),
+                        ContextMenuButtonItem(label: 'Align left', onPressed: () { editableTextState.hideToolbar(); _setTextBoxAlignment(id, 'left'); }),
+                        ContextMenuButtonItem(label: 'Align right', onPressed: () { editableTextState.hideToolbar(); _setTextBoxAlignment(id, 'right'); }),
+                        ContextMenuButtonItem(label: 'Justify text', onPressed: () { editableTextState.hideToolbar(); _setTextBoxAlignment(id, 'justify'); }),
+                        ContextMenuButtonItem(label: 'Reset formatting', onPressed: () { editableTextState.hideToolbar(); _resetTextBoxFormatting(id); }),
+                      ],
+                    );
+                  },
                   onChanged: (value) {
-                    box['text'] = value;
+                    if (controller is _FormattedTextEditingController) {
+                      controller.reconcileText(value);
+                      _updateTextBoxField(id, 'formatRanges', controller.formatRanges);
+                    }
+                    _updateTextBoxField(id, 'text', value);
                     _scheduleSave();
                   },
                   decoration: InputDecoration(
+                    filled: false,
+                    fillColor: Colors.transparent,
                     hintText: box['sticker'] == true ? '' : 'Write text…',
                     isDense: true,
                     border: InputBorder.none,
@@ -6406,6 +7421,8 @@ class _EditorV2PageState extends State<EditorV2Page>
                                     ),
                                     child: PopupMenuButton<String>(
                                       tooltip: 'Page ${index + 1} options',
+                                      useRootNavigator: true,
+                                      position: PopupMenuPosition.under,
                                       padding: EdgeInsets.zero,
                                       constraints: const BoxConstraints.tightFor(width: 34, height: 32),
                                       iconSize: 18,
@@ -6427,8 +7444,12 @@ class _EditorV2PageState extends State<EditorV2Page>
                                             _pastePage(insertAfter: index);
                                           case 'duplicate':
                                             _duplicatePage(index);
+                                          case 'clear':
+                                            unawaited(_clearPageWithConfirmation(index));
+                                          case 'share':
+                                            unawaited(_sharePage(index));
                                           case 'delete':
-                                            _deletePage(index);
+                                            unawaited(_confirmDeletePage(index));
                                         }
                                       },
                                       itemBuilder: (_) => <PopupMenuEntry<String>>[
@@ -6441,7 +7462,9 @@ class _EditorV2PageState extends State<EditorV2Page>
                                         const PopupMenuItem(value: 'copy', child: ListTile(dense: true, leading: Icon(Icons.copy_rounded), title: Text('Copy page'))),
                                         PopupMenuItem(value: 'paste', enabled: _pageClipboard != null, child: const ListTile(dense: true, leading: Icon(Icons.content_paste_rounded), title: Text('Paste after'))),
                                         const PopupMenuItem(value: 'duplicate', child: ListTile(dense: true, leading: Icon(Icons.control_point_duplicate_rounded), title: Text('Duplicate'))),
-                                        const PopupMenuItem(value: 'delete', child: ListTile(dense: true, leading: Icon(Icons.delete_outline_rounded), title: Text('Delete page'))),
+                                        const PopupMenuItem(value: 'clear', child: ListTile(dense: true, leading: Icon(Icons.cleaning_services_outlined), title: Text('Clear page…'))),
+                                        const PopupMenuItem(value: 'share', child: ListTile(dense: true, leading: Icon(Icons.share_outlined), title: Text('Share page'))),
+                                        const PopupMenuItem(value: 'delete', child: ListTile(dense: true, leading: Icon(Icons.delete_outline_rounded), title: Text('Delete page…'))),
                                       ],
                                       icon: const Icon(Icons.more_horiz_rounded),
                                     ),
@@ -6511,9 +7534,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                       focusNode: _quillFocus,
                       scrollController: _quillScroll,
                       controller: _quill,
-                      config: QuillEditorConfig(
-                        placeholder: 'Start writing rich text…',
-                      ),
+                      config: const QuillEditorConfig(placeholder: ''),
                     ),
                   ),
                 ),
@@ -6598,6 +7619,22 @@ class _EditorV2PageState extends State<EditorV2Page>
                 ),
               ),
               Positioned(
+                left: (_selectionBounds()!.center.dx + 14).clamp(0, _pageWidth - 24).toDouble(),
+                top: (_selectionBounds()!.top - 12).clamp(0, _pageHeight - 24).toDouble(),
+                child: Tooltip(
+                  message: 'Duplicate selection',
+                  child: GestureDetector(
+                    onTap: () => _pasteStrokes(duplicate: true),
+                    child: Material(
+                      color: Theme.of(context).colorScheme.secondary,
+                      shape: const CircleBorder(),
+                      elevation: 3,
+                      child: const SizedBox(width: 22, height: 22, child: Icon(Icons.control_point_duplicate_rounded, size: 13, color: Colors.white)),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
                 left: _selectionBounds()!.center.dx - 11,
                 top: _selectionBounds()!.top - 12,
                 child: Tooltip(
@@ -6615,27 +7652,39 @@ class _EditorV2PageState extends State<EditorV2Page>
                   ),
                 ),
               ),
-              Positioned(
-                left: (_selectionBounds()!.right - 7).clamp(0, _pageWidth - 18).toDouble(),
-                top: (_selectionBounds()!.bottom - 7).clamp(0, _pageHeight - 18).toDouble(),
-                child: Tooltip(
-                  message: 'Drag corner to resize selection',
-                  child: GestureDetector(
-                    onPanStart: (_) => _startSelectionTransform(resize: true),
-                    onPanUpdate: (details) => _updateSelectionTransform(details.delta),
-                    onPanEnd: (_) => _finishSelectionTransform(),
-                    child: Container(
-                      width: 15,
-                      height: 15,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary,
-                        border: Border.all(color: Colors.white, width: 1.5),
-                        borderRadius: BorderRadius.circular(4),
+              ...<({Offset position, Offset direction, String label})>[
+                (position: Offset(.5, 0), direction: Offset(0, -1), label: 'Resize from top'),
+                (position: Offset(.5, 1), direction: Offset(0, 1), label: 'Resize from bottom'),
+                (position: Offset(0, .5), direction: Offset(-1, 0), label: 'Resize from left'),
+                (position: Offset(1, .5), direction: Offset(1, 0), label: 'Resize from right'),
+                (position: Offset(0, 0), direction: Offset(-1, -1), label: 'Resize from top-left corner'),
+                (position: Offset(1, 0), direction: Offset(1, -1), label: 'Resize from top-right corner'),
+                (position: Offset(0, 1), direction: Offset(-1, 1), label: 'Resize from bottom-left corner'),
+                (position: Offset(1, 1), direction: Offset(1, 1), label: 'Resize from bottom-right corner'),
+              ].map((handle) {
+                final bounds = _selectionBounds()!;
+                return Positioned(
+                  left: (bounds.left + bounds.width * handle.position.dx - 7.5).clamp(0, _pageWidth - 15).toDouble(),
+                  top: (bounds.top + bounds.height * handle.position.dy - 7.5).clamp(0, _pageHeight - 15).toDouble(),
+                  child: Tooltip(
+                    message: handle.label,
+                    child: GestureDetector(
+                      onPanStart: (_) => _startSelectionTransform(resize: true, resizeDirection: handle.direction),
+                      onPanUpdate: (details) => _updateSelectionTransform(details.delta),
+                      onPanEnd: (_) => _finishSelectionTransform(),
+                      child: Container(
+                        width: 15,
+                        height: 15,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primary,
+                          border: Border.all(color: Colors.white, width: 1.5),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ),
+                );
+              }),
             ],
             if (_lassoRect != null && _selectionCount > 0 && _selectionBounds() != null)
               Positioned(
@@ -6652,7 +7701,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                       IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Copy selection', onPressed: _copySelection, icon: const Icon(Icons.copy_rounded, size: 16)),
                       IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Cut selection', onPressed: _cutSelection, icon: const Icon(Icons.content_cut_rounded, size: 16)),
                       IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Paste copied selection', onPressed: _selectionClipboard == null ? null : () => _pasteStrokes(), icon: const Icon(Icons.content_paste_rounded, size: 16)),
-                      IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Duplicate selection', onPressed: () => _pasteStrokes(duplicate: true), icon: const Icon(Icons.control_point_duplicate_rounded, size: 16)),
+
                       IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Bring selection to front', onPressed: () => _changeSelectionLayer(bringToFront: true), icon: const Icon(Icons.flip_to_front_rounded, size: 16)),
                       IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Send selection to back', onPressed: () => _changeSelectionLayer(bringToFront: false), icon: const Icon(Icons.flip_to_back_rounded, size: 16)),
                       IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 28), tooltip: 'Delete selection', onPressed: _deleteSelection, icon: const Icon(Icons.delete_outline_rounded, size: 16, color: Colors.redAccent)),
@@ -6791,8 +7840,12 @@ class _EditorV2PageState extends State<EditorV2Page>
                         unawaited(_chooseTemplate());
                       case 'format':
                         unawaited(_showPageFormatSettings());
+                      case 'clear':
+                        unawaited(_clearPageWithConfirmation(_page));
+                      case 'share':
+                        unawaited(_sharePage(_page));
                       case 'delete':
-                        _deletePage(_page);
+                        unawaited(_confirmDeletePage(_page));
                       case 'preview':
                         unawaited(_showPagePicker());
                     }
@@ -6806,8 +7859,10 @@ class _EditorV2PageState extends State<EditorV2Page>
                     PopupMenuItem(value: 'background', child: Text('Change template')),
                     PopupMenuItem(value: 'format', child: Text('Page format & background')),
                     PopupMenuItem(value: 'preview', child: Text('Page preview / reorder')),
+                    PopupMenuItem(value: 'clear', child: Text('Clear page…')),
+                    PopupMenuItem(value: 'share', child: Text('Share page')),
                     PopupMenuDivider(),
-                    PopupMenuItem(value: 'delete', child: Text('Delete page')),
+                    PopupMenuItem(value: 'delete', child: Text('Delete page…')),
                   ],
                   icon: const Icon(Icons.more_vert_rounded, size: 16),
                 ),
@@ -6944,9 +7999,15 @@ class _EditorV2PageState extends State<EditorV2Page>
                                   _movePage(index, math.min(_pages.length - 1, index + 1));
                                 case 'lock':
                                   unawaited(_togglePageLock(index));
+                                case 'clear':
+                                  Navigator.pop(sheetContext);
+                                  unawaited(_clearPageWithConfirmation(index));
+                                case 'share':
+                                  Navigator.pop(sheetContext);
+                                  unawaited(_sharePage(index));
                                 case 'delete':
                                   Navigator.pop(sheetContext);
-                                  _deletePage(index);
+                                  unawaited(_confirmDeletePage(index));
                               }
                             },
                             itemBuilder: (_) => const [
@@ -6955,6 +8016,8 @@ class _EditorV2PageState extends State<EditorV2Page>
                               PopupMenuItem(value: 'paste', child: Text('Paste copied page after this')),
                               PopupMenuItem(value: 'duplicate', child: Text('Duplicate page')),
                               PopupMenuItem(value: 'background', child: Text('Change page background')),
+                              PopupMenuItem(value: 'clear', child: Text('Clear page…')),
+                              PopupMenuItem(value: 'share', child: Text('Share page')),
                               PopupMenuItem(value: 'lock', child: Text('Lock / unlock this page')),
                               PopupMenuItem(value: 'up', child: Text('Move page up')),
                               PopupMenuItem(value: 'down', child: Text('Move page down')),
@@ -7160,23 +8223,42 @@ class _EditorV2PageState extends State<EditorV2Page>
             IconButton(
               visualDensity: VisualDensity.compact,
               tooltip: 'Show tabs / switch open notes',
-              onPressed: _openNoteSwitcher,
-              icon: const Icon(Icons.tab_rounded),
+              onPressed: _toggleTabsBar,
+              icon: Icon(_showTabsBar ? Icons.tab_rounded : Icons.tab_unselected_rounded),
             ),
           if (MediaQuery.sizeOf(context).width >= 500)
-            IconButton(
-              visualDensity: VisualDensity.compact,
-              tooltip: 'Page template',
-              onPressed: _chooseTemplate,
+            PopupMenuButton<String>(
+              tooltip: 'Page template and format',
+              onSelected: (value) {
+                if (value == 'template') {
+                  unawaited(_chooseTemplate());
+                } else if (value == 'format') {
+                  unawaited(_showPageFormatSettings());
+                } else {
+                  unawaited(_showPageAndEditorSettings());
+                }
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'template', child: Text('Choose template (with preview)')),
+                PopupMenuItem(value: 'format', child: Text('Dimensions, spacing & background')),
+                PopupMenuItem(value: 'settings', child: Text('Template colors & editor settings')),
+              ],
               icon: const Icon(Icons.grid_on_rounded),
             ),
-          if (MediaQuery.sizeOf(context).width >= 500)
+          if (_settings.getBool('showTitleBarTimer'))
             IconButton(
-              visualDensity: VisualDensity.compact,
-              tooltip: 'Page format, dimensions, spacing & background',
-              onPressed: _showPageFormatSettings,
-              icon: const Icon(Icons.straighten_rounded, size: 18),
-            ),
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Timer, alarm and stopwatch',
+            onPressed: () => setState(() => _showFloatingTimer = true),
+            icon: const Icon(Icons.timer_outlined, size: 19),
+          ),
+          if (_settings.getBool('showTitleBarSearch'))
+            IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Google and web search',
+            onPressed: () => unawaited(SnoteWebSearchPanel.show(context)),
+            icon: const Icon(Icons.travel_explore_rounded, size: 19),
+          ),
           if (titleBarToolButtons.isNotEmpty)
             SizedBox(
               width: math.min(
@@ -7213,12 +8295,13 @@ class _EditorV2PageState extends State<EditorV2Page>
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'fit', child: Text('Fit page to width')),
               const PopupMenuItem(value: 'fullscreen', child: Text('Toggle full screen')),
-              const PopupMenuItem(value: 'text', child: Text('Toggle rich text / handwriting')),
               const PopupMenuItem(value: 'image', child: Text('Insert image from file')),
               const PopupMenuItem(value: 'clipboardImage', child: Text('Paste screenshot from clipboard')),
               PopupMenuItem(value: 'pasteSelection', enabled: _selectionClipboard != null, child: const Text('Paste copied selection')),
               PopupMenuItem(value: 'clipboardHistory', enabled: _selectionClipboardHistory.isNotEmpty, child: const Text('Clipboard history (last 4)')),
-              const PopupMenuItem(value: 'pageSettings', child: Text('Note page settings')),
+              const PopupMenuItem(value: 'toolbarLayout', child: Text('Toolbar size, margins & padding')),
+               const PopupMenuItem(value: 'smartPages', child: Text('Smart Pages library (200+)')),
+               const PopupMenuItem(value: 'pageSettings', child: Text('Note page settings')),
               const PopupMenuItem(value: 'appSettings', child: Text('App settings')),
               const PopupMenuItem(value: 'template', child: Text('Page template')),
               PopupMenuItem(value: 'toggleNoteSwitcher', child: Text(_showNoteSwitcherInTitleBar ? 'Hide note switcher in title bar' : 'Show note switcher in title bar')),
@@ -7253,7 +8336,19 @@ class _EditorV2PageState extends State<EditorV2Page>
               ? _buildLockedBody()
               : _loadError != null
                   ? _buildErrorBody()
-                  : _buildEditorLayout(),
+                  : Column(
+                      children: [
+                        // Keep the tab strip's height reserved when hidden so toggling tabs never
+                        // shifts the canvas or changes the current viewport transform.
+                        SizedBox(
+                          height: 44,
+                          child: _showTabsBar && !_fullScreenMode
+                              ? _buildNoteTabs()
+                              : const SizedBox.shrink(),
+                        ),
+                        Expanded(child: _buildEditorLayout()),
+                      ],
+                    ),
     );
   }
 
@@ -7275,7 +8370,7 @@ class _EditorV2PageState extends State<EditorV2Page>
               width: sidebarWidth,
               child: _buildPagePreviewSidebar(),
             ),
-          if (_floatingToolbar || _fullScreenMode)
+          if ((_floatingToolbar || _fullScreenMode) && !_toolbarCollapsedToEdge)
             Positioned(
               left: _floatingOffset.dx.clamp(0, math.max(0, MediaQuery.sizeOf(context).width - 160)).toDouble(),
               top: _floatingOffset.dy.clamp(0, math.max(0, MediaQuery.sizeOf(context).height - 210)).toDouble(),
@@ -7299,19 +8394,90 @@ class _EditorV2PageState extends State<EditorV2Page>
                   elevation: 8,
                   borderRadius: BorderRadius.circular(12),
                   clipBehavior: Clip.antiAlias,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: math.min(360, MediaQuery.sizeOf(context).width - 16),
-                      maxHeight: math.min(190, MediaQuery.sizeOf(context).height * .5),
-                    ),
-                    child: _buildToolbar(vertical: false),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: math.min(_fullScreenMode && !_compactFloatingToolbar ? MediaQuery.sizeOf(context).width * .94 : (_compactFloatingToolbar ? _toolbarLength : 360.0), MediaQuery.sizeOf(context).width - 12),
+                          maxHeight: math.min(_fullScreenMode ? MediaQuery.sizeOf(context).height * .32 : 190.0, MediaQuery.sizeOf(context).height * .5),
+                        ),
+                        child: _buildToolbar(vertical: false),
+                      ),
+                      Positioned(
+                        right: -5,
+                        bottom: -5,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onPanUpdate: (details) => setState(() {
+                            _toolbarLength = (_toolbarLength + details.delta.dx).clamp(180.0, 900.0).toDouble();
+                            final verticalPadding = details.delta.dy / 2;
+                            _toolbarPaddingTop = (_toolbarPaddingTop + verticalPadding).clamp(0.0, 28.0).toDouble();
+                            _toolbarPaddingBottom = (_toolbarPaddingBottom + verticalPadding).clamp(0.0, 28.0).toDouble();
+                          }),
+                          onPanEnd: (_) {
+                            unawaited(_settings.setDouble('editorV2ToolbarLength', _toolbarLength));
+                            unawaited(_settings.setDouble('editorV2ToolbarPaddingTop', _toolbarPaddingTop));
+                            unawaited(_settings.setDouble('editorV2ToolbarPaddingBottom', _toolbarPaddingBottom));
+                          },
+                          child: Material(
+                            color: Theme.of(context).colorScheme.primary,
+                            shape: const CircleBorder(),
+                            elevation: 2,
+                            child: const SizedBox(width: 18, height: 18, child: Icon(Icons.open_in_full_rounded, size: 11, color: Colors.white)),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
           if (_showFavoritesShowcase || _pencaseTools.isNotEmpty) _buildFavoriteShowcase(),
           // Page navigation is now handled by the expanded page-preview sidebar.
+          if (_fullScreenMode && !_toolbarCollapsedToEdge)
+            Positioned(
+              top: 8,
+              right: 52,
+              child: Material(
+                color: Theme.of(context).colorScheme.primaryContainer,
+                shape: const CircleBorder(),
+                elevation: 5,
+                child: IconButton(
+                  tooltip: 'Collapse toolbar to screen edge',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () {
+                    setState(() => _toolbarCollapsedToEdge = true);
+                    unawaited(_settings.setBool('editorV2ToolbarCollapsed', true));
+                  },
+                  icon: const Icon(Icons.brush_rounded, size: 18),
+                ),
+              ),
+            ),
+          if (_fullScreenMode && _toolbarCollapsedToEdge)
+            Positioned(
+              right: 0,
+              top: 96,
+              child: Material(
+                color: Theme.of(context).colorScheme.primaryContainer,
+                borderRadius: const BorderRadius.horizontal(left: Radius.circular(14)),
+                elevation: 7,
+                child: InkWell(
+                  onTap: () {
+                    setState(() => _toolbarCollapsedToEdge = false);
+                    unawaited(_settings.setBool('editorV2ToolbarCollapsed', false));
+                  },
+                  child: const SizedBox(width: 30, height: 72, child: Tooltip(message: 'Expand toolbar', child: Icon(Icons.brush_rounded))),
+                ),
+              ),
+            ),
           if (_calculatorVisible) _buildFloatingCalculator(),
+          if (_showFloatingTimer)
+            Positioned.fill(
+              child: SnoteFloatingTimerPanel(
+                onClose: () => setState(() => _showFloatingTimer = false),
+              ),
+            ),
           if (_showViewportHud || _viewportLocked)
             Positioned(
               top: 8,
@@ -7453,6 +8619,7 @@ class _ScientificCalculatorDialog extends StatefulWidget {
   final ValueChanged<Size> onResize;
   final VoidCallback onClose;
   final ValueChanged<Offset> onMove;
+  final VoidCallback onCollapse;
 
   const _ScientificCalculatorDialog({
     required this.initialWidth,
@@ -7460,6 +8627,7 @@ class _ScientificCalculatorDialog extends StatefulWidget {
     required this.onResize,
     required this.onClose,
     required this.onMove,
+    required this.onCollapse,
   });
 
   @override
@@ -7471,6 +8639,7 @@ class _ScientificCalculatorDialogState extends State<_ScientificCalculatorDialog
   String _answer = '0';
   String? _error;
   bool _degrees = true;
+  bool _collapsed = false;
   double _width = 330;
   double _height = 465;
 
@@ -7555,6 +8724,22 @@ class _ScientificCalculatorDialogState extends State<_ScientificCalculatorDialog
     final width = _width.clamp(270.0, math.max(270.0, screen.width - 16)).toDouble();
     final height = _height.clamp(360.0, math.max(360.0, screen.height - 32)).toDouble();
     final scheme = Theme.of(context).colorScheme;
+    if (_collapsed) {
+      final dockLeft = screen.width / 2 > _width / 2;
+      return GestureDetector(
+        onTap: () => setState(() => _collapsed = false),
+        onPanUpdate: (details) => widget.onMove(details.delta),
+        child: Material(
+          color: scheme.primaryContainer,
+          elevation: 8,
+          borderRadius: BorderRadius.horizontal(
+            left: Radius.circular(dockLeft ? 0 : 12),
+            right: Radius.circular(dockLeft ? 12 : 0),
+          ),
+          child: SizedBox(width: 28, height: 76, child: Icon(dockLeft ? Icons.chevron_right_rounded : Icons.chevron_left_rounded)),
+        ),
+      );
+    }
     return SizedBox(
       width: width,
       height: height,
@@ -7575,6 +8760,16 @@ class _ScientificCalculatorDialogState extends State<_ScientificCalculatorDialog
                     const Icon(Icons.drag_indicator_rounded, size: 18),
                     const SizedBox(width: 4),
                     const Expanded(child: Text('Calculator', style: TextStyle(fontWeight: FontWeight.w800))),
+                    IconButton(
+                      tooltip: 'Collapse calculator to screen edge',
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+                      onPressed: () {
+                        widget.onCollapse();
+                        setState(() => _collapsed = true);
+                      },
+                      icon: const Icon(Icons.calculate_rounded, size: 18),
+                    ),
                     TextButton(
                       onPressed: () => setState(() => _degrees = !_degrees),
                       child: Text(_degrees ? 'DEG' : 'RAD'),
@@ -8240,4 +9435,303 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
       ),
     );
   }
+}
+
+class _FormattedTextEditingController extends TextEditingController {
+  _FormattedTextEditingController({super.text}) : _lastText = text ?? '';
+
+  String _lastText;
+  List<Map<String, Object?>> formatRanges = <Map<String, Object?>>[];
+
+  void reconcileText(String nextText) {
+    final oldText = _lastText;
+    if (oldText == nextText) return;
+    var prefix = 0;
+    final sharedLength = math.min(oldText.length, nextText.length);
+    while (prefix < sharedLength && oldText.codeUnitAt(prefix) == nextText.codeUnitAt(prefix)) {
+      prefix++;
+    }
+    var suffix = 0;
+    while (suffix < oldText.length - prefix &&
+        suffix < nextText.length - prefix &&
+        oldText.codeUnitAt(oldText.length - 1 - suffix) ==
+            nextText.codeUnitAt(nextText.length - 1 - suffix)) {
+      suffix++;
+    }
+    final oldChangedEnd = oldText.length - suffix;
+    final delta = nextText.length - oldText.length;
+    formatRanges = formatRanges.map((range) {
+      final updated = Map<String, Object?>.from(range);
+      var start = (updated['start'] as num?)?.toInt() ?? 0;
+      var end = (updated['end'] as num?)?.toInt() ?? start;
+      if (start >= oldChangedEnd) {
+        start += delta;
+        end += delta;
+      } else if (end > prefix) {
+        end += delta;
+      }
+      start = start.clamp(0, nextText.length).toInt();
+      end = end.clamp(start, nextText.length).toInt();
+      updated['start'] = start;
+      updated['end'] = end;
+      return updated;
+    }).where((range) =>
+      ((range['end'] as num?)?.toInt() ?? 0) >
+      ((range['start'] as num?)?.toInt() ?? 0)
+    ).toList();
+    _lastText = nextText;
+  }
+
+  @override
+  TextSpan buildTextSpan({
+    required BuildContext context,
+    TextStyle? style,
+    required bool withComposing,
+  }) {
+    final text = value.text;
+    if (text.isEmpty || formatRanges.isEmpty) {
+      return TextSpan(text: text, style: style);
+    }
+    final boundaries = <int>{0, text.length};
+    for (final range in formatRanges) {
+      final start = ((range['start'] as num?)?.toInt() ?? 0).clamp(0, text.length).toInt();
+      final end = ((range['end'] as num?)?.toInt() ?? start).clamp(start, text.length).toInt();
+      if (end > start) {
+        boundaries.add(start);
+        boundaries.add(end);
+      }
+    }
+    final points = boundaries.toList()..sort();
+    final spans = <InlineSpan>[];
+    for (var i = 0; i < points.length - 1; i++) {
+      final start = points[i];
+      final end = points[i + 1];
+      if (end <= start) continue;
+      bool? bold;
+      bool? italic;
+      bool? underline;
+      bool? strike;
+      for (final range in formatRanges) {
+        final rangeStart = (range['start'] as num?)?.toInt() ?? 0;
+        final rangeEnd = (range['end'] as num?)?.toInt() ?? rangeStart;
+        if (rangeStart <= start && rangeEnd >= end) {
+          if (range.containsKey('bold')) bold = range['bold'] == true;
+          if (range.containsKey('italic')) italic = range['italic'] == true;
+          if (range.containsKey('underline')) underline = range['underline'] == true;
+          if (range.containsKey('strikethrough')) strike = range['strikethrough'] == true;
+        }
+      }
+      final decorations = <TextDecoration>[
+        if (underline == true) TextDecoration.underline,
+        if (strike == true) TextDecoration.lineThrough,
+      ];
+      final segmentStyle = (style ?? const TextStyle()).merge(TextStyle(
+        fontWeight: bold == null ? null : (bold ? FontWeight.bold : FontWeight.normal),
+        fontStyle: italic == null ? null : (italic ? FontStyle.italic : FontStyle.normal),
+        decoration: underline == null && strike == null
+            ? null
+            : TextDecoration.combine(decorations),
+      ));
+      spans.add(TextSpan(text: text.substring(start, end), style: segmentStyle));
+    }
+    return TextSpan(style: style, children: spans);
+  }
+}
+
+class _CaptureRegionSelector extends StatefulWidget {
+  const _CaptureRegionSelector();
+
+  @override
+  State<_CaptureRegionSelector> createState() => _CaptureRegionSelectorState();
+}
+
+class _CaptureRegionSelectorState extends State<_CaptureRegionSelector> {
+  Offset? _start;
+  Offset? _current;
+  Rect? _resizeOrigin;
+  String? _activeResizeHandle;
+
+  Rect get _selection {
+    final start = _start;
+    final current = _current;
+    if (start == null || current == null) return Rect.zero;
+    return Rect.fromPoints(start, current);
+  }
+
+  void _beginResize(String handle) {
+    _resizeOrigin = _selection;
+    _activeResizeHandle = handle;
+  }
+
+  void _updateResize(DragUpdateDetails details) {
+    final origin = _resizeOrigin;
+    final handle = _activeResizeHandle;
+    if (origin == null || handle == null) return;
+    final dx = details.delta.dx;
+    final dy = details.delta.dy;
+    var left = origin.left;
+    var top = origin.top;
+    var right = origin.right;
+    var bottom = origin.bottom;
+    if (handle.contains('l')) left = (left + dx).clamp(0.0, right - 12).toDouble();
+    if (handle.contains('r')) right = (right + dx).clamp(left + 12, MediaQuery.sizeOf(context).width).toDouble();
+    if (handle.contains('t')) top = (top + dy).clamp(0.0, bottom - 12).toDouble();
+    if (handle.contains('b')) bottom = (bottom + dy).clamp(top + 12, MediaQuery.sizeOf(context).height).toDouble();
+    setState(() {
+      _start = Offset(left, top);
+      _current = Offset(right, bottom);
+    });
+    _resizeOrigin = Rect.fromLTRB(left, top, right, bottom);
+  }
+
+  List<Widget> _resizeHandles(Rect selection, Color color) {
+    const points = <({String key, double x, double y})>[
+      (key: 'tl', x: 0, y: 0), (key: 't', x: .5, y: 0),
+      (key: 'tr', x: 1, y: 0), (key: 'r', x: 1, y: .5),
+      (key: 'br', x: 1, y: 1), (key: 'b', x: .5, y: 1),
+      (key: 'bl', x: 0, y: 1), (key: 'l', x: 0, y: .5),
+    ];
+    return points.map((point) {
+      final center = Offset(selection.left + selection.width * point.x, selection.top + selection.height * point.y);
+      return Positioned(
+        left: center.dx - 9,
+        top: center.dy - 9,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onPanStart: (_) => _beginResize(point.key),
+          onPanUpdate: _updateResize,
+          onPanEnd: (_) { _resizeOrigin = null; _activeResizeHandle = null; },
+          child: Container(
+            width: 18,
+            height: 18,
+            decoration: BoxDecoration(
+              color: color,
+              border: Border.all(color: Colors.white, width: 1.5),
+              borderRadius: BorderRadius.circular(4),
+              boxShadow: const <BoxShadow>[BoxShadow(color: Color(0x55000000), blurRadius: 3)],
+            ),
+          ),
+        ),
+      );
+    }).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final selection = _selection;
+    final valid = selection.width >= 12 && selection.height >= 12;
+    return Material(
+      color: Colors.black.withValues(alpha: .52),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onPanStart: (details) => setState(() {
+              _start = details.localPosition;
+              _current = details.localPosition;
+            }),
+            onPanUpdate: (details) => setState(() => _current = details.localPosition),
+            onPanEnd: (_) => setState(() {}),
+            child: CustomPaint(
+              painter: _CaptureRegionPainter(selection: selection),
+              child: const SizedBox.expand(),
+            ),
+          ),
+          Positioned(
+            left: 16,
+            top: 18,
+            right: 16,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: colors.surface,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                  child: Text(
+                    'Drag to select the screenshot area',
+                    style: TextStyle(color: colors.onSurface, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 16,
+            bottom: 20,
+            child: FilledButton.tonal(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+          ),
+          Positioned(
+            right: 16,
+            bottom: 20,
+            child: FilledButton.icon(
+              onPressed: valid ? () => Navigator.of(context).pop(selection) : null,
+              icon: const Icon(Icons.crop_free_rounded),
+              label: const Text('Capture selection'),
+            ),
+          ),
+          if (valid) ..._resizeHandles(selection, const Color(0xff168d75)),
+          if (valid)
+            Positioned(
+              left: selection.left.clamp(0.0, MediaQuery.sizeOf(context).width - 120).toDouble(),
+              top: (selection.top - 34).clamp(8.0, MediaQuery.sizeOf(context).height - 40).toDouble(),
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: colors.surface,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: Text(
+                      '${selection.width.round()} × ${selection.height.round()}',
+                      style: TextStyle(color: colors.onSurface, fontSize: 12, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CaptureRegionPainter extends CustomPainter {
+  final Rect selection;
+
+  const _CaptureRegionPainter({required this.selection});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (selection.isEmpty) return;
+    final border = Paint()
+      ..color = const Color(0xff66e0c2)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+    final fill = Paint()..color = const Color(0x2266e0c2);
+    final rect = selection.intersect(Offset.zero & size);
+    canvas.drawRect(rect, fill);
+    canvas.drawRect(rect, border);
+    const handleSize = 8.0;
+    final handlePaint = Paint()..color = const Color(0xff66e0c2);
+    for (final point in <Offset>[
+      rect.topLeft, rect.topRight, rect.bottomLeft, rect.bottomRight,
+    ]) {
+      canvas.drawRect(
+        Rect.fromCenter(center: point, width: handleSize, height: handleSize),
+        handlePaint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _CaptureRegionPainter oldDelegate) =>
+      oldDelegate.selection != selection;
 }

@@ -17,15 +17,15 @@ class SnoteLogo extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         SvgPicture.asset(
-          'assets/branding/snote-logo.svg',
+          'assets/branding/snotee-mark.svg',
           width: size,
           height: size,
-          semanticsLabel: 'Snote',
+          semanticsLabel: 'Snotee',
         ),
         if (showWordmark) ...[
           const SizedBox(width: 10),
           const Text(
-            'Snote',
+            'Snotee',
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w800,

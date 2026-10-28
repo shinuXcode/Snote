@@ -153,6 +153,7 @@ class _SnoteAppState extends State<SnoteApp> {
               colorScheme: ColorScheme.fromSeed(
                 seedColor: Colors.grey,
                 brightness: Brightness.light,
+                contrastLevel: 1.0,
               ),
               scaffoldBackgroundColor: const Color(0xffededed),
               cardTheme: CardThemeData(
@@ -165,7 +166,7 @@ class _SnoteAppState extends State<SnoteApp> {
                   : const PageTransitionsTheme(),
             )
           : light.copyWith(
-              colorScheme: ColorScheme.fromSeed(seedColor: seedColor, brightness: Brightness.light),
+              colorScheme: ColorScheme.fromSeed(seedColor: seedColor, brightness: Brightness.light, contrastLevel: 1.0),
               visualDensity: _theme.style == SnoteThemeStyle.windows || _theme.style == SnoteThemeStyle.linux
                   ? VisualDensity.compact
                   : VisualDensity.standard,
@@ -174,6 +175,7 @@ class _SnoteAppState extends State<SnoteApp> {
         colorScheme: ColorScheme.fromSeed(
           seedColor: seedColor,
           brightness: Brightness.dark,
+          contrastLevel: 1.0,
         ),
         visualDensity: _theme.style == SnoteThemeStyle.windows || _theme.style == SnoteThemeStyle.linux
             ? VisualDensity.compact
