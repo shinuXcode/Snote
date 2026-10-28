@@ -268,63 +268,65 @@ jobs:
         working-directory: app
         run: flutter test --reporter expanded
 
-      - name: Build release APK
+      - name: Build split release APKs
         working-directory: app
-        run: flutter build apk --release --no-shrink
+        run: flutter build apk --release --split-per-abi
 
-      - name: Sign beta APK for Android installation
+      - name: Sign beta APKs for Android installation
         run: |
           set -euo pipefail
-          APK="app/build/app/outputs/flutter-apk/app-release.apk"
           SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
           BUILD_TOOLS="$(find "$SDK_ROOT/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
           APKSIGNER="$BUILD_TOOLS/apksigner"
-          test -x "$APKSIGNER"
           keytool -genkeypair -v \
             -keystore beta-signing.keystore \
             -storepass beta-temp-password \
             -keypass beta-temp-password \
             -alias snote-beta \
             -keyalg RSA -keysize 2048 -validity 10000 \
-            -dname "CN=Snote Beta Test, OU=Beta, O=Snote, L=Katihar, ST=Bihar, C=IN"
-          "$APKSIGNER" sign \
-            --ks beta-signing.keystore \
-            --ks-pass pass:beta-temp-password \
-            --key-pass pass:beta-temp-password \
-            --ks-key-alias snote-beta \
-            --out Snote-Android-Beta.apk "$APK"
-          "$APKSIGNER" verify --verbose --print-certs Snote-Android-Beta.apk
+            -dname "CN=Snote Beta Test, OU=Beta, O=Snote, L=Katihar, ST=Bihar, C=IN" \
+            -noprompt
+          for ABI in armeabi-v7a arm64-v8a x86_64; do
+            APK="app/build/app/outputs/flutter-apk/app-$ABI-release.apk"
+            test -s "$APK"
+            "$APKSIGNER" sign \
+              --ks beta-signing.keystore \
+              --ks-pass pass:beta-temp-password \
+              --key-pass pass:beta-temp-password \
+              --ks-key-alias snote-beta \
+              --out "Snote-Android-Beta-$ABI.apk" "$APK"
+            "$APKSIGNER" verify --verbose --print-certs "Snote-Android-Beta-$ABI.apk"
+          done
           rm -f beta-signing.keystore
 
-      - name: Verify beta APK identity, signature and checksum
+      - name: Verify beta APK identity, signature and checksums
         env:
           EXPECTED_VERSION: ${{ steps.beta_version.outputs.release_version }}
         run: |
           set -euo pipefail
-          APK="Snote-Android-Beta.apk"
-          test -s "$APK"
           SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
           BUILD_TOOLS="$(find "$SDK_ROOT/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
           AAPT="$BUILD_TOOLS/aapt"
           APKSIGNER="$BUILD_TOOLS/apksigner"
-          test -x "$AAPT"
-          test -x "$APKSIGNER"
-          "$APKSIGNER" verify --verbose "$APK"
-          BADGING="$("$AAPT" dump badging "$APK")"
-          APP_ID="$(printf '%s\n' "$BADGING" | awk -F"'" '/^package:/ {print $2; exit}')"
-          VERSION_NAME="$(printf '%s\n' "$BADGING" | grep '^package:' | grep -o "versionName='[^']*'" | cut -d"'" -f2)"
-          test "$APP_ID" = "com.snote.snote.beta"
-          test "$VERSION_NAME" = "$EXPECTED_VERSION"
-          sha256sum "$APK" | awk '{print $1 "  Snote-Android-Beta.apk"}' > Snote-Android-Beta.sha256
+          for APK in Snote-Android-Beta-*.apk; do
+            test -s "$APK"
+            "$APKSIGNER" verify --verbose "$APK"
+            BADGING="$("$AAPT" dump badging "$APK")"
+            APP_ID="$(printf '%s\\n' "$BADGING" | awk -F"'" '/^package:/ {print $2; exit}')"
+            VERSION_NAME="$(printf '%s\\n' "$BADGING" | grep '^package:' | grep -o "versionName='[^']*'" | cut -d"'" -f2)"
+            test "$APP_ID" = "com.snote.snote.beta"
+            test "$VERSION_NAME" = "$EXPECTED_VERSION"
+            echo "Verified $APK: applicationId=$APP_ID versionName=$VERSION_NAME"
+          done
+          sha256sum Snote-Android-Beta-*.apk > Snote-Android-Beta.sha256
           cat Snote-Android-Beta.sha256
-          echo "Verified APK: applicationId=$APP_ID versionName=$VERSION_NAME"
 
-      - name: Upload beta APK artifact
+      - name: Upload beta APK artifacts
         uses: actions/upload-artifact@v4
         with:
           name: snote-android-beta-${{ steps.beta_version.outputs.release_version }}
           path: |
-            Snote-Android-Beta.apk
+            Snote-Android-Beta-*.apk
             Snote-Android-Beta.sha256
           if-no-files-found: error
           retention-days: 30
@@ -341,15 +343,15 @@ jobs:
           NOTES="$(cat <<EOF
           Snote $PACKAGE_VERSION build for testing only.
           Build commit: $GITHUB_SHA
-          This APK uses the separate Android application ID com.snote.snote.beta, so it can be installed alongside the stable Snote app without replacing it or touching stable app data.
+          These per-ABI APKs use the separate Android application ID com.snote.snote.beta. Install the APK matching the device CPU architecture to use less storage than the previous universal APK.
           Published only after dependency resolution, formatting, analysis, automated tests, Android APK build, APK identity/version validation, and SHA-256 generation pass.
           EOF
           )"
 
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" Snote-Android-Beta.apk Snote-Android-Beta.sha256 --clobber --repo "$GITHUB_REPOSITORY"
+            gh release upload "$RELEASE_TAG" Snote-Android-Beta-*.apk Snote-Android-Beta.sha256 --clobber --repo "$GITHUB_REPOSITORY"
             gh release edit "$RELEASE_TAG" --title "Snote $PACKAGE_VERSION" --notes "$NOTES" --prerelease --repo "$GITHUB_REPOSITORY"
           else
-            gh release create "$RELEASE_TAG" Snote-Android-Beta.apk Snote-Android-Beta.sha256 --repo "$GITHUB_REPOSITORY" --title "Snote $PACKAGE_VERSION" --notes "$NOTES" --target "$GITHUB_SHA" --prerelease
+            gh release create "$RELEASE_TAG" Snote-Android-Beta-*.apk Snote-Android-Beta.sha256 --repo "$GITHUB_REPOSITORY" --title "Snote $PACKAGE_VERSION" --notes "$NOTES" --target "$GITHUB_SHA" --prerelease
           fi
 

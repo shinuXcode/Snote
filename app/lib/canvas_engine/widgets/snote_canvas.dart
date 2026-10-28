@@ -11,6 +11,7 @@ import '../algorithms/lasso_geometry.dart';
 import '../algorithms/shape_recognizer.dart';
 import '../input/ink_gesture_policy.dart';
 import '../input/ink_input_pipeline.dart';
+import '../input/ink_sample.dart';
 import '../input/palm_rejection.dart';
 import '../input/stylus_gesture_lock.dart';
 import '../persistence/ink_commit_queue.dart';
@@ -341,6 +342,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
   ui.Picture? _documentPicture;
 
   Offset? _eraserPoint;
+  Offset? _lastEraserPosition;
   double _eraserRadius = 0;
   int _activePointer = -1;
   String? _selectionTransformMode;
@@ -865,30 +867,21 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     if (_temporaryEraser ||
         widget.tool == CanvasTool.eraser ||
         widget.tool == CanvasTool.pixelEraser) {
-      _activeTool = widget.tool == CanvasTool.pixelEraser ||
+      _activeTool = widget.pressureErase ||
+              widget.tool == CanvasTool.pixelEraser ||
               widget.eraserMode == 'pixel'
           ? CanvasTool.pixelEraser
           : CanvasTool.eraser;
       _activePen = widget.pen;
       _eraserPoint = event.localPosition;
-      _eraserRadius = _eraseRadius(event.pressure);
-      if (!_eraseSnapshotTaken) {
-        _snapshot();
-        _eraseSnapshotTaken = true;
-      }
-      if (_activeTool == CanvasTool.pixelEraser) {
-        _erasePixelAt(
-          event.localPosition,
-          pressure: event.pressure,
-          snapshotAlreadyTaken: true,
-        );
-      } else {
-        _eraseAt(
-          event.localPosition,
-          pressure: event.pressure,
-          snapshotAlreadyTaken: true,
-        );
-      }
+      final pressure = InkSample.normalizePressure(event);
+      _eraserRadius = _eraseRadius(pressure);
+      _lastEraserPosition = event.localPosition;
+      _eraseAtPosition(
+        event.localPosition,
+        pressure: pressure,
+        pixel: _activeTool == CanvasTool.pixelEraser,
+      );
       _syncLivePainter();
       return;
     }
@@ -1003,20 +996,15 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
         _activeTool == CanvasTool.pixelEraser ||
         _temporaryEraser) {
       _eraserPoint = event.localPosition;
-      _eraserRadius = _eraseRadius(event.pressure);
-      if (_activeTool == CanvasTool.pixelEraser) {
-        _erasePixelAt(
-          event.localPosition,
-          pressure: event.pressure,
-          snapshotAlreadyTaken: _eraseSnapshotTaken,
-        );
-      } else {
-        _eraseAt(
-          event.localPosition,
-          pressure: event.pressure,
-          snapshotAlreadyTaken: _eraseSnapshotTaken,
-        );
-      }
+      final pressure = InkSample.normalizePressure(event);
+      _eraserRadius = _eraseRadius(pressure);
+      _eraseAlongSegment(
+        _lastEraserPosition ?? event.localPosition,
+        event.localPosition,
+        pressure: pressure,
+        pixel: _activeTool == CanvasTool.pixelEraser,
+      );
+      _lastEraserPosition = event.localPosition;
       _syncLivePainter();
       return;
     }
@@ -1155,6 +1143,7 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     _real = const <StrokePoint>[];
     _live = const <StrokePoint>[];
     _eraserPoint = null;
+    _lastEraserPosition = null;
     _eraserRadius = 0;
     _lasso.clear();
     _input?.reset();
@@ -1211,13 +1200,41 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     // Broad pressure response: light contact stays precise, firm pressure expands the eraser.
     // Cursor preview and actual erase operations share this radius.
     final base = (widget.pen.size * 5.5).clamp(20.0, 78.0).toDouble();
-    if (widget.pressureErase && widget.pressureEraseArea) {
-      return (base * (0.32 + normalized * 1.48)).clamp(8.0, 120.0).toDouble();
-    }
     if (widget.pressureErase) {
-      return (base * (0.55 + normalized * 0.9)).clamp(10.0, 112.0).toDouble();
+      // Pressure erasing is a pixel eraser with a radius that grows under load.
+      return (base * (0.16 + normalized * 1.34)).clamp(6.0, 120.0).toDouble();
     }
     return base.clamp(10.0, 90.0).toDouble();
+  }
+
+  void _eraseAtPosition(
+    Offset point, {
+    required double pressure,
+    required bool pixel,
+  }) {
+    if (pixel) {
+      _erasePixelAt(point, pressure: pressure);
+    } else {
+      _eraseAt(point, pressure: pressure);
+    }
+  }
+
+  void _eraseAlongSegment(
+    Offset start,
+    Offset end, {
+    required double pressure,
+    required bool pixel,
+  }) {
+    final distance = (end - start).distance;
+    final spacing = math.max(3.0, _eraseRadius(pressure) * .4);
+    final steps = math.max(1, math.min(64, (distance / spacing).ceil()));
+    for (var i = 1; i <= steps; i++) {
+      _eraseAtPosition(
+        Offset.lerp(start, end, i / steps)!,
+        pressure: pressure,
+        pixel: pixel,
+      );
+    }
   }
 
   Rect _eraserRect(Offset center, double radius) => Rect.fromCenter(
@@ -1418,7 +1435,8 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
     bool snapshotAlreadyTaken = false,
   }) {
     final radius = _eraseRadius(pressure);
-    final candidates = _spatial.candidates(point, radius);
+    final candidates = _spatial.candidates(point, radius).toList()
+      ..sort((a, b) => b.compareTo(a));
     for (final index in candidates) {
       if (index < 0 || index >= _strokes.length) continue;
       final stroke = _strokes[index];
@@ -1804,13 +1822,43 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
 
   void _finishLasso() {
     if (_lasso.length < 3) {
+      final tap = _lasso.isEmpty ? null : _lasso.first;
+      if (tap != null) {
+        const hitRadius = 24.0;
+        final hits = _spatial.candidates(tap, hitRadius)
+            .where((index) => index >= 0 && index < _strokes.length &&
+                _polylineTouchesCircle(
+                  _strokes[index].points,
+                  tap,
+                  hitRadius + _strokes[index].pen.size / 2,
+                ))
+            .toList()
+          ..sort((a, b) => b.compareTo(a));
+        _selected
+          ..clear()
+          ..addAll(hits.isEmpty ? const <String>[] : <String>[_strokes[hits.first].id]);
+        _recordDocumentPicture();
+        _notifySelection();
+      }
       _clearActiveState();
+      _syncLivePainter();
       return;
     }
 
+    final bounds = _lasso.skip(1).fold<Rect>(
+      Rect.fromPoints(_lasso.first, _lasso.first),
+      (rect, point) => rect.expandToInclude(Rect.fromPoints(point, point)),
+    );
+    final candidates = _spatial.candidatesInRect(bounds.inflate(60));
     _selected.clear();
-    for (final stroke in _strokes) {
-      if (LassoGeometry.strokeMostlyInsidePolygon(stroke.points, _lasso)) {
+    for (final index in candidates) {
+      if (index < 0 || index >= _strokes.length) continue;
+      final stroke = _strokes[index];
+      if (LassoGeometry.strokeMostlyInsidePolygon(
+        stroke.points,
+        _lasso,
+        hitTolerance: stroke.pen.size / 2,
+      )) {
         _selected.add(stroke.id);
       }
     }

@@ -175,6 +175,16 @@ class NoteRepository {
     final db = await _db;
     final rows = await db.query(
       'notes',
+      columns: [
+        'id',
+        'title',
+        'folder_id',
+        'note_type',
+        'created_at',
+        'updated_at',
+        'deleted_at',
+        'version',
+      ],
       where: 'owner_id = ? AND deleted_at IS NULL AND title LIKE ?',
       whereArgs: [SnoteAccountScope.ownerId, '%$normalized%'],
       orderBy: 'updated_at DESC',

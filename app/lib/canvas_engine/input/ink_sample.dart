@@ -31,13 +31,17 @@ class InkSample {
     required this.synthesized,
   });
 
-  factory InkSample.fromEvent(PointerEvent event) {
+  static double normalizePressure(PointerEvent event) {
     final min = event.pressureMin;
     final max = event.pressureMax;
     final raw = event.pressure.isFinite ? event.pressure : 1.0;
-    final pressure = max > min
+    return max > min
         ? ((raw - min) / (max - min)).clamp(0.0, 1.0).toDouble()
         : raw.clamp(0.0, 1.0).toDouble();
+  }
+
+  factory InkSample.fromEvent(PointerEvent event) {
+    final pressure = normalizePressure(event);
 
     return InkSample(
       position: event.localPosition,

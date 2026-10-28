@@ -51,6 +51,22 @@ class StrokeSpatialIndex {
     return result;
   }
 
+  Iterable<int> candidatesInRect(Rect rect) {
+    if (rect.isEmpty) return const <int>[];
+    final minX = _cell(rect.left);
+    final maxX = _cell(rect.right);
+    final minY = _cell(rect.top);
+    final maxY = _cell(rect.bottom);
+    final result = <int>{};
+    for (var y = minY; y <= maxY; y++) {
+      for (var x = minX; x <= maxX; x++) {
+        final values = _cells[_key(x, y)];
+        if (values != null) result.addAll(values);
+      }
+    }
+    return result;
+  }
+
   int _cell(double value) => (value / cellSize).floor();
   int _key(int x, int y) => Object.hash(x, y);
 }

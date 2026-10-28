@@ -61,10 +61,11 @@ class LassoGeometry {
     List<StrokePoint> points,
     List<Offset> polygon, {
     double minimumInsideFraction = .65,
+    double hitTolerance = 0,
   }) {
     if (points.isEmpty || polygon.length < 3) return false;
     if (points.length == 1) {
-      return pointInPolygon(points.first.position, polygon);
+      return _pointInPolygonOrNearBoundary(points.first.position, polygon, hitTolerance);
     }
 
     var totalLength = 0.0;
@@ -90,12 +91,47 @@ class LassoGeometry {
       for (var sample = 0; sample < sampleCount; sample++) {
         final t = (sample + .5) / sampleCount;
         final point = Offset.lerp(a, b, t)!;
-        if (pointInPolygon(point, polygon)) insideLength += sampleLength;
+        if (_pointInPolygonOrNearBoundary(point, polygon, hitTolerance)) {
+          insideLength += sampleLength;
+        }
       }
     }
 
     return insideLength / totalLength >=
         minimumInsideFraction.clamp(0.0, 1.0).toDouble();
+  }
+
+  static bool _pointInPolygonOrNearBoundary(
+    Offset point,
+    List<Offset> polygon,
+    double tolerance,
+  ) {
+    if (pointInPolygon(point, polygon)) return true;
+    if (tolerance <= 0) return false;
+    final squaredTolerance = tolerance * tolerance;
+    for (var i = 0; i < polygon.length; i++) {
+      if (_distanceSquaredToSegment(
+            point,
+            polygon[i],
+            polygon[(i + 1) % polygon.length],
+          ) <=
+          squaredTolerance) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static double _distanceSquaredToSegment(Offset point, Offset a, Offset b) {
+    final delta = b - a;
+    final lengthSquared = delta.distanceSquared;
+    if (lengthSquared <= 1e-12) return (point - a).distanceSquared;
+    final t = (((point.dx - a.dx) * delta.dx +
+                (point.dy - a.dy) * delta.dy) /
+            lengthSquared)
+        .clamp(0.0, 1.0)
+        .toDouble();
+    return (point - (a + delta * t)).distanceSquared;
   }
 
   static bool _segmentsIntersect(Offset a, Offset b, Offset c, Offset d) {
