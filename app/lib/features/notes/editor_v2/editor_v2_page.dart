@@ -27,6 +27,7 @@ import '../../../canvas_engine/models/pen_config.dart';
 import '../../../canvas_engine/models/stroke.dart';
 import '../../../canvas_engine/models/stroke_codec.dart';
 import '../../../canvas_engine/widgets/page_background.dart';
+import '../../../ui/snote_floating_toolbar.dart';
 import '../../../core/security/note_lock_service.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../settings/settings_page.dart';
@@ -6658,25 +6659,20 @@ class _EditorV2PageState extends State<EditorV2Page>
             math.max(1.0, screenWidth - 12),
             math.min(_toolbarLength, actions.length * 28.0 + quickButtons.length * 30.0 + 69.0),
           );
-    return Container(
-      margin: (_compactFloatingToolbar || _fullScreenMode)
-          ? EdgeInsets.zero
-          : EdgeInsets.fromLTRB(_toolbarMarginLeft, _toolbarMarginTop, _toolbarMarginRight, _toolbarMarginBottom),
-      child: Material(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: _compactFloatingToolbar ? .78 : .97),
-      elevation: _compactFloatingToolbar ? 1 : 2,
-      borderRadius: BorderRadius.circular(_compactFloatingToolbar ? 7 : (vertical ? 12 : 10)),
-      child: SizedBox(
-        width: compactWidth,
-        child: SingleChildScrollView(
-          padding: (_compactFloatingToolbar || _fullScreenMode)
-              ? EdgeInsets.zero
-              : EdgeInsets.fromLTRB(_toolbarPaddingLeft, _toolbarPaddingTop, _toolbarPaddingRight, _toolbarPaddingBottom),
-          scrollDirection: vertical ? Axis.vertical : Axis.horizontal,
-          child: vertical ? Column(mainAxisSize: MainAxisSize.min, children: children) : Row(mainAxisSize: MainAxisSize.min, children: children),
-        ),
-      ),
-      ),
+    return SnoteFloatingToolbar(
+      children: children,
+      vertical: vertical,
+      compact: _compactFloatingToolbar,
+      fullScreen: _fullScreenMode,
+      width: compactWidth,
+      marginLeft: _toolbarMarginLeft,
+      marginTop: _toolbarMarginTop,
+      marginRight: _toolbarMarginRight,
+      marginBottom: _toolbarMarginBottom,
+      paddingLeft: _toolbarPaddingLeft,
+      paddingTop: _toolbarPaddingTop,
+      paddingRight: _toolbarPaddingRight,
+      paddingBottom: _toolbarPaddingBottom,
     );
   }
 
