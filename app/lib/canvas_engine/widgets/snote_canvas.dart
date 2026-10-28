@@ -1208,14 +1208,16 @@ class _SnoteCanvasState extends State<SnoteCanvas> {
         : raw < threshold
             ? 0.0
             : ((raw - threshold) / (1.0 - threshold)).clamp(0.0, 1.0).toDouble();
-    final base = (widget.pen.size * 5.0).clamp(18, 64).toDouble();
+    // Broad pressure response: light contact stays precise, firm pressure expands the eraser.
+    // Cursor preview and actual erase operations share this radius.
+    final base = (widget.pen.size * 5.5).clamp(20.0, 78.0).toDouble();
     if (widget.pressureErase && widget.pressureEraseArea) {
-      return (base * (0.28 + normalized * 1.35)).clamp(6, 96).toDouble();
+      return (base * (0.32 + normalized * 1.48)).clamp(8.0, 120.0).toDouble();
     }
     if (widget.pressureErase) {
-      return (base * (0.65 + normalized * 0.35)).clamp(10, 72).toDouble();
+      return (base * (0.55 + normalized * 0.9)).clamp(10.0, 112.0).toDouble();
     }
-    return base;
+    return base.clamp(10.0, 90.0).toDouble();
   }
 
   Rect _eraserRect(Offset center, double radius) => Rect.fromCenter(
