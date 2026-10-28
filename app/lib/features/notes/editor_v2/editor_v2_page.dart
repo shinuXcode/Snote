@@ -6718,18 +6718,23 @@ class _EditorV2PageState extends State<EditorV2Page>
       ),
     ];
     final screenWidth = MediaQuery.sizeOf(context).width;
+    final screenHeight = MediaQuery.sizeOf(context).height;
     final compactWidth = vertical
         ? _toolbarThickness.clamp(28.0, 96.0).toDouble()
         : math.min(
             math.max(1.0, screenWidth - 12),
             math.min(_toolbarLength, actions.length * 28.0 + quickButtons.length * 30.0 + 69.0),
           );
+    final compactHeight = vertical
+        ? math.min(_toolbarLength, math.max(180.0, screenHeight - 24))
+        : _toolbarThickness.clamp(28.0, 96.0).toDouble();
     return SnoteFloatingToolbar(
       children: children,
       vertical: vertical,
       compact: _compactFloatingToolbar,
       fullScreen: _fullScreenMode,
       width: compactWidth,
+      height: compactHeight,
       marginLeft: _fullScreenMode ? 0 : _toolbarMarginLeft,
       marginTop: _fullScreenMode ? 0 : _toolbarMarginTop,
       marginRight: _fullScreenMode ? 0 : _toolbarMarginRight,
@@ -8483,28 +8488,42 @@ class _EditorV2PageState extends State<EditorV2Page>
                   child: Stack(
                     clipBehavior: Clip.none,
                     children: [
-                      ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxWidth: math.min(_compactFloatingToolbar ? _toolbarLength : 360.0, MediaQuery.sizeOf(context).width - 12),
-                          maxHeight: math.min(_fullScreenMode ? 190.0 : 190.0, MediaQuery.sizeOf(context).height * .5),
-                        ),
-                        child: _buildToolbar(vertical: _toolbarDock == 'left' || _toolbarDock == 'right'),
-                      ),
+                      Builder(builder: (context) {
+                        final vertical = _toolbarDock == 'left' || _toolbarDock == 'right';
+                        final screen = MediaQuery.sizeOf(context);
+                        return ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: vertical
+                                ? _toolbarThickness.clamp(28.0, 96.0).toDouble()
+                                : math.min(_compactFloatingToolbar ? _toolbarLength : 360.0, screen.width - 12),
+                            maxHeight: vertical
+                                ? math.min(_toolbarLength, screen.height - 24)
+                                : _toolbarThickness.clamp(28.0, 96.0).toDouble(),
+                          ),
+                          child: _buildToolbar(vertical: vertical),
+                        );
+                      }),
                       Positioned(
                         right: -5,
                         bottom: -5,
                         child: GestureDetector(
                           behavior: HitTestBehavior.opaque,
-                          onPanUpdate: (details) => setState(() {
-                            _toolbarLength = (_toolbarLength + details.delta.dx).clamp(180.0, 900.0).toDouble();
-                            final verticalPadding = details.delta.dy / 2;
-                            _toolbarPaddingTop = (_toolbarPaddingTop + verticalPadding).clamp(0.0, 28.0).toDouble();
-                            _toolbarPaddingBottom = (_toolbarPaddingBottom + verticalPadding).clamp(0.0, 28.0).toDouble();
-                          }),
+                          onPanUpdate: (details) {
+                            if (_toolbarDimensionsLocked) return;
+                            final vertical = _toolbarDock == 'left' || _toolbarDock == 'right';
+                            setState(() {
+                              if (vertical) {
+                                _toolbarThickness = (_toolbarThickness + details.delta.dx).clamp(28.0, 96.0).toDouble();
+                                _toolbarLength = (_toolbarLength + details.delta.dy).clamp(180.0, 900.0).toDouble();
+                              } else {
+                                _toolbarLength = (_toolbarLength + details.delta.dx).clamp(180.0, 900.0).toDouble();
+                                _toolbarThickness = (_toolbarThickness + details.delta.dy).clamp(28.0, 96.0).toDouble();
+                              }
+                            });
+                          },
                           onPanEnd: (_) {
                             unawaited(_settings.setDouble('editorV2ToolbarLength', _toolbarLength));
-                            unawaited(_settings.setDouble('editorV2ToolbarPaddingTop', _toolbarPaddingTop));
-                            unawaited(_settings.setDouble('editorV2ToolbarPaddingBottom', _toolbarPaddingBottom));
+                            unawaited(_settings.setDouble('editorV2ToolbarThickness', _toolbarThickness));
                           },
                           child: Material(
                             color: Theme.of(context).colorScheme.primary,

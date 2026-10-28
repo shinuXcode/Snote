@@ -10,6 +10,7 @@ class SnoteFloatingToolbar extends StatelessWidget {
     required this.compact,
     required this.fullScreen,
     required this.width,
+    required this.height,
     required this.marginLeft,
     required this.marginTop,
     required this.marginRight,
@@ -25,6 +26,7 @@ class SnoteFloatingToolbar extends StatelessWidget {
   final bool compact;
   final bool fullScreen;
   final double width;
+  final double height;
   final double marginLeft;
   final double marginTop;
   final double marginRight;
@@ -61,6 +63,7 @@ class SnoteFloatingToolbar extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: SizedBox(
           width: width,
+          height: height,
           child: SingleChildScrollView(
             padding: tight
                 ? EdgeInsets.zero
