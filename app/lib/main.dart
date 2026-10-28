@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 
 import 'app/app_entry.dart';
+import 'ui/snote_logo.dart';
 import 'app/theme_controller.dart';
 import 'core/settings/app_settings.dart';
 import 'ui/snote_theme.dart';
@@ -227,14 +228,23 @@ class _StartupPage extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const CircularProgressIndicator(),
-                const SizedBox(height: 18),
-                Text(
-                  'Starting Snote…',
-                  style: Theme.of(context).textTheme.titleMedium,
+
+                TweenAnimationBuilder<double>(
+                  tween: Tween(begin: .72, end: 1),
+                  duration: const Duration(milliseconds: 700),
+                  curve: Curves.easeOutBack,
+                  builder: (context, scale, child) => Opacity(
+                    opacity: scale.clamp(0.0, 1.0),
+                    child: Transform.scale(scale: scale, child: child),
+                  ),
+                  child: const SnoteLogo(size: 112, showWordmark: false),
                 ),
-                const SizedBox(height: 6),
-                const Text('Preparing your settings and notebook'),
+                const SizedBox(height: 24),
+                Text('Snote', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 18),
+                SizedBox(width: 120, child: LinearProgressIndicator(borderRadius: BorderRadius.circular(8))),
+                const SizedBox(height: 12),
+                const Text('Preparing your notebook'),
               ],
             ),
           ),

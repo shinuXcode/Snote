@@ -251,6 +251,8 @@ class _EditorV2PageState extends State<EditorV2Page>
   bool _showPagePreview = true;
   bool _floatingPageNavigation = false;
   bool _fullScreenMode = false;
+  bool _readingMode = false;
+  CanvasTool? _toolBeforeReading;
   bool _showFloatingTimer = false;
   bool _toolbarCollapsedToEdge = false;
   bool _calculatorCollapsed = false;
@@ -1461,6 +1463,19 @@ class _EditorV2PageState extends State<EditorV2Page>
     );
   }
 
+  List<Offset> _simplifyLassoOutline(List<Offset> points) {
+    if (points.length <= 3) return points;
+    final simplified = <Offset>[points.first];
+    for (var i = 1; i < points.length - 1; i++) {
+      if ((points[i] - simplified.last).distance >= 2.5 &&
+          simplified.length < 255) {
+        simplified.add(points[i]);
+      }
+    }
+    if (simplified.last != points.last) simplified.add(points.last);
+    return simplified;
+  }
+
   bool _strokeMostlyInsidePolygon(
     List<Offset> points,
     List<Offset> polygon, {
@@ -1638,19 +1653,20 @@ class _EditorV2PageState extends State<EditorV2Page>
     double? baseRadius,
   }) {
     final radius = baseRadius ?? math.max(18, _size * 2).toDouble();
-    if (!_settings.getBool('pressureErase') ||
-        !_settings.getBool('pressureEraseArea')) {
-      return radius;
-    }
+    if (!_settings.getBool('pressureErase')) return radius;
     final pressure = _pointFrom(event).pressure.clamp(0.0, 1.0).toDouble();
     final threshold = _settings.getDouble('pressureEraseThreshold').clamp(0.0, 1.0).toDouble();
     final effectivePressure = threshold >= 1
         ? (pressure >= 1 ? 1.0 : 0.0)
         : ((pressure - threshold) / (1 - threshold)).clamp(0.0, 1.0).toDouble();
-    return radius * (0.5 + effectivePressure * 1.5);
+    return radius * (0.08 + effectivePressure * 1.42);
   }
 
   void _onPointerDown(PointerDownEvent event) {
+    if (_readingMode) {
+      _navigationOnlyPointers.add(event.pointer);
+      return;
+    }
     _lastEraseTimestamp = null;
     _lastErasePosition = event.localPosition;
     _eraseUndoCaptured = false;
@@ -1816,8 +1832,9 @@ class _EditorV2PageState extends State<EditorV2Page>
     if (_activePointer == event.pointer && _pressureEraseActive) {
       _eraserCursor = event.localPosition;
       final radius = _pressureEraseRadius(event);
+      final previousPosition = _lastErasePosition ?? event.localPosition;
       if (_pressureEraseAllowed(event) && _shouldProcessErase(event, radius)) {
-        _eraseAt(event.localPosition, radius);
+        _eraseAlongSegment(previousPosition, event.localPosition, radius);
       }
       setState(() {});
       return;
@@ -1829,8 +1846,9 @@ class _EditorV2PageState extends State<EditorV2Page>
           _settings.getString('eraserMode') == 'pixel';
       final baseRadius = precisionRadius ? 7.0 : math.max(18, _size * 2).toDouble();
       final radius = _pressureEraseRadius(event, baseRadius: baseRadius);
+      final previousPosition = _lastErasePosition ?? event.localPosition;
       if (_pressureEraseAllowed(event) && _shouldProcessErase(event, radius)) {
-        _eraseAt(event.localPosition, radius);
+        _eraseAlongSegment(previousPosition, event.localPosition, radius);
       }
       setState(() {});
       return;
@@ -2031,6 +2049,15 @@ class _EditorV2PageState extends State<EditorV2Page>
     return result;
   }
 
+  void _eraseAlongSegment(Offset from, Offset to, double radius) {
+    final distance = (to - from).distance;
+    final spacing = math.max(2.0, radius * .45);
+    final steps = math.max(1, (distance / spacing).ceil());
+    for (var step = 0; step <= steps; step++) {
+      _eraseAt(Offset.lerp(from, to, step / steps)!, radius);
+    }
+  }
+
   void _eraseAt(Offset position, double radius) {
     final raw = _pageData['strokes'];
     if (raw is! List || raw.isEmpty) {
@@ -2045,8 +2072,9 @@ class _EditorV2PageState extends State<EditorV2Page>
     _eraseWorkingStrokes = decoded;
     final retained = <Stroke>[];
     var changed = false;
-    final partialErase = _tool == CanvasTool.pixelEraser ||
-        _settings.getString('eraserMode') == 'pixel';
+    final partialErase = _pressureEraseActive
+        ? _settings.getString('pressureEraserMode') == 'pixel'
+        : (_tool == CanvasTool.pixelEraser || _settings.getString('eraserMode') == 'pixel');
 
     for (final stroke in decoded) {
       if (stroke.points.isEmpty) {
@@ -2275,7 +2303,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       if (sourcePolygon.isNotEmpty) _selectInRect(Rect.fromPoints(sourcePolygon.first, sourcePolygon.last));
       return;
     }
-    final polygon = List<Offset>.unmodifiable(sourcePolygon);
+    final polygon = List<Offset>.unmodifiable(_simplifyLassoOutline(sourcePolygon));
     final xs = polygon.map((point) => point.dx);
     final ys = polygon.map((point) => point.dy);
     final left = xs.reduce((a, b) => math.min(a, b).toDouble());
@@ -2284,13 +2312,50 @@ class _EditorV2PageState extends State<EditorV2Page>
     final bottom = ys.reduce((a, b) => math.max(a, b).toDouble());
     final polygonBounds = Rect.fromLTRB(left, top, right, bottom);
     final selectedStrokes = <String>{};
-
+    // Keep the freeform lasso responsive on dense pages: reject strokes outside
+    // the lasso bounds before checking their geometry, then select visible ink
+    // that touches the outline as well as ink fully inside it.
     for (final stroke in _strokesFor(_pageData)) {
-      final points = stroke.points.map((sample) => sample.position).toList();
-      if (points.isEmpty) continue;
-      if (_strokeMostlyInsidePolygon(points, polygon)) {
-        selectedStrokes.add(stroke.id);
+      if (stroke.points.isEmpty) continue;
+      final strokeRadius = math.max(1.5, stroke.pen.size / 2);
+      var strokeBounds = Rect.fromPoints(
+        stroke.points.first.position,
+        stroke.points.first.position,
+      );
+      for (final sample in stroke.points.skip(1)) {
+        strokeBounds = strokeBounds.expandToInclude(
+          Rect.fromPoints(sample.position, sample.position),
+        );
       }
+      if (!strokeBounds.inflate(strokeRadius).overlaps(polygonBounds)) continue;
+
+      var selected = false;
+      for (final sample in stroke.points) {
+        final point = sample.position;
+        if (_pointInPolygon(point, polygon)) {
+          selected = true;
+          break;
+        }
+        for (var i = 0; i < polygon.length; i++) {
+          if (_distanceToSegment(point, polygon[i], polygon[(i + 1) % polygon.length]) <= strokeRadius) {
+            selected = true;
+            break;
+          }
+        }
+        if (selected) break;
+      }
+      // Catch a lasso boundary that crosses between widely spaced ink samples.
+      for (var i = 1; !selected && i < stroke.points.length; i++) {
+        final a = stroke.points[i - 1].position;
+        final b = stroke.points[i].position;
+        for (var j = 0; j < polygon.length; j++) {
+          if (_segmentsIntersect(a, b, polygon[j], polygon[(j + 1) % polygon.length])) {
+            selected = true;
+            break;
+          }
+        }
+      }
+      if (selected) selectedStrokes.add(stroke.id);
     }
 
     final selectedImages = <String>{};
@@ -3306,6 +3371,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     var color = _color;
     var places = Set<String>.from(_placementsFor(targetTool));
     var precisionErase = _settings.getString('eraserMode') == 'pixel';
+    var pressurePixelErase = _settings.getString('pressureEraserMode') == 'pixel';
 
     void saveProfile({bool persist = true}) {
       setState(() {
@@ -3319,8 +3385,9 @@ class _EditorV2PageState extends State<EditorV2Page>
       });
       _toolPlacements[targetTool.name] = Set<String>.from(places);
       if (persist) unawaited(_saveToolPlacements());
-      if (persist && targetTool == CanvasTool.eraser) {
+      if (persist && (targetTool == CanvasTool.eraser || targetTool == CanvasTool.pixelEraser)) {
         unawaited(_settings.setString('eraserMode', precisionErase ? 'pixel' : 'stroke'));
+        unawaited(_settings.setString('pressureEraserMode', pressurePixelErase ? 'pixel' : 'stroke'));
       }
       _toolProfiles[targetTool.name] = <String, Object?>{
         'size': size,
@@ -3426,16 +3493,35 @@ class _EditorV2PageState extends State<EditorV2Page>
               if (value != null) { setPanelState(() => curve = value); saveProfile(); }
             },
           ),
-          if (targetTool == CanvasTool.eraser)
-            SwitchListTile(
-              dense: true,
-              secondary: const Icon(Icons.crop_16_9_rounded),
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Precision erase radius'),
-              subtitle: const Text('Use a narrow hit area instead of the standard eraser radius'),
-              value: precisionErase,
-              onChanged: (value) { setPanelState(() => precisionErase = value); saveProfile(); },
+          if (targetTool == CanvasTool.eraser || targetTool == CanvasTool.pixelEraser) ...[
+            const Text('Normal eraser'),
+            SegmentedButton<bool>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: false, icon: Icon(Icons.gesture_rounded), label: Text('Stroke')),
+                ButtonSegment(value: true, icon: Icon(Icons.auto_fix_normal_rounded), label: Text('Pixel')),
+              ],
+              selected: <bool>{precisionErase},
+              onSelectionChanged: (value) {
+                setPanelState(() => precisionErase = value.first);
+                saveProfile();
+              },
             ),
+            const SizedBox(height: 8),
+            const Text('Pressure eraser'),
+            SegmentedButton<bool>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: false, icon: Icon(Icons.gesture_rounded), label: Text('Stroke')),
+                ButtonSegment(value: true, icon: Icon(Icons.auto_fix_normal_rounded), label: Text('Pixel')),
+              ],
+              selected: <bool>{pressurePixelErase},
+              onSelectionChanged: (value) {
+                setPanelState(() => pressurePixelErase = value.first);
+                saveProfile();
+              },
+            ),
+          ],
           if (targetTool == CanvasTool.lasso) ...[
             OutlinedButton.icon(
               icon: const Icon(Icons.text_fields_rounded),
@@ -3451,57 +3537,26 @@ class _EditorV2PageState extends State<EditorV2Page>
           const SizedBox(height: 8),
           const Divider(),
           const Text('Tool placement', style: TextStyle(fontWeight: FontWeight.w800)),
-          CheckboxListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            secondary: const Icon(Icons.title_rounded),
-            title: const Text('Show in Title Bar'),
-            value: places.contains('titleBar'),
-            onChanged: (value) {
+          SegmentedButton<String>(
+            showSelectedIcon: false,
+            multiSelectionEnabled: true,
+            emptySelectionAllowed: true,
+            segments: const [
+              ButtonSegment(value: 'titleBar', tooltip: 'Title bar', icon: Icon(Icons.title_rounded)),
+              ButtonSegment(value: 'toolbar', tooltip: 'Toolbar', icon: Icon(Icons.widgets_outlined)),
+              ButtonSegment(value: 'pencase', tooltip: 'Pencase', icon: Icon(Icons.inventory_2_outlined)),
+            ],
+            selected: places,
+            onSelectionChanged: (selection) {
               setPanelState(() {
-                if (value == true) {
-                  places.add('titleBar');
-                } else {
-                  places.remove('titleBar');
-                }
+                places
+                  ..clear()
+                  ..addAll(selection);
               });
               saveProfile();
             },
           ),
-          CheckboxListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            secondary: const Icon(Icons.widgets_outlined),
-            title: const Text('Show in Main Toolbar'),
-            value: places.contains('toolbar'),
-            onChanged: (value) {
-              setPanelState(() {
-                if (value == true) {
-                  places.add('toolbar');
-                } else {
-                  places.remove('toolbar');
-                }
-              });
-              saveProfile();
-            },
-          ),
-          CheckboxListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            secondary: const Icon(Icons.inventory_2_outlined),
-            title: const Text('Show in Pencase'),
-            value: places.contains('pencase'),
-            onChanged: (value) {
-              setPanelState(() {
-                if (value == true) {
-                  places.add('pencase');
-                } else {
-                  places.remove('pencase');
-                }
-              });
-              saveProfile();
-            },
-          ),
+          const SizedBox(height: 8),
           SwitchListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
@@ -6361,6 +6416,17 @@ class _EditorV2PageState extends State<EditorV2Page>
         _transform.value = Matrix4.identity()..scale(scale);
       case 'fullscreen':
         _toggleFullScreen();
+      case 'readingMode':
+        setState(() {
+          _readingMode = !_readingMode;
+          _fullScreenMode = _readingMode;
+          _panMode = _readingMode;
+          if (!_readingMode && _toolBeforeReading != null) {
+            _tool = _toolBeforeReading!;
+            _toolBeforeReading = null;
+          }
+        });
+        unawaited(SystemChrome.setEnabledSystemUIMode(_readingMode ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge));
       case 'save':
         unawaited(_save(force: true));
     }
@@ -6665,14 +6731,14 @@ class _EditorV2PageState extends State<EditorV2Page>
       compact: _compactFloatingToolbar,
       fullScreen: _fullScreenMode,
       width: compactWidth,
-      marginLeft: _toolbarMarginLeft,
-      marginTop: _toolbarMarginTop,
-      marginRight: _toolbarMarginRight,
-      marginBottom: _toolbarMarginBottom,
-      paddingLeft: _toolbarPaddingLeft,
-      paddingTop: _toolbarPaddingTop,
-      paddingRight: _toolbarPaddingRight,
-      paddingBottom: _toolbarPaddingBottom,
+      marginLeft: _fullScreenMode ? 0 : _toolbarMarginLeft,
+      marginTop: _fullScreenMode ? 0 : _toolbarMarginTop,
+      marginRight: _fullScreenMode ? 0 : _toolbarMarginRight,
+      marginBottom: _fullScreenMode ? 0 : _toolbarMarginBottom,
+      paddingLeft: _fullScreenMode ? 0 : _toolbarPaddingLeft,
+      paddingTop: _fullScreenMode ? 0 : _toolbarPaddingTop,
+      paddingRight: _fullScreenMode ? 0 : _toolbarPaddingRight,
+      paddingBottom: _fullScreenMode ? 0 : _toolbarPaddingBottom,
     );
   }
 
@@ -8306,6 +8372,7 @@ class _EditorV2PageState extends State<EditorV2Page>
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'fit', child: Text('Fit page to width')),
               const PopupMenuItem(value: 'fullscreen', child: Text('Toggle full screen')),
+              PopupMenuItem(value: 'readingMode', child: Text(_readingMode ? 'Exit reading mode' : 'Reading mode')),
               const PopupMenuItem(value: 'image', child: Text('Insert image from file')),
               const PopupMenuItem(value: 'clipboardImage', child: Text('Paste screenshot from clipboard')),
               PopupMenuItem(value: 'pasteSelection', enabled: _selectionClipboard != null, child: const Text('Paste copied selection')),
@@ -8380,7 +8447,7 @@ class _EditorV2PageState extends State<EditorV2Page>
               width: sidebarWidth,
               child: _buildPagePreviewSidebar(),
             ),
-          if ((_floatingToolbar || _fullScreenMode) && !_toolbarCollapsedToEdge)
+          if (!_readingMode && (_floatingToolbar || _fullScreenMode) && !_toolbarCollapsedToEdge)
             Positioned(
               left: _floatingOffset.dx.clamp(0, math.max(0, MediaQuery.sizeOf(context).width - 160)).toDouble(),
               top: _floatingOffset.dy.clamp(0, math.max(0, MediaQuery.sizeOf(context).height - 210)).toDouble(),
@@ -8413,8 +8480,8 @@ class _EditorV2PageState extends State<EditorV2Page>
                     children: [
                       ConstrainedBox(
                         constraints: BoxConstraints(
-                          maxWidth: math.min(_fullScreenMode && !_compactFloatingToolbar ? MediaQuery.sizeOf(context).width * .94 : (_compactFloatingToolbar ? _toolbarLength : 360.0), MediaQuery.sizeOf(context).width - 12),
-                          maxHeight: math.min(_fullScreenMode ? MediaQuery.sizeOf(context).height * .32 : 190.0, MediaQuery.sizeOf(context).height * .5),
+                          maxWidth: math.min(_compactFloatingToolbar ? _toolbarLength : 360.0, MediaQuery.sizeOf(context).width - 12),
+                          maxHeight: math.min(_fullScreenMode ? 190.0 : 190.0, MediaQuery.sizeOf(context).height * .5),
                         ),
                         child: _buildToolbar(vertical: _toolbarDock == 'left' || _toolbarDock == 'right'),
                       ),
@@ -8447,9 +8514,9 @@ class _EditorV2PageState extends State<EditorV2Page>
                 ),
               ),
             ),
-          if (_showFavoritesShowcase || _pencaseTools.isNotEmpty) _buildFavoriteShowcase(),
+          if (!_readingMode && (_showFavoritesShowcase || _pencaseTools.isNotEmpty)) _buildFavoriteShowcase(),
           // Page navigation is now handled by the expanded page-preview sidebar.
-          if (_fullScreenMode && !_toolbarCollapsedToEdge)
+          if (_fullScreenMode && !_readingMode && !_toolbarCollapsedToEdge)
             Positioned(
               top: 8,
               right: 52,
@@ -8533,7 +8600,28 @@ class _EditorV2PageState extends State<EditorV2Page>
                 ),
               ),
             ),
-          if (_fullScreenMode)
+          if (_readingMode)
+            Positioned(
+              left: 12,
+              right: 12,
+              top: 8,
+              child: SafeArea(
+                child: Center(
+                  child: Material(
+                    elevation: 6,
+                    borderRadius: BorderRadius.circular(28),
+                    color: Theme.of(context).colorScheme.surface.withValues(alpha: .94),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      IconButton(tooltip: 'Previous page', onPressed: _page > 0 ? () => _goToPage(_page - 1) : null, icon: const Icon(Icons.chevron_left_rounded)),
+                      Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Text('${_page + 1} / ${_pages.length}', style: const TextStyle(fontWeight: FontWeight.w700))),
+                      IconButton(tooltip: 'Next page', onPressed: _page + 1 < _pages.length ? () => _goToPage(_page + 1) : null, icon: const Icon(Icons.chevron_right_rounded)),
+                      IconButton(tooltip: 'Exit reading mode', onPressed: () => _onMenuSelected('readingMode'), icon: const Icon(Icons.close_rounded)),
+                    ]),
+                  ),
+                ),
+              ),
+            ),
+          if (_fullScreenMode && !_readingMode)
             Positioned(
               right: 8,
               top: 8,

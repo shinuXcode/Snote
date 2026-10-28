@@ -13,6 +13,7 @@ on:
       - restore/oct14-beta92
       - feat/snote-beta96-workspace-overhaul
       - feat/writing-engine-touch-notes-refresh
+      - beta/snote-0.1.2
     paths:
       - "app/**"
       - ".github/workflows/beta.yml"
@@ -53,7 +54,7 @@ jobs:
           set -euo pipefail
           VERSION="$(awk '/^version:/ {sub(/^version:[[:space:]]*/, ""); print; exit}' app/pubspec.yaml)"
           case "$VERSION" in
-            1.1.0-beta.*+*|0.1.1+*) ;;
+            1.1.0-beta.*+*|0.1.1+*|0.1.2+*) ;;
             *) echo "Unexpected beta version in app/pubspec.yaml: $VERSION"; exit 1 ;;
           esac
           RELEASE_VERSION="${VERSION%%+*}"
@@ -255,6 +256,10 @@ jobs:
       - name: Install dependencies
         working-directory: app
         run: flutter pub get
+
+      - name: Generate beta app icon
+        working-directory: app
+        run: dart run flutter_launcher_icons
 
       - name: Format
         working-directory: app

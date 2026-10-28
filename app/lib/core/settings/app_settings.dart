@@ -66,6 +66,7 @@ class SnoteSettings extends ChangeNotifier {
     'toolDashed': '{}',
     'lassoStyle': 'solid',
     'eraserMode': 'stroke',
+    'pressureEraserMode': 'pixel',
     'timerAlertSound': 'alert',
     'floatingTimerDockSide': 'right',
     'editorV2FavoriteOffset': '{"dx":16,"dy":220}',
