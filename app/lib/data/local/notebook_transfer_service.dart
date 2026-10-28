@@ -36,7 +36,7 @@ class NotebookTransferService {
       raw.cast<String, dynamic>(),
       password,
     );
-    return _importManifest(manifest);
+    return _importJson(jsonEncode(manifest));
   }
 
 
