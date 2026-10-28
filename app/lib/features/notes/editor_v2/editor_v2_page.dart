@@ -633,7 +633,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           });
         }
       }
-      final maxDimension = thumbnail ? 320.0 : 1600.0;
+      final maxDimension = thumbnail ? 320.0 : 2800.0;
       final scale = math.min(maxDimension / page.width, maxDimension / page.height);
       final rendered = await page.render(
         width: (page.width * scale).clamp(1.0, maxDimension).toDouble(),
@@ -755,7 +755,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       for (var index = 1; index <= totalPages; index++) {
         final pdfPage = await document.getPage(index);
         try {
-          const maxDimension = 1500.0;
+          const maxDimension = 2400.0;
           final scale = math.min(maxDimension / pdfPage.width, maxDimension / pdfPage.height);
           final rendered = await pdfPage.render(
             width: (pdfPage.width * scale).roundToDouble(),
@@ -6659,7 +6659,7 @@ class _EditorV2PageState extends State<EditorV2Page>
             math.min(_toolbarLength, actions.length * 28.0 + quickButtons.length * 30.0 + 69.0),
           );
     return Container(
-      margin: _compactFloatingToolbar
+      margin: (_compactFloatingToolbar || _fullScreenMode)
           ? EdgeInsets.zero
           : EdgeInsets.fromLTRB(_toolbarMarginLeft, _toolbarMarginTop, _toolbarMarginRight, _toolbarMarginBottom),
       child: Material(
@@ -6669,7 +6669,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       child: SizedBox(
         width: compactWidth,
         child: SingleChildScrollView(
-          padding: _compactFloatingToolbar
+          padding: (_compactFloatingToolbar || _fullScreenMode)
               ? EdgeInsets.zero
               : EdgeInsets.fromLTRB(_toolbarPaddingLeft, _toolbarPaddingTop, _toolbarPaddingRight, _toolbarPaddingBottom),
           scrollDirection: vertical ? Axis.vertical : Axis.horizontal,
@@ -6917,7 +6917,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           final bytes = snapshot.data;
           if (bytes != null && bytes.isNotEmpty) {
             return Image.memory(bytes, fit: BoxFit.fill,
-              filterQuality: thumbnail ? FilterQuality.low : FilterQuality.medium,
+              filterQuality: thumbnail ? FilterQuality.low : FilterQuality.high,
               errorBuilder: (_, error, stackTrace) => const ColoredBox(color: Color(0xfffff8e7), child: Center(child: Icon(Icons.broken_image_outlined))),
             );
           }
