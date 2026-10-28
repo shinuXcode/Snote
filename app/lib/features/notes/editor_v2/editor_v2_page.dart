@@ -7543,7 +7543,6 @@ class _EditorV2PageState extends State<EditorV2Page>
                                         ),
                                         const PopupMenuItem(value: 'delete', child: ListTile(dense: true, leading: Icon(Icons.delete_outline_rounded), title: Text('Delete page…'))),
                                       ],
-                                      icon: const Icon(Icons.more_horiz_rounded),
                                     ),
                                   ),
                                 ),
