@@ -12,6 +12,7 @@ on:
       - feat/snote-beta83-pro-ui-fountain-ocr
       - restore/oct14-beta92
       - feat/snote-beta96-workspace-overhaul
+      - fix/beta-0.0.2-pdf-toolbar
     paths:
       - "app/**"
       - ".github/workflows/beta.yml"
@@ -52,7 +53,7 @@ jobs:
           set -euo pipefail
           VERSION="$(awk '/^version:/ {sub(/^version:[[:space:]]*/, ""); print; exit}' app/pubspec.yaml)"
           case "$VERSION" in
-            1.1.0-beta.*+*) ;;
+            1.1.0-beta.*+*|0.0.2+*) ;;
             *) echo "Unexpected beta version in app/pubspec.yaml: $VERSION"; exit 1 ;;
           esac
           RELEASE_VERSION="${VERSION%%+*}"
@@ -351,23 +352,4 @@ jobs:
             gh release edit "$RELEASE_TAG" --title "Snote $PACKAGE_VERSION" --notes "$NOTES" --prerelease --repo "$GITHUB_REPOSITORY"
           else
             gh release create "$RELEASE_TAG" Snote-Android-Beta.apk Snote-Android-Beta.sha256 --repo "$GITHUB_REPOSITORY" --title "Snote $PACKAGE_VERSION" --notes "$NOTES" --target "$GITHUB_SHA" --prerelease
-          fi
-
-      - name: Remove superseded beta release after replacement publishes
-        if: success() && github.event_name == 'push'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CURRENT_TAG: ${{ steps.beta_version.outputs.tag }}
-        run: |
-          set -euo pipefail
-          OLD_TAG="v1.1.0-beta.79"
-          if [ "$CURRENT_TAG" = "$OLD_TAG" ]; then
-            echo "Skipping cleanup because the current release is the old beta."
-            exit 0
-          fi
-          if gh release view "$OLD_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release delete "$OLD_TAG" --yes --cleanup-tag --repo "$GITHUB_REPOSITORY"
-            echo "Removed superseded release and tag $OLD_TAG after $CURRENT_TAG was published."
-          else
-            echo "Superseded release $OLD_TAG is already absent."
           fi
