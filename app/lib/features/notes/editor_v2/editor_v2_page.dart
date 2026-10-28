@@ -633,7 +633,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           });
         }
       }
-      final maxDimension = thumbnail ? 320.0 : 1600.0;
+      final maxDimension = thumbnail ? 320.0 : 2800.0;
       final scale = math.min(maxDimension / page.width, maxDimension / page.height);
       final rendered = await page.render(
         width: (page.width * scale).clamp(1.0, maxDimension).toDouble(),
@@ -755,7 +755,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       for (var index = 1; index <= totalPages; index++) {
         final pdfPage = await document.getPage(index);
         try {
-          const maxDimension = 1500.0;
+          const maxDimension = 2800.0;
           final scale = math.min(maxDimension / pdfPage.width, maxDimension / pdfPage.height);
           final rendered = await pdfPage.render(
             width: (pdfPage.width * scale).roundToDouble(),
@@ -5867,15 +5867,15 @@ class _EditorV2PageState extends State<EditorV2Page>
   }
 
   Future<void> _setToolbarDock(String value) async {
-    // The editor no longer renders a bottom dock/navigation panel. Keep old
-    // saved preferences compatible by mapping a requested bottom dock to top.
-    final dock = value == 'bottom' ? 'top' : value;
+    final dock = const <String>{'top', 'bottom', 'left', 'right'}.contains(value)
+        ? value
+        : 'top';
     setState(() {
       _toolbarDock = dock;
-      _floatingToolbar = false;
+      _floatingToolbar = true;
     });
     await _settings.setString('editorV2ToolbarDock', dock);
-    await _settings.setBool('editorV2FloatingToolbar', false);
+    await _settings.setBool('editorV2FloatingToolbar', true);
   }
 
   Future<void> _toggleFloatingToolbar() async {
@@ -6659,7 +6659,7 @@ class _EditorV2PageState extends State<EditorV2Page>
             math.min(_toolbarLength, actions.length * 28.0 + quickButtons.length * 30.0 + 69.0),
           );
     return Container(
-      margin: _compactFloatingToolbar
+      margin: (_compactFloatingToolbar || _fullScreenMode)
           ? EdgeInsets.zero
           : EdgeInsets.fromLTRB(_toolbarMarginLeft, _toolbarMarginTop, _toolbarMarginRight, _toolbarMarginBottom),
       child: Material(
@@ -6669,7 +6669,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       child: SizedBox(
         width: compactWidth,
         child: SingleChildScrollView(
-          padding: _compactFloatingToolbar
+          padding: (_compactFloatingToolbar || _fullScreenMode)
               ? EdgeInsets.zero
               : EdgeInsets.fromLTRB(_toolbarPaddingLeft, _toolbarPaddingTop, _toolbarPaddingRight, _toolbarPaddingBottom),
           scrollDirection: vertical ? Axis.vertical : Axis.horizontal,
@@ -6917,7 +6917,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           final bytes = snapshot.data;
           if (bytes != null && bytes.isNotEmpty) {
             return Image.memory(bytes, fit: BoxFit.fill,
-              filterQuality: thumbnail ? FilterQuality.low : FilterQuality.medium,
+              filterQuality: thumbnail ? FilterQuality.low : FilterQuality.high,
               errorBuilder: (_, error, stackTrace) => const ColoredBox(color: Color(0xfffff8e7), child: Center(child: Icon(Icons.broken_image_outlined))),
             );
           }
@@ -8395,13 +8395,17 @@ class _EditorV2PageState extends State<EditorV2Page>
                   final x = _floatingOffset.dx;
                   final y = _floatingOffset.dy;
                   if (x <= 18) {
+                    setState(() => _floatingOffset = Offset(0, y.clamp(0, screen.height - 120).toDouble()));
                     unawaited(_setToolbarDock('left'));
                   } else if (x >= screen.width - 100) {
+                    setState(() => _floatingOffset = Offset(math.max(0, screen.width - 66), y.clamp(0, screen.height - 120).toDouble()));
                     unawaited(_setToolbarDock('right'));
                   } else if (y <= 18) {
+                    setState(() => _floatingOffset = Offset(x.clamp(0, screen.width - 180).toDouble(), 0));
                     unawaited(_setToolbarDock('top'));
-                  } else if (y >= screen.height - 230) {
-                    unawaited(_setToolbarDock('right'));
+                  } else if (y >= screen.height - 130) {
+                    setState(() => _floatingOffset = Offset(x.clamp(0, screen.width - 180).toDouble(), math.max(0, screen.height - 112)));
+                    unawaited(_setToolbarDock('bottom'));
                   }
                 },
                 child: Material(
@@ -8416,7 +8420,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                           maxWidth: math.min(_fullScreenMode && !_compactFloatingToolbar ? MediaQuery.sizeOf(context).width * .94 : (_compactFloatingToolbar ? _toolbarLength : 360.0), MediaQuery.sizeOf(context).width - 12),
                           maxHeight: math.min(_fullScreenMode ? MediaQuery.sizeOf(context).height * .32 : 190.0, MediaQuery.sizeOf(context).height * .5),
                         ),
-                        child: _buildToolbar(vertical: false),
+                        child: _buildToolbar(vertical: _toolbarDock == 'left' || _toolbarDock == 'right'),
                       ),
                       Positioned(
                         right: -5,
