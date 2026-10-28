@@ -31,6 +31,7 @@ dependencies:
   google_mlkit_text_recognition: ^0.15.0
   flutter_secure_storage: ^11.2.0
   crypto: ^3.0.6
+  cryptography: ^2.9.0
   archive: ^4.0.9
   wakelock_plus: ^1.8.1
   http: ^1.6.0

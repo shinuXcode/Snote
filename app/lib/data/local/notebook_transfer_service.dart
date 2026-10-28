@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:file_picker/file_picker.dart';
 
+import 'notebook_transfer_crypto.dart';
+
 import 'folder_repository.dart';
 import 'note_repository.dart';
 
@@ -12,6 +14,31 @@ class NotebookTransferService {
   final FolderRepository folders = FolderRepository();
 
   NotebookTransferService(this.repository);
+
+  Future<Uri?> exportEncryptedPicked({required String password}) async {
+    final envelope = await NotebookTransferCrypto.encrypt(await _manifest(), password);
+    return FilePicker.saveFile(
+      fileName: 'snote-encrypted-notebook-${DateTime.now().millisecondsSinceEpoch}.snote',
+      bytes: Uint8List.fromList(utf8.encode(jsonEncode(envelope))),
+      mimeType: 'application/octet-stream',
+    );
+  }
+
+  Future<int> importEncryptedPicked({required String password}) async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['snote', 'json'],
+    );
+    if (result.isEmpty) return 0;
+    final raw = jsonDecode(utf8.decode(await result.first.readAsBytes()));
+    if (raw is! Map) throw const FormatException('Invalid encrypted Snote notebook.');
+    final manifest = await NotebookTransferCrypto.decrypt(
+      raw.cast<String, dynamic>(),
+      password,
+    );
+    return _importManifest(manifest);
+  }
+
 
   Future<Map<String, dynamic>> _manifest() async {
     final notes = await repository.listAllVisible();

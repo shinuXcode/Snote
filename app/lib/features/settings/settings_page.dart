@@ -444,40 +444,80 @@ class _SettingsPageState extends State<SettingsPage> {
     final action = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
-      builder: (sheet) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        ListTile(leading: const Icon(Icons.qr_code_scanner_rounded), title: const Text('Receive note'), subtitle: const Text('Open the QR receiver'), onTap: () => Navigator.pop(sheet, 'receive')),
-        ListTile(leading: const Icon(Icons.qr_code_2_rounded), title: const Text('Send note'), subtitle: const Text('Choose a note to display transfer QR codes'), onTap: () => Navigator.pop(sheet, 'send')),
-      ])),
+      builder: (sheet) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.lock_outline_rounded),
+            title: const Text('Send whole notebook'),
+            subtitle: const Text('Export all notes and folders in an encrypted file'),
+            onTap: () => Navigator.pop(sheet, 'send'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.lock_open_rounded),
+            title: const Text('Receive notebook'),
+            subtitle: const Text('Import an encrypted notebook file'),
+            onTap: () => Navigator.pop(sheet, 'receive'),
+          ),
+        ]),
+      ),
     );
     if (!mounted || action == null) return;
-    if (action == 'receive') {
-      await Navigator.push(context, MaterialPageRoute(builder: (_) => const QrImportPage()));
+
+    final passwordController = TextEditingController();
+    final password = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(action == 'send' ? 'Protect notebook transfer' : 'Unlock notebook transfer'),
+        content: TextField(
+          controller: passwordController,
+          autofocus: true,
+          obscureText: true,
+          decoration: const InputDecoration(
+            labelText: 'Transfer password',
+            helperText: 'Use the same password on the receiving device (8+ characters).',
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, passwordController.text),
+            child: Text(action == 'send' ? 'Encrypt and save' : 'Choose file'),
+          ),
+        ],
+      ),
+    );
+    passwordController.dispose();
+    if (!mounted || password == null) return;
+    if (password.length < 8) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Transfer password must be at least 8 characters.')),
+      );
       return;
     }
-    final notes = await NoteRepository().listAllVisible();
-    if (!mounted) return;
-    final selected = await showModalBottomSheet<LocalNote>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (sheet) => SafeArea(child: SizedBox(
-        height: MediaQuery.sizeOf(sheet).height * .7,
-        child: ListView(
-          children: [
-            const ListTile(title: Text('Choose note to send', style: TextStyle(fontWeight: FontWeight.w800))),
-            for (final note in notes)
-              ListTile(
-                leading: const Icon(Icons.description_outlined),
-                title: Text(note.title.isEmpty ? 'Untitled note' : note.title),
-                subtitle: Text(note.noteType),
-                onTap: () => Navigator.pop(sheet, note),
-              ),
-          ],
-        ),
-      )),
-    );
-    if (selected != null && mounted) {
-      await Navigator.push(context, MaterialPageRoute(builder: (_) => QrTransferPage(note: selected)));
+
+    final transfer = NotebookTransferService(NoteRepository());
+    try {
+      if (action == 'send') {
+        final uri = await transfer.exportEncryptedPicked(password: password);
+        if (uri != null && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Encrypted notebook file is ready to share.')),
+          );
+        }
+      } else {
+        final count = await transfer.importEncryptedPicked(password: password);
+        if (mounted && count > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Imported $count note(s) from the encrypted notebook.')),
+          );
+        }
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Notebook transfer failed: $error')),
+        );
+      }
     }
   }
 

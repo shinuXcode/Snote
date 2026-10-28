@@ -18,6 +18,7 @@ import '../folders/folder_cover_art.dart';
 import '../folders/folder_cover_library_page.dart';
 import '../pdf/pdf_annotation_page.dart';
 import '../settings/settings_page.dart';
+import '../settings/local_backups_page.dart';
 import '../share/qr_import_page.dart';
 import '../trash/trash_page.dart';
 import '../tools/flashcard_page.dart';
@@ -1080,6 +1081,39 @@ class _NotesHomePageState extends State<NotesHomePage> {
     }
   }
 
+  Future<void> _openHomeDestination(String destination) async {
+    if (destination == 'home') {
+      setState(() {
+        _folderId = null;
+        _breadcrumbs.clear();
+        _selected = null;
+        _search.clear();
+      });
+      await _load();
+      return;
+    }
+    final Widget page;
+    switch (destination) {
+      case 'flashcards':
+        page = const FlashcardPage();
+        break;
+      case 'mindmaps':
+        page = const MindMapPage();
+        break;
+      case 'trash':
+        page = const TrashPage();
+        break;
+      case 'backups':
+        page = const LocalBackupsPage();
+        break;
+      default:
+        return;
+    }
+    if (!mounted) return;
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+    if (mounted) await _load();
+  }
+
   Future<void> _openPlus() async {
     final messenger = ScaffoldMessenger.of(context);
     final action = await showModalBottomSheet<String>(
@@ -1137,6 +1171,24 @@ class _NotesHomePageState extends State<NotesHomePage> {
   Widget build(BuildContext context) {
     final wide = _usesSplitWorkspace(context);
     return Scaffold(
+      drawer: wide ? null : Drawer(
+        child: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(14, 10, 14, 18),
+                child: Row(children: [SnoteLogo(size: 32), SizedBox(width: 10), Text('Snote', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800))]),
+              ),
+              _homeDrawerItem(Icons.home_rounded, 'Home', 'home'),
+              _homeDrawerItem(Icons.style_rounded, 'Flashcards', 'flashcards'),
+              _homeDrawerItem(Icons.hub_rounded, 'Mindmaps', 'mindmaps'),
+              _homeDrawerItem(Icons.backup_rounded, 'Local Backups', 'backups'),
+              _homeDrawerItem(Icons.delete_outline_rounded, 'Trash', 'trash'),
+            ],
+          ),
+        ),
+      ),
       body: SafeArea(child: wide ? _desktop() : _mobile()),
       floatingActionButton: FloatingActionButton(
         tooltip: 'Add',
@@ -1146,6 +1198,17 @@ class _NotesHomePageState extends State<NotesHomePage> {
     );
   }
 
+
+  Widget _homeDrawerItem(IconData icon, String label, String destination) =>
+      ListTile(
+        leading: Icon(icon),
+        title: Text(label),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        onTap: () {
+          Navigator.pop(context);
+          unawaited(_openHomeDestination(destination));
+        },
+      );
 
   /// Beta 79's new notebook launch panel. Feature-specific destinations remain
   /// available from the existing action sheet; these are only quick shortcuts.
@@ -1298,6 +1361,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
           ),
           onUpdates: _openUpdates,
           onCovers: _openCoverLibrary,
+          onDestination: (destination) => unawaited(_openHomeDestination(destination)),
         ),
         Expanded(
           child: Column(
@@ -1403,6 +1467,11 @@ class _NotesHomePageState extends State<NotesHomePage> {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: Row(
             children: [
+              Builder(builder: (context) => IconButton(
+                tooltip: 'Open navigation',
+                onPressed: () => Scaffold.of(context).openDrawer(),
+                icon: const Icon(Icons.menu_rounded),
+              )),
               const SnoteLogo(size: 34),
               const Spacer(),
               IconButton(onPressed: () => setState(() { _searchVisible = !_searchVisible; if (!_searchVisible) _search.clear(); }), tooltip: 'Search notes', icon: const Icon(Icons.search_rounded)),
@@ -1530,6 +1599,7 @@ class _SideRail extends StatelessWidget {
   final VoidCallback onSettings;
   final VoidCallback onUpdates;
   final VoidCallback onCovers;
+  final ValueChanged<String> onDestination;
 
   const _SideRail({
     required this.expanded,
@@ -1537,6 +1607,7 @@ class _SideRail extends StatelessWidget {
     required this.onSettings,
     required this.onUpdates,
     required this.onCovers,
+    required this.onDestination,
   });
 
   @override
@@ -1588,7 +1659,12 @@ class _SideRail extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 20),
-          entry(icon: Icons.auto_stories_rounded, label: 'Notebook', selected: true, onTap: () {}),
+          entry(icon: Icons.home_rounded, label: 'Home', selected: true, onTap: () => onDestination('home')),
+          entry(icon: Icons.style_rounded, label: 'Flashcards', onTap: () => onDestination('flashcards')),
+          entry(icon: Icons.hub_rounded, label: 'Mindmaps', onTap: () => onDestination('mindmaps')),
+          entry(icon: Icons.backup_rounded, label: 'Local Backups', onTap: () => onDestination('backups')),
+          entry(icon: Icons.delete_outline_rounded, label: 'Trash', onTap: () => onDestination('trash')),
+          const Divider(height: 18),
           entry(icon: Icons.notifications_none_rounded, label: 'Updates & notices', onTap: onUpdates),
           entry(icon: Icons.collections_bookmark_outlined, label: 'Cover library', onTap: onCovers),
           entry(icon: Icons.settings_outlined, label: 'Settings', onTap: onSettings),
