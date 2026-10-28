@@ -698,7 +698,11 @@ class _EditorV2PageState extends State<EditorV2Page>
           _pdfRasterCache.values.fold<int>(0, (total, bytes) => total + bytes.length) >
               _maxPdfRasterCacheBytes) {
         if (_pdfRasterCache.isEmpty) break;
-        _pdfRasterCache.remove(_pdfRasterCache.keys.first);
+        final evictedKey = _pdfRasterCache.keys.first;
+        _pdfRasterCache.remove(evictedKey);
+        // Keep the byte budget meaningful: a completed Future also retains its
+        // Uint8List, so evict its entry together with the raster bytes.
+        _pdfRasterFutureCache.remove(evictedKey);
       }
     }).catchError((Object error) {
       debugPrint('[Snote][EditorV2] lazy PDF page render failed ($pageNumber): $error');
