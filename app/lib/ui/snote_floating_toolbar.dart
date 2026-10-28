@@ -44,11 +44,7 @@ class SnoteFloatingToolbar extends StatelessWidget {
           : EdgeInsets.fromLTRB(marginLeft, marginTop, marginRight, marginBottom),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: compact ? .88 : .96),
-        borderRadius: BorderRadius.circular(compact ? 9 : 13),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: .72),
-          width: .7,
-        ),
+        borderRadius: BorderRadius.circular(24),
         boxShadow: compact || fullScreen
             ? const <BoxShadow>[]
             : <BoxShadow>[
@@ -61,7 +57,7 @@ class SnoteFloatingToolbar extends StatelessWidget {
       ),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(compact ? 9 : 13),
+        borderRadius: BorderRadius.circular(24),
         clipBehavior: Clip.antiAlias,
         child: SizedBox(
           width: width,

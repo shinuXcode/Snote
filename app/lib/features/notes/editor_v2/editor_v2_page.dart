@@ -228,6 +228,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   int? _activePointer;
   Offset? _gestureStart;
   Offset? _eraserCursor;
+  double _eraserCursorRadius = 18;
   Offset _floatingOffset = const Offset(12, 12);
   List<StrokePoint> _livePoints = <StrokePoint>[];
   Stroke? _liveStroke;
@@ -1228,17 +1229,7 @@ class _EditorV2PageState extends State<EditorV2Page>
               width: _favoritesVertical ? 34 : 38,
               height: _favoritesVertical ? 38 : 34,
               margin: const EdgeInsets.all(2),
-              decoration: BoxDecoration(
-                color: active
-                    ? Theme.of(context).colorScheme.primaryContainer
-                    : Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: active
-                      ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).colorScheme.outlineVariant,
-                ),
-              ),
+              decoration: const BoxDecoration(shape: BoxShape.circle),
               child: _settings.getBool('showPenCaseStrokeSize') && active
                   ? Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -1832,6 +1823,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     if (_activePointer == event.pointer && _pressureEraseActive) {
       _eraserCursor = event.localPosition;
       final radius = _pressureEraseRadius(event);
+      _eraserCursorRadius = radius;
       final previousPosition = _lastErasePosition ?? event.localPosition;
       if (_pressureEraseAllowed(event) && _shouldProcessErase(event, radius)) {
         _eraseAlongSegment(previousPosition, event.localPosition, radius);
@@ -1846,6 +1838,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           _settings.getString('eraserMode') == 'pixel';
       final baseRadius = precisionRadius ? 7.0 : math.max(18, _size * 2).toDouble();
       final radius = _pressureEraseRadius(event, baseRadius: baseRadius);
+      _eraserCursorRadius = radius;
       final previousPosition = _lastErasePosition ?? event.localPosition;
       if (_pressureEraseAllowed(event) && _shouldProcessErase(event, radius)) {
         _eraseAlongSegment(previousPosition, event.localPosition, radius);
@@ -1903,7 +1896,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       _navigationOnlyPointers.remove(event.pointer);
       final swipe = event.localPosition - _pageSwipeStart!;
       final horizontalSwipe = swipe.dx.abs() > swipe.dy.abs() * 1.25;
-      final forward = horizontalSwipe ? swipe.dx > 0 : swipe.dy < 0;
+      final forward = horizontalSwipe ? swipe.dx < 0 : swipe.dy > 0;
       setState(() {
         _activePointer = null;
         _gestureStart = null;
@@ -6475,17 +6468,14 @@ class _EditorV2PageState extends State<EditorV2Page>
           child: Tooltip(
             message: '${tool.label}\nDouble-tap for settings • long-press and drag to reorder',
             child: Material(
-              color: _tool == tool ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surface,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(7),
-                side: BorderSide(color: _tool == tool ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outlineVariant.withValues(alpha: .65)),
-              ),
+              color: Colors.transparent,
+              shape: const CircleBorder(),
               child: InkWell(
                 borderRadius: BorderRadius.circular(7),
                 onTapDown: (details) => _toolSettingsAnchor = details.globalPosition,
                 onDoubleTap: () => _strokeSettings(tool, _toolSettingsAnchor),
                 onTap: () => _selectTool(tool),
-                child: SizedBox(width: 27, height: 27, child: Icon(_toolIcon(tool), size: 16, color: _tool == tool ? Theme.of(context).colorScheme.primary : null)),
+                child: SizedBox(width: 30, height: 30, child: Stack(alignment: Alignment.center, children: [Icon(_toolIcon(tool), size: 18, color: _tool == tool ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface), if (_tool == tool) Positioned(bottom: 1, child: Container(width: 4, height: 4, decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, shape: BoxShape.circle))) ])),
               ),
             ),
           ),
@@ -7482,7 +7472,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                                   right: 0,
                                   top: 0,
                                   child: Material(
-                                    color: Theme.of(context).colorScheme.surface.withValues(alpha: .96),
+                                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
                                     borderRadius: const BorderRadius.only(
                                       bottomLeft: Radius.circular(8),
                                     ),
@@ -7491,8 +7481,9 @@ class _EditorV2PageState extends State<EditorV2Page>
                                       useRootNavigator: true,
                                       position: PopupMenuPosition.under,
                                       padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints.tightFor(width: 34, height: 32),
-                                      iconSize: 18,
+                                      constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+                                      iconSize: 22,
+                                      icon: Icon(Icons.more_vert_rounded, color: Theme.of(context).colorScheme.onSurface),
                                       onSelected: (action) {
                                         switch (action) {
                                           case 'blank':
@@ -7637,6 +7628,11 @@ class _EditorV2PageState extends State<EditorV2Page>
                 onPointerHover: (event) {
                   if (_tool == CanvasTool.eraser || _tool == CanvasTool.pixelEraser) {
                     _eraserCursor = event.localPosition;
+                    final baseRadius = _tool == CanvasTool.pixelEraser ||
+                            _settings.getString('eraserMode') == 'pixel'
+                        ? 7.0
+                        : math.max(18, _size * 2).toDouble();
+                    _eraserCursorRadius = _pressureEraseRadius(event, baseRadius: baseRadius);
                     setState(() {});
                   }
                 },
@@ -7646,7 +7642,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                     liveStroke: live,
                     selectedStrokeIds: selected,
                     eraserCursor: _tool == CanvasTool.eraser || _tool == CanvasTool.pixelEraser ? _eraserCursor : null,
-                    eraserRadius: _tool == CanvasTool.pixelEraser ? 7 : math.max(18, _size * 2).toDouble(),
+                    eraserRadius: _eraserCursorRadius,
                   ),
                   size: Size(_pageWidth, _pageHeight),
                 ),

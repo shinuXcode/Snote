@@ -42,17 +42,34 @@ class EditorV2InkPainter extends CustomPainter {
     }
     if (liveStroke != null) _drawStroke(canvas, liveStroke!);
     if (eraserCursor != null) {
-      final cursor = Paint()
-        ..color = const Color(0xff3979e8).withValues(alpha: .65)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.4;
-      canvas.drawRect(
-        Rect.fromCenter(
-          center: eraserCursor!,
-          width: eraserRadius * 2,
-          height: eraserRadius * 1.4,
-        ),
-        cursor,
+      final bounds = Rect.fromCircle(center: eraserCursor!, radius: eraserRadius);
+      // A translucent footprint plus a contrasting double outline stays visible
+      // over both light and dark page backgrounds while tracking pressure live.
+      canvas.drawCircle(
+        eraserCursor!,
+        eraserRadius,
+        Paint()..color = const Color(0xff3979e8).withValues(alpha: .10),
+      );
+      canvas.drawCircle(
+        eraserCursor!,
+        eraserRadius,
+        Paint()
+          ..color = Colors.white.withValues(alpha: .95)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.2,
+      );
+      canvas.drawCircle(
+        eraserCursor!,
+        eraserRadius,
+        Paint()
+          ..color = const Color(0xff174ea6)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.4,
+      );
+      canvas.drawCircle(
+        eraserCursor!,
+        math.max(1.2, bounds.width * .012),
+        Paint()..color = const Color(0xff174ea6),
       );
     }
   }
