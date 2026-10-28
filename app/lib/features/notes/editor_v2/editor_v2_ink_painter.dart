@@ -82,9 +82,9 @@ class EditorV2InkPainter extends CustomPainter {
 
     final type = stroke.pen.type;
     final baseWidth = stroke.pen.size.clamp(.5, 60).toDouble();
-    final alpha = (stroke.pen.opacity *
+    final alpha = (stroke.pen.color.a * stroke.pen.opacity *
             (type == PenType.pencil ? .78 : 1.0))
-        .clamp(.03, 1.0)
+        .clamp(0.0, 1.0)
         .toDouble();
     final paint = Paint()
       ..color = stroke.pen.color.withValues(alpha: alpha)
@@ -109,7 +109,7 @@ class EditorV2InkPainter extends CustomPainter {
         loop,
         Paint()
           ..color = (stroke.fillColor ?? stroke.pen.color).withValues(
-            alpha: stroke.fillOpacity.clamp(0, 1).toDouble(),
+            alpha: (stroke.fillColor ?? stroke.pen.color).a * stroke.fillOpacity.clamp(0, 1).toDouble(),
           )
           ..style = PaintingStyle.fill
           ..isAntiAlias = true,
