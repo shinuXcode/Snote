@@ -13,7 +13,7 @@ void main() {
   test('stroke codec round-trips vector data', () {
     const pen = PenConfig(
       type: PenType.fountain,
-      color: Color(0xff3567ff),
+      color: Color(0x803567ff),
       size: 4,
     );
 
@@ -42,6 +42,12 @@ void main() {
     expect(decoded.first.points, hasLength(2));
     expect(decoded.first.pen.type, PenType.fountain);
     expect(decoded.first.pen.color.toARGB32(), pen.color.toARGB32());
+    // Vector coordinates and per-sample pressure must survive save/load exactly.
+    expect(decoded.first.points[0].position, const Offset(12, 16));
+    expect(decoded.first.points[0].pressure, .8);
+    expect(decoded.first.points[0].timestamp, 1);
+    expect(decoded.first.points[1].position, const Offset(22, 26));
+    expect(decoded.first.points[1].pressure, .9);
   });
 
   test('fountain width decreases as velocity increases', () {

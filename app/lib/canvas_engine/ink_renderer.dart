@@ -50,7 +50,7 @@ class InkRenderer {
         .toDouble();
 
     final paint = Paint()
-      ..color = pen.color.withValues(alpha: opacity)
+      ..color = pen.color.withValues(alpha: pen.color.a * opacity)
       ..style = PaintingStyle.fill
       ..isAntiAlias = true
       ..blendMode = pen.type == PenType.highlighter
@@ -69,7 +69,7 @@ class InkRenderer {
     // fractional device-pixel positions without changing the stored geometry.
     if (pen.size <= 2.2 && points.length > 1) {
       final centerPaint = Paint()
-        ..color = pen.color.withValues(alpha: opacity * .16)
+        ..color = pen.color.withValues(alpha: pen.color.a * opacity * .16)
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round
@@ -93,7 +93,7 @@ class InkRenderer {
         math.max(.25, radius),
         Paint()
           ..color = pen.color.withValues(
-            alpha: fountainOpacityForSample(
+            alpha: pen.color.a * fountainOpacityForSample(
               pressure: point.pressure,
               speed: 0,
               pen: pen,
@@ -162,7 +162,7 @@ class InkRenderer {
     canvas.drawPath(
       ribbon,
       Paint()
-        ..color = pen.color.withValues(alpha: alpha)
+        ..color = pen.color.withValues(alpha: pen.color.a * alpha)
         ..style = PaintingStyle.fill
         ..isAntiAlias = true
         ..strokeJoin = StrokeJoin.round,

@@ -4,12 +4,12 @@ import 'package:flutter/material.dart';
 /// A notebook-first palette with cool paper, deep teal ink and coral actions.
 /// The editor canvas remains responsible for its own paper templates.
 class SnoteTheme {
-  static const violet = Color(0xFF3559B8); // Kept for saved theme compatibility.
-  static const ink = Color(0xFF1B2638);
-  static const canvas = Color(0xFFF2F5F9);
+  static const violet = Color(0xFF5B5CE2); // Refreshed indigo-violet app accent.
+  static const ink = Color(0xFF172033);
+  static const canvas = Color(0xFFF5F6FC);
   static const panel = Color(0xFFFFFFFF);
-  static const coral = Color(0xFF168C83); // Professional teal accent; legacy API name retained.
-  static const mint = Color(0xFFDDE7FA);
+  static const coral = Color(0xFF0F9D8A); // Refreshed mint-teal secondary accent.
+  static const mint = Color(0xFFE5E7FF);
 
   static ThemeData light() {
     final scheme = ColorScheme.fromSeed(
@@ -139,10 +139,10 @@ class SnoteTheme {
   }
 
   static ThemeData dark() {
-    const background = Color(0xFF0E1522);
-    const surface = Color(0xFF171F2E);
-    const text = Color(0xFFE8EDF5);
-    const teal = Color(0xFFA9BDFB);
+    const background = Color(0xFF10111B);
+    const surface = Color(0xFF1A1B29);
+    const text = Color(0xFFF0F0FA);
+    const teal = Color(0xFFB7B5FF);
 
     final scheme = ColorScheme.fromSeed(
       seedColor: teal,
