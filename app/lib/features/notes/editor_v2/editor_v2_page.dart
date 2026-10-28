@@ -1763,6 +1763,7 @@ class _EditorV2PageState extends State<EditorV2Page>
             _livePoints.clear();
             _liveStroke = null;
             _eraserCursor = position;
+            _eraserCursorRadius = _pressureEraseRadius(event, baseRadius: 48);
           });
         }
       });
