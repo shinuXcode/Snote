@@ -19,12 +19,15 @@ class SnoteLogo extends StatelessWidget {
           'assets/branding/snote-logo.png',
           width: size,
           height: size,
-          semanticLabel: 'Snote',
+          fit: BoxFit.contain,
+          filterQuality: FilterQuality.high,
+          isAntiAlias: true,
+          semanticLabel: 'Snotee',
         ),
         if (showWordmark) ...[
           const SizedBox(width: 10),
           const Text(
-            'Snote',
+            'Snotee',
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w800,
