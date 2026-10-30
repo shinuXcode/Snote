@@ -23,6 +23,15 @@ Baseline: `beta/snote-0.1.2` (kept unchanged). Work branch: `feat/snotee-beta-po
 - No database schema, preference-key, package identifier, or user-data migration was performed.
 - **Phases 2–8 are not yet implemented.** They remain planned and must be handled in separate, tested changes.
 
+## Performance phase update — 2026-10-30
+
+- The active editor is `EditorV2Page`, not the legacy `NoteEditorPage`. PDF pages are already represented lazily for saved source attachments, with a 48 MiB raster LRU and adjacent-page prefetch on page navigation.
+- Root cause of slow note-tab switching: selecting another note used `pushReplacement`, disposing the current editor and its warm PDF document/raster caches. Switching back therefore repeated document loading and decoding.
+- Implemented route reuse on the feature branch: editor tabs now push a named route when first opened and return to an already-open route when selected. Existing editor states and their warm PDF caches remain mounted while another note is active.
+- Added post-first-frame prefetch of the current page's adjacent PDF pages so the initial visible page can paint before background warming starts.
+- Standardized the PDF-import editor route name with the reusable editor-tab route registry.
+- No database schema or persisted note format changed. This phase still needs CI verification and device-level frame-time / PDF timing measurements. It is not yet a quantified performance claim.
+
 ## Phased plan
 
 1. **Brand foundation:** unify visible app/website naming, remove duplicate sidebar branding, improve logo fit/filtering, preserve existing asset paths and package identifiers. Verify Flutter formatting/analyzer and website typecheck/build.
