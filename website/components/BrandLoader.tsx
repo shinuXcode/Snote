@@ -8,7 +8,7 @@ export default function BrandLoader() {
   return () => window.clearTimeout(timer);
  }, []);
  if (!visible) return null;
- return <div className="brand-loader" role="status" aria-label="Loading Snote" aria-live="polite">
+ return <div className="brand-loader" role="status" aria-label="Loading Snotee" aria-live="polite">
   <div className="brand-loader-mark"><img src="/snote-logo.png" alt="" /></div>
   <span className="brand-loader-word">snotee</span>
   <span className="brand-loader-track"><i /></span>
