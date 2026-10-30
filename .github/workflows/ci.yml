@@ -2,7 +2,7 @@ name: Snote CI
 
 on:
   push:
-    branches: [main, feat/snote-beta81-tool-layout-fill, feat/snote-beta82-editor-polish-ocr]
+    branches: [main, feat/snote-beta81-tool-layout-fill, feat/snote-beta82-editor-polish-ocr, feat/snotee-beta-polish-20261030]
     paths:
       - "app/**"
       - "website/**"
