@@ -90,14 +90,14 @@ class _NotesHomePageState extends State<NotesHomePage> {
       _sharingSubscription =
           ReceiveSharingIntent.instance.getMediaStream().listen(
         (items) => unawaited(_handleIncomingSharedMedia(items)),
-        onError: (error) => debugPrint('Snote incoming-share stream error: $error'),
+        onError: (error) => debugPrint('Snotee incoming-share stream error: $error'),
       );
       final initialItems = await ReceiveSharingIntent.instance.getInitialMedia();
       if (initialItems.isNotEmpty) {
         unawaited(_handleIncomingSharedMedia(initialItems));
       }
     } catch (error) {
-      debugPrint('Snote could not initialize incoming-share listener: $error');
+      debugPrint('Snotee could not initialize incoming-share listener: $error');
     }
   }
 
@@ -251,7 +251,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
         });
       }
     } catch (error, stackTrace) {
-      debugPrint('Snote notebook load failed: $error\\n$stackTrace');
+      debugPrint('Snotee notebook load failed: $error\\n$stackTrace');
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _loading = false;
@@ -317,7 +317,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
   Future<void> _createNote() async {
     final folderId = _folderId;
     debugPrint(
-      '[Snote][Navigation] New Note requested '
+      '[Snotee][Navigation] New Note requested '
       'platform=${defaultTargetPlatform.name} folder=${folderId ?? 'root'}',
     );
     try {
@@ -335,22 +335,22 @@ class _NotesHomePageState extends State<NotesHomePage> {
       }
       if (!mounted) return;
 
-      debugPrint('[Snote][Navigation] persisted new note id=${note.id}');
+      debugPrint('[Snotee][Navigation] persisted new note id=${note.id}');
       setState(() => _selected = note);
       // Always open New Note in its own full-screen route. In particular,
       // do not mount a just-created note inside the split-workspace editor:
       // this isolates its lifecycle and constraints from the home layout.
-      debugPrint('[Snote][Navigation] push dedicated new-note route noteId=${note.id}');
+      debugPrint('[Snotee][Navigation] push dedicated new-note route noteId=${note.id}');
       await Navigator.of(context).push<void>(
         MaterialPageRoute<void>(
           settings: RouteSettings(name: '/new-note/${note.id}'),
           builder: (_) => NewNoteRoute(note: note),
         ),
       );
-      debugPrint('[Snote][Navigation] dedicated new-note route returned noteId=${note.id}');
+      debugPrint('[Snotee][Navigation] dedicated new-note route returned noteId=${note.id}');
       await _load();
     } catch (error, stackTrace) {
-      debugPrint('[Snote][Navigation] New Note failed: $error\n$stackTrace');
+      debugPrint('[Snotee][Navigation] New Note failed: $error\n$stackTrace');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Could not open a new note: $error')),
@@ -1178,7 +1178,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
             children: [
               const Padding(
                 padding: EdgeInsets.fromLTRB(14, 10, 14, 18),
-                child: Row(children: [SnoteLogo(size: 32), SizedBox(width: 10), Text('Snote', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800))]),
+                child: SnoteLogo(size: 32),
               ),
               _homeDrawerItem(Icons.home_rounded, 'Home', 'home'),
               _homeDrawerItem(Icons.style_rounded, 'Flashcards', 'flashcards'),
