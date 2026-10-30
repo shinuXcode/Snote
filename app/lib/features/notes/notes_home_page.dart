@@ -434,7 +434,10 @@ class _NotesHomePageState extends State<NotesHomePage> {
     if (!_usesSplitWorkspace(context)) {
       await Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => _noteContentPage(note)),
+        MaterialPageRoute(
+          settings: RouteSettings(name: '/snotee/editor/${note.id}'),
+          builder: (_) => _noteContentPage(note),
+        ),
       );
       await _load();
     }
