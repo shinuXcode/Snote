@@ -14,6 +14,15 @@ Baseline: `beta/snote-0.1.2` (kept unchanged). Work branch: `feat/snotee-beta-po
 - Agonesa font is not present in the inspected asset tree or Flutter font configuration.
 - Android runner/resources are generated in CI by `flutter create`; the repository maintains its own manifest and Kotlin integration in `app/native_android/`.
 
+## Progress checkpoint — 2026-10-30
+
+- **Phase 1 — Branding foundation:** implemented on the feature branch.
+- Website: `npm install`, `npm run typecheck`, design guard and `npm run build` passed.
+- Flutter: `dart format` check, `flutter analyze`, and the existing `flutter test` suite passed in GitHub Actions.
+- Android APK, Windows, iOS and macOS smoke builds are still running in workflow [41039014112](https://github.com/shinuXcode/Snote/actions/runs/41039014112).
+- No database schema, preference-key, package identifier, or user-data migration was performed.
+- **Phases 2–8 are not yet implemented.** They remain planned and must be handled in separate, tested changes.
+
 ## Phased plan
 
 1. **Brand foundation:** unify visible app/website naming, remove duplicate sidebar branding, improve logo fit/filtering, preserve existing asset paths and package identifiers. Verify Flutter formatting/analyzer and website typecheck/build.
