@@ -14,7 +14,6 @@ on:
       - feat/snote-beta96-workspace-overhaul
       - feat/writing-engine-touch-notes-refresh
       - beta/snote-0.1.2
-      - feat/snotee-beta-polish-20261030
     paths:
       - "app/**"
       - ".github/workflows/beta.yml"
@@ -37,7 +36,6 @@ concurrency:
 jobs:
   beta-android:
     name: Test and build Android beta
-    if: github.ref == 'refs/heads/beta/snote-0.1.2'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -132,7 +130,8 @@ jobs:
           text = manifest.read_text()
           if 'android.permission.CAMERA' not in text:
               text = text.replace('</manifest>', '    <uses-permission android:name="android.permission.CAMERA" />\n</manifest>')
-          text = text.replace('android:label="snote"', 'android:label="Snote Beta"')
+          text = text.replace('android:label="snote"', 'android:label="Snotee Beta"')
+          text = text.replace('android:label="Snotee"', 'android:label="Snotee Beta"')
           if 'android:launchMode="singleTop"' in text:
               text = text.replace('android:launchMode="singleTop"', 'android:launchMode="singleTask"')
           if 'android.intent.action.SEND' not in text:
@@ -177,7 +176,7 @@ jobs:
           </paths>
           ''')
 
-          if 'Snote Beta' not in manifest.read_text():
+          if 'Snotee Beta' not in manifest.read_text():
               raise SystemExit('Beta app label was not set')
           if 'android.intent.action.SEND' not in manifest.read_text():
               raise SystemExit('Android image share filters were not configured')
