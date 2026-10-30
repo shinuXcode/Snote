@@ -41,6 +41,7 @@ required_manifest_tokens = (
     "android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION",
     "android.permission.CAMERA",
     "android.permission.POST_NOTIFICATIONS",
+    'android:mimeType="application/pdf"',
 )
 for token in required_manifest_tokens:
     if token not in manifest:
