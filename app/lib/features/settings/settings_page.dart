@@ -91,7 +91,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget _sideInfo(BuildContext context) => ListView(
     padding: const EdgeInsets.fromLTRB(22, 22, 18, 30),
     children: [
-      Text('Snote', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900)),
+      Text('Snotee', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900)),
       const SizedBox(height: 8),
       const Text('Handwriting workspace controls, display comfort and privacy settings.'),
       const SizedBox(height: 24),
