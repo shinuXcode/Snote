@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:cross_file/cross_file.dart';
@@ -18,7 +19,14 @@ import '../notes/nextgen_editor_route.dart';
 
 class PdfAnnotationPage extends StatefulWidget {
   final String? folderId;
-  const PdfAnnotationPage({super.key, this.folderId});
+  final Uint8List? initialPdfBytes;
+  final String? initialPdfName;
+  const PdfAnnotationPage({
+    super.key,
+    this.folderId,
+    this.initialPdfBytes,
+    this.initialPdfName,
+  });
 
   @override
   State<PdfAnnotationPage> createState() => _PdfAnnotationPageState();
@@ -50,30 +58,51 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
       '[Snote][PDF] annotation workspace opened '
       'platform=${defaultTargetPlatform.name} folder=${widget.folderId ?? 'root'}',
     );
+    final incomingBytes = widget.initialPdfBytes;
+    if (incomingBytes != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          unawaited(_openPdf(
+            incomingBytes: incomingBytes,
+            incomingName: widget.initialPdfName,
+          ));
+        }
+      });
+    }
   }
 
-  Future<void> _openPdf() async {
+  Future<void> _openPdf({
+    Uint8List? incomingBytes,
+    String? incomingName,
+  }) async {
     if (_busy) return;
     debugPrint('[Snote][PDF] picker requested folder=${widget.folderId ?? 'root'}');
     LocalNote? createdNote;
     DocumentAsset? savedAsset;
     setState(() => _busy = true);
     try {
-      final file = await FilePicker.pickFile(
-        type: FileType.custom,
-        allowedExtensions: const ['pdf'],
-      );
-      if (file == null) return;
+      final file = incomingBytes == null
+          ? await FilePicker.pickFile(
+              type: FileType.custom,
+              allowedExtensions: const ['pdf'],
+            )
+          : null;
+      if (incomingBytes == null && file == null) return;
 
-      final bytes = await file.readAsBytes();
-      debugPrint('[Snote][PDF] picked file name=${file.name} bytes=${bytes.length}');
+      final bytes = incomingBytes ?? await file!.readAsBytes();
+      final fileName = (incomingName ?? file?.name ?? 'Imported PDF').trim();
       if (bytes.isEmpty) {
         throw StateError('The selected PDF file is empty or could not be read.');
       }
+      if (bytes.length < 5 ||
+          String.fromCharCodes(bytes.take(5)) != '%PDF-') {
+        throw const FormatException('The selected file is not a valid PDF.');
+      }
+      debugPrint('[Snote][PDF] importing file name=$fileName bytes=${bytes.length}');
 
-      final rawTitle = file.name.toLowerCase().endsWith('.pdf')
-          ? file.name.substring(0, file.name.length - 4)
-          : file.name;
+      final rawTitle = fileName.toLowerCase().endsWith('.pdf')
+          ? fileName.substring(0, fileName.length - 4)
+          : fileName;
       final note = await _notes.create(
         title: rawTitle,
         folderId: widget.folderId,
@@ -82,7 +111,7 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
 
       final asset = await _documents.saveBytes(
         noteId: note.id,
-        name: file.name,
+        name: fileName,
         type: 'pdf',
         bytes: bytes,
         metadata: const <String, dynamic>{
@@ -108,7 +137,7 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
           builder: (_) => SnoteNextEditorRoute(
             note: note,
             initialPdfBytes: bytes,
-            initialPdfName: file.name,
+            initialPdfName: fileName,
           ),
         ),
       );
