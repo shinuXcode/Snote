@@ -83,6 +83,12 @@ class EditorV2Page extends StatefulWidget {
 
 class _EditorV2PageState extends State<EditorV2Page>
     with WidgetsBindingObserver {
+  // Keep already-open editor routes mounted while another note is selected.
+  // This preserves decoded page state and warm PDF raster/document caches.
+  static final Set<String> _openEditorNoteIds = <String>{};
+
+  static String _editorRouteName(String noteId) => '/snotee/editor/$noteId';
+
   static const double _defaultPageHeight = 1152;
 
   double get _pageHeight {
@@ -311,6 +317,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   @override
   void initState() {
     super.initState();
+    _openEditorNoteIds.add(widget.note.id);
     WidgetsBinding.instance.addObserver(this);
     _title.text = widget.note.title;
     _quill.addListener(_scheduleSave);
@@ -2990,9 +2997,25 @@ class _EditorV2PageState extends State<EditorV2Page>
     if (note.id == widget.note.id) return;
     await _flushSave();
     if (!mounted) return;
-    Navigator.of(context).pushReplacement(MaterialPageRoute<void>(
-      builder: (_) => EditorV2Page(note: note),
-    ));
+
+    final navigator = Navigator.of(context);
+    if (_openEditorNoteIds.contains(note.id)) {
+      navigator.popUntil(
+        (route) => route.settings.name == _editorRouteName(note.id),
+      );
+      return;
+    }
+
+    await navigator.push<void>(
+      MaterialPageRoute<void>(
+        settings: RouteSettings(name: _editorRouteName(note.id)),
+        builder: (_) => EditorV2Page(note: note),
+      ),
+    );
+    if (mounted) {
+      _noteTabsFuture = _repo.listAllVisible(limit: 12);
+      setState(() {});
+    }
   }
 
   Widget _buildNoteTabs() {
@@ -3080,9 +3103,23 @@ class _EditorV2PageState extends State<EditorV2Page>
     if (selected == null || selected.id == widget.note.id || !mounted) return;
     await _flushSave();
     if (!mounted) return;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute<void>(builder: (_) => EditorV2Page(note: selected)),
+    final navigator = Navigator.of(context);
+    if (_openEditorNoteIds.contains(selected.id)) {
+      navigator.popUntil(
+        (route) => route.settings.name == _editorRouteName(selected.id),
+      );
+      return;
+    }
+    await navigator.push<void>(
+      MaterialPageRoute<void>(
+        settings: RouteSettings(name: _editorRouteName(selected.id)),
+        builder: (_) => EditorV2Page(note: selected),
+      ),
     );
+    if (mounted) {
+      _noteTabsFuture = _repo.listAllVisible(limit: 12);
+      setState(() {});
+    }
   }
 
   void _selectTool(CanvasTool tool) {
@@ -8707,6 +8744,7 @@ class _EditorV2PageState extends State<EditorV2Page>
 
   @override
   void dispose() {
+    _openEditorNoteIds.remove(widget.note.id);
     WidgetsBinding.instance.removeObserver(this);
     _saveTimer?.cancel();
     _studyTimer?.cancel();
