@@ -1,4 +1,4 @@
-# Snote
+# Snotee
 
 Open-source, offline-first handwriting and rich-text notes for Android, iOS, Windows, macOS, Linux and Web.
 
@@ -10,7 +10,7 @@ Open-source, offline-first handwriting and rich-text notes for Android, iOS, Win
 
 ## Privacy and storage
 
-Snote is local-only in production: no Supabase, remote database, account, login, signup or cloud sync. Notes are stored on the device using SQLite and local files. Use notebook export to create portable backups. The beta workflow/version is kept separate and unchanged by this refactor.
+Snotee is local-only in production: no Supabase, remote database, account, login, signup or cloud sync. Notes are stored on the device using SQLite and local files. Use notebook export to create portable backups. The beta workflow/version is kept separate and unchanged by this refactor.
 
 ## Local setup
 
