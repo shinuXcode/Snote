@@ -584,6 +584,11 @@ class _EditorV2PageState extends State<EditorV2Page>
       _loadError = null;
     });
     _initializeTextControllers();
+    // Warm the pages adjacent to the restored/current page only after the
+    // first interactive frame. This keeps initial editor paint responsive.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _warmAdjacentPdfPages(_page);
+    });
     debugPrint(
       '[Snote][EditorV2] document ready noteId=${widget.note.id} '
       'pages=${pages.length} pdfPages=$totalPdfPages migratedPdf=$renderedPdf',
