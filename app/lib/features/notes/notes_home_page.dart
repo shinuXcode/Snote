@@ -104,48 +104,96 @@ class _NotesHomePageState extends State<NotesHomePage> {
   bool _isIncomingImage(SharedMediaFile item) {
     if ((item.mimeType ?? '').toLowerCase().startsWith('image/')) return true;
     final path = item.path.toLowerCase().split('?').first;
-    return const ['.png', '.jpg', '.jpeg', '.webp', '.heic', '.heif', '.bmp', '.gif'].any(path.endsWith);
+    return const ['.png', '.jpg', '.jpeg', '.webp', '.heic', '.heif', '.bmp', '.gif']
+        .any(path.endsWith);
+  }
+
+  bool _isIncomingPdf(SharedMediaFile item) {
+    if ((item.mimeType ?? '').toLowerCase() == 'application/pdf') return true;
+    return item.path.toLowerCase().split('?').first.endsWith('.pdf');
   }
 
   Future<void> _handleIncomingSharedMedia(List<SharedMediaFile> items) async {
     if (!mounted || _handlingIncomingShare || items.isEmpty) return;
-    SharedMediaFile? image;
+    SharedMediaFile? supported;
     for (final item in items) {
-      if (_isIncomingImage(item)) { image = item; break; }
+      if (_isIncomingPdf(item) || _isIncomingImage(item)) {
+        supported = item;
+        break;
+      }
     }
-    if (image == null) {
+    if (supported == null) {
       try { await ReceiveSharingIntent.instance.reset(); } catch (_) {}
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Snotee supports shared PDF files and images.')),
+        );
+      }
       return;
     }
-    final path = image.path.trim();
+
+    final path = supported.path.trim();
     if (path.isEmpty || path == _lastIncomingSharePath) {
       try { await ReceiveSharingIntent.instance.reset(); } catch (_) {}
       return;
     }
+
     _handlingIncomingShare = true;
     _lastIncomingSharePath = path;
     try {
-      final bytes = await readSharedMediaBytes(path);
-      if (bytes.isEmpty) throw StateError('The shared image is empty.');
-      try { await ReceiveSharingIntent.instance.reset(); } catch (_) {}
-      if (!mounted) return;
       final filename = path.replaceAll(String.fromCharCode(92), '/').split('/').last;
       final title = filename.replaceFirst(RegExp(r'\.[^.]+$'), '').trim();
-      await Navigator.of(context).push<LocalNote>(
-        MaterialPageRoute(
-          builder: (_) => ScreenshotImportPage(
-            folderId: _folderId,
-            initialBytes: bytes,
-            initialName: title.isEmpty ? 'Shared screenshot' : title,
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Importing $filename…')),
+        );
+      }
+      final bytes = await readSharedMediaBytes(path);
+      if (bytes.isEmpty) throw StateError('The shared file is empty or unreadable.');
+      if (bytes.length > 250 * 1024 * 1024) {
+        throw StateError('Files larger than 250 MB cannot be imported through sharing.');
+      }
+      try { await ReceiveSharingIntent.instance.reset(); } catch (_) {}
+      if (!mounted) return;
+
+      if (_isIncomingPdf(supported)) {
+        if (bytes.length < 5 ||
+            String.fromCharCodes(bytes.take(5)) != '%PDF-') {
+          throw const FormatException('The shared file does not contain a valid PDF.');
+        }
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute(
+            builder: (_) => PdfAnnotationPage(
+              folderId: _folderId,
+              initialPdfBytes: bytes,
+              initialPdfName: filename.toLowerCase().endsWith('.pdf')
+                  ? filename
+                  : '$filename.pdf',
+            ),
           ),
-        ),
-      );
-      if (mounted) await _load();
+        );
+      } else {
+        await Navigator.of(context).push<LocalNote>(
+          MaterialPageRoute(
+            builder: (_) => ScreenshotImportPage(
+              folderId: _folderId,
+              initialBytes: bytes,
+              initialName: title.isEmpty ? 'Shared image' : title,
+            ),
+          ),
+        );
+      }
+      if (mounted) {
+        await _load();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Import completed. The source file was not moved or deleted.')),
+        );
+      }
     } catch (error) {
       try { await ReceiveSharingIntent.instance.reset(); } catch (_) {}
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not import the shared image: ' + error.toString())),
+          SnackBar(content: Text('Could not import the shared file: $error')),
         );
       }
     } finally {
