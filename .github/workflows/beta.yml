@@ -14,6 +14,7 @@ on:
       - feat/snote-beta96-workspace-overhaul
       - feat/writing-engine-touch-notes-refresh
       - beta/snote-0.1.2
+      - feat/snotee-beta-polish-20261030
     paths:
       - "app/**"
       - ".github/workflows/beta.yml"
