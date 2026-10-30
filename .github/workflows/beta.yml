@@ -37,6 +37,7 @@ concurrency:
 jobs:
   beta-android:
     name: Test and build Android beta
+    if: github.ref == 'refs/heads/beta/snote-0.1.2'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
