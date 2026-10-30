@@ -13,7 +13,7 @@ import 'ui/snote_theme.dart';
 void _installSnoteErrorLogging() {
   final previousFlutterError = FlutterError.onError;
   FlutterError.onError = (details) {
-    debugPrint('[Snote][FlutterError] ${details.exceptionAsString()}');
+    debugPrint('[Snotee][FlutterError] ${details.exceptionAsString()}');
     if (details.stack != null) {
       debugPrintStack(stackTrace: details.stack);
     }
@@ -27,13 +27,13 @@ void _installSnoteErrorLogging() {
   final dispatcher = WidgetsBinding.instance.platformDispatcher;
   final previousPlatformError = dispatcher.onError;
   dispatcher.onError = (error, stackTrace) {
-    debugPrint('[Snote][PlatformError] $error\n$stackTrace');
+    debugPrint('[Snotee][PlatformError] $error\n$stackTrace');
     return previousPlatformError?.call(error, stackTrace) ?? false;
   };
 }
 
 Widget _snoteErrorWidget(FlutterErrorDetails details) {
-  debugPrint('[Snote][ErrorWidget] ${details.exceptionAsString()}');
+  debugPrint('[Snotee][ErrorWidget] ${details.exceptionAsString()}');
   if (details.stack != null) debugPrintStack(stackTrace: details.stack);
   return Material(
     color: const Color(0xfff7f8fa),
@@ -114,7 +114,7 @@ class _SnoteAppState extends State<SnoteApp> {
         _startupError = null;
       });
     } catch (error, stackTrace) {
-      debugPrint('Snote startup failed: $error\\n$stackTrace');
+      debugPrint('Snotee startup failed: $error\\n$stackTrace');
       if (!mounted) return;
       setState(() {
         _bootstrapping = false;
@@ -144,7 +144,7 @@ class _SnoteAppState extends State<SnoteApp> {
         ? profileSeed
         : _theme.colorTheme.color;
     final app = MaterialApp(
-      title: 'Snote',
+      title: 'Snotee',
       debugShowCheckedModeBanner: false,
       theme: _theme.eInk
           ? ThemeData(
@@ -240,7 +240,7 @@ class _StartupPage extends StatelessWidget {
                   child: const SnoteLogo(size: 112, showWordmark: false),
                 ),
                 const SizedBox(height: 24),
-                Text('Snote', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                Text('Snotee', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 18),
                 SizedBox(width: 120, child: LinearProgressIndicator(borderRadius: BorderRadius.circular(8))),
                 const SizedBox(height: 12),
@@ -279,7 +279,7 @@ class _StartupFailurePage extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'Snote could not finish starting.',
+                      'Snotee could not finish starting.',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
