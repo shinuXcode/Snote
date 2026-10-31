@@ -5451,48 +5451,144 @@ class _EditorV2PageState extends State<EditorV2Page>
       );
       return;
     }
-    final current = Color((page['paperColor'] as num?)?.toInt() ?? 0xffffffff);
-    final chosen = await showDialog<Color>(
+
+    var paperColor = Color((page['paperColor'] as num?)?.toInt() ?? 0xffffffff);
+    var lineColor = Color((page['lineColor'] as num?)?.toInt() ?? 0xffd8dee8);
+    var lineOpacity = ((page['lineOpacity'] as num?)?.toDouble() ?? .85)
+        .clamp(0.0, 1.0).toDouble();
+    final spacing = ((page['spacing'] as num?)?.toDouble() ?? 28.0)
+        .clamp(10.0, 80.0).toDouble();
+    final template = PageTemplate.values.firstWhere(
+      (value) => value.name == page['template']?.toString(),
+      orElse: () => PageTemplate.blank,
+    );
+
+    final chosen = await showDialog<Map<String, Object?>>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('Page ${index + 1} background'),
-        content: Wrap(
-          spacing: 9,
-          runSpacing: 9,
-          children: [
-            ActionChip(
-              avatar: const Icon(Icons.colorize_rounded, size: 17),
-              label: const Text('Custom…'),
-              onPressed: () async {
-                final selectedColor = await _pickCustomColor(initial: current, title: 'Custom page background');
-                if (selectedColor != null && dialogContext.mounted) Navigator.pop(dialogContext, selectedColor);
-              },
-            ),
-            ..._palette.map((color) => InkWell(
-            onTap: () => Navigator.pop(dialogContext, color),
-            borderRadius: BorderRadius.circular(20),
-            child: Container(
-              width: 30,
-              height: 30,
-              decoration: BoxDecoration(
-                color: color,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: color.toARGB32() == current.toARGB32()
-                      ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).colorScheme.outlineVariant,
-                  width: color.toARGB32() == current.toARGB32() ? 3 : 1,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          Widget palette(String label, Color selected, ValueChanged<Color> onChanged) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 7),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ActionChip(
+                      avatar: const Icon(Icons.colorize_rounded, size: 17),
+                      label: const Text('Custom'),
+                      onPressed: () async {
+                        final custom = await _pickCustomColor(
+                          initial: selected,
+                          title: 'Custom $label',
+                        );
+                        if (custom != null && dialogContext.mounted) {
+                          setDialogState(() => onChanged(custom));
+                        }
+                      },
+                    ),
+                    ..._palette.map((color) => InkWell(
+                      onTap: () => setDialogState(() => onChanged(color)),
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: color.toARGB32() == selected.toARGB32()
+                                ? Theme.of(dialogContext).colorScheme.primary
+                                : Theme.of(dialogContext).colorScheme.outlineVariant,
+                            width: color.toARGB32() == selected.toARGB32() ? 3 : 1,
+                          ),
+                        ),
+                      ),
+                    )),
+                  ],
+                ),
+              ],
+            );
+          }
+
+          return AlertDialog(
+            title: Text('Template appearance · Page ${index + 1}'),
+            content: SizedBox(
+              width: 440,
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      height: 150,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Theme.of(dialogContext).colorScheme.outlineVariant),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: CustomPaint(
+                        painter: PageBackground(
+                          template: template,
+                          paperColor: paperColor,
+                          lineColor: lineColor,
+                          spacing: spacing,
+                          lineOpacity: lineOpacity,
+                        ),
+                        child: const SizedBox.expand(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    palette('Paper background', paperColor, (value) => paperColor = value),
+                    const SizedBox(height: 16),
+                    palette('Template lines', lineColor, (value) => lineColor = value),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text('Line opacity', style: TextStyle(fontWeight: FontWeight.w800)),
+                        ),
+                        Text('${(lineOpacity * 100).round()}%'),
+                      ],
+                    ),
+                    Slider(
+                      value: lineOpacity,
+                      min: 0,
+                      max: 1,
+                      onChanged: (value) => setDialogState(() => lineOpacity = value),
+                    ),
+                  ],
                 ),
               ),
             ),
-          )).toList(),
-          ],
-        ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, <String, Object?>{
+                  'paperColor': paperColor.toARGB32(),
+                  'lineColor': lineColor.toARGB32(),
+                  'lineOpacity': lineOpacity,
+                }),
+                child: const Text('Apply'),
+              ),
+            ],
+          );
+        },
       ),
     );
     if (chosen == null || !mounted) return;
     _pushUndo();
-    setState(() => page['paperColor'] = chosen.toARGB32());
+    setState(() {
+      page['paperColor'] = chosen['paperColor'];
+      page['lineColor'] = chosen['lineColor'];
+      page['lineOpacity'] = chosen['lineOpacity'];
+    });
     _scheduleSave();
   }
 
