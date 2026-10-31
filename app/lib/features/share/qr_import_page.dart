@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../data/local/note_repository.dart';
+import '../../data/local/notebook_transfer_crypto.dart';
 
 class QrImportPage extends StatefulWidget {
   const QrImportPage({super.key});
@@ -36,6 +37,10 @@ class _QrImportPageState extends State<QrImportPage> {
         await _saveNote(decoded.cast<String, dynamic>());
         return;
       }
+      if (format == 'snote-encrypted-notebook-v1') {
+        await _saveEncryptedNote(decoded.cast<String, dynamic>());
+        return;
+      }
 
       if (format != 'snote-qr-v2') {
         throw const FormatException('Not an Snote transfer QR.');
@@ -61,12 +66,81 @@ class _QrImportPageState extends State<QrImportPage> {
         final payload = List.generate(total, (i) => _chunks[i]).join();
         final note = jsonDecode(payload);
         if (note is! Map) throw const FormatException('Invalid assembled note.');
-        await _saveNote(note.cast<String, dynamic>());
+        final assembled = note.cast<String, dynamic>();
+        if (assembled['format'] == 'snote-encrypted-notebook-v1') {
+          await _saveEncryptedNote(assembled);
+        } else {
+          await _saveNote(assembled);
+        }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
       }
+    }
+  }
+
+  Future<String?> _askTransferPassword() async {
+    final controller = TextEditingController();
+    final password = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Decrypt QR transfer'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          obscureText: true,
+          decoration: const InputDecoration(labelText: 'Transfer password'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () {
+              if (controller.text.length >= 8) Navigator.pop(dialogContext, controller.text);
+            },
+            child: const Text('Decrypt'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return password;
+  }
+
+  Future<void> _saveEncryptedNote(Map<String, dynamic> envelope) async {
+    _importing = true;
+    try {
+      final password = await _askTransferPassword();
+      if (!mounted || password == null) {
+        _chunks.clear();
+        _transferId = null;
+        _total = null;
+        if (mounted) setState(() {});
+        return;
+      }
+      final manifest = await NotebookTransferCrypto.decrypt(envelope, password);
+      if (manifest['format'] != 'snote-qr-note-v1' || manifest['content'] is! Map) {
+        throw const FormatException('The encrypted QR payload is not a supported note transfer.');
+      }
+      final title = manifest['title']?.toString() ?? 'Imported note';
+      final repository = NoteRepository();
+      final note = await repository.create(title: title);
+      await repository.saveContent(
+        note.id,
+        (manifest['content'] as Map).cast<String, Object?>(),
+      );
+      _chunks.clear();
+      _transferId = null;
+      _total = null;
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Encrypted note imported successfully.')),
+        );
+      }
+    } finally {
+      _importing = false;
     }
   }
 
