@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+
+import '../../canvas_engine/widgets/page_background.dart';
 import '../../app/theme_controller.dart';
 import '../../core/config/app_version.dart';
 import '../../core/settings/app_settings.dart';
@@ -230,7 +232,7 @@ class _SettingsPageState extends State<SettingsPage> {
         _toggle('showPageNavigation', 'Show page navigation', 'Display previous/next/add controls.'),
         _toggle('showPageNumbers', 'Show page number', 'Number pages automatically.'),
         _toggle('showVisitedHistory', 'Show visited history', 'Remember recent page positions.'),
-        _toggle('showPagePreview', 'Show page preview in the left sidebar', 'Keep the thumbnail rail available.'),
+        _toggle('showPagePreview', 'Show page preview sidebar', 'Keep the thumbnail rail available beside the canvas.'),
         _toggle('highlighterOnTop', 'Draw highlighter above content', 'When enabled, highlight ink appears above inserted images and text.'),
         _pagePreviewSideSelector(),
         _toggle('showUndoOnRight', 'Show undo on the right', 'Mirror undo and redo near navigation.'),
@@ -249,6 +251,21 @@ class _SettingsPageState extends State<SettingsPage> {
         _toggle('pageSwipe', 'Page swipe navigation', 'Swipe from page edges horizontally or vertically to turn pages.'),
         _toggle('autoAddPage', 'Auto add page', 'Create the next numbered page when swiping past the end.'),
         _toggle('securePagePreviews', 'Preview lock / privacy', 'Hide handwritten content in the page preview rail.'),
+      ]),
+      if (_noteOnly) _group('New Page Template', [
+        _defaultPageTemplateSelector(),
+        _templateColorSelector(
+          key: 'defaultPagePaperColor',
+          title: 'Default paper background',
+          subtitle: 'Applied to newly inserted pages unless you choose a page-specific color.',
+          fallback: const Color(0xffffffff),
+        ),
+        _templateColorSelector(
+          key: 'defaultPageLineColor',
+          title: 'Default template line color',
+          subtitle: 'Applied to new lined, grid and dot templates.',
+          fallback: const Color(0xffd8dee8),
+        ),
       ]),
       if (!_noteOnly && (_query.isEmpty || 'privacy security custom note password'.contains(_query))) _group('Privacy & Security', [
         Card(
@@ -421,6 +438,110 @@ class _SettingsPageState extends State<SettingsPage> {
     if (key.contains('book') || key.contains('shelf')) return Icons.menu_book_outlined;
     if (key.contains('select') || key.contains('menu')) return Icons.touch_app_outlined;
     return Icons.tune_rounded;
+  }
+
+  Widget _defaultPageTemplateSelector() => Card(
+    margin: const EdgeInsets.only(bottom: 8),
+    child: ListTile(
+      leading: const Icon(Icons.grid_view_rounded),
+      title: const Text('Default new-page template'),
+      subtitle: const Text('Choose a template for new pages, or inherit the current page.'),
+      trailing: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _settings.getString('defaultPageTemplate').isEmpty
+              ? 'inherit'
+              : _settings.getString('defaultPageTemplate'),
+          items: [
+            const DropdownMenuItem(value: 'inherit', child: Text('Inherit')),
+            ...PageTemplate.values.map(
+              (template) => DropdownMenuItem(
+                value: template.name,
+                child: Text(template.name[0].toUpperCase() + template.name.substring(1)),
+              ),
+            ),
+          ],
+          onChanged: (value) {
+            if (value != null) {
+              unawaited(_settings.setString(
+                'defaultPageTemplate',
+                value == 'inherit' ? '' : value,
+              ));
+              setState(() {});
+            }
+          },
+        ),
+      ),
+    ),
+  );
+
+  Widget _templateColorSelector({
+    required String key,
+    required String title,
+    required String subtitle,
+    required Color fallback,
+  }) {
+    final stored = int.tryParse(_settings.getString(key));
+    final selected = stored == null ? null : Color(stored);
+    const palette = <Color>[
+      Color(0xffffffff), Color(0xfff7f8fa), Color(0xfffff8e7), Color(0xfff4f0e8),
+      Color(0xffeaf2ff), Color(0xffe8f5e9), Color(0xffffebee), Color(0xfff3e5f5),
+      Color(0xff263238), Color(0xff37474f), Color(0xff546e7a), Color(0xff78909c),
+      Color(0xff0d47a1), Color(0xff1565c0), Color(0xff42a5f5), Color(0xff80d8ff),
+      Color(0xff004d40), Color(0xff00897b), Color(0xff4db6ac), Color(0xffa7ffeb),
+      Color(0xff1b5e20), Color(0xff2e7d32), Color(0xff81c784), Color(0xffc5e1a5),
+      Color(0xff4a148c), Color(0xff7b1fa2), Color(0xffba68c8), Color(0xffe1bee7),
+      Color(0xffb71c1c), Color(0xffc62828), Color(0xffef5350), Color(0xffff8a80),
+    ];
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 3),
+            Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ChoiceChip(
+                  label: const Text('Inherit'),
+                  selected: selected == null,
+                  onSelected: (_) async {
+                    await _settings.setString(key, '');
+                    if (mounted) setState(() {});
+                  },
+                ),
+                ...palette.map((color) => InkWell(
+                  onTap: () async {
+                    await _settings.setString(key, color.toARGB32().toString());
+                    if (mounted) setState(() {});
+                  },
+                  borderRadius: BorderRadius.circular(18),
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: color.toARGB32() == (selected ?? fallback).toARGB32()
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(context).colorScheme.outlineVariant,
+                        width: color.toARGB32() == (selected ?? fallback).toARGB32() ? 3 : 1,
+                      ),
+                    ),
+                  ),
+                )),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _pagePreviewSideSelector() => Card(
