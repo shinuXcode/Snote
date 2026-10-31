@@ -38,7 +38,7 @@ class _FolderCoverLibraryPageState extends State<FolderCoverLibraryPage> {
   List<int> get _builtInIndices {
     if (_builtInCategory == 'All') return List<int>.generate(400, (i) => i);
     final category = _coverCategories.indexOf(_builtInCategory);
-    if (category < 1) return List<int>.generate(200, (i) => i);
+    if (category < 1) return List<int>.generate(400, (i) => i);
     final start = (category - 1) * 40;
     return List<int>.generate(40, (i) => start + i);
   }
