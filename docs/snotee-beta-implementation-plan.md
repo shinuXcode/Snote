@@ -14,14 +14,23 @@ Baseline: `beta/snote-0.1.2` (kept unchanged). Work branch: `feat/snotee-beta-po
 - Agonesa font is not present in the inspected asset tree or Flutter font configuration.
 - Android runner/resources are generated in CI by `flutter create`; the repository maintains its own manifest and Kotlin integration in `app/native_android/`.
 
-## Progress checkpoint — 2026-10-30
+## Progress checkpoint — 2026-10-31
 
-- **Phase 1 — Branding foundation:** implemented on the feature branch.
-- Website: `npm install`, `npm run typecheck`, design guard and `npm run build` passed.
-- Flutter: `dart format` check, `flutter analyze`, and the existing `flutter test` suite passed in GitHub Actions.
-- Android APK, Windows, iOS and macOS smoke builds are still running in workflow [41039014112](https://github.com/shinuXcode/Snote/actions/runs/41039014112).
-- No database schema, preference-key, package identifier, or user-data migration was performed.
-- **Phases 2–8 are not yet implemented.** They remain planned and must be handled in separate, tested changes.
+Work is being committed incrementally to `feat/snotee-beta-polish-20261030`. The base beta branch remains untouched.
+
+- Existing note/folder favorites are exposed in the desktop navigation rail; opening a folder from Favorites exits the favorites filter cleanly.
+- Note and folder menus now expose encrypted file export and encrypted QR transfer entry points. The existing QR receiver ignores duplicate completed frame sequences and can be reset for another transfer.
+- The generated cover catalog now exposes 400 variants in ten collections. These are generated vector/gradient designs, not 400 separately licensed image assets.
+- Note settings include a persistent default page template and paper/line color palettes; new pages apply valid saved defaults without changing existing pages.
+- Editor tabs include close controls and a five-mounted-editor cap to limit memory growth. Existing note routes are reused where registered.
+- Ink changes include cached static stroke pictures, incremental live highlighter path updates, an optional highlighter overlay layer, decoded-stroke reuse, and lasso size +/- controls. Eraser hit testing uses cached stroke bounds as a broad phase.
+- Portrait vertical page-turn direction was adjusted.
+- Android launch resources are maintained in-repo and copied into the generated runner by CI; the Flutter startup surface is platform-aware so desktop retains its startup page.
+- Website BrandLoader now fades after page readiness with a timeout fallback.
+- Browser opening now selects the embedded browser panel rather than stacking a separate modal route.
+- No SQLite schema migration or destructive note-data rewrite was made.
+
+**Validation:** latest branch-head workflow [41161081889](https://github.com/shinuXcode/Snote/actions/runs/41161081889) is still running. At the last check, platform jobs were setting up Flutter and the website build had started. Do not treat earlier or superseded workflow results as proof for this branch head. No APK artifact from this head has been verified yet.
 
 ## Performance phase update — 2026-10-30
 
@@ -32,16 +41,21 @@ Baseline: `beta/snote-0.1.2` (kept unchanged). Work branch: `feat/snotee-beta-po
 - Standardized the PDF-import editor route name with the reusable editor-tab route registry.
 - No database schema or persisted note format changed. This phase still needs CI verification and device-level frame-time / PDF timing measurements. It is not yet a quantified performance claim.
 
-## Phased plan
+## Remaining work — do not mark complete yet
 
-1. **Brand foundation:** unify visible app/website naming, remove duplicate sidebar branding, improve logo fit/filtering, preserve existing asset paths and package identifiers. Verify Flutter formatting/analyzer and website typecheck/build.
-2. **Home/library:** inspect existing folder/deck/map persistence, add favorites and organization without changing existing note/deck/map records; improve tab state/close behavior. Verify repository/widget tests.
-3. **Pages/settings/templates:** map editor page state and settings persistence; implement page actions/navigation and live template controls. Verify editor/document/settings tests and old-note compatibility.
-4. **Writing engine:** trace lasso dispatch, selection transforms, eraser and highlighter hot paths; implement focused changes only after regression coverage. Verify lasso, ink, renderer and performance tests.
-5. **Sharing/transfer:** build a shared export/import pipeline for supported content and preserve local privacy; extend QR transfer only after validating archive/content model. Verify round-trip and compatibility.
-6. **Android intents:** extend MIME filters and URI handling for PDF/documents, validate permissions and deduplicate imports; reuse shared import pipeline. Verify generated Android manifest, Kotlin/Flutter build and import tests.
-7. **Utilities/reliability:** inspect browser lifecycle, MediaProjection restrictions, timer/notification lifecycle and backup recovery before changes. Verify platform-specific behavior and avoid claiming unsupported cross-app capture.
-8. **Website/release:** align logo/loading state, responsive behavior and transition; run website build and relevant CI.
+1. **Library/deck/map:** verify favorites persistence and add missing deck/map organization controls where existing models support them; verify full tab close/fallback behavior and page-preview actions (copy/cut/paste/delete/insert/search navigation).
+2. **Settings/templates:** apply the saved page-template and color defaults through every new-page entry point; finish persistent note controls, settings grouping and live template preview. Expand cover collections only after confirming the library browsing UI and performance.
+3. **Writing engine:** run focused lasso, resize, eraser, highlighter z-order and selection regression tests. The current painter/cache work is not a substitute for device profiling.
+4. **Sharing/backup:** encrypted note/folder exports are exposed, but attachment/binary completeness and QR folder/page/deck round-trips are not yet proven. Implement a managed rotating local backup with safe restore separately; current “local backup” page is still encrypted file export/import.
+5. **Browser/utilities:** validate browser collapse/resizing/ad-blocking limits, timer/alarm lifecycle across app background/restart, and screenshot capture consent flows. Do not claim silent cross-app capture.
+6. **Release polish:** confirm native splash behavior on Android API levels and iOS, inspect responsive website transitions, and complete all CI jobs plus physical-device regression checks.
+
+## Validation gates
+
+- Latest branch-head workflow: [41161081889](https://github.com/shinuXcode/Snote/actions/runs/41161081889). It must complete for the exact final commit before a build is called verified.
+- Required checks: Flutter format/analyze/tests; Android APK and web/Linux builds; Windows, iOS and macOS smoke builds; website typecheck/build.
+- Then test actual Android stylus writing, PDF opening/scrolling, tab switching, note/folder export/import, backup recovery and launch transitions on-device.
+- No merge, release, or beta APK announcement until the user explicitly requests it and all applicable checks pass.
 
 ## Risks and guardrails
 
