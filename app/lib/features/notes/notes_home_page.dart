@@ -1515,6 +1515,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
           ),
           onUpdates: _openUpdates,
           onCovers: _openCoverLibrary,
+          favoritesSelected: _favoritesOnly,
           onDestination: (destination) => unawaited(_openHomeDestination(destination)),
         ),
         Expanded(
@@ -1767,6 +1768,7 @@ class _SideRail extends StatelessWidget {
   final VoidCallback onSettings;
   final VoidCallback onUpdates;
   final VoidCallback onCovers;
+  final bool favoritesSelected;
   final ValueChanged<String> onDestination;
 
   const _SideRail({
@@ -1775,6 +1777,7 @@ class _SideRail extends StatelessWidget {
     required this.onSettings,
     required this.onUpdates,
     required this.onCovers,
+    required this.favoritesSelected,
     required this.onDestination,
   });
 
@@ -1827,7 +1830,8 @@ class _SideRail extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 20),
-          entry(icon: Icons.home_rounded, label: 'Home', selected: true, onTap: () => onDestination('home')),
+          entry(icon: Icons.home_rounded, label: 'Home', selected: !favoritesSelected, onTap: () => onDestination('home')),
+          entry(icon: Icons.star_rounded, label: 'Favorites', selected: favoritesSelected, onTap: () => onDestination('favorites')),
           entry(icon: Icons.style_rounded, label: 'Flashcards', onTap: () => onDestination('flashcards')),
           entry(icon: Icons.hub_rounded, label: 'Mindmaps', onTap: () => onDestination('mindmaps')),
           entry(icon: Icons.backup_rounded, label: 'Local Backups', onTap: () => onDestination('backups')),
