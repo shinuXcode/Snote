@@ -4,20 +4,23 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
-import '../../canvas_engine/models/stroke_codec.dart';
+import '../../data/local/folder_repository.dart';
 import '../../data/local/note_repository.dart';
-import '../../data/local/notebook_transfer_crypto.dart';
+import '../../data/local/notebook_transfer_service.dart';
 
 class QrTransferPage extends StatefulWidget {
-  final LocalNote note;
-  const QrTransferPage({super.key, required this.note});
+  final LocalNote? note;
+  final LocalFolder? folder;
+  const QrTransferPage({super.key, this.note, this.folder})
+      : assert((note == null) != (folder == null));
 
   @override
   State<QrTransferPage> createState() => _QrTransferPageState();
 }
 
 class _QrTransferPageState extends State<QrTransferPage> {
-  static const _chunkSize = 900;
+  static const _chunkSize = 2400;
+  final String _transferId = DateTime.now().microsecondsSinceEpoch.toString();
   Timer? _timer;
   List<String> _chunks = <String>[];
   int _index = 0;
@@ -69,20 +72,19 @@ class _QrTransferPageState extends State<QrTransferPage> {
         Navigator.of(context).pop();
         return;
       }
-      final content = widget.note.contentJson == null
-          ? StrokeCodec.strokesToDocument(const [])
-          : jsonDecode(widget.note.contentJson!);
-      if (content is! Map) throw const FormatException('The note content is invalid.');
-      final envelope = await NotebookTransferCrypto.encrypt(
-        <String, dynamic>{
-          'format': 'snote-qr-note-v1',
-          'id': widget.note.id,
-          'title': widget.note.title,
-          'content': content,
-        },
-        password,
+      final encryptedBytes = await NotebookTransferService(NoteRepository())
+          .exportEncryptedArchiveBytes(
+        password: password,
+        folderId: widget.folder?.id,
+        noteId: widget.note?.id,
       );
-      final payload = jsonEncode(envelope);
+      if (encryptedBytes.length > 512 * 1024) {
+        throw StateError(
+          'This selection is too large for a reliable QR transfer. '
+          'Use the encrypted Snote backup file for large PDFs or attachments.',
+        );
+      }
+      final payload = utf8.decode(encryptedBytes);
       if (!mounted) return;
       setState(() {
         _chunks = [
@@ -111,7 +113,7 @@ class _QrTransferPageState extends State<QrTransferPage> {
 
   String get _qrPayload => jsonEncode({
         'format': 'snote-qr-v2',
-        'transfer_id': widget.note.id,
+        'transfer_id': _transferId,
         'index': _index,
         'total': _chunks.length,
         'data': _chunks[_index],
@@ -136,7 +138,7 @@ class _QrTransferPageState extends State<QrTransferPage> {
     }
     return Scaffold(
       appBar: AppBar(
-        title: const Text('QR note transfer'),
+        title: const Text('Encrypted QR transfer'),
         actions: [
           if (total > 1)
             IconButton(
@@ -180,12 +182,12 @@ class _QrTransferPageState extends State<QrTransferPage> {
               const SizedBox(height: 14),
               Text('${_index + 1} / $total', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
-              Text(widget.note.title, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+              Text(widget.note?.title ?? widget.folder!.name, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 8),
               Text(
                 total == 1
                     ? 'Encrypted local transfer. Enter the same password on the receiving device.'
-                    : 'Scan all frames. The receiver assembles and decrypts the note. Keep the password private and share it separately.',
+                    : 'Scan all frames. The receiver decrypts this selection, including its folders, pages and attachments. Keep the password private and share it separately.',
                 textAlign: TextAlign.center,
               ),
             ],
