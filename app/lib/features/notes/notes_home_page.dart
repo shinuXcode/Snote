@@ -380,6 +380,70 @@ class _NotesHomePageState extends State<NotesHomePage> {
     );
   }
 
+  Future<String?> _askEncryptedExportPassword(String title) async {
+    final controller = TextEditingController();
+    final password = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Encrypt $title'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          obscureText: true,
+          decoration: const InputDecoration(
+            labelText: 'Transfer password',
+            helperText: 'Use at least 8 characters. Enter the same password on the receiving device.',
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () {
+              if (controller.text.length >= 8) Navigator.pop(dialogContext, controller.text);
+            },
+            child: const Text('Export'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return password;
+  }
+
+  Future<void> _exportEncryptedSelection({
+    required String title,
+    String? noteId,
+    String? folderId,
+  }) async {
+    final password = await _askEncryptedExportPassword(title);
+    if (password == null || !mounted) return;
+    try {
+      final uri = await _transfer.exportEncryptedPicked(
+        password: password,
+        noteId: noteId,
+        folderId: folderId,
+      );
+      if (uri != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Encrypted $title export is ready to share.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Encrypted export failed: $error')),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportEncryptedNoteFile(LocalNote note) =>
+      _exportEncryptedSelection(title: 'note', noteId: note.id);
+
+  Future<void> _exportEncryptedFolderFile(LocalFolder folder) =>
+      _exportEncryptedSelection(title: 'folder', folderId: folder.id);
+
+
   Future<void> _createFolder() async {
     final c = TextEditingController();
     final name = await showDialog<String>(
@@ -1511,6 +1575,8 @@ class _NotesHomePageState extends State<NotesHomePage> {
                         onToggleFolderFavorite: _toggleFolderFavorite,
                         onTransferNote: _transferNoteByQr,
                         onTransferFolder: _transferFolderByQr,
+                        onExportEncryptedNote: _exportEncryptedNoteFile,
+                        onExportEncryptedFolder: _exportEncryptedFolderFile,
                         favoritesOnly: _favoritesOnly,
                         folderSort: _folderSort,
                         onFolderSort: _setFolderSort,
@@ -1654,6 +1720,8 @@ class _NotesHomePageState extends State<NotesHomePage> {
                         onToggleFolderFavorite: _toggleFolderFavorite,
                         onTransferNote: _transferNoteByQr,
                         onTransferFolder: _transferFolderByQr,
+                        onExportEncryptedNote: _exportEncryptedNoteFile,
+                        onExportEncryptedFolder: _exportEncryptedFolderFile,
                         favoritesOnly: _favoritesOnly,
                         folderSort: _folderSort,
                         onFolderSort: _setFolderSort,
@@ -1870,6 +1938,8 @@ class _HierarchyPanel extends StatelessWidget {
   final ValueChanged<LocalFolder> onToggleFolderFavorite;
   final ValueChanged<LocalNote> onTransferNote;
   final ValueChanged<LocalFolder> onTransferFolder;
+  final ValueChanged<LocalNote> onExportEncryptedNote;
+  final ValueChanged<LocalFolder> onExportEncryptedFolder;
   final bool favoritesOnly;
   final String folderSort;
   final ValueChanged<String> onFolderSort;
@@ -1925,6 +1995,8 @@ class _HierarchyPanel extends StatelessWidget {
     required this.onToggleFolderFavorite,
     required this.onTransferNote,
     required this.onTransferFolder,
+    required this.onExportEncryptedNote,
+    required this.onExportEncryptedFolder,
     required this.favoritesOnly,
     required this.folderSort,
     required this.onFolderSort,
@@ -2105,6 +2177,7 @@ class _HierarchyPanel extends StatelessWidget {
                     onDetails: () => onFolderDetails(folder),
                     onToggleFavorite: () => onToggleFolderFavorite(folder),
                     onTransfer: () => onTransferFolder(folder),
+                    onExportEncrypted: () => onExportEncryptedFolder(folder),
                   ),
                 );
               }).toList(),
@@ -2194,6 +2267,8 @@ class _HierarchyPanel extends StatelessWidget {
                                   onToggleNoteFavorite(note);
                                 } else if (value == 'transfer') {
                                   onTransferNote(note);
+                                } else if (value == 'encrypted-file') {
+                                  onExportEncryptedNote(note);
                                 } else if (value == 'rename') {
                                   onRenameNote(note);
                                 } else if (value == 'delete') {
@@ -2212,6 +2287,7 @@ class _HierarchyPanel extends StatelessWidget {
                                 const PopupMenuItem(value: 'cover', child: Text('Change cover')),
                                 PopupMenuItem(value: 'favorite', child: Text(note.isFavorite ? 'Remove from favorites' : 'Add to favorites')),
                                 const PopupMenuItem(value: 'transfer', child: Text('Encrypted QR transfer')),
+                                const PopupMenuItem(value: 'encrypted-file', child: Text('Export encrypted file')),
                                 const PopupMenuItem(value: 'rename', child: Text('Rename')),
                                 const PopupMenuItem(value: 'move', child: Text('Move to folder')),
                                 const PopupMenuItem(value: 'copy', child: Text('Copy')),
@@ -2248,6 +2324,7 @@ class _HierarchyPanel extends StatelessWidget {
               onChangeCover: () => onChangeNoteCover(note),
               onToggleFavorite: () => onToggleNoteFavorite(note),
               onTransfer: () => onTransferNote(note),
+              onExportEncrypted: () => onExportEncryptedNote(note),
             ),
           ),
         if (notes.length > renderedNotes.length ||
@@ -2292,6 +2369,7 @@ class _FolderCoverCard extends StatelessWidget {
   final VoidCallback onDetails;
   final VoidCallback onToggleFavorite;
   final VoidCallback onTransfer;
+  final VoidCallback onExportEncrypted;
 
   const _FolderCoverCard({
     required this.folder, required this.selected, required this.selectionMode,
@@ -2300,6 +2378,7 @@ class _FolderCoverCard extends StatelessWidget {
     required this.onCopy, required this.onCut, required this.onDetails,
     required this.onToggleFavorite,
     required this.onTransfer,
+    required this.onExportEncrypted,
   });
 
   @override
@@ -2345,6 +2424,7 @@ class _FolderCoverCard extends StatelessWidget {
                           case 'details': onDetails(); break;
                           case 'favorite': onToggleFavorite(); break;
                           case 'transfer': onTransfer(); break;
+                          case 'encrypted-file': onExportEncrypted(); break;
                           case 'rename': onRename(); break;
                           case 'delete': onDelete(); break;
                         }
@@ -2359,6 +2439,7 @@ class _FolderCoverCard extends StatelessWidget {
                         PopupMenuItem(value: 'details', child: Text('Details')),
                         PopupMenuItem(value: 'favorite', child: Text(folder.isFavorite ? 'Remove from favorites' : 'Add to favorites')),
                         const PopupMenuItem(value: 'transfer', child: Text('Encrypted QR transfer')),
+                        const PopupMenuItem(value: 'encrypted-file', child: Text('Export encrypted file')),
                         PopupMenuItem(value: 'rename', child: Text('Rename')),
                         PopupMenuItem(value: 'delete', child: Text('Delete')),
                       ],
@@ -2411,6 +2492,7 @@ class _HomeNoteTile extends StatelessWidget {
   final VoidCallback onChangeCover;
   final VoidCallback onToggleFavorite;
   final VoidCallback onTransfer;
+  final VoidCallback onExportEncrypted;
 
   const _HomeNoteTile({
     required this.note,
@@ -2428,6 +2510,7 @@ class _HomeNoteTile extends StatelessWidget {
     required this.onChangeCover,
     required this.onToggleFavorite,
     required this.onTransfer,
+    required this.onExportEncrypted,
   });
 
   @override
@@ -2489,6 +2572,8 @@ class _HomeNoteTile extends StatelessWidget {
                       onToggleFavorite();
                     } else if (value == 'transfer') {
                       onTransfer();
+                    } else if (value == 'encrypted-file') {
+                      onExportEncrypted();
                     } else if (value == 'rename') {
                       onRename();
                     } else if (value == 'delete') {
@@ -2507,6 +2592,7 @@ class _HomeNoteTile extends StatelessWidget {
                     const PopupMenuItem(value: 'cover', child: Text('Change cover')),
                     PopupMenuItem(value: 'favorite', child: Text(note.isFavorite ? 'Remove from favorites' : 'Add to favorites')),
                     const PopupMenuItem(value: 'transfer', child: Text('Encrypted QR transfer')),
+                    const PopupMenuItem(value: 'encrypted-file', child: Text('Export encrypted file')),
                     const PopupMenuItem(value: 'rename', child: Text('Rename')),
                     const PopupMenuItem(value: 'move', child: Text('Move to folder')),
                     const PopupMenuItem(value: 'copy', child: Text('Copy')),
