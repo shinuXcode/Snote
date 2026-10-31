@@ -152,7 +152,24 @@ class NotebookTransferService {
 
     final coverRepository = FolderCoverRepository.instance;
     final covers = await coverRepository.list();
+    final usedCoverKeys = <String>{
+      for (final folder in selectedFolders)
+        if (folder.iconKey.startsWith('cover:custom-')) folder.iconKey,
+    };
+    for (final note in notes) {
+      try {
+        final content = jsonDecode(note.contentJson ?? '{}');
+        if (content is Map && content['coverKey'] is String) {
+          final key = content['coverKey'] as String;
+          if (key.startsWith('cover:custom-')) usedCoverKeys.add(key);
+        }
+      } catch (_) {
+        // A malformed cover reference does not invalidate otherwise valid note content.
+      }
+    }
+    final includeAllCovers = folderId == null && noteId == null;
     for (final cover in covers) {
+      if (!includeAllCovers && !usedCoverKeys.contains(cover.key)) continue;
       final bytes = await coverRepository.imageForKey(cover.key);
       if (bytes == null || bytes.isEmpty) {
         throw StateError('Custom folder cover "${cover.name}" is missing and cannot be backed up safely.');
