@@ -286,7 +286,7 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> with 
       if (raw.isEmpty) return;
       final decoded = jsonDecode(raw);
       if (decoded is! Map) return;
-      _timerMinutes = ((decoded['timerMinutes'] as num?)?.toInt() ?? 25).clamp(1, 240);
+      _timerMinutes = ((decoded['timerMinutes'] as num?)?.toInt() ?? 25).clamp(1, 240).toInt();
       _timerRemaining = math.max(0, (decoded['timerRemaining'] as num?)?.toInt() ?? _timerMinutes * 60).toInt();
       _timerRunning = decoded['timerRunning'] == true;
       final timerDeadline = (decoded['timerDeadline'] as num?)?.toInt();
