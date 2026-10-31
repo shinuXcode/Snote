@@ -2434,8 +2434,8 @@ class _FolderCoverCard extends StatelessWidget {
                           case 'delete': onDelete(); break;
                         }
                       },
-                      itemBuilder: (_) => const [
-                        PopupMenuItem(value: 'open', child: Text('Open folder')),
+                      itemBuilder: (_) => [
+                        const PopupMenuItem(value: 'open', child: Text('Open folder')),
                         PopupMenuItem(value: 'cover', child: Text('Change cover / color')),
                         PopupMenuItem(value: 'select', child: Text('Select')),
                         PopupMenuItem(value: 'move', child: Text('Move')),
