@@ -1722,7 +1722,10 @@ class EditorV2InkPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant EditorV2InkPainter oldDelegate) {
-    final sameBaseStrokes = identical(strokes, oldDelegate.strokes);
+    final sameBaseStrokes =
+        identical(strokes, oldDelegate.strokes) &&
+        highlighterOnTop == oldDelegate.highlighterOnTop &&
+        onlyHighlighters == oldDelegate.onlyHighlighters;
     if (sameBaseStrokes && oldDelegate._basePicture != null) {
       _basePicture = oldDelegate._basePicture;
       oldDelegate._basePicture = null;
