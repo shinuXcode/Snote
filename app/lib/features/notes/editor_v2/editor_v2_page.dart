@@ -86,6 +86,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   // Keep already-open editor routes mounted while another note is selected.
   // This preserves decoded page state and warm PDF raster/document caches.
   static final Set<String> _openEditorNoteIds = <String>{};
+  static const int _maxMountedEditorTabs = 5;
   static final LinkedHashMap<String, LocalNote> _editorTabNotes =
       LinkedHashMap<String, LocalNote>();
   static final Map<String, Route<dynamic>> _editorRoutes =
@@ -3090,6 +3091,17 @@ class _EditorV2PageState extends State<EditorV2Page>
       return;
     }
 
+    while (_editorTabNotes.length >= _maxMountedEditorTabs) {
+      final oldestId = _editorTabNotes.keys.firstWhere(
+        (id) => id != widget.note.id && id != note.id,
+        orElse: () => '',
+      );
+      if (oldestId.isEmpty) break;
+      final oldestRoute = _editorRoutes.remove(oldestId);
+      _editorTabNotes.remove(oldestId);
+      _openEditorNoteIds.remove(oldestId);
+      if (oldestRoute != null) navigator.removeRoute(oldestRoute);
+    }
     _editorTabNotes[note.id] = note;
     setState(() {});
     await navigator.push<void>(
