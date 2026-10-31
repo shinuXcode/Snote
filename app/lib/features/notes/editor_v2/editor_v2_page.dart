@@ -394,7 +394,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   void didChangeDependencies() {
     super.didChangeDependencies();
     final route = ModalRoute.of(context);
-    if (route != null && route.settings.name == _editorRouteName(widget.note.id)) {
+    if (route != null) {
       _editorRoute = route;
       _editorRoutes[widget.note.id] = route;
     }
@@ -3075,10 +3075,12 @@ class _EditorV2PageState extends State<EditorV2Page>
     if (!mounted) return;
 
     final navigator = Navigator.of(context);
-    if (_openEditorNoteIds.contains(note.id)) {
-      navigator.popUntil(
-        (route) => route.settings.name == _editorRouteName(note.id),
-      );
+    final existingRoute = _editorRoutes[note.id];
+    if (existingRoute != null) {
+      _editorTabNotes.remove(note.id);
+      _editorTabNotes[note.id] = note;
+      setState(() {});
+      navigator.popUntil((route) => identical(route, existingRoute));
       return;
     }
 
