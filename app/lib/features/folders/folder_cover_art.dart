@@ -91,7 +91,7 @@ class FolderCoverArt extends StatelessWidget {
                 borderRadius: BorderRadius.circular(7),
               ),
               child: Text(
-                'SNOTE  •  ' + (seed + 1).toString().padLeft(3, '0'),
+                'SNOTEE  •  ' + (seed + 1).toString().padLeft(3, '0'),
                 style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1),
               ),
             )),
