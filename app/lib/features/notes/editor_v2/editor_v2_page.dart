@@ -6632,7 +6632,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       case 'timer':
         setState(() => _showFloatingTimer = true);
       case 'webSearch':
-        unawaited(SnoteWebSearchPanel.show(context));
+        setState(() => _showBrowserPanel = true);
       case 'favorite':
         unawaited(_addFavoritePen());
       case 'dockTop':
