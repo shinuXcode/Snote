@@ -1,4 +1,4 @@
-const databaseVersion = 8;
+const databaseVersion = 9;
 const createNotesTable = '''
 CREATE TABLE notes (
   id TEXT PRIMARY KEY,
@@ -11,6 +11,7 @@ CREATE TABLE notes (
   updated_at INTEGER NOT NULL,
   deleted_at INTEGER,
   version INTEGER NOT NULL DEFAULT 1,
+  is_favorite INTEGER NOT NULL DEFAULT 0,
   sync_state TEXT NOT NULL DEFAULT 'pending'
 )''';
 
@@ -23,6 +24,7 @@ CREATE TABLE folders (
   color_value INTEGER NOT NULL DEFAULT 4284187897,
   icon_key TEXT NOT NULL DEFAULT 'folder',
   sort_order INTEGER NOT NULL DEFAULT 0,
+  is_favorite INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   deleted_at INTEGER
