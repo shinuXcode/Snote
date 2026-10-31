@@ -54,6 +54,7 @@ class NotebookTransferService {
         'title': n.title,
         'folderId': n.folderId,
         'noteType': n.noteType,
+        'isFavorite': n.isFavorite,
         'contentJson': n.contentJson,
         'createdAt': n.createdAt,
         'updatedAt': n.updatedAt,
@@ -160,6 +161,9 @@ class NotebookTransferService {
         final parentId = item['parentId']?.toString();
         final mappedParentId = parentId == null ? fallbackFolderId : folderMap[parentId] ?? fallbackFolderId;
         final newFolder = await folders.create(name: folderName, parentId: mappedParentId);
+        if (item['isFavorite'] == true) {
+          await folders.setFavorite(newFolder.id, true);
+        }
         folderMap[oldId] = newFolder.id;
       }
     }
@@ -173,6 +177,9 @@ class NotebookTransferService {
       if (title == null || title.isEmpty) continue;
       final oldFolderId = item['folderId']?.toString();
       final note = await repository.create(title: title, folderId: folderMap[oldFolderId] ?? fallbackFolderId);
+      if (item['isFavorite'] == true) {
+        await repository.setFavorite(note.id, true);
+      }
       final content = item['contentJson'];
       if (content is String && content.isNotEmpty) {
         try {
