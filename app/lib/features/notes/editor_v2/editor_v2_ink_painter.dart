@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -16,8 +17,12 @@ class EditorV2InkPainter extends CustomPainter {
   final Set<String> selectedStrokeIds;
   final Offset? eraserCursor;
   final double eraserRadius;
+  ui.Picture? _basePicture;
+  Path? _liveHighlighterPath;
+  List<StrokePoint>? _liveHighlighterPoints;
+  int _liveHighlighterPointCount = 0;
 
-  const EditorV2InkPainter({
+  EditorV2InkPainter({
     required this.strokes,
     this.liveStroke,
     this.selectedStrokeIds = const <String>{},
@@ -27,8 +32,9 @@ class EditorV2InkPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    final basePicture = _basePicture ?? _recordBasePicture();
+    canvas.drawPicture(basePicture);
     for (final stroke in strokes) {
-      _drawStroke(canvas, stroke);
       if (selectedStrokeIds.contains(stroke.id)) {
         final bounds = _strokeBounds(stroke);
         if (bounds != null) {
@@ -40,7 +46,13 @@ class EditorV2InkPainter extends CustomPainter {
         }
       }
     }
-    if (liveStroke != null) _drawStroke(canvas, liveStroke!);
+    if (liveStroke != null) {
+      if (liveStroke!.pen.type == PenType.highlighter) {
+        _drawLiveHighlighter(canvas, liveStroke!);
+      } else {
+        _drawStroke(canvas, liveStroke!);
+      }
+    }
     if (eraserCursor != null) {
       final bounds = Rect.fromCircle(center: eraserCursor!, radius: eraserRadius);
       // A translucent footprint plus a contrasting double outline stays visible
@@ -71,6 +83,63 @@ class EditorV2InkPainter extends CustomPainter {
         math.max(1.2, bounds.width * .012),
         Paint()..color = const Color(0xff174ea6),
       );
+    }
+  }
+
+  ui.Picture _recordBasePicture() {
+    final recorder = ui.PictureRecorder();
+    final recordingCanvas = Canvas(recorder);
+    for (final stroke in strokes) {
+      _drawStroke(recordingCanvas, stroke);
+    }
+    final picture = recorder.endRecording();
+    _basePicture = picture;
+    return picture;
+  }
+
+  void _drawLiveHighlighter(Canvas canvas, Stroke stroke) {
+    final points = stroke.points;
+    if (points.isEmpty) return;
+    if (!identical(_liveHighlighterPoints, points) ||
+        _liveHighlighterPointCount > points.length) {
+      _liveHighlighterPath = null;
+      _liveHighlighterPoints = points;
+      _liveHighlighterPointCount = 0;
+    }
+    if (_liveHighlighterPath == null) {
+      _liveHighlighterPath = Path()..moveTo(
+        points.first.position.dx,
+        points.first.position.dy,
+      );
+      _liveHighlighterPointCount = 1;
+    }
+    final path = _liveHighlighterPath!;
+    while (_liveHighlighterPointCount < points.length) {
+      final point = points[_liveHighlighterPointCount].position;
+      path.lineTo(point.dx, point.dy);
+      _liveHighlighterPointCount++;
+    }
+    final baseWidth = stroke.pen.size.clamp(.5, 60).toDouble();
+    final alpha = (stroke.pen.color.a * stroke.pen.opacity).clamp(0.0, 1.0).toDouble();
+    final paint = Paint()
+      ..color = stroke.pen.color.withValues(alpha: math.min(alpha, .38))
+      ..blendMode = BlendMode.multiply
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..strokeWidth = math.max(baseWidth, 7).toDouble()
+      ..isAntiAlias = true;
+    if (points.length == 1) {
+      canvas.drawCircle(
+        points.first.position,
+        math.max(1.5, paint.strokeWidth * .42),
+        Paint()
+          ..color = paint.color
+          ..blendMode = BlendMode.multiply
+          ..isAntiAlias = true,
+      );
+    } else {
+      canvas.drawPath(path, paint);
     }
   }
 
@@ -1642,10 +1711,37 @@ class EditorV2InkPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant EditorV2InkPainter oldDelegate) =>
-      !identical(strokes, oldDelegate.strokes) ||
-      liveStroke != oldDelegate.liveStroke ||
-      selectedStrokeIds != oldDelegate.selectedStrokeIds ||
-      eraserCursor != oldDelegate.eraserCursor ||
-      eraserRadius != oldDelegate.eraserRadius;
+  bool shouldRepaint(covariant EditorV2InkPainter oldDelegate) {
+    final sameBaseStrokes = identical(strokes, oldDelegate.strokes);
+    if (sameBaseStrokes && oldDelegate._basePicture != null) {
+      _basePicture = oldDelegate._basePicture;
+      oldDelegate._basePicture = null;
+    }
+
+    final sameLiveHighlighterPoints =
+        liveStroke?.pen.type == PenType.highlighter &&
+        oldDelegate.liveStroke?.pen.type == PenType.highlighter &&
+        identical(liveStroke?.points, oldDelegate.liveStroke?.points);
+    if (sameLiveHighlighterPoints) {
+      _liveHighlighterPath = oldDelegate._liveHighlighterPath;
+      _liveHighlighterPoints = oldDelegate._liveHighlighterPoints;
+      _liveHighlighterPointCount = oldDelegate._liveHighlighterPointCount;
+      oldDelegate._liveHighlighterPath = null;
+      oldDelegate._liveHighlighterPoints = null;
+      oldDelegate._liveHighlighterPointCount = 0;
+    }
+
+    return !sameBaseStrokes ||
+        liveStroke != oldDelegate.liveStroke ||
+        selectedStrokeIds != oldDelegate.selectedStrokeIds ||
+        eraserCursor != oldDelegate.eraserCursor ||
+        eraserRadius != oldDelegate.eraserRadius;
+  }
+
+  @override
+  void dispose() {
+    _basePicture?.dispose();
+    _basePicture = null;
+    super.dispose();
+  }
 }
