@@ -67,6 +67,7 @@ class _SnoteToolGlyphPainter extends CustomPainter {
         line(const Offset(12, 4), const Offset(12, 19));
         canvas.drawCircle(const Offset(12, 11), 1.25, fill);
         line(const Offset(8, 15), const Offset(16, 15));
+        break;
       case CanvasTool.ballpoint:
         canvas.save();
         canvas.translate(12, 12);
@@ -83,6 +84,7 @@ class _SnoteToolGlyphPainter extends CustomPainter {
         line(const Offset(10.5, -7), const Offset(10.5, -9));
         line(const Offset(13.5, -7), const Offset(13.5, -9));
         canvas.restore();
+        break;
       case CanvasTool.pencil:
         canvas.save();
         canvas.translate(12, 12);
@@ -94,6 +96,7 @@ class _SnoteToolGlyphPainter extends CustomPainter {
         line(const Offset(8, -6), const Offset(16, -6));
         line(const Offset(8, 7), const Offset(16, 7));
         canvas.restore();
+        break;
       case CanvasTool.highlighter:
         canvas.save();
         canvas.translate(12, 12);
@@ -109,6 +112,7 @@ class _SnoteToolGlyphPainter extends CustomPainter {
         line(const Offset(6, 2), const Offset(18, 2));
         polygon(const <Offset>[Offset(6, 6), Offset(18, 6), Offset(15, 10), Offset(9, 10)]);
         canvas.restore();
+        break;
       case CanvasTool.marker:
         canvas.save();
         canvas.translate(12, 12);
@@ -123,11 +127,13 @@ class _SnoteToolGlyphPainter extends CustomPainter {
         );
         line(const Offset(7, 4), const Offset(17, 4));
         canvas.restore();
+        break;
       case CanvasTool.brush:
         line(const Offset(6, 18), const Offset(16, 8));
         line(const Offset(4, 20), const Offset(8, 16));
         polygon(const <Offset>[Offset(15, 8), Offset(18, 3), Offset(21, 6), Offset(17, 11)], filled: true);
         canvas.drawCircle(const Offset(5, 19), 1.4, fill);
+        break;
       case CanvasTool.eraser:
       case CanvasTool.pixelEraser:
         canvas.save();
@@ -147,6 +153,7 @@ class _SnoteToolGlyphPainter extends CustomPainter {
           canvas.drawRect(const Rect.fromLTWH(15, 2.5, 2, 2), stroke);
         }
         canvas.restore();
+        break;
       default:
         canvas.drawCircle(const Offset(12, 12), 8, stroke);
     }

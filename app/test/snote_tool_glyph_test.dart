@@ -4,7 +4,7 @@ import 'package:snote/canvas_engine/models/pen_config.dart';
 import 'package:snote/ui/snote_tool_glyph.dart';
 
 void main() {
-  testWidgets('writing tool glyphs render without icon tile backgrounds', (tester) async {
+  testWidgets('writing tool glyphs render as background-free vector icons', (tester) async {
     const tools = <CanvasTool>[
       CanvasTool.ballpoint,
       CanvasTool.fountain,
@@ -17,13 +17,16 @@ void main() {
     ];
 
     await tester.pumpWidget(
-      const MaterialApp(
+      MaterialApp(
         home: Scaffold(
           body: Wrap(
-            children: [
-              for (final tool in tools)
-                SnoteToolGlyph(tool: tool, color: Colors.black, size: 24),
-            ],
+            children: tools
+                .map((tool) => SnoteToolGlyph(
+                      tool: tool,
+                      color: Colors.black,
+                      size: 24,
+                    ))
+                .toList(),
           ),
         ),
       ),
