@@ -86,6 +86,10 @@ class _EditorV2PageState extends State<EditorV2Page>
   // Keep already-open editor routes mounted while another note is selected.
   // This preserves decoded page state and warm PDF raster/document caches.
   static final Set<String> _openEditorNoteIds = <String>{};
+  static final LinkedHashMap<String, LocalNote> _editorTabNotes =
+      LinkedHashMap<String, LocalNote>();
+  static final Map<String, Route<dynamic>> _editorRoutes =
+      <String, Route<dynamic>>{};
 
   static String _editorRouteName(String noteId) => '/snotee/editor/$noteId';
 
@@ -250,7 +254,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   List<String> _toolbarOrder = <String>[];
   bool _showNoteSwitcherInTitleBar = true;
   bool _showTabsBar = false;
-  Future<List<LocalNote>>? _noteTabsFuture;
+  Route<dynamic>? _editorRoute;
   List<Map<String, Object?>>? _selectionTransformImageSnapshot;
   List<Map<String, Object?>>? _selectionTransformTextSnapshot;
   bool _showFavoritesShowcase = true;
@@ -318,6 +322,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   void initState() {
     super.initState();
     _openEditorNoteIds.add(widget.note.id);
+    _editorTabNotes[widget.note.id] = widget.note;
     WidgetsBinding.instance.addObserver(this);
     _title.text = widget.note.title;
     _quill.addListener(_scheduleSave);
@@ -384,6 +389,11 @@ class _EditorV2PageState extends State<EditorV2Page>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route != null && route.settings.name == _editorRouteName(widget.note.id)) {
+      _editorRoute = route;
+      _editorRoutes[widget.note.id] = route;
+    }
     if (_fitInitialized) return;
     _fitInitialized = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -2993,7 +3003,6 @@ class _EditorV2PageState extends State<EditorV2Page>
     final next = !_showTabsBar;
     setState(() {
       _showTabsBar = next;
-      _noteTabsFuture ??= _repo.listAllVisible(limit: 12);
     });
     await _settings.setBool('editorV2ShowTabs', next);
   }
@@ -3011,57 +3020,64 @@ class _EditorV2PageState extends State<EditorV2Page>
       return;
     }
 
+    _editorTabNotes[note.id] = note;
+    setState(() {});
     await navigator.push<void>(
       MaterialPageRoute<void>(
         settings: RouteSettings(name: _editorRouteName(note.id)),
         builder: (_) => EditorV2Page(note: note),
       ),
     );
-    if (mounted) {
-      _noteTabsFuture = _repo.listAllVisible(limit: 12);
-      setState(() {});
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _closeNoteTab(LocalNote note) async {
+    final navigator = Navigator.of(context);
+    if (note.id == widget.note.id) {
+      await _flushSave();
+      if (!mounted) return;
+      if (navigator.canPop()) navigator.pop();
+      return;
     }
+    final route = _editorRoutes[note.id];
+    if (route == null) return;
+    navigator.removeRoute(route);
+    _editorRoutes.remove(note.id);
+    _editorTabNotes.remove(note.id);
+    _openEditorNoteIds.remove(note.id);
+    if (mounted) setState(() {});
   }
 
   Widget _buildNoteTabs() {
+    final notes = _editorTabNotes.values.toList(growable: false);
+    if (notes.isEmpty) return const SizedBox.shrink();
     return Material(
       color: Theme.of(context).colorScheme.surfaceContainerLow,
       child: SizedBox(
         height: 44,
-        child: FutureBuilder<List<LocalNote>>(
-          future: _noteTabsFuture ??= _repo.listAllVisible(limit: 12),
-          builder: (context, snapshot) {
-            final notes = snapshot.data ?? const <LocalNote>[];
-            if (snapshot.hasError) {
-              return Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Could not load note tabs', style: TextStyle(color: Theme.of(context).colorScheme.error)),
-              );
-            }
-            if (notes.isEmpty) return const SizedBox.shrink();
-            return ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-              itemCount: notes.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 5),
-              itemBuilder: (context, index) {
-                final note = notes[index];
-                final active = note.id == widget.note.id;
-                return ChoiceChip(
-                  visualDensity: VisualDensity.compact,
-                  selected: active,
-                  avatar: Icon(active ? Icons.edit_note_rounded : Icons.note_outlined, size: 16),
-                  label: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 170),
-                    child: Text(
-                      note.title.trim().isEmpty ? 'Untitled note' : note.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  onSelected: (_) => unawaited(_openNoteTab(note)),
-                );
-              },
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          itemCount: notes.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 5),
+          itemBuilder: (context, index) {
+            final note = notes[index];
+            final active = note.id == widget.note.id;
+            return InputChip(
+              visualDensity: VisualDensity.compact,
+              selected: active,
+              avatar: Icon(active ? Icons.edit_note_rounded : Icons.note_outlined, size: 16),
+              label: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 150),
+                child: Text(
+                  note.title.trim().isEmpty ? 'Untitled note' : note.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              onPressed: active ? null : () => unawaited(_openNoteTab(note)),
+              onDeleted: () => unawaited(_closeNoteTab(note)),
+              deleteButtonTooltipMessage: 'Close ${note.title.isEmpty ? 'untitled note' : note.title}',
             );
           },
         ),
@@ -8750,6 +8766,10 @@ class _EditorV2PageState extends State<EditorV2Page>
   @override
   void dispose() {
     _openEditorNoteIds.remove(widget.note.id);
+    _editorTabNotes.remove(widget.note.id);
+    if (identical(_editorRoutes[widget.note.id], _editorRoute)) {
+      _editorRoutes.remove(widget.note.id);
+    }
     WidgetsBinding.instance.removeObserver(this);
     _saveTimer?.cancel();
     _studyTimer?.cancel();
