@@ -574,7 +574,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
         if (key != null && key.startsWith('cover:')) return key;
       }
     } catch (_) {}
-    return 'cover:' + (note.id.hashCode.abs() % 200).toString();
+    return 'cover:' + (note.id.hashCode.abs() % 400).toString();
   }
 
   Future<void> _changeNoteCover(LocalNote note) async {
