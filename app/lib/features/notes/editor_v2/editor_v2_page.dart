@@ -333,7 +333,6 @@ class _EditorV2PageState extends State<EditorV2Page>
     _floatingToolbar = _settings.getBool('editorV2FloatingToolbar');
     _compactFloatingToolbar = _settings.getBool('editorV2CompactFloatingToolbar');
     _showTabsBar = _settings.getBool('editorV2ShowTabs');
-    _noteTabsFuture = _repo.listAllVisible(limit: 12);
     _toolbarCollapsedToEdge = _settings.getBool('editorV2ToolbarCollapsed');
     _toolbarLength = _settings.getDouble('editorV2ToolbarLength').clamp(180.0, 900.0).toDouble();
     _toolbarThickness = _settings.getDouble('editorV2ToolbarThickness').clamp(28.0, 96.0).toDouble();
