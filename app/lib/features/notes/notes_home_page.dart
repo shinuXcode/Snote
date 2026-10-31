@@ -608,6 +608,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
       current = current.parentId == null ? null : byId[current.parentId];
     }
     setState(() {
+      _favoritesOnly = false;
       _breadcrumbs
         ..clear()
         ..addAll(path.reversed);
@@ -2045,7 +2046,7 @@ class _HierarchyPanel extends StatelessWidget {
         if (key != null && key.startsWith('cover:')) return key;
       }
     } catch (_) {}
-    return 'cover:' + (note.id.hashCode.abs() % 200).toString();
+    return 'cover:' + (note.id.hashCode.abs() % 400).toString();
   }
 
   @override
@@ -2053,7 +2054,6 @@ class _HierarchyPanel extends StatelessWidget {
     if (loading) return const Center(child: CircularProgressIndicator());
     final theme = Theme.of(context);
     final visibleFolders = (favoritesOnly ? allFolders : allFolders.where((folder) => folder.parentId == currentFolderId)).toList();
-    final renderedFolders = visibleFolders.take(folderRenderLimit).toList();
     final renderedNotes = notes.take(noteRenderLimit).toList();
     switch (folderSort) {
       case 'nameDesc':
@@ -2068,6 +2068,7 @@ class _HierarchyPanel extends StatelessWidget {
       default:
         visibleFolders.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     }
+    final renderedFolders = visibleFolders.take(folderRenderLimit).toList();
 
     return ListView(
       padding: EdgeInsets.fromLTRB(compact ? 12 : 14, 4, compact ? 12 : 14, 110),
