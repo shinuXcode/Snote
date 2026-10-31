@@ -224,13 +224,14 @@ class _SettingsPageState extends State<SettingsPage> {
           onChanged: _theme.setReduceMotion,
         ),
       ]),
-      if (_noteOnly) _group('Other Settings', [
+      if (_noteOnly) _group('Note Controls & Navigation', [
         _toggle('keepScreenOn', 'Keep screen on', 'Stay awake while writing.'),
         _toggle('bookshelfStartPage', 'Bookshelf as start page', 'Open the notebook library first.'),
         _toggle('showPageNavigation', 'Show page navigation', 'Display previous/next/add controls.'),
         _toggle('showPageNumbers', 'Show page number', 'Number pages automatically.'),
         _toggle('showVisitedHistory', 'Show visited history', 'Remember recent page positions.'),
         _toggle('showPagePreview', 'Show page preview in the left sidebar', 'Keep the thumbnail rail available.'),
+        _pagePreviewSideSelector(),
         _toggle('showUndoOnRight', 'Show undo on the right', 'Mirror undo and redo near navigation.'),
         _toggle('screenshotNotification', 'Notification bar displays screenshot', 'Platform-dependent screenshot feedback.'),
         _toggle('clickHyperlink', 'Click hyperlink to jump', 'Open rich-text hyperlinks.'),
@@ -420,6 +421,27 @@ class _SettingsPageState extends State<SettingsPage> {
     if (key.contains('select') || key.contains('menu')) return Icons.touch_app_outlined;
     return Icons.tune_rounded;
   }
+
+  Widget _pagePreviewSideSelector() => Card(
+    margin: const EdgeInsets.only(bottom: 8),
+    child: ListTile(
+      leading: const Icon(Icons.view_sidebar_outlined),
+      title: const Text('Page preview position'),
+      subtitle: const Text('Choose which side of the writing canvas holds page thumbnails.'),
+      trailing: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _settings.getString('editorV2PagePreviewSide') == 'right' ? 'right' : 'left',
+          items: const [
+            DropdownMenuItem(value: 'left', child: Text('Left')),
+            DropdownMenuItem(value: 'right', child: Text('Right')),
+          ],
+          onChanged: (value) {
+            if (value != null) unawaited(_settings.setString('editorV2PagePreviewSide', value));
+          },
+        ),
+      ),
+    ),
+  );
 
   Widget _toggle(String key, String title, String subtitle) => SwitchListTile.adaptive(
     contentPadding: const EdgeInsets.symmetric(horizontal: 16),
