@@ -6787,6 +6787,18 @@ class _EditorV2PageState extends State<EditorV2Page>
     Color? color,
   }) {
     final glyphColor = color ?? Theme.of(context).colorScheme.onSurface;
+    if (tool.isShape) {
+      return SizedBox(
+        width: size,
+        height: size,
+        child: CustomPaint(
+          painter: _EditorV2ShapePreviewPainter(
+            shape: tool.name,
+            color: glyphColor,
+          ),
+        ),
+      );
+    }
     if (const <CanvasTool>{
       CanvasTool.ballpoint,
       CanvasTool.fountain,
