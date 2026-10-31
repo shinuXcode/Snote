@@ -3122,25 +3122,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       ),
     );
     if (selected == null || selected.id == widget.note.id || !mounted) return;
-    await _flushSave();
-    if (!mounted) return;
-    final navigator = Navigator.of(context);
-    if (_openEditorNoteIds.contains(selected.id)) {
-      navigator.popUntil(
-        (route) => route.settings.name == _editorRouteName(selected.id),
-      );
-      return;
-    }
-    await navigator.push<void>(
-      MaterialPageRoute<void>(
-        settings: RouteSettings(name: _editorRouteName(selected.id)),
-        builder: (_) => EditorV2Page(note: selected),
-      ),
-    );
-    if (mounted) {
-      _noteTabsFuture = _repo.listAllVisible(limit: 12);
-      setState(() {});
-    }
+    await _openNoteTab(selected);
   }
 
   void _selectTool(CanvasTool tool) {
@@ -7588,7 +7570,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                                         const PopupMenuDivider(),
                                         const PopupMenuItem(value: 'cut', child: ListTile(dense: true, leading: Icon(Icons.content_cut_rounded), title: Text('Cut page'))),
                                         const PopupMenuItem(value: 'copy', child: ListTile(dense: true, leading: Icon(Icons.copy_rounded), title: Text('Copy page'))),
-                                        PopupMenuItem(value: 'paste', enabled: _pageClipboard != null, child: const ListTile(dense: true, leading: Icon(Icons.content_paste_rounded), title: Text('Paste after'))),
+                                        PopupMenuItem(value: 'paste', enabled: _pageClipboard != null, child: const ListTile(dense: true, leading: Icon(Icons.content_paste_rounded), title: Text('Paste as page'))),
                                         const PopupMenuItem(value: 'duplicate', child: ListTile(dense: true, leading: Icon(Icons.control_point_duplicate_rounded), title: Text('Duplicate'))),
                                         const PopupMenuItem(value: 'clear', child: ListTile(dense: true, leading: Icon(Icons.cleaning_services_outlined), title: Text('Clear page…'))),
                                         const PopupMenuItem(value: 'share', child: ListTile(dense: true, leading: Icon(Icons.share_outlined), title: Text('Share page'))),
