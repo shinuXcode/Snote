@@ -17,6 +17,8 @@ class EditorV2InkPainter extends CustomPainter {
   final Set<String> selectedStrokeIds;
   final Offset? eraserCursor;
   final double eraserRadius;
+  final bool highlighterOnTop;
+  final bool onlyHighlighters;
   ui.Picture? _basePicture;
   Path? _liveHighlighterPath;
   List<StrokePoint>? _liveHighlighterPoints;
@@ -28,6 +30,8 @@ class EditorV2InkPainter extends CustomPainter {
     this.selectedStrokeIds = const <String>{},
     this.eraserCursor,
     this.eraserRadius = 18,
+    this.highlighterOnTop = false,
+    this.onlyHighlighters = false,
   });
 
   @override
@@ -35,6 +39,8 @@ class EditorV2InkPainter extends CustomPainter {
     final basePicture = _basePicture ?? _recordBasePicture();
     canvas.drawPicture(basePicture);
     for (final stroke in strokes) {
+      if (onlyHighlighters && stroke.pen.type != PenType.highlighter) continue;
+      if (highlighterOnTop && !onlyHighlighters && stroke.pen.type == PenType.highlighter) continue;
       if (selectedStrokeIds.contains(stroke.id)) {
         final bounds = _strokeBounds(stroke);
         if (bounds != null) {
@@ -46,7 +52,9 @@ class EditorV2InkPainter extends CustomPainter {
         }
       }
     }
-    if (liveStroke != null) {
+    if (liveStroke != null &&
+        !(highlighterOnTop && !onlyHighlighters && liveStroke!.pen.type == PenType.highlighter) &&
+        (!onlyHighlighters || liveStroke!.pen.type == PenType.highlighter)) {
       if (liveStroke!.pen.type == PenType.highlighter) {
         _drawLiveHighlighter(canvas, liveStroke!);
       } else {
@@ -90,6 +98,8 @@ class EditorV2InkPainter extends CustomPainter {
     final recorder = ui.PictureRecorder();
     final recordingCanvas = Canvas(recorder);
     for (final stroke in strokes) {
+      if (onlyHighlighters && stroke.pen.type != PenType.highlighter) continue;
+      if (highlighterOnTop && !onlyHighlighters && stroke.pen.type == PenType.highlighter) continue;
       _drawStroke(recordingCanvas, stroke);
     }
     final picture = recorder.endRecording();
@@ -1735,7 +1745,9 @@ class EditorV2InkPainter extends CustomPainter {
         liveStroke != oldDelegate.liveStroke ||
         selectedStrokeIds != oldDelegate.selectedStrokeIds ||
         eraserCursor != oldDelegate.eraserCursor ||
-        eraserRadius != oldDelegate.eraserRadius;
+        eraserRadius != oldDelegate.eraserRadius ||
+        highlighterOnTop != oldDelegate.highlighterOnTop ||
+        onlyHighlighters != oldDelegate.onlyHighlighters;
   }
 
   @override
