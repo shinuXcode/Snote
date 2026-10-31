@@ -253,7 +253,7 @@ class _SettingsPageState extends State<SettingsPage> {
         _toggle('securePagePreviews', 'Preview lock / privacy', 'Hide handwritten content in the page preview rail.'),
       ]),
       if (_noteOnly) _group('New Page Template', [
-        _defaultPageTemplateSelector(),
+        _editorV2DefaultPageTemplateSelector(),
         _templateColorSelector(
           key: 'defaultPagePaperColor',
           title: 'Default paper background',
@@ -440,7 +440,7 @@ class _SettingsPageState extends State<SettingsPage> {
     return Icons.tune_rounded;
   }
 
-  Widget _defaultPageTemplateSelector() => Card(
+  Widget _editorV2DefaultPageTemplateSelector() => Card(
     margin: const EdgeInsets.only(bottom: 8),
     child: ListTile(
       leading: const Icon(Icons.grid_view_rounded),
@@ -449,9 +449,9 @@ class _SettingsPageState extends State<SettingsPage> {
       trailing: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: PageTemplate.values.any(
-            (template) => template.name == _settings.getString('defaultPageTemplate'),
+            (template) => template.name == _settings.getString('editorV2DefaultPageTemplate'),
           )
-              ? _settings.getString('defaultPageTemplate')
+              ? _settings.getString('editorV2DefaultPageTemplate')
               : 'inherit',
           items: [
             const DropdownMenuItem(value: 'inherit', child: Text('Inherit')),
@@ -465,7 +465,7 @@ class _SettingsPageState extends State<SettingsPage> {
           onChanged: (value) {
             if (value != null) {
               unawaited(_settings.setString(
-                'defaultPageTemplate',
+                'editorV2DefaultPageTemplate',
                 value == 'inherit' ? '' : value,
               ));
               setState(() {});
