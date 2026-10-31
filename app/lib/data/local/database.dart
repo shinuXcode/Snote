@@ -75,6 +75,22 @@ class SnoteDatabase {
         if (oldVersion < 7) {
           await db.execute(createFolderCoversTable);
         }
+        if (oldVersion < 9) {
+          // Additive-only migration: existing notes and folders remain intact
+          // and default to not-favorited.
+          await _addColumnIfMissing(
+            db,
+            table: 'notes',
+            column: 'is_favorite',
+            declaration: 'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _addColumnIfMissing(
+            db,
+            table: 'folders',
+            column: 'is_favorite',
+            declaration: 'INTEGER NOT NULL DEFAULT 0',
+          );
+        }
       },
       onOpen: (db) async {
         await db.execute(
@@ -95,6 +111,14 @@ class SnoteDatabase {
         await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_notes_owner_title '
           'ON notes(owner_id, title COLLATE NOCASE)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_notes_owner_favorite '
+          'ON notes(owner_id, is_favorite, updated_at DESC)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_folders_owner_favorite '
+          'ON folders(owner_id, is_favorite, updated_at DESC)',
         );
         await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_notes_title ON notes(title COLLATE NOCASE)',
