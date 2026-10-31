@@ -40,20 +40,6 @@ class EditorV2InkPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final basePicture = _basePicture ?? _recordBasePicture();
     canvas.drawPicture(basePicture);
-    for (final stroke in strokes) {
-      if (onlyHighlighters && stroke.pen.type != PenType.highlighter) continue;
-      if (highlighterOnTop && !onlyHighlighters && stroke.pen.type == PenType.highlighter) continue;
-      if (selectedStrokeIds.contains(stroke.id)) {
-        final bounds = _strokeBounds(stroke);
-        if (bounds != null) {
-          final selection = Paint()
-            ..color = const Color(0xff3979e8).withValues(alpha: .9)
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.2;
-          canvas.drawRect(bounds.inflate(5), selection);
-        }
-      }
-    }
     if (liveStroke != null &&
         !(highlighterOnTop && !onlyHighlighters && liveStroke!.pen.type == PenType.highlighter) &&
         (!onlyHighlighters || liveStroke!.pen.type == PenType.highlighter)) {

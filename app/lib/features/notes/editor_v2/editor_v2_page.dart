@@ -28,6 +28,7 @@ import '../../../canvas_engine/models/stroke.dart';
 import '../../../canvas_engine/models/stroke_codec.dart';
 import '../../../canvas_engine/widgets/page_background.dart';
 import '../../../ui/snote_floating_toolbar.dart';
+import '../../../ui/snote_tool_glyph.dart';
 import '../../../core/security/note_lock_service.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../settings/settings_page.dart';
@@ -251,6 +252,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   final Set<String> _selectedStrokeIds = <String>{};
   final Set<String> _selectedImageIds = <String>{};
   final Set<String> _selectedTextBoxIds = <String>{};
+  final List<Offset> _lassoOutlinePoints = <Offset>[];
   final Map<String, Map<String, Object?>> _toolProfiles = <String, Map<String, Object?>>{};
   Map<String, Object?>? _pageClipboard;
   Map<String, Object?>? _selectionClipboard;
@@ -1229,7 +1231,7 @@ class _EditorV2PageState extends State<EditorV2Page>
             child: SizedBox(
               width: 34,
               height: 34,
-              child: Icon(_toolIcon(tool), color: Theme.of(context).colorScheme.primary),
+              child: _toolGlyph(tool, size: 19, color: Theme.of(context).colorScheme.primary),
             ),
           ),
           child: GestureDetector(
@@ -1238,7 +1240,7 @@ class _EditorV2PageState extends State<EditorV2Page>
               visualDensity: VisualDensity.compact,
               tooltip: '${tool.label} • double-tap for settings',
               onPressed: () => _selectTool(tool),
-              icon: Icon(_toolIcon(tool), size: 19),
+              icon: _toolGlyph(tool, size: 19),
             ),
           ),
         ),
@@ -1259,7 +1261,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           child: SizedBox(
             width: 36,
             height: 36,
-            child: Icon(_toolIcon(tool), color: Theme.of(context).colorScheme.primary),
+            child: _toolGlyph(tool, size: 19, color: Theme.of(context).colorScheme.primary),
           ),
         ),
         child: Tooltip(
@@ -1277,11 +1279,11 @@ class _EditorV2PageState extends State<EditorV2Page>
                   ? Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(_toolIcon(tool), size: 14),
+                        _toolGlyph(tool, size: 14),
                         Text(_size.toStringAsFixed(1), style: const TextStyle(fontSize: 7, height: 1)),
                       ],
                     )
-                  : Icon(_toolIcon(tool), size: 16),
+                  : _toolGlyph(tool, size: 16),
             ),
           ),
         ),
@@ -1291,6 +1293,7 @@ class _EditorV2PageState extends State<EditorV2Page>
 
   void _rememberCurrentToolProfile() {
     _toolProfiles[_tool.name] = <String, Object?>{
+      ...?_toolProfiles[_tool.name],
       'size': _size,
       'color': _color.toARGB32(),
       'opacity': _opacity,
@@ -1804,6 +1807,10 @@ class _EditorV2PageState extends State<EditorV2Page>
     _pageSwipeTriggered = false;
     _longPressTriggered = false;
     _livePoints = <StrokePoint>[_pointFrom(event)];
+    if (_tool == CanvasTool.lasso) {
+      _lassoOutlinePoints.clear();
+      _lassoRect = Rect.fromPoints(event.localPosition, event.localPosition);
+    }
     _eraserCursor = event.localPosition;
     _liveStroke = _buildLiveStroke();
     _holdTimer?.cancel();
@@ -1927,6 +1934,9 @@ class _EditorV2PageState extends State<EditorV2Page>
       if ((point.position - previous).distance < .35) return;
     }
     _livePoints.add(point);
+    if (_tool == CanvasTool.lasso && _gestureStart != null) {
+      _lassoRect = Rect.fromPoints(_gestureStart!, event.localPosition);
+    }
     _liveStroke = _buildLiveStroke();
     _eraserCursor = event.localPosition;
     setState(() {});
@@ -2051,10 +2061,27 @@ class _EditorV2PageState extends State<EditorV2Page>
           ? 0.0
           : List.generate(lassoPath.length - 1, (i) => (lassoPath[i + 1] - lassoPath[i]).distance)
               .fold<double>(0, (sum, distance) => sum + distance);
+      final lassoProfile = _toolProfiles[CanvasTool.lasso.name];
+      final freehandSelection = (lassoProfile?['lassoFreehandSelection'] as bool?) ?? true;
+      final freehandOutline = (lassoProfile?['lassoFreehandOutline'] as bool?) ?? true;
       if (pathLength < 10) {
+        _lassoOutlinePoints.clear();
         _selectStrokeAt(end, radius: math.max(14, _size * 2));
       } else {
-        _selectInPolygon(lassoPath);
+        if (freehandSelection) {
+          _selectInPolygon(lassoPath);
+        } else {
+          _selectInRect(Rect.fromPoints(lassoPath.first, lassoPath.last));
+        }
+        setState(() {
+          if (freehandOutline) {
+            _lassoOutlinePoints
+              ..clear()
+              ..addAll(_simplifyLassoOutline(lassoPath));
+          } else {
+            _lassoOutlinePoints.clear();
+          }
+        });
       }
     } else if (_tool == CanvasTool.fill) {
       _fillShapeAt(end);
@@ -2343,6 +2370,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     _selectedStrokeIds.clear();
     _selectedImageIds.clear();
     _selectedTextBoxIds.clear();
+    _lassoOutlinePoints.clear();
   }
 
   int get _selectionCount =>
@@ -3262,6 +3290,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     if (tool != CanvasTool.lasso) {
       _clearSelectionIds();
       _lassoRect = null;
+      _lassoOutlinePoints.clear();
     }
   }
 
@@ -3517,6 +3546,9 @@ class _EditorV2PageState extends State<EditorV2Page>
     var velocity = _velocitySensitivity;
     var curve = _pressureCurve;
     var color = _color;
+    final initialProfile = _toolProfiles[targetTool.name];
+    var lassoFreehandSelection = (initialProfile?['lassoFreehandSelection'] as bool?) ?? true;
+    var lassoFreehandOutline = (initialProfile?['lassoFreehandOutline'] as bool?) ?? true;
     var places = Set<String>.from(_placementsFor(targetTool));
     var precisionErase = _settings.getString('eraserMode') == 'pixel';
     var pressurePixelErase = _settings.getString('pressureEraserMode') == 'pixel';
@@ -3538,12 +3570,17 @@ class _EditorV2PageState extends State<EditorV2Page>
         unawaited(_settings.setString('pressureEraserMode', pressurePixelErase ? 'pixel' : 'stroke'));
       }
       _toolProfiles[targetTool.name] = <String, Object?>{
+        ...? _toolProfiles[targetTool.name],
         'size': size,
         'color': color.toARGB32(),
         'opacity': opacity,
         'pressureSensitivity': pressure,
         'velocitySensitivity': velocity,
         'pressureCurve': curve.name,
+        if (targetTool == CanvasTool.lasso) ...{
+          'lassoFreehandSelection': lassoFreehandSelection,
+          'lassoFreehandOutline': lassoFreehandOutline,
+        },
       };
       if (persist) unawaited(_saveToolProfiles());
     }
@@ -3707,6 +3744,28 @@ class _EditorV2PageState extends State<EditorV2Page>
             ),
           ],
           if (targetTool == CanvasTool.lasso) ...[
+            SwitchListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Freehand selection'),
+              subtitle: const Text('Trace an irregular area. Turn off to select with a rectangle.'),
+              value: lassoFreehandSelection,
+              onChanged: (value) {
+                setPanelState(() => lassoFreehandSelection = value);
+                saveProfile();
+              },
+            ),
+            SwitchListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Freehand lasso boundary'),
+              subtitle: const Text('Show the traced outline instead of a rectangular selection box.'),
+              value: lassoFreehandOutline,
+              onChanged: (value) {
+                setPanelState(() => lassoFreehandOutline = value);
+                saveProfile();
+              },
+            ),
             OutlinedButton.icon(
               icon: const Icon(Icons.text_fields_rounded),
               label: const Text('Convert selected ink to text'),
@@ -6722,6 +6781,27 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
   }
 
+  Widget _toolGlyph(
+    CanvasTool tool, {
+    double size = 18,
+    Color? color,
+  }) {
+    final glyphColor = color ?? Theme.of(context).colorScheme.onSurface;
+    if (const <CanvasTool>{
+      CanvasTool.ballpoint,
+      CanvasTool.fountain,
+      CanvasTool.pencil,
+      CanvasTool.highlighter,
+      CanvasTool.marker,
+      CanvasTool.brush,
+      CanvasTool.eraser,
+      CanvasTool.pixelEraser,
+    }.contains(tool)) {
+      return SnoteToolGlyph(tool: tool, color: glyphColor, size: size);
+    }
+    return Icon(_toolIcon(tool), size: size, color: glyphColor);
+  }
+
   IconData _toolIcon(CanvasTool tool) {
     return switch (tool) {
       CanvasTool.ballpoint => Icons.edit_rounded,
@@ -6763,7 +6843,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                 onTapDown: (details) => _toolSettingsAnchor = details.globalPosition,
                 onDoubleTap: () => _strokeSettings(tool, _toolSettingsAnchor),
                 onTap: () => _selectTool(tool),
-                child: SizedBox(width: 30, height: 30, child: Stack(alignment: Alignment.center, children: [Icon(_toolIcon(tool), size: 18, color: _tool == tool ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface), if (_tool == tool) Positioned(bottom: 1, child: Container(width: 4, height: 4, decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, shape: BoxShape.circle))) ])),
+                child: SizedBox(width: 30, height: 30, child: Stack(alignment: Alignment.center, children: [_toolGlyph(tool, size: 18, color: _tool == tool ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface), if (_tool == tool) Positioned(bottom: 1, child: Container(width: 4, height: 4, decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, shape: BoxShape.circle))) ])),
               ),
             ),
           ),
@@ -6778,7 +6858,7 @@ class _EditorV2PageState extends State<EditorV2Page>
         feedback: Material(
           elevation: 8,
           borderRadius: BorderRadius.circular(7),
-          child: SizedBox(width: 29, height: 29, child: Icon(_toolIcon(tool), size: 17, color: Theme.of(context).colorScheme.primary)),
+          child: SizedBox(width: 29, height: 29, child: _toolGlyph(tool, size: 17, color: Theme.of(context).colorScheme.primary)),
         ),
         childWhenDragging: tile(faded: true),
         child: tile(faded: false),
@@ -7048,20 +7128,25 @@ class _EditorV2PageState extends State<EditorV2Page>
           borderRadius: BorderRadius.circular(9),
           onTap: () => _applyFavorite(favorite),
           onLongPress: () => _removeFavorite(favorite),
-          child: Container(
+          child: SizedBox(
             width: _favoritesVertical ? 34 : 38,
             height: _favoritesVertical ? 38 : 34,
-            margin: const EdgeInsets.all(2),
-            decoration: BoxDecoration(
-              color: active ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(color: active ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outlineVariant),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+            child: Stack(
+              alignment: Alignment.center,
               children: [
-                Icon(_toolIcon(favoriteTool), size: 17, color: color),
-                Container(margin: const EdgeInsets.only(top: 3), width: 18, height: 2, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3))),
+                _toolGlyph(favoriteTool, size: 19, color: color),
+                if (active)
+                  Positioned(
+                    bottom: 2,
+                    child: Container(
+                      width: 4,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primary,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -7482,6 +7567,32 @@ class _EditorV2PageState extends State<EditorV2Page>
       final box = item.map<String, Object?>((key, value) => MapEntry(key.toString(), value));
       final id = box['id']?.toString() ?? '';
       if (id.isEmpty) continue;
+      final x = (box['x'] as num?)?.toDouble() ?? .12;
+      final y = (box['y'] as num?)?.toDouble() ?? .12;
+      final width = (box['width'] as num?)?.toDouble() ?? .68;
+      final height = (box['height'] as num?)?.toDouble() ?? .16;
+      final fontSize = (box['fontSize'] as num?)?.toDouble() ?? 18;
+      final color = Color((box['color'] as num?)?.toInt() ?? 0xff263238);
+      if (box['sticker'] == true) {
+        children.add(Positioned(
+          left: x * _pageWidth,
+          top: y * _pageHeight,
+          width: width * _pageWidth,
+          height: height * _pageHeight,
+          child: IgnorePointer(
+            child: Center(
+              child: FittedBox(
+                fit: BoxFit.contain,
+                child: Text(
+                  box['text']?.toString() ?? '',
+                  style: TextStyle(fontSize: fontSize, color: color, height: 1),
+                ),
+              ),
+            ),
+          ),
+        ));
+        continue;
+      }
       final controller = _textControllers.putIfAbsent(
         id,
         () => _FormattedTextEditingController(text: box['text']?.toString() ?? ''),
@@ -7490,12 +7601,6 @@ class _EditorV2PageState extends State<EditorV2Page>
       if (controller is _FormattedTextEditingController) {
         controller.formatRanges = formatRanges;
       }
-      final x = (box['x'] as num?)?.toDouble() ?? .12;
-      final y = (box['y'] as num?)?.toDouble() ?? .12;
-      final width = (box['width'] as num?)?.toDouble() ?? .68;
-      final height = (box['height'] as num?)?.toDouble() ?? .16;
-      final fontSize = (box['fontSize'] as num?)?.toDouble() ?? 18;
-      final color = Color((box['color'] as num?)?.toInt() ?? 0xff263238);
       children.add(Positioned(
         left: x * _pageWidth,
         top: y * _pageHeight,
@@ -7569,8 +7674,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                   ),
                 ),
               ),
-              if (box['sticker'] != true || _selectedTextBoxIds.contains(id))
-                Positioned(
+              Positioned(
                   right: 0,
                   top: 0,
                   child: IconButton(
@@ -7878,6 +7982,12 @@ class _EditorV2PageState extends State<EditorV2Page>
     final strokes = _strokesFor(page);
     final live = _liveStroke;
     final selected = Set<String>.from(_selectedStrokeIds);
+    final lassoProfile = _toolProfiles[CanvasTool.lasso.name];
+    final showFreehandLassoOutline = (lassoProfile?['lassoFreehandOutline'] as bool?) ?? true;
+    final drawingLasso = _tool == CanvasTool.lasso && _activePointer != null && _livePoints.length > 1;
+    final lassoOutline = drawingLasso
+        ? _livePoints.map((point) => point.position).toList(growable: false)
+        : List<Offset>.unmodifiable(_lassoOutlinePoints);
     return RepaintBoundary(
       key: _pageCaptureKey,
       child: Container(
@@ -7932,7 +8042,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                 child: CustomPaint(
                   painter: EditorV2InkPainter(
                     strokes: strokes,
-                    liveStroke: live,
+                    liveStroke: _tool == CanvasTool.lasso ? null : live,
                     selectedStrokeIds: selected,
                     eraserCursor: _tool == CanvasTool.eraser || _tool == CanvasTool.pixelEraser ? _eraserCursor : null,
                     eraserRadius: _eraserCursorRadius,
@@ -7959,7 +8069,19 @@ class _EditorV2PageState extends State<EditorV2Page>
                   ),
                 ),
               ),
-            if (_lassoRect != null)
+            if (showFreehandLassoOutline && lassoOutline.length > 1)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    painter: _LassoOutlinePainter(
+                      points: lassoOutline,
+                      closed: !drawingLasso,
+                    ),
+                    size: Size(_pageWidth, _pageHeight),
+                  ),
+                ),
+              ),
+            if (!showFreehandLassoOutline && _lassoRect != null)
               Positioned(
                 left: math.min(_lassoRect!.left, _lassoRect!.right),
                 top: math.min(_lassoRect!.top, _lassoRect!.bottom),
@@ -9729,7 +9851,7 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
         ),
       );
     }
-    return Icon(_pickerIcon(tool), size: 23, color: scheme.primary);
+    return _toolGlyph(tool, size: 23, color: scheme.primary);
   }
 
   @override
@@ -10178,4 +10300,47 @@ class _CaptureRegionPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _CaptureRegionPainter oldDelegate) =>
       oldDelegate.selection != selection;
+}
+
+
+class _LassoOutlinePainter extends CustomPainter {
+  const _LassoOutlinePainter({
+    required this.points,
+    required this.closed,
+  });
+
+  final List<Offset> points;
+  final bool closed;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.length < 2) return;
+    final path = Path()..moveTo(points.first.dx, points.first.dy);
+    for (final point in points.skip(1)) {
+      path.lineTo(point.dx, point.dy);
+    }
+    if (closed) path.close();
+    if (closed) {
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = const Color(0xff3979e8).withValues(alpha: .08)
+          ..style = PaintingStyle.fill,
+      );
+    }
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = const Color(0xff3979e8)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..isAntiAlias = true,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _LassoOutlinePainter oldDelegate) =>
+      oldDelegate.closed != closed || !identical(oldDelegate.points, points);
 }
