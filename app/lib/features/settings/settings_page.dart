@@ -231,6 +231,7 @@ class _SettingsPageState extends State<SettingsPage> {
         _toggle('showPageNumbers', 'Show page number', 'Number pages automatically.'),
         _toggle('showVisitedHistory', 'Show visited history', 'Remember recent page positions.'),
         _toggle('showPagePreview', 'Show page preview in the left sidebar', 'Keep the thumbnail rail available.'),
+        _toggle('highlighterOnTop', 'Draw highlighter above content', 'When enabled, highlight ink appears above inserted images and text.'),
         _pagePreviewSideSelector(),
         _toggle('showUndoOnRight', 'Show undo on the right', 'Mirror undo and redo near navigation.'),
         _toggle('screenshotNotification', 'Notification bar displays screenshot', 'Platform-dependent screenshot feedback.'),
