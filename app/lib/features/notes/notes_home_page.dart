@@ -20,6 +20,7 @@ import '../pdf/pdf_annotation_page.dart';
 import '../settings/settings_page.dart';
 import '../settings/local_backups_page.dart';
 import '../share/qr_import_page.dart';
+import '../share/qr_transfer_page.dart';
 import '../trash/trash_page.dart';
 import '../tools/flashcard_page.dart';
 import '../tools/mind_map_page.dart';
@@ -363,6 +364,20 @@ class _NotesHomePageState extends State<NotesHomePage> {
   Future<void> _toggleFolderFavorite(LocalFolder folder) async {
     await _folders.setFavorite(folder.id, !folder.isFavorite);
     if (mounted) await _load();
+  }
+
+  Future<void> _transferNoteByQr(LocalNote note) async {
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(builder: (_) => QrTransferPage(note: note)),
+    );
+  }
+
+  Future<void> _transferFolderByQr(LocalFolder folder) async {
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(builder: (_) => QrTransferPage(folder: folder)),
+    );
   }
 
   Future<void> _createFolder() async {
@@ -1494,6 +1509,8 @@ class _NotesHomePageState extends State<NotesHomePage> {
                         onChangeNoteCover: _changeNoteCover,
                         onToggleNoteFavorite: _toggleNoteFavorite,
                         onToggleFolderFavorite: _toggleFolderFavorite,
+                        onTransferNote: _transferNoteByQr,
+                        onTransferFolder: _transferFolderByQr,
                         favoritesOnly: _favoritesOnly,
                         folderSort: _folderSort,
                         onFolderSort: _setFolderSort,
@@ -1635,6 +1652,8 @@ class _NotesHomePageState extends State<NotesHomePage> {
                         onChangeNoteCover: _changeNoteCover,
                         onToggleNoteFavorite: _toggleNoteFavorite,
                         onToggleFolderFavorite: _toggleFolderFavorite,
+                        onTransferNote: _transferNoteByQr,
+                        onTransferFolder: _transferFolderByQr,
                         favoritesOnly: _favoritesOnly,
                         folderSort: _folderSort,
                         onFolderSort: _setFolderSort,
@@ -1849,6 +1868,8 @@ class _HierarchyPanel extends StatelessWidget {
   final ValueChanged<LocalNote> onChangeNoteCover;
   final ValueChanged<LocalNote> onToggleNoteFavorite;
   final ValueChanged<LocalFolder> onToggleFolderFavorite;
+  final ValueChanged<LocalNote> onTransferNote;
+  final ValueChanged<LocalFolder> onTransferFolder;
   final bool favoritesOnly;
   final String folderSort;
   final ValueChanged<String> onFolderSort;
@@ -1902,6 +1923,8 @@ class _HierarchyPanel extends StatelessWidget {
     required this.onChangeNoteCover,
     required this.onToggleNoteFavorite,
     required this.onToggleFolderFavorite,
+    required this.onTransferNote,
+    required this.onTransferFolder,
     required this.favoritesOnly,
     required this.folderSort,
     required this.onFolderSort,
@@ -2081,6 +2104,7 @@ class _HierarchyPanel extends StatelessWidget {
                     onCut: () => onSetFolderClipboard(folder, 'cut'),
                     onDetails: () => onFolderDetails(folder),
                     onToggleFavorite: () => onToggleFolderFavorite(folder),
+                    onTransfer: () => onTransferFolder(folder),
                   ),
                 );
               }).toList(),
@@ -2168,6 +2192,8 @@ class _HierarchyPanel extends StatelessWidget {
                                   onChangeNoteCover(note);
                                 } else if (value == 'favorite') {
                                   onToggleNoteFavorite(note);
+                                } else if (value == 'transfer') {
+                                  onTransferNote(note);
                                 } else if (value == 'rename') {
                                   onRenameNote(note);
                                 } else if (value == 'delete') {
@@ -2185,6 +2211,7 @@ class _HierarchyPanel extends StatelessWidget {
                               itemBuilder: (_) => [
                                 const PopupMenuItem(value: 'cover', child: Text('Change cover')),
                                 PopupMenuItem(value: 'favorite', child: Text(note.isFavorite ? 'Remove from favorites' : 'Add to favorites')),
+                                const PopupMenuItem(value: 'transfer', child: Text('Encrypted QR transfer')),
                                 const PopupMenuItem(value: 'rename', child: Text('Rename')),
                                 const PopupMenuItem(value: 'move', child: Text('Move to folder')),
                                 const PopupMenuItem(value: 'copy', child: Text('Copy')),
@@ -2220,6 +2247,7 @@ class _HierarchyPanel extends StatelessWidget {
               canPasteNotes: canPasteNotes,
               onChangeCover: () => onChangeNoteCover(note),
               onToggleFavorite: () => onToggleNoteFavorite(note),
+              onTransfer: () => onTransferNote(note),
             ),
           ),
         if (notes.length > renderedNotes.length ||
@@ -2263,6 +2291,7 @@ class _FolderCoverCard extends StatelessWidget {
   final VoidCallback onCut;
   final VoidCallback onDetails;
   final VoidCallback onToggleFavorite;
+  final VoidCallback onTransfer;
 
   const _FolderCoverCard({
     required this.folder, required this.selected, required this.selectionMode,
@@ -2270,6 +2299,7 @@ class _FolderCoverCard extends StatelessWidget {
     required this.onRename, required this.onDelete, required this.onMove,
     required this.onCopy, required this.onCut, required this.onDetails,
     required this.onToggleFavorite,
+    required this.onTransfer,
   });
 
   @override
@@ -2314,6 +2344,7 @@ class _FolderCoverCard extends StatelessWidget {
                           case 'cut': onCut(); break;
                           case 'details': onDetails(); break;
                           case 'favorite': onToggleFavorite(); break;
+                          case 'transfer': onTransfer(); break;
                           case 'rename': onRename(); break;
                           case 'delete': onDelete(); break;
                         }
@@ -2327,6 +2358,7 @@ class _FolderCoverCard extends StatelessWidget {
                         PopupMenuItem(value: 'cut', child: Text('Cut')),
                         PopupMenuItem(value: 'details', child: Text('Details')),
                         PopupMenuItem(value: 'favorite', child: Text(folder.isFavorite ? 'Remove from favorites' : 'Add to favorites')),
+                        const PopupMenuItem(value: 'transfer', child: Text('Encrypted QR transfer')),
                         PopupMenuItem(value: 'rename', child: Text('Rename')),
                         PopupMenuItem(value: 'delete', child: Text('Delete')),
                       ],
@@ -2378,6 +2410,7 @@ class _HomeNoteTile extends StatelessWidget {
   final bool canPasteNotes;
   final VoidCallback onChangeCover;
   final VoidCallback onToggleFavorite;
+  final VoidCallback onTransfer;
 
   const _HomeNoteTile({
     required this.note,
@@ -2394,6 +2427,7 @@ class _HomeNoteTile extends StatelessWidget {
     required this.canPasteNotes,
     required this.onChangeCover,
     required this.onToggleFavorite,
+    required this.onTransfer,
   });
 
   @override
@@ -2453,6 +2487,8 @@ class _HomeNoteTile extends StatelessWidget {
                       onChangeCover();
                     } else if (value == 'favorite') {
                       onToggleFavorite();
+                    } else if (value == 'transfer') {
+                      onTransfer();
                     } else if (value == 'rename') {
                       onRename();
                     } else if (value == 'delete') {
@@ -2470,6 +2506,7 @@ class _HomeNoteTile extends StatelessWidget {
                   itemBuilder: (_) => [
                     const PopupMenuItem(value: 'cover', child: Text('Change cover')),
                     PopupMenuItem(value: 'favorite', child: Text(note.isFavorite ? 'Remove from favorites' : 'Add to favorites')),
+                    const PopupMenuItem(value: 'transfer', child: Text('Encrypted QR transfer')),
                     const PopupMenuItem(value: 'rename', child: Text('Rename')),
                     const PopupMenuItem(value: 'move', child: Text('Move to folder')),
                     const PopupMenuItem(value: 'copy', child: Text('Copy')),
