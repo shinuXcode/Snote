@@ -471,6 +471,7 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> with 
       _timerMinutes = minutes;
       if (!_timerRunning) _timerRemaining = minutes * 60;
     });
+    unawaited(_persistRuntimeState());
   }
 
   Future<void> _setAlarm() async {
@@ -500,6 +501,16 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> with 
       title: 'Snotee alarm',
       deadline: deadline,
     ));
+  }
+
+  Future<void> _cancelQuickAlarm() async {
+    setState(() {
+      _alarmArmed = false;
+      _alarmDeadline = null;
+      _alarmTime = null;
+    });
+    await _persistRuntimeState();
+    await AlarmNotificationService.instance.cancel(_quickAlarmNotificationId);
   }
 
   void _startOrPauseTimer() {
@@ -912,6 +923,15 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> with 
                                   label: const Text('Quick one-time alarm'),
                                 ),
                               ),
+                              if (_alarmArmed)
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: TextButton.icon(
+                                    onPressed: _cancelQuickAlarm,
+                                    icon: const Icon(Icons.alarm_off_rounded, size: 18),
+                                    label: const Text('Cancel quick alarm'),
+                                  ),
+                                ),
                             ],
                           ),
                       ],
