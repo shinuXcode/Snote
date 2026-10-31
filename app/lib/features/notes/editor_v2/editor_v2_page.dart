@@ -175,6 +175,9 @@ class _EditorV2PageState extends State<EditorV2Page>
   final Map<String, TextEditingController> _textControllers =
       <String, TextEditingController>{};
   final Map<String, Uint8List> _backgroundBytesCache = <String, Uint8List>{};
+  final LinkedHashMap<String, List<Stroke>> _decodedStrokeCache =
+      LinkedHashMap<String, List<Stroke>>();
+  final Map<String, List> _strokeSourceLists = <String, List>{};
   final Map<String, Uint8List> _imageBytesCache = <String, Uint8List>{};
   final Map<String, DocumentAsset> _pdfSourceAssets = <String, DocumentAsset>{};
   final Map<String, Uint8List> _pdfSourceBytesCache = <String, Uint8List>{};
@@ -578,6 +581,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     _title.text = saved.title;
 
     if (!mounted) return;
+    _clearStrokeDecodeCache();
     setState(() {
       _rootContent = root;
       _pages = pages;
@@ -1388,6 +1392,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   }
 
   void _pushUndo() {
+    _clearStrokeDecodeCache();
     _undoStack.add(EditorV2DocumentCodec.clonePages(_pages));
     if (_undoStack.length > 80) _undoStack.removeAt(0);
     _redoStack.clear();
@@ -1395,6 +1400,7 @@ class _EditorV2PageState extends State<EditorV2Page>
 
   void _undo() {
     if (_undoStack.isEmpty) return;
+    _clearStrokeDecodeCache();
     _redoStack.add(EditorV2DocumentCodec.clonePages(_pages));
     setState(() {
       _pages = _undoStack.removeLast();
@@ -1408,6 +1414,7 @@ class _EditorV2PageState extends State<EditorV2Page>
 
   void _redo() {
     if (_redoStack.isEmpty) return;
+    _clearStrokeDecodeCache();
     _undoStack.add(EditorV2DocumentCodec.clonePages(_pages));
     setState(() {
       _pages = _redoStack.removeLast();
@@ -1421,9 +1428,29 @@ class _EditorV2PageState extends State<EditorV2Page>
 
   List<Stroke> _strokesFor(Map<String, Object?> page) {
     final raw = page['strokes'];
-    return StrokeCodec.documentToStrokes(<String, Object?>{
-      'strokes': raw is List ? raw : <Object?>[],
+    if (raw is! List) return const <Stroke>[];
+    final pageId = page['id']?.toString() ?? 'page-$_page';
+    final cached = _decodedStrokeCache.remove(pageId);
+    if (cached != null && identical(_strokeSourceLists[pageId], raw)) {
+      _decodedStrokeCache[pageId] = cached;
+      return cached;
+    }
+    final decoded = StrokeCodec.documentToStrokes(<String, Object?>{
+      'strokes': raw,
     });
+    _strokeSourceLists[pageId] = raw;
+    _decodedStrokeCache[pageId] = decoded;
+    while (_decodedStrokeCache.length > 6) {
+      final oldest = _decodedStrokeCache.keys.first;
+      _decodedStrokeCache.remove(oldest);
+      _strokeSourceLists.remove(oldest);
+    }
+    return decoded;
+  }
+
+  void _clearStrokeDecodeCache() {
+    _decodedStrokeCache.clear();
+    _strokeSourceLists.clear();
   }
 
   StrokePoint _pointFrom(PointerEvent event) {
@@ -1466,7 +1493,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
     final points = shapeTool && _livePoints.isNotEmpty
         ? <StrokePoint>[_livePoints.first, _livePoints.last]
-        : List<StrokePoint>.from(_livePoints);
+        : _livePoints;
     return Stroke(
       id: 'live-${_activePointer ?? 0}',
       points: points,
