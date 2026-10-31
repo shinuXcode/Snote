@@ -265,6 +265,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   bool _readingMode = false;
   CanvasTool? _toolBeforeReading;
   bool _showFloatingTimer = false;
+  bool _showBrowserPanel = false;
   bool _toolbarCollapsedToEdge = false;
   bool _calculatorCollapsed = false;
   bool _showViewportHud = false;
@@ -1139,7 +1140,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     } else if (key == 'timer') {
       setState(() => _showFloatingTimer = true);
     } else if (key == 'webSearch') {
-      unawaited(SnoteWebSearchPanel.show(context));
+      setState(() => _showBrowserPanel = true);
     }
   }
 
@@ -8590,6 +8591,12 @@ class _EditorV2PageState extends State<EditorV2Page>
               bottom: 0,
               width: sidebarWidth,
               child: _buildPagePreviewSidebar(),
+            ),
+          if (_showBrowserPanel)
+            Positioned.fill(
+              child: SnoteWebSearchPanel(
+                onClose: () => setState(() => _showBrowserPanel = false),
+              ),
             ),
           if (!_readingMode && (_floatingToolbar || _fullScreenMode) && !_toolbarCollapsedToEdge)
             Positioned(
