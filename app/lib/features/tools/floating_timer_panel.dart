@@ -19,7 +19,7 @@ class SnoteFloatingTimerPanel extends StatefulWidget {
       _SnoteFloatingTimerPanelState();
 }
 
-class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> {
+class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> with WidgetsBindingObserver {
   Timer? _ticker;
   String _mode = 'timer';
   int _timerMinutes = 25;
@@ -36,10 +36,14 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> {
   bool _collapsed = false;
   String _dockSide = 'right';
   Offset _offset = const Offset(12, 76);
+  static const int _quickAlarmNotificationId = 900000;
+  static const int _timerNotificationId = 900001;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _restoreRuntimeState();
     _collapsed = SnoteSettings.instance.getBool('floatingTimerCollapsed');
     _dockSide = SnoteSettings.instance.getString('floatingTimerDockSide') == 'left' ? 'left' : 'right';
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
@@ -264,8 +268,139 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> {
         alarmCompleted = true;
       }
     });
-    if (timerCompleted) _notify('Timer complete.');
-    if (alarmCompleted) _notify('Alarm time reached.');
+    if (timerCompleted) {
+      unawaited(AlarmNotificationService.instance.cancel(_timerNotificationId));
+      unawaited(_persistRuntimeState());
+      _notify('Timer complete.');
+    }
+    if (alarmCompleted) {
+      unawaited(AlarmNotificationService.instance.cancel(_quickAlarmNotificationId));
+      unawaited(_persistRuntimeState());
+      _notify('Alarm time reached.');
+    }
+  }
+
+  void _restoreRuntimeState() {
+    try {
+      final raw = SnoteSettings.instance.getString('floatingTimerRuntimeState');
+      if (raw.isEmpty) return;
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return;
+      _timerMinutes = ((decoded['timerMinutes'] as num?)?.toInt() ?? 25).clamp(1, 240);
+      _timerRemaining = math.max(0, (decoded['timerRemaining'] as num?)?.toInt() ?? _timerMinutes * 60).toInt();
+      _timerRunning = decoded['timerRunning'] == true;
+      final timerDeadline = (decoded['timerDeadline'] as num?)?.toInt();
+      _timerDeadline = timerDeadline == null ? null : DateTime.fromMillisecondsSinceEpoch(timerDeadline);
+      if (_timerRunning && _timerDeadline != null) {
+        _timerRemaining = math.max(0, _timerDeadline!.difference(DateTime.now()).inSeconds).toInt();
+      } else {
+        _timerRunning = false;
+        _timerDeadline = null;
+      }
+      _stopwatchAccumulated = Duration(
+        milliseconds: math.max(0, (decoded['stopwatchAccumulatedMs'] as num?)?.toInt() ?? 0).toInt(),
+      );
+      _stopwatchRunning = decoded['stopwatchRunning'] == true;
+      final stopwatchStarted = (decoded['stopwatchStartedAt'] as num?)?.toInt();
+      _stopwatchStartedAt = _stopwatchRunning && stopwatchStarted != null
+          ? DateTime.fromMillisecondsSinceEpoch(stopwatchStarted)
+          : null;
+      if (_stopwatchStartedAt == null) _stopwatchRunning = false;
+      final alarmDeadline = (decoded['alarmDeadline'] as num?)?.toInt();
+      _alarmDeadline = alarmDeadline == null ? null : DateTime.fromMillisecondsSinceEpoch(alarmDeadline);
+      _alarmArmed = decoded['alarmArmed'] == true && _alarmDeadline != null;
+      _alarmTime = _alarmDeadline == null ? null : TimeOfDay.fromDateTime(_alarmDeadline!);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _tick();
+        unawaited(_restoreRuntimeNotifications());
+      });
+    } catch (error) {
+      debugPrint('[Snote][Timer] saved timer state could not be restored: $error');
+    }
+  }
+
+  Future<void> _persistRuntimeState() async {
+    await SnoteSettings.instance.setString(
+      'floatingTimerRuntimeState',
+      jsonEncode(<String, Object?>{
+        'timerMinutes': _timerMinutes,
+        'timerRemaining': _timerRemaining,
+        'timerRunning': _timerRunning,
+        'timerDeadline': _timerDeadline?.millisecondsSinceEpoch,
+        'stopwatchAccumulatedMs': _stopwatchAccumulated.inMilliseconds,
+        'stopwatchRunning': _stopwatchRunning,
+        'stopwatchStartedAt': _stopwatchStartedAt?.millisecondsSinceEpoch,
+        'alarmArmed': _alarmArmed,
+        'alarmDeadline': _alarmDeadline?.millisecondsSinceEpoch,
+      }),
+    );
+  }
+
+  Future<void> _restoreRuntimeNotifications() async {
+    final soundEnabled = SnoteSettings.instance.getBool('timerAlertEnabled');
+    final customUri = SnoteSettings.instance.getString('timerAlertSound') == 'custom'
+        ? SnoteSettings.instance.getString('timerAlertSoundUri')
+        : null;
+    try {
+      if (_timerRunning && _timerDeadline != null && _timerDeadline!.isAfter(DateTime.now())) {
+        await AlarmNotificationService.instance.schedule(
+          id: _timerNotificationId,
+          title: 'Snotee timer complete',
+          firstAt: _timerDeadline!,
+          repeat: 'once',
+          silent: !soundEnabled,
+          soundUri: customUri,
+        );
+      }
+      if (_alarmArmed && _alarmDeadline != null && _alarmDeadline!.isAfter(DateTime.now())) {
+        await AlarmNotificationService.instance.schedule(
+          id: _quickAlarmNotificationId,
+          title: 'Snotee alarm',
+          firstAt: _alarmDeadline!,
+          repeat: 'once',
+          silent: !soundEnabled,
+          soundUri: customUri,
+        );
+      }
+    } catch (error) {
+      debugPrint('[Snote][Timer] runtime notification restore failed: $error');
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _tick();
+      unawaited(_persistRuntimeState());
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      unawaited(_persistRuntimeState());
+    }
+  }
+
+  Future<void> _scheduleRuntimeNotification({
+    required int id,
+    required String title,
+    required DateTime deadline,
+  }) async {
+    final soundEnabled = SnoteSettings.instance.getBool('timerAlertEnabled');
+    final customUri = SnoteSettings.instance.getString('timerAlertSound') == 'custom'
+        ? SnoteSettings.instance.getString('timerAlertSoundUri')
+        : null;
+    try {
+      await AlarmNotificationService.instance.schedule(
+        id: id,
+        title: title,
+        firstAt: deadline,
+        repeat: 'once',
+        silent: !soundEnabled,
+        soundUri: customUri,
+      );
+    } catch (error) {
+      debugPrint('[Snote][Timer] could not schedule notification: $error');
+    }
   }
 
   void _notify(String message) {
@@ -359,9 +494,16 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> {
       _alarmDeadline = deadline;
       _alarmArmed = true;
     });
+    unawaited(_persistRuntimeState());
+    unawaited(_scheduleRuntimeNotification(
+      id: _quickAlarmNotificationId,
+      title: 'Snotee alarm',
+      deadline: deadline,
+    ));
   }
 
   void _startOrPauseTimer() {
+    final wasRunning = _timerRunning;
     setState(() {
       if (_timerRunning) {
         final remaining =
@@ -375,6 +517,16 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> {
         _timerRunning = true;
       }
     });
+    unawaited(_persistRuntimeState());
+    if (wasRunning) {
+      unawaited(AlarmNotificationService.instance.cancel(_timerNotificationId));
+    } else if (_timerDeadline != null) {
+      unawaited(_scheduleRuntimeNotification(
+        id: _timerNotificationId,
+        title: 'Snotee timer complete',
+        deadline: _timerDeadline!,
+      ));
+    }
   }
 
   void _resetTimer() {
@@ -383,6 +535,8 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> {
       _timerDeadline = null;
       _timerRemaining = _timerMinutes * 60;
     });
+    unawaited(_persistRuntimeState());
+    unawaited(AlarmNotificationService.instance.cancel(_timerNotificationId));
   }
 
   void _startOrPauseStopwatch() {
@@ -396,6 +550,7 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> {
         _stopwatchRunning = true;
       }
     });
+    unawaited(_persistRuntimeState());
   }
 
   void _resetStopwatch() {
@@ -403,6 +558,7 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> {
       _stopwatchAccumulated = Duration.zero;
       _stopwatchStartedAt = _stopwatchRunning ? DateTime.now() : null;
     });
+    unawaited(_persistRuntimeState());
   }
 
   void _dragPanel(DragUpdateDetails details, Size screen) {
@@ -772,6 +928,8 @@ class _SnoteFloatingTimerPanelState extends State<SnoteFloatingTimerPanel> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(_persistRuntimeState());
     _ticker?.cancel();
     super.dispose();
   }
