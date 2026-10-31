@@ -7,6 +7,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../data/local/note_repository.dart';
 import '../../data/local/notebook_transfer_crypto.dart';
+import '../../data/local/notebook_transfer_service.dart';
 
 class QrImportPage extends StatefulWidget {
   const QrImportPage({super.key});
@@ -37,8 +38,9 @@ class _QrImportPageState extends State<QrImportPage> {
         await _saveNote(decoded.cast<String, dynamic>());
         return;
       }
-      if (format == 'snote-encrypted-notebook-v1') {
-        await _saveEncryptedNote(decoded.cast<String, dynamic>());
+      if (format == 'snote-encrypted-notebook-v1' ||
+          format == 'snote-encrypted-archive-v1') {
+        await _saveEncryptedTransfer(decoded.cast<String, dynamic>());
         return;
       }
 
@@ -67,8 +69,9 @@ class _QrImportPageState extends State<QrImportPage> {
         final note = jsonDecode(payload);
         if (note is! Map) throw const FormatException('Invalid assembled note.');
         final assembled = note.cast<String, dynamic>();
-        if (assembled['format'] == 'snote-encrypted-notebook-v1') {
-          await _saveEncryptedNote(assembled);
+        if (assembled['format'] == 'snote-encrypted-notebook-v1' ||
+            assembled['format'] == 'snote-encrypted-archive-v1') {
+          await _saveEncryptedTransfer(assembled);
         } else {
           await _saveNote(assembled);
         }
@@ -108,7 +111,7 @@ class _QrImportPageState extends State<QrImportPage> {
     return password;
   }
 
-  Future<void> _saveEncryptedNote(Map<String, dynamic> envelope) async {
+  Future<void> _saveEncryptedTransfer(Map<String, dynamic> envelope) async {
     _importing = true;
     try {
       final password = await _askTransferPassword();
@@ -119,24 +122,16 @@ class _QrImportPageState extends State<QrImportPage> {
         if (mounted) setState(() {});
         return;
       }
-      final manifest = await NotebookTransferCrypto.decrypt(envelope, password);
-      if (manifest['format'] != 'snote-qr-note-v1' || manifest['content'] is! Map) {
-        throw const FormatException('The encrypted QR payload is not a supported note transfer.');
-      }
-      final title = manifest['title']?.toString() ?? 'Imported note';
-      final repository = NoteRepository();
-      final note = await repository.create(title: title);
-      await repository.saveContent(
-        note.id,
-        (manifest['content'] as Map).cast<String, Object?>(),
-      );
+      final bytes = utf8.encode(jsonEncode(envelope));
+      final count = await NotebookTransferService(NoteRepository())
+          .importEncryptedArchiveBytes(bytes, password: password);
       _chunks.clear();
       _transferId = null;
       _total = null;
       if (mounted) {
         setState(() {});
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Encrypted note imported successfully.')),
+          SnackBar(content: Text('Encrypted transfer imported $count note(s), with folder and attachment data.')),
         );
       }
     } finally {
