@@ -66,9 +66,17 @@ class _QrImportPageState extends State<QrImportPage> {
 
       if (_chunks.length == total && _chunks.keys.every((i) => i >= 0 && i < total)) {
         final encoded = List.generate(total, (i) => _chunks[i]).join();
-        final decodedPayload = jsonDecode(utf8.decode(base64Decode(encoded)));
-        if (decodedPayload is! Map) throw const FormatException('Invalid encrypted transfer.');
-        await _saveEncryptedTransfer(decodedPayload.cast<String, dynamic>());
+        try {
+          final decodedPayload = jsonDecode(utf8.decode(base64Decode(encoded)));
+          if (decodedPayload is! Map) throw const FormatException('Invalid encrypted transfer.');
+          await _saveEncryptedTransfer(decodedPayload.cast<String, dynamic>());
+        } on FormatException {
+          // Older beta QR v2 frames carried a plaintext note payload. Keep
+          // receiving those existing transfers for backward compatibility.
+          final legacy = jsonDecode(encoded);
+          if (legacy is! Map) throw const FormatException('Invalid assembled note.');
+          await _saveNote(legacy.cast<String, dynamic>());
+        }
       }
     } catch (e) {
       if (mounted) {
