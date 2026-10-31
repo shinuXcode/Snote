@@ -2063,7 +2063,7 @@ class _EditorV2PageState extends State<EditorV2Page>
               .fold<double>(0, (sum, distance) => sum + distance);
       final lassoProfile = _toolProfiles[CanvasTool.lasso.name];
       final freehandSelection = (lassoProfile?['lassoFreehandSelection'] as bool?) ?? true;
-      final freehandOutline = (lassoProfile?['lassoFreehandOutline'] as bool?) ?? true;
+      final freehandOutline = (lassoProfile?['lassoFreehandOutline'] as bool?) ?? false;
       if (pathLength < 10) {
         _lassoOutlinePoints.clear();
         _selectStrokeAt(end, radius: math.max(14, _size * 2));
@@ -3548,7 +3548,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     var color = _color;
     final initialProfile = _toolProfiles[targetTool.name];
     var lassoFreehandSelection = (initialProfile?['lassoFreehandSelection'] as bool?) ?? true;
-    var lassoFreehandOutline = (initialProfile?['lassoFreehandOutline'] as bool?) ?? true;
+    var lassoFreehandOutline = (initialProfile?['lassoFreehandOutline'] as bool?) ?? false;
     var places = Set<String>.from(_placementsFor(targetTool));
     var precisionErase = _settings.getString('eraserMode') == 'pixel';
     var pressurePixelErase = _settings.getString('pressureEraserMode') == 'pixel';
@@ -7983,7 +7983,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     final live = _liveStroke;
     final selected = Set<String>.from(_selectedStrokeIds);
     final lassoProfile = _toolProfiles[CanvasTool.lasso.name];
-    final showFreehandLassoOutline = (lassoProfile?['lassoFreehandOutline'] as bool?) ?? true;
+    final showFreehandLassoOutline = (lassoProfile?['lassoFreehandOutline'] as bool?) ?? false;
     final drawingLasso = _tool == CanvasTool.lasso && _activePointer != null && _livePoints.length > 1;
     final lassoOutline = drawingLasso
         ? _livePoints.map((point) => point.position).toList(growable: false)
