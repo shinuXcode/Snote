@@ -24,6 +24,7 @@ import '../share/qr_transfer_page.dart';
 import '../trash/trash_page.dart';
 import '../tools/flashcard_page.dart';
 import '../tools/mind_map_page.dart';
+import '../tools/note_collection_page.dart';
 import '../tools/screenshot_import_page.dart';
 import '../updates/update_center_page.dart';
 import '../onboarding/welcome_guide_page.dart';
@@ -1249,10 +1250,10 @@ class _NotesHomePageState extends State<NotesHomePage> {
     final Widget page;
     switch (destination) {
       case 'flashcards':
-        page = const FlashcardPage();
+        page = const NoteCollectionPage(kind: 'flashcard');
         break;
       case 'mindmaps':
-        page = const MindMapPage();
+        page = const NoteCollectionPage(kind: 'mindmap');
         break;
       case 'trash':
         page = const TrashPage();
