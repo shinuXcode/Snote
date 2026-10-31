@@ -1948,7 +1948,13 @@ class _EditorV2PageState extends State<EditorV2Page>
       _navigationOnlyPointers.remove(event.pointer);
       final swipe = event.localPosition - _pageSwipeStart!;
       final horizontalSwipe = swipe.dx.abs() > swipe.dy.abs() * 1.25;
-      final forward = horizontalSwipe ? swipe.dx < 0 : swipe.dy > 0;
+      final portraitVerticalSwipe = !horizontalSwipe &&
+          MediaQuery.orientationOf(context) == Orientation.portrait;
+      final forward = horizontalSwipe
+          ? swipe.dx < 0
+          : portraitVerticalSwipe
+              ? swipe.dy < 0
+              : swipe.dy > 0;
       setState(() {
         _activePointer = null;
         _gestureStart = null;
