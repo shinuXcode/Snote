@@ -1723,6 +1723,19 @@ class EditorV2InkPainter extends CustomPainter {
     canvas.drawPath(path, paint);
   }
 
+  /// Releases the cached picture when an owner can explicitly end this painter's lifetime.
+  /// RenderCustomPaint does not call this method; the finalizer remains the fallback
+  /// for painters owned by the widget/rendering lifecycle.
+  void dispose() {
+    _pictureFinalizer.detach(this);
+    final picture = _basePicture;
+    _basePicture = null;
+    picture?.dispose();
+    _liveHighlighterPath = null;
+    _liveHighlighterPoints = null;
+    _liveHighlighterPointCount = 0;
+  }
+
   @override
   bool shouldRepaint(covariant EditorV2InkPainter oldDelegate) {
     final sameBaseStrokes =

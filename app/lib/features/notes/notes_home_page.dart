@@ -2076,7 +2076,7 @@ class _HierarchyPanel extends StatelessWidget {
       children: [
         Row(
           children: [
-            const Expanded(
+            Expanded(
               child: Text(
                 favoritesOnly ? 'Favorites' : 'Folders & notes',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
