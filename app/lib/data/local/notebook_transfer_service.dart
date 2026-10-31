@@ -486,7 +486,7 @@ class NotebookTransferService {
     }
 
     final noteIdMap = <String, String>{};
-    final pendingContent = <({LocalNote note, Object? content})>[];
+    final pendingContent = <({LocalNote note, Map<String, Object?>? content})>[];
     var imported = 0;
     for (final prepared in preparedNotes) {
       final item = prepared.item;
