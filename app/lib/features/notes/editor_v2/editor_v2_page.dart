@@ -8475,17 +8475,21 @@ class _EditorV2PageState extends State<EditorV2Page>
 
   Widget _buildEditorLayout() {
     final sidebarWidth = MediaQuery.sizeOf(context).width >= 900 ? 216.0 : 172.0;
+    final previewOnRight = _settings.getString('editorV2PagePreviewSide') == 'right';
+    final showPreview = _showPagePreview && !_fullScreenMode;
     final viewport = Expanded(
       child: Stack(
         clipBehavior: Clip.none,
         children: [
           Positioned.fill(
-            left: _showPagePreview && !_fullScreenMode ? sidebarWidth + 8 : 0,
+            left: showPreview && !previewOnRight ? sidebarWidth + 8 : 0,
+            right: showPreview && previewOnRight ? sidebarWidth + 8 : 0,
             child: _buildCanvas(),
           ),
-          if (_showPagePreview && !_fullScreenMode)
+          if (showPreview)
             Positioned(
-              left: 0,
+              left: previewOnRight ? null : 0,
+              right: previewOnRight ? 0 : null,
               top: 0,
               bottom: 0,
               width: sidebarWidth,
