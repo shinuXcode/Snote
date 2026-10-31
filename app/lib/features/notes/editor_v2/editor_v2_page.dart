@@ -9851,7 +9851,19 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
         ),
       );
     }
-    return _toolGlyph(tool, size: 23, color: scheme.primary);
+    if (const <CanvasTool>{
+      CanvasTool.ballpoint,
+      CanvasTool.fountain,
+      CanvasTool.pencil,
+      CanvasTool.highlighter,
+      CanvasTool.marker,
+      CanvasTool.brush,
+      CanvasTool.eraser,
+      CanvasTool.pixelEraser,
+    }.contains(tool)) {
+      return SnoteToolGlyph(tool: tool, color: scheme.primary, size: 23);
+    }
+    return Icon(_pickerIcon(tool), size: 23, color: scheme.primary);
   }
 
   @override
