@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 
 import 'notebook_transfer_crypto.dart';
 
+import 'file_document_repository.dart';
 import 'folder_repository.dart';
 import 'note_repository.dart';
 
@@ -16,9 +17,10 @@ class NotebookTransferService {
   NotebookTransferService(this.repository);
 
   Future<Uri?> exportEncryptedPicked({required String password}) async {
-    final envelope = await NotebookTransferCrypto.encrypt(await _manifest(), password);
+    final archiveBytes = await _buildEncryptedArchive();
+    final envelope = await NotebookTransferCrypto.encryptArchive(archiveBytes, password);
     return FilePicker.saveFile(
-      fileName: 'snote-encrypted-notebook-${DateTime.now().millisecondsSinceEpoch}.snote',
+      fileName: 'snotee-encrypted-notebook-${DateTime.now().millisecondsSinceEpoch}.snote',
       bytes: Uint8List.fromList(utf8.encode(jsonEncode(envelope))),
       mimeType: 'application/octet-stream',
     );
@@ -32,13 +34,89 @@ class NotebookTransferService {
     if (result.isEmpty) return 0;
     final raw = jsonDecode(utf8.decode(await result.first.readAsBytes()));
     if (raw is! Map) throw const FormatException('Invalid encrypted Snote notebook.');
-    final manifest = await NotebookTransferCrypto.decrypt(
-      raw.cast<String, dynamic>(),
-      password,
-    );
+    final envelope = raw.cast<String, dynamic>();
+    if (envelope['format'] == 'snote-encrypted-archive-v1') {
+      final archiveBytes = await NotebookTransferCrypto.decryptArchive(envelope, password);
+      return _importEncryptedArchive(archiveBytes);
+    }
+    // Backward compatibility for encrypted notebook backups created by older
+    // beta versions. Those files contain notes/folders but no attachment bytes.
+    final manifest = await NotebookTransferCrypto.decrypt(envelope, password);
     return _importJson(jsonEncode(manifest));
   }
 
+  Future<List<int>> _buildEncryptedArchive() async {
+    final manifest = await _manifest();
+    manifest['format'] = 'snote-notebook-v4';
+    manifest['version'] = 4;
+    final notes = await repository.listAllVisible();
+    final documents = FileDocumentRepository();
+    final attachmentManifest = <Map<String, Object?>>[];
+    final archive = Archive();
+
+    for (final note in notes) {
+      final assets = await documents.listForNote(note.id);
+      for (final asset in assets) {
+        final bytes = await documents.readBytes(asset);
+        if (bytes.isEmpty) {
+          throw StateError('Attachment "${asset.name}" is empty and cannot be backed up safely.');
+        }
+        if (asset.size > 0 && bytes.length != asset.size) {
+          throw StateError('Attachment "${asset.name}" changed while the backup was being created.');
+        }
+        final archivePath = 'attachments/${asset.id}.bin';
+        archive.addFile(ArchiveFile.bytes(archivePath, bytes));
+        attachmentManifest.add(<String, Object?>{
+          'id': asset.id,
+          'noteId': note.id,
+          'type': asset.type,
+          'name': asset.name,
+          'size': bytes.length,
+          'metadata': asset.metadata,
+          'archivePath': archivePath,
+        });
+      }
+    }
+
+    manifest['attachments'] = attachmentManifest;
+    archive.addFile(ArchiveFile.bytes(
+      'manifest.json',
+      utf8.encode(const JsonEncoder.withIndent('  ').convert(manifest)),
+    ));
+    return ZipEncoder().encodeBytes(archive);
+  }
+
+  Future<int> _importEncryptedArchive(List<int> bytes) async {
+    if (bytes.isEmpty) throw const FormatException('The decrypted notebook archive is empty.');
+    final archive = ZipDecoder().decodeBytes(bytes);
+    if (archive.length > 20000) {
+      throw const FormatException('The backup contains too many archive entries.');
+    }
+    final files = <String, List<int>>{};
+    var totalBytes = 0;
+    for (final entry in archive) {
+      if (!entry.isFile) continue;
+      final name = entry.name.replaceAll('\\\\', '/');
+      if (name.startsWith('/') || name.split('/').contains('..')) {
+        throw const FormatException('The backup contains an unsafe file path.');
+      }
+      final data = entry.readBytes();
+      if (data == null) continue;
+      totalBytes += data.length;
+      if (totalBytes > 512 * 1024 * 1024) {
+        throw const FormatException('The expanded backup exceeds the 512 MB safety limit.');
+      }
+      files[name] = data;
+    }
+    final manifestBytes = files.remove('manifest.json');
+    if (manifestBytes == null || manifestBytes.isEmpty) {
+      throw const FormatException('The backup does not contain a notebook manifest.');
+    }
+    return _importJson(
+      utf8.decode(manifestBytes),
+      archiveFiles: files,
+    );
+  }
 
   Future<Map<String, dynamic>> _manifest() async {
     final notes = await repository.listAllVisible();
@@ -147,27 +225,65 @@ class NotebookTransferService {
     throw const FormatException('Unsupported notebook package.');
   }
 
-  Future<int> _importJson(String raw, {String? fallbackFolderId}) async {
+  Future<int> _importJson(
+    String raw, {
+    String? fallbackFolderId,
+    Map<String, List<int>>? archiveFiles,
+  }) async {
     final decoded = jsonDecode(raw);
     if (decoded is! Map) throw const FormatException('Invalid notebook JSON.');
 
     final folderMap = <String, String>{};
     final folderData = decoded['folders'];
-    if (folderData is List) {
-      for (final item in folderData.whereType<Map>()) {
+    final pendingFolders = folderData is List
+        ? folderData.whereType<Map>().toList(growable: true)
+        : <Map>[];
+    final oldFolderIds = pendingFolders
+        .map((item) => item['id']?.toString())
+        .whereType<String>()
+        .toSet();
+
+    // Create parents before children. A malformed cyclic hierarchy is rejected
+    // rather than creating a partial, incorrectly nested tree.
+    while (pendingFolders.isNotEmpty) {
+      var progressed = false;
+      for (final item in List<Map>.from(pendingFolders)) {
         final oldId = item['id']?.toString();
         final folderName = item['name']?.toString().trim();
-        if (oldId == null || folderName == null || folderName.isEmpty) continue;
-        final parentId = item['parentId']?.toString();
-        final mappedParentId = parentId == null ? fallbackFolderId : folderMap[parentId] ?? fallbackFolderId;
-        final newFolder = await folders.create(name: folderName, parentId: mappedParentId);
+        if (oldId == null || oldId.isEmpty || folderName == null || folderName.isEmpty) {
+          pendingFolders.remove(item);
+          progressed = true;
+          continue;
+        }
+        final oldParentId = item['parentId']?.toString();
+        if (oldParentId != null &&
+            oldFolderIds.contains(oldParentId) &&
+            !folderMap.containsKey(oldParentId)) {
+          continue;
+        }
+        final mappedParentId = oldParentId == null
+            ? fallbackFolderId
+            : folderMap[oldParentId] ?? fallbackFolderId;
+        final newFolder = await folders.create(
+          name: folderName,
+          parentId: mappedParentId,
+          colorValue: (item['colorValue'] as num?)?.toInt() ?? defaultFolderColor,
+          iconKey: item['iconKey']?.toString() ?? 'folder',
+        );
         if (item['isFavorite'] == true) {
           await folders.setFavorite(newFolder.id, true);
         }
         folderMap[oldId] = newFolder.id;
+        pendingFolders.remove(item);
+        progressed = true;
+      }
+      if (!progressed) {
+        throw const FormatException('The backup contains a cyclic or invalid folder hierarchy.');
       }
     }
 
+    final noteIdMap = <String, String>{};
+    final pendingContent = <({LocalNote note, Object? content})>[];
     var imported = 0;
     final notes = decoded['notes'];
     if (notes is! List) return imported;
@@ -175,23 +291,98 @@ class NotebookTransferService {
     for (final item in notes.whereType<Map>()) {
       final title = item['title']?.toString().trim();
       if (title == null || title.isEmpty) continue;
+      final oldNoteId = item['id']?.toString();
       final oldFolderId = item['folderId']?.toString();
-      final note = await repository.create(title: title, folderId: folderMap[oldFolderId] ?? fallbackFolderId);
+      final note = await repository.create(
+        title: title,
+        folderId: folderMap[oldFolderId] ?? fallbackFolderId,
+      );
+      if (oldNoteId != null && oldNoteId.isNotEmpty) {
+        noteIdMap[oldNoteId] = note.id;
+      }
       if (item['isFavorite'] == true) {
         await repository.setFavorite(note.id, true);
       }
-      final content = item['contentJson'];
-      if (content is String && content.isNotEmpty) {
-        try {
-          final parsed = jsonDecode(content);
-          if (parsed is Map) await repository.saveContent(note.id, parsed.cast<String, Object?>());
-        } catch (_) {}
-      } else if (content is Map) {
-        await repository.saveContent(note.id, content.cast<String, Object?>());
-      }
+      pendingContent.add((note: note, content: item['contentJson']));
       imported++;
     }
+
+    final assetIdMap = <String, String>{};
+    final attachmentData = decoded['attachments'];
+    if (attachmentData is List && attachmentData.isNotEmpty) {
+      if (archiveFiles == null) {
+        throw const FormatException('This backup references attachments but has no attachment archive.');
+      }
+      final documents = FileDocumentRepository();
+      for (final item in attachmentData.whereType<Map>()) {
+        final oldNoteId = item['noteId']?.toString();
+        final newNoteId = oldNoteId == null ? null : noteIdMap[oldNoteId];
+        final oldAssetId = item['id']?.toString();
+        final archivePath = item['archivePath']?.toString();
+        if (newNoteId == null || oldAssetId == null || archivePath == null) {
+          throw const FormatException('The backup contains invalid attachment metadata.');
+        }
+        final attachmentBytes = archiveFiles[archivePath];
+        if (attachmentBytes == null || attachmentBytes.isEmpty) {
+          throw const FormatException('A backup attachment is missing or empty.');
+        }
+        final expectedSize = (item['size'] as num?)?.toInt();
+        if (expectedSize != null && expectedSize != attachmentBytes.length) {
+          throw const FormatException('A backup attachment failed its size check.');
+        }
+        final metadata = item['metadata'] is Map
+            ? (item['metadata'] as Map).map<String, dynamic>(
+                (key, value) => MapEntry(key.toString(), value),
+              )
+            : <String, dynamic>{};
+        final savedAsset = await documents.saveBytes(
+          noteId: newNoteId,
+          name: item['name']?.toString() ?? 'Attachment',
+          type: item['type']?.toString() ?? 'file',
+          bytes: attachmentBytes,
+          metadata: metadata,
+        );
+        assetIdMap[oldAssetId] = savedAsset.id;
+      }
+    }
+
+    for (final pending in pendingContent) {
+      final rawContent = pending.content;
+      if (rawContent is String && rawContent.isNotEmpty) {
+        try {
+          final parsed = jsonDecode(rawContent);
+          if (parsed is Map) {
+            final content = _remapAssetReferences(
+              parsed.cast<String, Object?>(),
+              assetIdMap,
+            );
+            await repository.saveContent(pending.note.id, content);
+          }
+        } catch (error) {
+          if (error is FormatException) rethrow;
+        }
+      } else if (rawContent is Map) {
+        final content = _remapAssetReferences(
+          rawContent.cast<String, Object?>(),
+          assetIdMap,
+        );
+        await repository.saveContent(pending.note.id, content);
+      }
+    }
     return imported;
+  }
+
+  Object? _remapAssetReferences(Object? value, Map<String, String> ids) {
+    if (value is String) return ids[value] ?? value;
+    if (value is List) {
+      return value.map((item) => _remapAssetReferences(item, ids)).toList();
+    }
+    if (value is Map) {
+      return value.map<Object?, Object?>(
+        (key, item) => MapEntry(key, _remapAssetReferences(item, ids)),
+      );
+    }
+    return value;
   }
 
   Future<int> _importText(String filename, String raw, {String? folderId}) async {
