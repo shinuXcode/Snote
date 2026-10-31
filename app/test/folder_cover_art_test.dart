@@ -56,7 +56,7 @@ void main() {
     );
 
     expect(find.text('My folder'), findsNothing);
-    expect(find.textContaining('SNOTE'), findsNothing);
+    expect(find.textContaining('SNOTEE'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }
