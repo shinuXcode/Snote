@@ -665,7 +665,14 @@ class _EditorV2PageState extends State<EditorV2Page>
           });
         }
       }
-      final maxDimension = thumbnail ? 320.0 : 2800.0;
+      final devicePixelRatio =
+          WidgetsBinding.instance.platformDispatcher.views.first.devicePixelRatio;
+      final zoom = _transform.value.getMaxScaleOnAxis().clamp(.5, 3.0).toDouble();
+      final maxDimension = thumbnail
+          ? 320.0
+          : (math.max(page.width, page.height) * devicePixelRatio * zoom * 1.2)
+              .clamp(1200.0, 2800.0)
+              .toDouble();
       final scale = math.min(maxDimension / page.width, maxDimension / page.height);
       final rendered = await page.render(
         width: (page.width * scale).clamp(1.0, maxDimension).toDouble(),
@@ -5914,20 +5921,21 @@ class _EditorV2PageState extends State<EditorV2Page>
     _scheduleSave();
   }
 
-  void _warmAdjacentPdfPages(int pageIndex) {
-    // Render only the neighboring PDF pages after the active page is visible.
-    // Current-page rendering stays demand-driven so navigation is not blocked.
-    for (final index in <int>[pageIndex - 1, pageIndex + 1]) {
-      if (index < 0 || index >= _pages.length) continue;
+  Future<void> _warmAdjacentPdfPages(int pageIndex) async {
+    // Prioritize the next page, then warm the previous page. Serial prefetch
+    // avoids two large raster jobs competing with the active canvas.
+    for (final index in <int>[pageIndex + 1, pageIndex - 1]) {
+      if (!mounted || index < 0 || index >= _pages.length) continue;
       final record = _pages[index];
       if (record['pdfLazyRender'] != true) continue;
       final assetId = record['pdfSourceAssetId']?.toString();
       final sourcePage = (record['pdfSourcePage'] as num?)?.toInt();
       if (assetId == null || assetId.isEmpty || sourcePage == null) continue;
-      unawaited(_lazyPdfPageRaster(assetId, sourcePage).catchError((Object error) {
+      try {
+        await _lazyPdfPageRaster(assetId, sourcePage);
+      } catch (error) {
         debugPrint('[Snote][PDF] adjacent-page prefetch failed: $error');
-        return null;
-      }));
+      }
     }
   }
 
