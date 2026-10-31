@@ -19,6 +19,8 @@ class EditorV2InkPainter extends CustomPainter {
   final double eraserRadius;
   final bool highlighterOnTop;
   final bool onlyHighlighters;
+  static final Finalizer<ui.Picture> _pictureFinalizer =
+      Finalizer<ui.Picture>((picture) => picture.dispose());
   ui.Picture? _basePicture;
   Path? _liveHighlighterPath;
   List<StrokePoint>? _liveHighlighterPoints;
@@ -104,6 +106,7 @@ class EditorV2InkPainter extends CustomPainter {
     }
     final picture = recorder.endRecording();
     _basePicture = picture;
+    _pictureFinalizer.attach(this, picture, detach: this);
     return picture;
   }
 
@@ -1727,8 +1730,10 @@ class EditorV2InkPainter extends CustomPainter {
         highlighterOnTop == oldDelegate.highlighterOnTop &&
         onlyHighlighters == oldDelegate.onlyHighlighters;
     if (sameBaseStrokes && oldDelegate._basePicture != null) {
+      _pictureFinalizer.detach(oldDelegate);
       _basePicture = oldDelegate._basePicture;
       oldDelegate._basePicture = null;
+      _pictureFinalizer.attach(this, _basePicture!, detach: this);
     }
 
     final sameLiveHighlighterPoints =
@@ -1753,10 +1758,4 @@ class EditorV2InkPainter extends CustomPainter {
         onlyHighlighters != oldDelegate.onlyHighlighters;
   }
 
-  @override
-  void dispose() {
-    _basePicture?.dispose();
-    _basePicture = null;
-    super.dispose();
-  }
 }
