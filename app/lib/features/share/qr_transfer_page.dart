@@ -19,7 +19,7 @@ class QrTransferPage extends StatefulWidget {
 }
 
 class _QrTransferPageState extends State<QrTransferPage> {
-  static const _chunkSize = 2400;
+  static const _chunkSize = 1200;
   final String _transferId = DateTime.now().microsecondsSinceEpoch.toString();
   Timer? _timer;
   List<String> _chunks = <String>[];
@@ -78,13 +78,13 @@ class _QrTransferPageState extends State<QrTransferPage> {
         folderId: widget.folder?.id,
         noteId: widget.note?.id,
       );
-      if (encryptedBytes.length > 512 * 1024) {
+      if (encryptedBytes.length > 128 * 1024) {
         throw StateError(
-          'This selection is too large for a reliable QR transfer. '
+          'This selection is too large for a reliable QR transfer (128 KB limit). '
           'Use the encrypted Snote backup file for large PDFs or attachments.',
         );
       }
-      final payload = utf8.decode(encryptedBytes);
+      final payload = base64Encode(encryptedBytes);
       if (!mounted) return;
       setState(() {
         _chunks = [
