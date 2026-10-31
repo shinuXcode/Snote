@@ -195,6 +195,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   Offset? _lastErasePosition;
   bool _eraseUndoCaptured = false;
   List<Stroke>? _eraseWorkingStrokes;
+  final Map<String, Rect> _eraseWorkingBounds = <String, Rect>{};
   Timer? _holdTimer;
   Offset? _holdStartPosition;
   Offset? _pageSwipeStart;
@@ -1711,6 +1712,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     _lastErasePosition = event.localPosition;
     _eraseUndoCaptured = false;
     _eraseWorkingStrokes = null;
+    _eraseWorkingBounds.clear();
     _activePointers.add(event.pointer);
     if (event.kind == PointerDeviceKind.stylus ||
         event.kind == PointerDeviceKind.invertedStylus) {
@@ -2110,34 +2112,60 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
   }
 
+  Rect? _eraseBoundsForStroke(Stroke stroke) {
+    if (stroke.points.isEmpty) return null;
+    var left = stroke.points.first.position.dx;
+    var right = left;
+    var top = stroke.points.first.position.dy;
+    var bottom = top;
+    for (final point in stroke.points.skip(1)) {
+      left = math.min(left, point.position.dx);
+      right = math.max(right, point.position.dx);
+      top = math.min(top, point.position.dy);
+      bottom = math.max(bottom, point.position.dy);
+    }
+    return Rect.fromLTRB(left, top, right, bottom).inflate(stroke.pen.size / 2);
+  }
+
   void _eraseAt(Offset position, double radius) {
     final raw = _pageData['strokes'];
     if (raw is! List || raw.isEmpty) {
       _eraseWorkingStrokes = null;
+      _eraseWorkingBounds.clear();
       return;
     }
 
-    // Decode once for the entire drag. Mutate the cached working vector set
-    // until the pointer is released instead of reparsing every saved sample.
+    // Decode vectors once per drag and cache each stroke's broad-phase bounds.
+    // Most pointer samples can now skip distant strokes without walking every
+    // point in every stroke.
     final decoded = _eraseWorkingStrokes ??
         StrokeCodec.documentToStrokes(<String, Object?>{'strokes': raw});
     _eraseWorkingStrokes = decoded;
     final retained = <Stroke>[];
+    final nextBounds = <String, Rect>{};
     var changed = false;
+    final baseFootprint = Rect.fromCenter(
+      center: position,
+      width: radius * 2,
+      height: radius * 1.4,
+    );
     final partialErase = _pressureEraseActive
         ? _settings.getString('pressureEraserMode') == 'pixel'
         : (_tool == CanvasTool.pixelEraser || _settings.getString('eraserMode') == 'pixel');
 
     for (final stroke in decoded) {
-      if (stroke.points.isEmpty) {
+      final bounds = _eraseWorkingBounds[stroke.id] ?? _eraseBoundsForStroke(stroke);
+      if (bounds == null) {
         retained.add(stroke);
         continue;
       }
-      final footprint = Rect.fromCenter(
-        center: position,
-        width: radius * 2,
-        height: radius * 1.4,
-      ).inflate(stroke.pen.size / 2);
+      if (!bounds.overlaps(baseFootprint)) {
+        retained.add(stroke);
+        nextBounds[stroke.id] = bounds;
+        continue;
+      }
+
+      final footprint = baseFootprint.inflate(stroke.pen.size / 2);
       var hit = footprint.contains(stroke.points.first.position);
       for (var i = 1; !hit && i < stroke.points.length; i++) {
         hit = footprint.contains(stroke.points[i].position) ||
@@ -2150,6 +2178,7 @@ class _EditorV2PageState extends State<EditorV2Page>
 
       if (!hit) {
         retained.add(stroke);
+        nextBounds[stroke.id] = bounds;
         continue;
       }
 
@@ -2165,10 +2194,16 @@ class _EditorV2PageState extends State<EditorV2Page>
         if (fragment.length < 2) continue;
         final fragmentId =
             '${stroke.id}-px-${DateTime.now().microsecondsSinceEpoch}-${fragmentNumber++}';
-        retained.add(stroke.copyWith(id: fragmentId, points: fragment));
+        final clipped = stroke.copyWith(id: fragmentId, points: fragment);
+        retained.add(clipped);
+        final clippedBounds = _eraseBoundsForStroke(clipped);
+        if (clippedBounds != null) nextBounds[clipped.id] = clippedBounds;
       }
     }
 
+    _eraseWorkingBounds
+      ..clear()
+      ..addAll(nextBounds);
     if (!changed) return;
     _eraseWorkingStrokes = retained;
     // One undo checkpoint covers an entire eraser gesture, not each pointer
