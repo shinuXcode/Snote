@@ -560,7 +560,9 @@ class _SettingsPageState extends State<SettingsPage> {
             DropdownMenuItem(value: 'right', child: Text('Right')),
           ],
           onChanged: (value) {
-            if (value != null) unawaited(_settings.setString('editorV2PagePreviewSide', value));
+            if (value == null) return;
+            unawaited(_settings.setString('editorV2PagePreviewSide', value));
+            setState(() {});
           },
         ),
       ),
