@@ -7,6 +7,7 @@ service: app/native_android is the single source of truth for these components.
 """
 
 from pathlib import Path
+import shutil
 
 android = Path("android")
 main_candidates = list((android / "app/src/main/kotlin").rglob("MainActivity.kt"))
@@ -29,6 +30,26 @@ required_channels = (
 for channel in required_channels:
     if channel not in main_text:
         raise SystemExit(f"Maintained MainActivity is missing MethodChannel {channel!r}")
+
+# Copy maintained launch resources over Flutter's generated defaults so the
+# native splash is the only startup surface shown before the first Flutter frame.
+source_resources = Path("app/native_android/res")
+target_resources = android / "app/src/main/res"
+if source_resources.is_dir():
+    for source in source_resources.rglob("*"):
+        if not source.is_file():
+            continue
+        target = target_resources / source.relative_to(source_resources)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+
+for required_resource in (
+    target_resources / "values/styles.xml",
+    target_resources / "drawable/launch_background.xml",
+    target_resources / "values-v31/styles.xml",
+):
+    if not required_resource.is_file():
+        raise SystemExit(f"Maintained Android launch resource was not copied: {required_resource}")
 
 source_dir = main_activity.parent
 for source_name in ("ScreenCaptureBridge.kt", "ScreenCaptureService.kt"):
