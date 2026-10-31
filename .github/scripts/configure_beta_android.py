@@ -46,6 +46,7 @@ if source_resources.is_dir():
 for required_resource in (
     target_resources / "values/styles.xml",
     target_resources / "drawable/launch_background.xml",
+    target_resources / "drawable-v21/launch_background.xml",
     target_resources / "values-v31/styles.xml",
 ):
     if not required_resource.is_file():
