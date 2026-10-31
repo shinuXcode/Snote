@@ -206,3 +206,13 @@ body{background:#030303;color:#f5f2ef;font-family:'DM Sans',Inter,ui-sans-serif,
 @keyframes loader-float{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-5px) scale(1.025)}}
 @keyframes loader-progress{from{transform:translateX(-110%)}to{transform:translateX(240%)}}
 @media(prefers-reduced-motion:reduce){.brand-loader,.brand-loader-mark,.brand-loader-track i{animation:none}.brand-loader{transition:none}}
+
+
+/* Crisp vector brand assets and founder portrait */
+.brand img,.footer-brand img{image-rendering:auto;object-fit:contain;}
+.founder-photo-wrap{position:relative;min-height:420px;aspect-ratio:4/5;border:1px solid #ffffff18;border-radius:18px;background:radial-gradient(ellipse at 50% 35%,#4b3025 0%,#17110e 58%,#080707 100%);}
+.founder-photo{width:100%;height:100%;min-height:420px;max-height:560px;object-fit:cover;object-position:center 30%;border-radius:18px;}
+.founder-photo-wrap:after{content:"";position:absolute;inset:0;border:1px solid #ffffff12;border-radius:18px;pointer-events:none;}
+.brand-loader-mark{width:clamp(96px,18vw,132px);height:clamp(96px,18vw,132px);}
+.brand-loader-mark img{width:100%;height:100%;object-fit:contain;image-rendering:auto;}
+@media(max-width:720px){.founder-photo-wrap,.founder-photo{min-height:300px;max-height:420px;}}
