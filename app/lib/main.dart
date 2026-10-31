@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart';
@@ -8,6 +9,7 @@ import 'app/app_entry.dart';
 import 'app/theme_controller.dart';
 import 'core/settings/app_settings.dart';
 import 'ui/snote_theme.dart';
+import 'ui/snote_logo.dart';
 
 void _installSnoteErrorLogging() {
   final previousFlutterError = FlutterError.onError;
@@ -67,9 +69,13 @@ void main() {
   WidgetsFlutterBinding.ensureInitialized();
   ErrorWidget.builder = _snoteErrorWidget;
   _installSnoteErrorLogging();
-  // Mount Flutter immediately so startup failures can show an error/retry
-  // screen instead of leaving the user on a blank launch surface.
-  WidgetsBinding.instance.deferFirstFrame();
+  final deferForNativeLaunch = !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+  if (deferForNativeLaunch) {
+    // Keep the OS launch screen visible until the first usable app frame.
+    WidgetsBinding.instance.deferFirstFrame();
+  }
   runApp(const SnoteApp());
 }
 
@@ -80,8 +86,11 @@ class SnoteApp extends StatefulWidget {
 
 class _SnoteAppState extends State<SnoteApp> {
   final _theme = SnoteThemeController.instance;
+  bool _bootstrapping = true;
   bool _bootstrapAttemptActive = false;
-  bool _firstFramePending = true;
+  bool _firstFramePending = !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
   String? _startupError;
 
   @override
@@ -92,7 +101,7 @@ class _SnoteAppState extends State<SnoteApp> {
   }
 
   void _refresh() {
-    if (mounted) setState(() {});
+    if (mounted) setState(() => _bootstrapping = true);
   }
 
   Future<void> _initialize() async {
@@ -105,12 +114,14 @@ class _SnoteAppState extends State<SnoteApp> {
       await SnoteSettings.instance.load();
       if (!mounted) return;
       setState(() {
+        _bootstrapping = false;
         _startupError = null;
       });
     } catch (error, stackTrace) {
       debugPrint('Snotee startup failed: $error\\n$stackTrace');
       if (!mounted) return;
       setState(() {
+        _bootstrapping = false;
         _startupError = error.toString();
       });
     } finally {
@@ -185,12 +196,14 @@ class _SnoteAppState extends State<SnoteApp> {
         FlutterQuillLocalizations.delegate,
       ],
       supportedLocales: const [Locale('en'), Locale('hi')],
-      home: _startupError == null
-          ? const AppEntry()
-          : _StartupFailurePage(
+      home: _startupError != null
+          ? _StartupFailurePage(
               details: _startupError!,
               onRetry: _retryBootstrap,
-            ),
+            )
+          : _bootstrapping
+              ? const _StartupPage()
+              : const AppEntry(),
     );
     if (_theme.eInk && _theme.grayscale) {
       return ColorFiltered(
@@ -211,6 +224,37 @@ class _SnoteAppState extends State<SnoteApp> {
     _theme.removeListener(_refresh);
     super.dispose();
   }
+}
+
+class _StartupPage extends StatelessWidget {
+  const _StartupPage();
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        backgroundColor: const Color(0xfff7f8fa),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SnoteLogo(size: 76),
+              const SizedBox(height: 18),
+              const Text(
+                'Snotee',
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -.6,
+                ),
+              ),
+              const SizedBox(height: 18),
+              const SizedBox(
+                width: 110,
+                child: LinearProgressIndicator(minHeight: 3),
+              ),
+            ],
+          ),
+        ),
+      );
 }
 
 class _StartupFailurePage extends StatelessWidget {
