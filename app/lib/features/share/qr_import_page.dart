@@ -65,16 +65,10 @@ class _QrImportPageState extends State<QrImportPage> {
       if (mounted) setState(() {});
 
       if (_chunks.length == total && _chunks.keys.every((i) => i >= 0 && i < total)) {
-        final payload = List.generate(total, (i) => _chunks[i]).join();
-        final note = jsonDecode(payload);
-        if (note is! Map) throw const FormatException('Invalid assembled note.');
-        final assembled = note.cast<String, dynamic>();
-        if (assembled['format'] == 'snote-encrypted-notebook-v1' ||
-            assembled['format'] == 'snote-encrypted-archive-v1') {
-          await _saveEncryptedTransfer(assembled);
-        } else {
-          await _saveNote(assembled);
-        }
+        final encoded = List.generate(total, (i) => _chunks[i]).join();
+        final decodedPayload = jsonDecode(utf8.decode(base64Decode(encoded)));
+        if (decodedPayload is! Map) throw const FormatException('Invalid encrypted transfer.');
+        await _saveEncryptedTransfer(decodedPayload.cast<String, dynamic>());
       }
     } catch (e) {
       if (mounted) {
