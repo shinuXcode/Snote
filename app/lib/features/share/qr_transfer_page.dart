@@ -6,6 +6,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../canvas_engine/models/stroke_codec.dart';
 import '../../data/local/note_repository.dart';
+import '../../data/local/notebook_transfer_crypto.dart';
 
 class QrTransferPage extends StatefulWidget {
   final LocalNote note;
@@ -18,25 +19,87 @@ class QrTransferPage extends StatefulWidget {
 class _QrTransferPageState extends State<QrTransferPage> {
   static const _chunkSize = 900;
   Timer? _timer;
-  late final List<String> _chunks;
+  List<String> _chunks = <String>[];
   int _index = 0;
+  bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    final payload = jsonEncode({
-      'format': 'snote-note-v2',
-      'id': widget.note.id,
-      'title': widget.note.title,
-      'content': widget.note.contentJson == null
+    WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_prepareEncryptedTransfer()));
+  }
+
+  Future<String?> _askPassword() async {
+    final controller = TextEditingController();
+    final password = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Encrypt QR transfer'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          obscureText: true,
+          decoration: const InputDecoration(
+            labelText: 'Transfer password',
+            helperText: 'Enter the same password on the receiving device. Use at least 8 characters.',
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () {
+              if (controller.text.length >= 8) Navigator.pop(dialogContext, controller.text);
+            },
+            child: const Text('Encrypt'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return password;
+  }
+
+  Future<void> _prepareEncryptedTransfer() async {
+    try {
+      final password = await _askPassword();
+      if (!mounted) return;
+      if (password == null) {
+        Navigator.of(context).pop();
+        return;
+      }
+      final content = widget.note.contentJson == null
           ? StrokeCodec.strokesToDocument(const [])
-          : jsonDecode(widget.note.contentJson!),
-    });
-    _chunks = [
-      for (var start = 0; start < payload.length; start += _chunkSize)
-        payload.substring(start, (start + _chunkSize).clamp(0, payload.length)),
-    ];
-    if (_chunks.length > 1) _startTimer();
+          : jsonDecode(widget.note.contentJson!);
+      if (content is! Map) throw const FormatException('The note content is invalid.');
+      final envelope = await NotebookTransferCrypto.encrypt(
+        <String, dynamic>{
+          'format': 'snote-qr-note-v1',
+          'id': widget.note.id,
+          'title': widget.note.title,
+          'content': content,
+        },
+        password,
+      );
+      final payload = jsonEncode(envelope);
+      if (!mounted) return;
+      setState(() {
+        _chunks = [
+          for (var start = 0; start < payload.length; start += _chunkSize)
+            payload.substring(start, (start + _chunkSize).clamp(0, payload.length)),
+        ];
+        _loading = false;
+        _error = null;
+      });
+      if (_chunks.length > 1) _startTimer();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = error.toString();
+      });
+    }
   }
 
   void _startTimer() {
@@ -58,6 +121,19 @@ class _QrTransferPageState extends State<QrTransferPage> {
   Widget build(BuildContext context) {
     final total = _chunks.length;
     final running = _timer?.isActive == true;
+    if (_loading) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('QR note transfer')),
+        body: Center(
+          child: _error == null
+              ? const CircularProgressIndicator()
+              : Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(_error!, textAlign: TextAlign.center),
+                ),
+        ),
+      );
+    }
     return Scaffold(
       appBar: AppBar(
         title: const Text('QR note transfer'),
@@ -85,7 +161,7 @@ class _QrTransferPageState extends State<QrTransferPage> {
             children: [
               Text(
                 total == 1
-                    ? 'Scan this QR code on the receiving Snote device.'
+                    ? 'Scan this QR code on the receiving Snotee device.'
                     : 'Keep this screen visible. The QR sequence advances automatically.',
                 textAlign: TextAlign.center,
               ),
@@ -108,8 +184,8 @@ class _QrTransferPageState extends State<QrTransferPage> {
               const SizedBox(height: 8),
               Text(
                 total == 1
-                    ? 'Local-only transfer. Nothing is uploaded.'
-                    : 'Scan all frames. The receiver assembles the note automatically.',
+                    ? 'Encrypted local transfer. Enter the same password on the receiving device.'
+                    : 'Scan all frames. The receiver assembles and decrypts the note. Keep the password private and share it separately.',
                 textAlign: TextAlign.center,
               ),
             ],
