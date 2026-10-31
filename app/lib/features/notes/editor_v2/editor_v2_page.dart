@@ -5017,11 +5017,22 @@ class _EditorV2PageState extends State<EditorV2Page>
   void _addPage({int? insertAfter, Map<String, Object?>? templateFrom}) {
     _pushUndo();
     final previous = templateFrom ?? _pageData;
+    final defaultTemplate = templateFrom == null
+        ? _settings.getString('defaultPageTemplate')
+        : '';
+    final defaultPaperColor = templateFrom == null
+        ? int.tryParse(_settings.getString('defaultPagePaperColor'))
+        : null;
+    final defaultLineColor = templateFrom == null
+        ? int.tryParse(_settings.getString('defaultPageLineColor'))
+        : null;
     final page = EditorV2DocumentCodec.normalizePage(<String, Object?>{
       'id': DateTime.now().microsecondsSinceEpoch.toString(),
-      'template': previous['template'] ?? 'dotted',
-      'paperColor': previous['paperColor'] ?? 0xffffffff,
-      'lineColor': previous['lineColor'] ?? 0xffd8dee8,
+      'template': defaultTemplate.isNotEmpty
+          ? defaultTemplate
+          : previous['template'] ?? 'dotted',
+      'paperColor': defaultPaperColor ?? previous['paperColor'] ?? 0xffffffff,
+      'lineColor': defaultLineColor ?? previous['lineColor'] ?? 0xffd8dee8,
       'lineOpacity': previous['lineOpacity'] ?? .85,
       'spacing': previous['spacing'] ?? 28.0,
       'lineWidth': previous['lineWidth'] ?? .7,
