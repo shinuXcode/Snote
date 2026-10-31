@@ -32,11 +32,11 @@ class _FolderCoverLibraryPageState extends State<FolderCoverLibraryPage> {
   String _builtInCategory = 'All';
 
   static const _coverCategories = <String>[
-    'All', 'Study', 'Science', 'Nature', 'Creative', 'Abstract',
+    'All', 'Study', 'Science', 'Nature', 'Creative', 'Abstract', 'Space', 'Geometry', 'Technology', 'Literature', 'Minimal',
   ];
 
   List<int> get _builtInIndices {
-    if (_builtInCategory == 'All') return List<int>.generate(200, (i) => i);
+    if (_builtInCategory == 'All') return List<int>.generate(400, (i) => i);
     final category = _coverCategories.indexOf(_builtInCategory);
     if (category < 1) return List<int>.generate(200, (i) => i);
     final start = (category - 1) * 40;
@@ -150,7 +150,7 @@ class _FolderCoverLibraryPageState extends State<FolderCoverLibraryPage> {
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
             child: SegmentedButton<int>(
               segments: [
-                const ButtonSegment(value: 0, label: Text('Built-in (200)'), icon: Icon(Icons.auto_awesome_outlined)),
+                const ButtonSegment(value: 0, label: Text('Built-in (400)'), icon: Icon(Icons.auto_awesome_outlined)),
                 ButtonSegment(value: 1, label: Text('Custom (' + _customCovers.length.toString() + ')'), icon: const Icon(Icons.photo_library_outlined)),
               ],
               selected: {_libraryTab},
