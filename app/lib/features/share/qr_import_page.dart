@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../data/local/note_repository.dart';
-import '../../data/local/notebook_transfer_crypto.dart';
 import '../../data/local/notebook_transfer_service.dart';
 
 class QrImportPage extends StatefulWidget {
@@ -21,6 +20,7 @@ class _QrImportPageState extends State<QrImportPage> {
   String? _transferId;
   int? _total;
   bool _importing = false;
+  String? _completedTransferId;
 
   bool get _cameraSupported => kIsWeb ||
       defaultTargetPlatform == TargetPlatform.android ||
@@ -49,6 +49,7 @@ class _QrImportPageState extends State<QrImportPage> {
       }
 
       final transferId = decoded['transfer_id']?.toString();
+      if (transferId != null && transferId == _completedTransferId) return;
       final index = (decoded['index'] as num?)?.toInt();
       final total = (decoded['total'] as num?)?.toInt();
       final data = decoded['data']?.toString();
@@ -65,6 +66,7 @@ class _QrImportPageState extends State<QrImportPage> {
       if (mounted) setState(() {});
 
       if (_chunks.length == total && _chunks.keys.every((i) => i >= 0 && i < total)) {
+        _completedTransferId = transferId;
         final encoded = List.generate(total, (i) => _chunks[i]).join();
         try {
           final decodedPayload = jsonDecode(utf8.decode(base64Decode(encoded)));
@@ -180,7 +182,22 @@ class _QrImportPageState extends State<QrImportPage> {
   Widget build(BuildContext context) {
     final progress = _total == null || _total == 0 ? null : (_chunks.length / _total!).toDouble();
     return Scaffold(
-      appBar: AppBar(title: const Text('Import transfer')),
+      appBar: AppBar(
+        title: const Text('Import transfer'),
+        actions: [
+          if (_completedTransferId != null)
+            IconButton(
+              tooltip: 'Reset and scan again',
+              onPressed: () => setState(() {
+                _chunks.clear();
+                _transferId = null;
+                _total = null;
+                _completedTransferId = null;
+              }),
+              icon: const Icon(Icons.restart_alt_rounded),
+            ),
+        ],
+      ),
       body: Column(
         children: [
           if (_cameraSupported)
