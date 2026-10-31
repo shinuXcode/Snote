@@ -123,7 +123,7 @@ class NotebookTransferService {
     final allFolders = await folders.listAllVisible();
     return {
       'format': 'snote-notebook-v3',
-      'app': 'Snote',
+      'app': 'Snotee',
       'version': 3,
       'exportedAt': DateTime.now().toUtc().toIso8601String(),
       'folders': allFolders.map((f) => f.toExport()).toList(),
@@ -282,10 +282,7 @@ class NotebookTransferService {
 
     final folderMap = <String, String>{};
     final pendingFolders = folderItems.toList(growable: true);
-
-        ? folderData.whereType<Map>().toList(growable: true)
-        : <Map>[];
-    final oldFolderIds = pendingFolders
+    final oldFolderIds = folderItems
         .map((item) => item['id']?.toString())
         .whereType<String>()
         .toSet();
