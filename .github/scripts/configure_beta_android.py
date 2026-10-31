@@ -33,7 +33,7 @@ for channel in required_channels:
 
 # Copy maintained launch resources over Flutter's generated defaults so the
 # native splash is the only startup surface shown before the first Flutter frame.
-source_resources = Path("app/native_android/res")
+source_resources = Path("native_android/res")
 target_resources = android / "app/src/main/res"
 if source_resources.is_dir():
     for source in source_resources.rglob("*"):
