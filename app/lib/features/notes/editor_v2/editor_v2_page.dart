@@ -5017,8 +5017,10 @@ class _EditorV2PageState extends State<EditorV2Page>
   void _addPage({int? insertAfter, Map<String, Object?>? templateFrom}) {
     _pushUndo();
     final previous = templateFrom ?? _pageData;
-    final defaultTemplate = templateFrom == null
-        ? _settings.getString('defaultPageTemplate')
+    final storedDefaultTemplate = _settings.getString('defaultPageTemplate');
+    final defaultTemplate = templateFrom == null &&
+            PageTemplate.values.any((template) => template.name == storedDefaultTemplate)
+        ? storedDefaultTemplate
         : '';
     final defaultPaperColor = templateFrom == null
         ? int.tryParse(_settings.getString('defaultPagePaperColor'))
