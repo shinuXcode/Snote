@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../lib/features/folders/folder_cover_art.dart';
 
 void main() {
-  testWidgets('the built-in cover catalog renders all 200 cover variants', (tester) async {
+  testWidgets('the built-in cover catalog renders all 400 cover variants', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -15,7 +15,7 @@ void main() {
                 spacing: 6,
                 runSpacing: 6,
                 children: [
-                  for (var index = 0; index < 200; index++)
+                  for (var index = 0; index < 400; index++)
                     SizedBox(
                       width: 58,
                       height: 82,
@@ -33,7 +33,7 @@ void main() {
     );
 
     expect(find.text('Cover 1'), findsOneWidget);
-    expect(find.text('Cover 200'), findsOneWidget);
+    expect(find.text('Cover 400'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
