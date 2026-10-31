@@ -17,14 +17,34 @@ class NotebookTransferService {
 
   NotebookTransferService(this.repository);
 
-  Future<Uri?> exportEncryptedPicked({required String password}) async {
-    final archiveBytes = await _buildEncryptedArchive();
-    final envelope = await NotebookTransferCrypto.encryptArchive(archiveBytes, password);
+  Future<Uri?> exportEncryptedPicked({
+    required String password,
+    String? folderId,
+    String? noteId,
+  }) async {
+    final bytes = await exportEncryptedArchiveBytes(
+      password: password,
+      folderId: folderId,
+      noteId: noteId,
+    );
     return FilePicker.saveFile(
       fileName: 'snotee-encrypted-notebook-${DateTime.now().millisecondsSinceEpoch}.snote',
-      bytes: Uint8List.fromList(utf8.encode(jsonEncode(envelope))),
+      bytes: bytes,
       mimeType: 'application/octet-stream',
     );
+  }
+
+  Future<Uint8List> exportEncryptedArchiveBytes({
+    required String password,
+    String? folderId,
+    String? noteId,
+  }) async {
+    final archiveBytes = await _buildEncryptedArchive(
+      folderId: folderId,
+      noteId: noteId,
+    );
+    final envelope = await NotebookTransferCrypto.encryptArchive(archiveBytes, password);
+    return Uint8List.fromList(utf8.encode(jsonEncode(envelope)));
   }
 
   Future<int> importEncryptedPicked({required String password}) async {
@@ -33,7 +53,17 @@ class NotebookTransferService {
       allowedExtensions: ['snote', 'json'],
     );
     if (result.isEmpty) return 0;
-    final raw = jsonDecode(utf8.decode(await result.first.readAsBytes()));
+    return importEncryptedArchiveBytes(
+      Uint8List.fromList(await result.first.readAsBytes()),
+      password: password,
+    );
+  }
+
+  Future<int> importEncryptedArchiveBytes(
+    List<int> encryptedBytes, {
+    required String password,
+  }) async {
+    final raw = jsonDecode(utf8.decode(encryptedBytes));
     if (raw is! Map) throw const FormatException('Invalid encrypted Snote notebook.');
     final envelope = raw.cast<String, dynamic>();
     if (envelope['format'] == 'snote-encrypted-archive-v1') {
@@ -46,11 +76,51 @@ class NotebookTransferService {
     return _importJson(jsonEncode(manifest));
   }
 
-  Future<List<int>> _buildEncryptedArchive() async {
-    final manifest = await _manifest();
+  Future<List<int>> _buildEncryptedArchive({
+    String? folderId,
+    String? noteId,
+  }) async {
+    final allNotes = await repository.listAllVisible();
+    final allFolders = await folders.listAllVisible();
+    late final List<LocalNote> notes;
+    late final List<LocalFolder> selectedFolders;
+    if (folderId != null) {
+      final folderIds = <String>{folderId};
+      var changed = true;
+      while (changed) {
+        changed = false;
+        for (final folder in allFolders) {
+          if (folder.parentId != null &&
+              folderIds.contains(folder.parentId) &&
+              folderIds.add(folder.id)) {
+            changed = true;
+          }
+        }
+      }
+      notes = allNotes.where((note) => note.folderId != null && folderIds.contains(note.folderId)).toList();
+      selectedFolders = allFolders.where((folder) => folderIds.contains(folder.id)).toList();
+      if (!selectedFolders.any((folder) => folder.id == folderId)) {
+        throw StateError('The selected folder is no longer available.');
+      }
+    } else if (noteId != null) {
+      final selected = allNotes.where((note) => note.id == noteId).toList();
+      if (selected.isEmpty) throw StateError('The selected note is no longer available.');
+      notes = selected;
+      final folderIds = <String>{};
+      final byId = {for (final folder in allFolders) folder.id: folder};
+      var parentId = selected.first.folderId;
+      while (parentId != null && folderIds.add(parentId)) {
+        parentId = byId[parentId]?.parentId;
+      }
+      selectedFolders = allFolders.where((folder) => folderIds.contains(folder.id)).toList();
+    } else {
+      notes = allNotes;
+      selectedFolders = allFolders;
+    }
+
+    final manifest = await _manifest(notes: notes, selectedFolders: selectedFolders);
     manifest['format'] = 'snote-notebook-v4';
     manifest['version'] = 4;
-    final notes = await repository.listAllVisible();
     final documents = FileDocumentRepository();
     final attachmentManifest = <Map<String, Object?>>[];
     final coverManifest = <Map<String, Object?>>[];
@@ -138,16 +208,19 @@ class NotebookTransferService {
     );
   }
 
-  Future<Map<String, dynamic>> _manifest() async {
-    final notes = await repository.listAllVisible();
-    final allFolders = await folders.listAllVisible();
+  Future<Map<String, dynamic>> _manifest({
+    List<LocalNote>? notes,
+    List<LocalFolder>? selectedFolders,
+  }) async {
+    final selectedNotes = notes ?? await repository.listAllVisible();
+    final allFolders = selectedFolders ?? await folders.listAllVisible();
     return {
       'format': 'snote-notebook-v3',
       'app': 'Snotee',
       'version': 3,
       'exportedAt': DateTime.now().toUtc().toIso8601String(),
       'folders': allFolders.map((f) => f.toExport()).toList(),
-      'notes': notes.map((n) => {
+      'notes': selectedNotes.map((n) => {
         'id': n.id,
         'title': n.title,
         'folderId': n.folderId,
