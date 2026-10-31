@@ -53,7 +53,7 @@ class _LocalBackupsPageState extends State<LocalBackupsPage> {
         final count = await transfer.importEncryptedPicked(password: password);
         if (mounted && count > 0) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Restored $count note(s).')),
+            SnackBar(content: Text('Restored $count note(s) and their available attachments.')),
           );
         }
       } else {
@@ -96,7 +96,7 @@ class _LocalBackupsPageState extends State<LocalBackupsPage> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Backups include all visible notes and folders. They are encrypted on this device before saving.',
+                'Encrypted backups include visible notes, folder structure, page content, and attached files such as source PDFs. Existing older encrypted backups remain importable.',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
               ),
