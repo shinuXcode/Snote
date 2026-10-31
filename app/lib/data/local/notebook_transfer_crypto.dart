@@ -40,6 +40,64 @@ class NotebookTransferCrypto {
     };
   }
 
+  static Future<Map<String, dynamic>> encryptArchive(
+    List<int> archiveBytes,
+    String password,
+  ) async {
+    if (password.length < 8) {
+      throw ArgumentError('Use a password with at least 8 characters.');
+    }
+    if (archiveBytes.isEmpty) {
+      throw const FormatException('The notebook archive is empty.');
+    }
+    final random = math.Random.secure();
+    final salt = List<int>.generate(16, (_) => random.nextInt(256));
+    final key = await _kdf.deriveKeyFromPassword(password: password, nonce: salt);
+    final box = await _cipher.encrypt(archiveBytes, secretKey: key);
+    return <String, dynamic>{
+      'format': 'snote-encrypted-archive-v1',
+      'kdf': 'pbkdf2-hmac-sha256',
+      'iterations': _iterations,
+      'cipher': 'aes-256-gcm',
+      'salt': base64Encode(salt),
+      'nonce': base64Encode(box.nonce),
+      'mac': base64Encode(box.mac.bytes),
+      'ciphertext': base64Encode(box.cipherText),
+    };
+  }
+
+  static Future<List<int>> decryptArchive(
+    Map<String, dynamic> envelope,
+    String password,
+  ) async {
+    if (envelope['format'] != 'snote-encrypted-archive-v1' ||
+        envelope['kdf'] != 'pbkdf2-hmac-sha256' ||
+        envelope['cipher'] != 'aes-256-gcm' ||
+        envelope['iterations'] != _iterations) {
+      throw const FormatException('Unsupported encrypted Snote archive.');
+    }
+    try {
+      final salt = base64Decode(envelope['salt']?.toString() ?? '');
+      final nonce = base64Decode(envelope['nonce']?.toString() ?? '');
+      final mac = Mac(base64Decode(envelope['mac']?.toString() ?? ''));
+      final ciphertext = base64Decode(envelope['ciphertext']?.toString() ?? '');
+      if (salt.length != 16 || nonce.length != 12 || mac.bytes.length != 16) {
+        throw const FormatException('Invalid encrypted archive data.');
+      }
+      final key = await _kdf.deriveKeyFromPassword(password: password, nonce: salt);
+      final clear = await _cipher.decrypt(
+        SecretBox(ciphertext, nonce: nonce, mac: mac),
+        secretKey: key,
+      );
+      if (clear.isEmpty) throw const FormatException('The decrypted archive is empty.');
+      return clear;
+    } catch (_) {
+      throw const FormatException(
+        'Could not decrypt the archive. Check the password and file.',
+      );
+    }
+  }
+
   static Future<Map<String, dynamic>> decrypt(
     Map<String, dynamic> envelope,
     String password,
