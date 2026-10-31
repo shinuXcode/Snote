@@ -372,14 +372,22 @@ class NotebookTransferService {
     return imported;
   }
 
-  Object? _remapAssetReferences(Object? value, Map<String, String> ids) {
+  Map<String, Object?> _remapAssetReferences(
+    Map<String, Object?> content,
+    Map<String, String> ids,
+  ) =>
+      content.map(
+        (key, value) => MapEntry(key, _remapAssetReferenceValue(value, ids)),
+      );
+
+  Object? _remapAssetReferenceValue(Object? value, Map<String, String> ids) {
     if (value is String) return ids[value] ?? value;
     if (value is List) {
-      return value.map((item) => _remapAssetReferences(item, ids)).toList();
+      return value.map((item) => _remapAssetReferenceValue(item, ids)).toList();
     }
     if (value is Map) {
       return value.map<Object?, Object?>(
-        (key, item) => MapEntry(key, _remapAssetReferences(item, ids)),
+        (key, item) => MapEntry(key, _remapAssetReferenceValue(item, ids)),
       );
     }
     return value;
