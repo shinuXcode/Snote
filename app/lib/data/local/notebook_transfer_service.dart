@@ -497,6 +497,7 @@ class NotebookTransferService {
       final note = await repository.create(
         title: title,
         folderId: folderMap[oldFolderId] ?? fallbackFolderId,
+        noteType: item['noteType']?.toString() ?? 'handwriting',
       );
       if (oldNoteId != null && oldNoteId.isNotEmpty) {
         noteIdMap[oldNoteId] = note.id;
