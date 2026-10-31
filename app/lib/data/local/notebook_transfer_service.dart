@@ -233,9 +233,56 @@ class NotebookTransferService {
     final decoded = jsonDecode(raw);
     if (decoded is! Map) throw const FormatException('Invalid notebook JSON.');
 
-    final folderMap = <String, String>{};
     final folderData = decoded['folders'];
-    final pendingFolders = folderData is List
+    final folderItems = folderData is List
+        ? folderData.whereType<Map>().toList(growable: false)
+        : const <Map>[];
+    final parentById = <String, String?>{
+      for (final item in folderItems)
+        if (item['id']?.toString().isNotEmpty == true)
+          item['id'].toString(): item['parentId']?.toString(),
+    };
+    for (final id in parentById.keys) {
+      final visited = <String>{};
+      String? current = id;
+      while (current != null && parentById.containsKey(current)) {
+        if (!visited.add(current)) {
+          throw const FormatException('The backup contains a cyclic folder hierarchy.');
+        }
+        current = parentById[current];
+      }
+    }
+
+    final noteItems = decoded['notes'] is List
+        ? (decoded['notes'] as List).whereType<Map>().toList(growable: false)
+        : const <Map>[];
+    final attachmentItems = decoded['attachments'] is List
+        ? (decoded['attachments'] as List).whereType<Map>().toList(growable: false)
+        : const <Map>[];
+    if (attachmentItems.isNotEmpty) {
+      if (archiveFiles == null) {
+        throw const FormatException('This backup references attachments but has no attachment archive.');
+      }
+      final noteIds = noteItems
+          .map((item) => item['id']?.toString())
+          .whereType<String>()
+          .toSet();
+      for (final item in attachmentItems) {
+        final noteId = item['noteId']?.toString();
+        final path = item['archivePath']?.toString();
+        final data = path == null ? null : archiveFiles[path];
+        final size = (item['size'] as num?)?.toInt();
+        if (noteId == null || !noteIds.contains(noteId) ||
+            path == null || data == null || data.isEmpty ||
+            (size != null && size != data.length)) {
+          throw const FormatException('The backup contains a missing or invalid attachment.');
+        }
+      }
+    }
+
+    final folderMap = <String, String>{};
+    final pendingFolders = folderItems.toList(growable: true);
+
         ? folderData.whereType<Map>().toList(growable: true)
         : <Map>[];
     final oldFolderIds = pendingFolders
@@ -285,10 +332,7 @@ class NotebookTransferService {
     final noteIdMap = <String, String>{};
     final pendingContent = <({LocalNote note, Object? content})>[];
     var imported = 0;
-    final notes = decoded['notes'];
-    if (notes is! List) return imported;
-
-    for (final item in notes.whereType<Map>()) {
+    for (final item in noteItems) {
       final title = item['title']?.toString().trim();
       if (title == null || title.isEmpty) continue;
       final oldNoteId = item['id']?.toString();
@@ -308,13 +352,13 @@ class NotebookTransferService {
     }
 
     final assetIdMap = <String, String>{};
-    final attachmentData = decoded['attachments'];
-    if (attachmentData is List && attachmentData.isNotEmpty) {
+    final attachmentData = attachmentItems;
+    if (attachmentData.isNotEmpty) {
       if (archiveFiles == null) {
         throw const FormatException('This backup references attachments but has no attachment archive.');
       }
       final documents = FileDocumentRepository();
-      for (final item in attachmentData.whereType<Map>()) {
+      for (final item in attachmentData) {
         final oldNoteId = item['noteId']?.toString();
         final newNoteId = oldNoteId == null ? null : noteIdMap[oldNoteId];
         final oldAssetId = item['id']?.toString();
