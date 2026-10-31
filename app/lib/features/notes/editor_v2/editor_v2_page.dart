@@ -700,7 +700,15 @@ class _EditorV2PageState extends State<EditorV2Page>
     int pageNumber, {
     bool thumbnail = false,
   }) {
-    final key = '$assetId:$pageNumber:${thumbnail ? 'thumb' : 'full'}';
+    final zoom = _transform.value.getMaxScaleOnAxis();
+    final resolution = thumbnail
+        ? 'thumb'
+        : zoom >= 2
+            ? 'high'
+            : zoom >= 1
+                ? 'normal'
+                : 'fit';
+    final key = '$assetId:$pageNumber:$resolution';
 
     final cachedFuture = _pdfRasterFutureCache.remove(key);
     if (cachedFuture != null) {
