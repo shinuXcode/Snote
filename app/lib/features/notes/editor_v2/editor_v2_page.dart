@@ -5669,6 +5669,8 @@ class _EditorV2PageState extends State<EditorV2Page>
                           lineColor: lineColor,
                           spacing: spacing,
                           lineOpacity: lineOpacity,
+                          lineWidth: ((page['lineWidth'] as num?)?.toDouble() ?? .7),
+                          cornellAssist: page['cornellAssist'] == true,
                         ),
                         child: const SizedBox.expand(),
                       ),
