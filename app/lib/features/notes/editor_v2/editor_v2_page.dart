@@ -3098,13 +3098,16 @@ class _EditorV2PageState extends State<EditorV2Page>
 
     final navigator = Navigator.of(context);
     final existingRoute = _editorRoutes[note.id];
-    if (existingRoute != null) {
+    if (existingRoute != null && existingRoute.isActive) {
       _editorTabNotes.remove(note.id);
       _editorTabNotes[note.id] = note;
       setState(() {});
       navigator.popUntil((route) => identical(route, existingRoute));
       return;
     }
+    if (existingRoute != null) _editorRoutes.remove(note.id);
+    _editorTabNotes.remove(note.id);
+    _openEditorNoteIds.remove(note.id);
 
     while (_editorTabNotes.length >= _maxMountedEditorTabs) {
       final oldestId = _editorTabNotes.keys.firstWhere(
@@ -3137,8 +3140,13 @@ class _EditorV2PageState extends State<EditorV2Page>
       return;
     }
     final route = _editorRoutes[note.id];
-    if (route == null) return;
-    navigator.removeRoute(route);
+    if (route == null) {
+      _editorTabNotes.remove(note.id);
+      _openEditorNoteIds.remove(note.id);
+      if (mounted) setState(() {});
+      return;
+    }
+    if (route.isActive) navigator.removeRoute(route);
     _editorRoutes.remove(note.id);
     _editorTabNotes.remove(note.id);
     _openEditorNoteIds.remove(note.id);
