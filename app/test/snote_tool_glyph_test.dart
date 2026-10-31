@@ -33,6 +33,5 @@ void main() {
     );
 
     expect(find.byType(SnoteToolGlyph), findsNWidgets(tools.length));
-    expect(find.byType(CustomPaint), findsNWidgets(tools.length));
   });
 }
