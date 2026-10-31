@@ -7885,6 +7885,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                     selectedStrokeIds: selected,
                     eraserCursor: _tool == CanvasTool.eraser || _tool == CanvasTool.pixelEraser ? _eraserCursor : null,
                     eraserRadius: _eraserCursorRadius,
+                    highlighterOnTop: _settings.getBool('highlighterOnTop'),
                   ),
                   size: Size(_pageWidth, _pageHeight),
                 ),
@@ -7893,6 +7894,20 @@ class _EditorV2PageState extends State<EditorV2Page>
             ),
             Positioned.fill(child: _buildImages(page)),
             Positioned.fill(child: IgnorePointer(ignoring: page['locked'] == true, child: _buildTextBoxes(page))),
+            if (_settings.getBool('highlighterOnTop'))
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    painter: EditorV2InkPainter(
+                      strokes: strokes,
+                      liveStroke: live?.pen.type == PenType.highlighter ? live : null,
+                      selectedStrokeIds: selected,
+                      onlyHighlighters: true,
+                    ),
+                    size: Size(_pageWidth, _pageHeight),
+                  ),
+                ),
+              ),
             if (_lassoRect != null)
               Positioned(
                 left: math.min(_lassoRect!.left, _lassoRect!.right),
