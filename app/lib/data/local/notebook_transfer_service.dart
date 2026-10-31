@@ -7,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import 'notebook_transfer_crypto.dart';
 
 import 'file_document_repository.dart';
+import '../../features/folders/folder_cover_repository.dart';
 import 'folder_repository.dart';
 import 'note_repository.dart';
 
@@ -52,6 +53,7 @@ class NotebookTransferService {
     final notes = await repository.listAllVisible();
     final documents = FileDocumentRepository();
     final attachmentManifest = <Map<String, Object?>>[];
+    final coverManifest = <Map<String, Object?>>[];
     final archive = Archive();
 
     for (final note in notes) {
@@ -78,7 +80,25 @@ class NotebookTransferService {
       }
     }
 
+    final coverRepository = FolderCoverRepository.instance;
+    final covers = await coverRepository.list();
+    for (final cover in covers) {
+      final bytes = await coverRepository.imageForKey(cover.key);
+      if (bytes == null || bytes.isEmpty) {
+        throw StateError('Custom folder cover "${cover.name}" is missing and cannot be backed up safely.');
+      }
+      final archivePath = 'covers/${cover.id}.bin';
+      archive.addFile(ArchiveFile.bytes(archivePath, bytes));
+      coverManifest.add(<String, Object?>{
+        'id': cover.id,
+        'name': cover.name,
+        'size': bytes.length,
+        'archivePath': archivePath,
+      });
+    }
+
     manifest['attachments'] = attachmentManifest;
+    manifest['folderCovers'] = coverManifest;
     archive.addFile(ArchiveFile.bytes(
       'manifest.json',
       utf8.encode(const JsonEncoder.withIndent('  ').convert(manifest)),
@@ -256,6 +276,22 @@ class NotebookTransferService {
     final noteItems = decoded['notes'] is List
         ? (decoded['notes'] as List).whereType<Map>().toList(growable: false)
         : const <Map>[];
+    final preparedNotes = <({Map item, Map<String, Object?>? content})>[];
+    for (final item in noteItems) {
+      final rawContent = item['contentJson'];
+      Map<String, Object?>? content;
+      if (rawContent is String && rawContent.isNotEmpty) {
+        final parsed = jsonDecode(rawContent);
+        if (parsed is! Map) {
+          throw const FormatException('A backup note contains invalid content.');
+        }
+        content = parsed.cast<String, Object?>();
+      } else if (rawContent is Map) {
+        content = rawContent.cast<String, Object?>();
+      }
+      preparedNotes.add((item: item, content: content));
+    }
+
     final attachmentItems = decoded['attachments'] is List
         ? (decoded['attachments'] as List).whereType<Map>().toList(growable: false)
         : const <Map>[];
@@ -280,12 +316,44 @@ class NotebookTransferService {
       }
     }
 
+    final coverItems = decoded['folderCovers'] is List
+        ? (decoded['folderCovers'] as List).whereType<Map>().toList(growable: false)
+        : const <Map>[];
+    if (coverItems.isNotEmpty) {
+      if (archiveFiles == null) {
+        throw const FormatException('This backup references custom covers but has no cover archive.');
+      }
+      for (final item in coverItems) {
+        final path = item['archivePath']?.toString();
+        final data = path == null ? null : archiveFiles[path];
+        final size = (item['size'] as num?)?.toInt();
+        if (item['id'] == null || path == null || data == null || data.isEmpty ||
+            (size != null && size != data.length)) {
+          throw const FormatException('The backup contains a missing or invalid custom cover.');
+        }
+      }
+    }
+
     final folderMap = <String, String>{};
     final pendingFolders = folderItems.toList(growable: true);
     final oldFolderIds = folderItems
         .map((item) => item['id']?.toString())
         .whereType<String>()
         .toSet();
+
+    final coverIdMap = <String, String>{};
+    if (coverItems.isNotEmpty) {
+      final coverRepository = FolderCoverRepository.instance;
+      for (final item in coverItems) {
+        final oldKey = 'cover:${item['id']}';
+        final imageBytes = archiveFiles![item['archivePath']?.toString()]!;
+        final newId = await coverRepository.add(
+          name: item['name']?.toString() ?? 'Imported cover',
+          imageBytes: Uint8List.fromList(imageBytes),
+        );
+        coverIdMap[oldKey] = 'cover:$newId';
+      }
+    }
 
     // Create parents before children. A malformed cyclic hierarchy is rejected
     // rather than creating a partial, incorrectly nested tree.
@@ -308,11 +376,12 @@ class NotebookTransferService {
         final mappedParentId = oldParentId == null
             ? fallbackFolderId
             : folderMap[oldParentId] ?? fallbackFolderId;
+        final oldIconKey = item['iconKey']?.toString() ?? 'folder';
         final newFolder = await folders.create(
           name: folderName,
           parentId: mappedParentId,
           colorValue: (item['colorValue'] as num?)?.toInt() ?? defaultFolderColor,
-          iconKey: item['iconKey']?.toString() ?? 'folder',
+          iconKey: coverIdMap[oldIconKey] ?? oldIconKey,
         );
         if (item['isFavorite'] == true) {
           await folders.setFavorite(newFolder.id, true);
@@ -329,7 +398,8 @@ class NotebookTransferService {
     final noteIdMap = <String, String>{};
     final pendingContent = <({LocalNote note, Object? content})>[];
     var imported = 0;
-    for (final item in noteItems) {
+    for (final prepared in preparedNotes) {
+      final item = prepared.item;
       final title = item['title']?.toString().trim();
       if (title == null || title.isEmpty) continue;
       final oldNoteId = item['id']?.toString();
@@ -344,11 +414,11 @@ class NotebookTransferService {
       if (item['isFavorite'] == true) {
         await repository.setFavorite(note.id, true);
       }
-      pendingContent.add((note: note, content: item['contentJson']));
+      pendingContent.add((note: note, content: prepared.content));
       imported++;
     }
 
-    final assetIdMap = <String, String>{};
+    final assetIdMap = <String, String>{...coverIdMap};
     final attachmentData = attachmentItems;
     if (attachmentData.isNotEmpty) {
       if (archiveFiles == null) {
@@ -388,26 +458,12 @@ class NotebookTransferService {
     }
 
     for (final pending in pendingContent) {
-      final rawContent = pending.content;
-      if (rawContent is String && rawContent.isNotEmpty) {
-        try {
-          final parsed = jsonDecode(rawContent);
-          if (parsed is Map) {
-            final content = _remapAssetReferences(
-              parsed.cast<String, Object?>(),
-              assetIdMap,
-            );
-            await repository.saveContent(pending.note.id, content);
-          }
-        } catch (error) {
-          if (error is FormatException) rethrow;
-        }
-      } else if (rawContent is Map) {
-        final content = _remapAssetReferences(
-          rawContent.cast<String, Object?>(),
-          assetIdMap,
+      final content = pending.content;
+      if (content != null) {
+        await repository.saveContent(
+          pending.note.id,
+          _remapAssetReferences(content, assetIdMap),
         );
-        await repository.saveContent(pending.note.id, content);
       }
     }
     return imported;
