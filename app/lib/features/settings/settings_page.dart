@@ -448,9 +448,11 @@ class _SettingsPageState extends State<SettingsPage> {
       subtitle: const Text('Choose a template for new pages, or inherit the current page.'),
       trailing: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
-          value: _settings.getString('defaultPageTemplate').isEmpty
-              ? 'inherit'
-              : _settings.getString('defaultPageTemplate'),
+          value: PageTemplate.values.any(
+            (template) => template.name == _settings.getString('defaultPageTemplate'),
+          )
+              ? _settings.getString('defaultPageTemplate')
+              : 'inherit',
           items: [
             const DropdownMenuItem(value: 'inherit', child: Text('Inherit')),
             ...PageTemplate.values.map(
