@@ -81,7 +81,7 @@ class _QrTransferPageState extends State<QrTransferPage> {
       if (encryptedBytes.length > 128 * 1024) {
         throw StateError(
           'This selection is too large for a reliable QR transfer (128 KB limit). '
-          'Use the encrypted Snote backup file for large PDFs or attachments.',
+          'Use Export encrypted file from the same note or folder menu for large PDFs or attachments.',
         );
       }
       final payload = base64Encode(encryptedBytes);
