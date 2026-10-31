@@ -94,13 +94,14 @@ class NoteRepository {
   Future<LocalNote> create({
     String title = 'Untitled note',
     String? folderId,
+    String noteType = 'handwriting',
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final note = LocalNote(
       id: _uuid.v4(),
       title: title.trim().isEmpty ? 'Untitled note' : title.trim(),
       folderId: folderId,
-      noteType: 'handwriting',
+      noteType: noteType,
       createdAt: now,
       updatedAt: now,
       version: 1,
