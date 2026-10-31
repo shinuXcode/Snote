@@ -3521,13 +3521,49 @@ class _EditorV2PageState extends State<EditorV2Page>
           ),
           const SizedBox(height: 8),
           Row(children: [const Icon(Icons.line_weight_rounded, size: 17), const SizedBox(width: 7), Text('Stroke size: ${size.toStringAsFixed(1)}')]),
-          Slider(
-            min: .5,
-            max: 40,
-            value: size.clamp(.5, 40),
-            onChanged: (value) { setPanelState(() => size = value); saveProfile(persist: false); },
-            onChangeEnd: (_) => saveProfile(),
-          ),
+          if (targetTool == CanvasTool.lasso)
+            Row(
+              children: [
+                IconButton(
+                  tooltip: 'Decrease lasso size',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () {
+                    setPanelState(() => size = (size - .5).clamp(.5, 40).toDouble());
+                    saveProfile();
+                  },
+                  icon: const Icon(Icons.remove_circle_outline_rounded),
+                ),
+                Expanded(
+                  child: Slider(
+                    min: .5,
+                    max: 40,
+                    value: size.clamp(.5, 40),
+                    onChanged: (value) {
+                      setPanelState(() => size = value);
+                      saveProfile(persist: false);
+                    },
+                    onChangeEnd: (_) => saveProfile(),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Increase lasso size',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () {
+                    setPanelState(() => size = (size + .5).clamp(.5, 40).toDouble());
+                    saveProfile();
+                  },
+                  icon: const Icon(Icons.add_circle_outline_rounded),
+                ),
+              ],
+            )
+          else
+            Slider(
+              min: .5,
+              max: 40,
+              value: size.clamp(.5, 40),
+              onChanged: (value) { setPanelState(() => size = value); saveProfile(persist: false); },
+              onChangeEnd: (_) => saveProfile(),
+            ),
           Row(children: [const Icon(Icons.opacity_rounded, size: 17), const SizedBox(width: 7), Text('Opacity: ${(opacity * 100).round()}%')]),
           Slider(
             min: .05,
