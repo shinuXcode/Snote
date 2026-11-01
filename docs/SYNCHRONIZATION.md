@@ -19,6 +19,7 @@
 - SyncJournal exposes local status and pending operations.
 - SyncTransport defines a provider-neutral encrypted-object contract.
 - HTTPS WebDAV adapter supports collection discovery, bounded object listing, immutable create-only uploads and downloads.
+- Google Drive adapter stores immutable encrypted objects in the user's private `appDataFolder`; it accepts a short-lived OAuth token from the host app and never stores credentials.
 - Journal delivery now has atomic leases, idempotent acknowledgement, retry release and stale-lease recovery.
 - Journal and WebDAV tests cover rollback, sequence order, retries, recovery, HTTPS-only URLs and object path validation.
 - Settings exposes a Sync & Devices page without claiming network providers are connected.
@@ -26,10 +27,11 @@
 ## Remaining work
 1. Connect journal leases to an encrypted change-pack builder and verified apply pipeline.
 2. Implement QR-authenticated LAN pairing and transfer.
-3. Implement Google Drive appDataFolder and user-selected-folder adapters.
-4. Add domain-specific merge for handwriting, text, folders, attachments and PDF annotations.
-5. Add key recovery, device revocation, retention and garbage collection.
-6. Add platform-specific best-effort background scheduling and user-facing provider setup.
+3. Add Google OAuth consent/token refresh and user-facing Drive account setup; the appDataFolder transport is implemented.
+4. Add user-facing HTTPS WebDAV configuration and connection testing; the transport is implemented.
+5. Add domain-specific merge for handwriting, text, folders, attachments and PDF annotations.
+6. Add key recovery, device revocation, retention and garbage collection.
+7. Add platform-specific best-effort background scheduling and user-facing provider setup.
 
 ## Constraints
 - Never sync the SQLite database file as a unit.
