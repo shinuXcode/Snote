@@ -27,7 +27,7 @@ void main() {
               "name": "snote_note-01.blob",
               "size": "128",
               "modifiedTime": "2026-11-01T12:00:00.000Z",
-              "appProperties": {"sha256": "\${'b' * 64}"}
+              "appProperties": {"sha256": "${'b' * 64}"}
             },
             {"id":"other","name":"photo.png","size":"12"},
             {"id":"bad","name":"snote_../bad.blob","size":"12"}
