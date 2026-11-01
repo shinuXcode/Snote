@@ -21,6 +21,7 @@ void main() {
       expect(request.url.queryParameters['q'], contains("'appDataFolder' in parents"));
       return http.Response('''
         {
+          "nextPageToken": "next-page-2",
           "files": [
             {
               "id": "drive-id-1",
@@ -42,7 +43,9 @@ void main() {
     );
     await transport.connect();
     expect(transport.kind, SyncProviderKind.googleDrive);
-    final objects = await transport.listObjects();
+    final page = await transport.listObjects();
+    final objects = page.objects;
+    expect(page.nextCursor, 'next-page-2');
 
     expect(objects, hasLength(1));
     expect(objects.single.objectId, 'note-01');
