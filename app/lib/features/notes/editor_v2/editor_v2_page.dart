@@ -130,7 +130,9 @@ class _EditorV2PageState extends State<EditorV2Page>
         : shortToLong;
   }
   static const int _maxPdfPagesPerImport = 40;
-  static const int _maxPdfRasterCacheBytes = 48 * 1024 * 1024;
+  // Keep decoded PDF page rasters bounded on memory-constrained phones.
+  // The original PDF remains attached and visible pages can be rerendered.
+  static const int _maxPdfRasterCacheBytes = 32 * 1024 * 1024;
   static const List<Color> _palette = <Color>[
     Color(0xff111827), Color(0xff263238), Color(0xff546e7a), Color(0xff90a4ae),
     Color(0xff000000), Color(0xffffffff), Color(0xff37474f), Color(0xff78909c),
@@ -670,10 +672,13 @@ class _EditorV2PageState extends State<EditorV2Page>
       final devicePixelRatio =
           WidgetsBinding.instance.platformDispatcher.views.first.devicePixelRatio;
       final zoom = _transform.value.getMaxScaleOnAxis().clamp(.5, 3.0).toDouble();
+      // PDF rasterization is the most memory-intensive part of opening a
+      // textbook. Cap the first-pass bitmap size to avoid multi-page OOMs;
+      // zooming still rerenders the current page at a higher bounded scale.
       final maxDimension = thumbnail
-          ? 320.0
-          : (math.max(page.width, page.height) * devicePixelRatio * zoom * 1.2)
-              .clamp(1200.0, 2800.0)
+          ? 256.0
+          : (math.max(page.width, page.height) * devicePixelRatio * zoom)
+              .clamp(960.0, 2000.0)
               .toDouble();
       final scale = math.min(maxDimension / page.width, maxDimension / page.height);
       final rendered = await page.render(
@@ -692,7 +697,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   void _rememberPdfRasterFuture(String key, Future<Uint8List?> future) {
     _pdfRasterFutureCache.remove(key);
     _pdfRasterFutureCache[key] = future;
-    while (_pdfRasterFutureCache.length > 12) {
+    while (_pdfRasterFutureCache.length > 8) {
       _pdfRasterFutureCache.remove(_pdfRasterFutureCache.keys.first);
     }
   }
