@@ -13,6 +13,7 @@ import '../share/qr_import_page.dart';
 import '../share/qr_transfer_page.dart';
 import '../tools/screenshot_import_page.dart';
 import '../trash/trash_page.dart';
+import '../sync/sync_center_page.dart';
 
 class SettingsPage extends StatefulWidget {
   final bool noteOnly;
@@ -300,6 +301,15 @@ class _SettingsPageState extends State<SettingsPage> {
           title: const Text('Import / export notes'),
           subtitle: const Text('Portable Snote package, JSON and text formats.'),
           onTap: _transfer,
+        )),
+      ]),
+      if (!_noteOnly && (_query.isEmpty || 'sync devices cloud wifi webdav'.contains(_query))) _group('Sync & Devices', [
+        Card(child: ListTile(
+          leading: const Icon(Icons.sync_rounded),
+          title: const Text('Sync & Devices', style: TextStyle(fontWeight: FontWeight.w800)),
+          subtitle: const Text('View local change journal and available synchronization methods.'),
+          trailing: const Icon(Icons.chevron_right_rounded),
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SyncCenterPage())),
         )),
       ]),
       if (!_noteOnly && (_query.isEmpty || 'updates about release app notices'.contains(_query))) _group('Updates & About', [
