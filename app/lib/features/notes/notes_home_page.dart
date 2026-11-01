@@ -1636,7 +1636,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
                 onPressed: () => Scaffold.of(context).openDrawer(),
                 icon: const Icon(Icons.menu_rounded),
               )),
-              const SnoteLogo(size: 34),
+              const SnoteLogo(size: 40),
               const Spacer(),
               IconButton(onPressed: () => setState(() { _searchVisible = !_searchVisible; if (!_searchVisible) _search.clear(); }), tooltip: 'Search notes', icon: const Icon(Icons.search_rounded)),
               IconButton(
@@ -1866,9 +1866,11 @@ class _TopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
         child: Row(
           children: [
+            const SnoteLogo(size: 42),
+            const SizedBox(width: 20),
             if (searchVisible)
               Expanded(child: TextField(
                 controller: search,
@@ -1879,8 +1881,10 @@ class _TopBar extends StatelessWidget {
                   suffixIcon: IconButton(onPressed: onToggleSearch, icon: const Icon(Icons.close_rounded), tooltip: 'Close search'),
                 ),
               ))
-            else
+            else ...[
+              const Spacer(),
               IconButton(onPressed: onToggleSearch, tooltip: 'Search notes', icon: const Icon(Icons.search_rounded)),
+            ],
             const SizedBox(width: 8),
             IconButton(
               onPressed: onToggleView,
@@ -2631,8 +2635,8 @@ class _WorkspaceEmpty extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.draw_outlined, size: 54, color: Theme.of(context).colorScheme.primary),
-                const SizedBox(height: 16),
+                const SnoteLogo(size: 76),
+                const SizedBox(height: 18),
                 const Text('Open a note to start writing', textAlign: TextAlign.center, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 8),
                 const Text('Choose a note from the list, or create a new one. The workspace will not stay blank.', textAlign: TextAlign.center),
