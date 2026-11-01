@@ -64,8 +64,8 @@ class SyncJournal {
     });
   }
 
-  static Future<SyncJournalStatus> status() async {
-    final db = await SnoteDatabase.open();
+  static Future<SyncJournalStatus> status({Database? database}) async {
+    final db = database ?? await SnoteDatabase.open();
     return db.transaction((tx) async {
       final deviceId = await _ensureDeviceId(tx);
       final counts = await tx.rawQuery(
@@ -121,13 +121,32 @@ class SyncJournal {
         where: "status = 'in_progress' AND lease_until <= ?",
         whereArgs: [timestamp],
       );
-      final rows = await tx.query(
+      // Never skip an earlier unacknowledged operation: doing so would
+      // create a sequence gap that a remote device cannot safely checkpoint.
+      final outstanding = await tx.query(
         'sync_operations',
-        where: "status = 'pending' AND (next_attempt_at IS NULL OR next_attempt_at <= ?)",
-        whereArgs: [timestamp],
+        where: "status != 'uploaded'",
         orderBy: 'sequence ASC',
-        limit: limit.clamp(1, 500).toInt(),
+        limit: 500,
       );
+      if (outstanding.isEmpty ||
+          outstanding.first['status'] != 'pending' ||
+          ((outstanding.first['next_attempt_at'] as num?)?.toInt() ?? 0) > timestamp) {
+        return SyncJournalLease(id: leaseId, operations: const []);
+      }
+
+      final firstSequence = (outstanding.first['sequence'] as num).toInt();
+      final rows = <Map<String, Object?>>[];
+      var expectedSequence = firstSequence;
+      for (final operation in outstanding) {
+        final sequence = (operation['sequence'] as num).toInt();
+        if (sequence != expectedSequence || operation['status'] != 'pending') break;
+        final retryAt = (operation['next_attempt_at'] as num?)?.toInt() ?? 0;
+        if (retryAt > timestamp) break;
+        rows.add(operation);
+        expectedSequence++;
+        if (rows.length >= limit.clamp(1, 500).toInt()) break;
+      }
       if (rows.isEmpty) {
         return SyncJournalLease(id: leaseId, operations: const []);
       }

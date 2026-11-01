@@ -59,16 +59,21 @@ void main() {
     expect(first.operations, hasLength(1));
     expect(first.operations.single['status'], 'in_progress');
 
+    // A later sequence must not leapfrog an earlier live lease.
     final second = await SyncJournal.claimPending(limit: 5, database: db);
-    expect(second.operations, hasLength(1));
-    expect(second.operations.single['entity_id'], isNot(first.operations.single['entity_id']));
+    expect(second.operations, isEmpty);
 
     expect(await SyncJournal.acknowledge(first, database: db), 1);
     expect(await SyncJournal.acknowledge(first, database: db), 0);
-    expect(await SyncJournal.pending(database: db), hasLength(0));
+
+    final next = await SyncJournal.claimPending(limit: 5, database: db);
+    expect(next.operations, hasLength(1));
+    expect(next.operations.single['entity_id'], 'n2');
+    expect(await SyncJournal.acknowledge(next, database: db), 1);
+    expect(await SyncJournal.pending(database: db), isEmpty);
 
     final uploaded = await db.query('sync_operations', where: "status = 'uploaded'");
-    expect(uploaded, hasLength(1));
+    expect(uploaded, hasLength(2));
   });
 
   test('released operation observes exponential backoff before retry', () async {
@@ -104,6 +109,34 @@ void main() {
       now: start.add(const Duration(seconds: 1)),
     );
     expect(retry.operations.single['attempts'], 2);
+  });
+
+
+  test('a delayed earlier retry blocks later sequence numbers', () async {
+    final start = DateTime.utc(2026, 11, 1, 12);
+    await SyncJournal.record(db, entityType: 'note', entityId: 'n1', operation: 'upsert');
+    await SyncJournal.record(db, entityType: 'note', entityId: 'n2', operation: 'upsert');
+    final first = await SyncJournal.claimPending(limit: 1, database: db, now: start);
+    await SyncJournal.release(
+      first,
+      error: 'offline',
+      database: db,
+      now: start,
+    );
+
+    final blocked = await SyncJournal.claimPending(
+      limit: 10,
+      database: db,
+      now: start.add(const Duration(milliseconds: 500)),
+    );
+    expect(blocked.operations, isEmpty);
+
+    final due = await SyncJournal.claimPending(
+      limit: 10,
+      database: db,
+      now: start.add(const Duration(seconds: 1)),
+    );
+    expect(due.operations.map((row) => row['sequence']), [1, 2]);
   });
 
   test('active lease can be renewed before expiry', () async {
