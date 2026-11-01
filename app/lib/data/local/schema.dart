@@ -1,4 +1,4 @@
-const databaseVersion = 11;
+const databaseVersion = 13;
 const createNotesTable = '''
 CREATE TABLE notes (
   id TEXT PRIMARY KEY,
@@ -108,5 +108,38 @@ CREATE TABLE sync_operations (
   last_error TEXT,
   lease_id TEXT,
   lease_until INTEGER,
+  next_attempt_at INTEGER,
   UNIQUE(device_id, sequence)
+)''';
+
+const createSyncDeviceCursorsTable = '''
+CREATE TABLE sync_device_cursors (
+  device_id TEXT PRIMARY KEY,
+  last_sequence INTEGER NOT NULL DEFAULT 0,
+  checkpoint_id TEXT,
+  updated_at INTEGER NOT NULL
+)''';
+
+const createSyncAppliedPacksTable = '''
+CREATE TABLE sync_applied_packs (
+  pack_id TEXT PRIMARY KEY,
+  device_id TEXT NOT NULL,
+  from_sequence INTEGER NOT NULL,
+  to_sequence INTEGER NOT NULL,
+  sha256 TEXT NOT NULL,
+  applied_at INTEGER NOT NULL
+)''';
+
+const createSyncConflictsTable = '''
+CREATE TABLE sync_conflicts (
+  conflict_id TEXT PRIMARY KEY,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  local_revision_json TEXT NOT NULL,
+  remote_revision_json TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open',
+  created_at INTEGER NOT NULL,
+  resolved_at INTEGER,
+  resolution_json TEXT
 )''';
