@@ -206,28 +206,15 @@ class GoogleDriveSyncTransport implements SyncTransport {
     final file = await _findObject(objectId);
     if (file == null) throw StateError('Sync object was not found in Google Drive.');
     final fileId = file['id']?.toString();
-    if (fileId == null || !RegExp(r'^[A-Za-z0-9_-]{5,200}
+    if (fileId == null ||
+        !RegExp(r'^[A-Za-z0-9_-]{5,200}$').hasMatch(fileId)) {
       throw const FormatException('Google Drive returned an invalid file identifier.');
     }
-    final uri = Uri.https('www.googleapis.com', '/drive/v3/files/${Uri.encodeComponent(fileId)}', {'alt': 'media'});
-    final response = await _send(http.Request('GET', uri), accepted: {200});
-    return response.stream;
-  }
-
-  void _requireConnected() {
-    if (!_connected) throw StateError('Connect to Google Drive before syncing.');
-  }
-
-  @override
-  Future<void> disconnect() async {
-    _connected = false;
-    if (_ownsClient) _client.close();
-  }
-}
-).hasMatch(fileId)) {
-      throw const FormatException('Google Drive returned an invalid file identifier.');
-    }
-    final uri = Uri.https('www.googleapis.com', '/drive/v3/files/$fileId', {'alt': 'media'});
+    final uri = Uri.https(
+      'www.googleapis.com',
+      '/drive/v3/files/${Uri.encodeComponent(fileId)}',
+      {'alt': 'media'},
+    );
     final response = await _send(http.Request('GET', uri), accepted: {200});
     return response.stream;
   }
