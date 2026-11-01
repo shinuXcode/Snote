@@ -156,7 +156,9 @@ class SyncChangePack {
         fromSequence: payload['fromSequence'] as int? ?? -1,
         toSequence: payload['toSequence'] as int? ?? -1,
         baseCheckpoint: payload['baseCheckpoint']?.toString(),
-        vectorClock: clock.map((key, value) => MapEntry(key.toString(), value as int)),
+        vectorClock: clock.cast<String, dynamic>().map<String, int>(
+          (key, value) => MapEntry(key, value as int),
+        ),
         operations: operations.map((value) {
           if (value is! Map) throw const FormatException('Invalid operation record.');
           return value.cast<String, dynamic>();
