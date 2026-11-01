@@ -180,6 +180,10 @@ class SnoteDatabase {
           'ON sync_operations(status, sequence)',
         );
         await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_sync_operations_retry_schedule '
+          'ON sync_operations(status, next_attempt_at, sequence)',
+        );
+        await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_sync_operations_entity '
           'ON sync_operations(entity_type, entity_id, created_at)',
         );
