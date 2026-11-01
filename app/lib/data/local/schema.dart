@@ -1,4 +1,4 @@
-const databaseVersion = 10;
+const databaseVersion = 11;
 const createNotesTable = '''
 CREATE TABLE notes (
   id TEXT PRIMARY KEY,
@@ -106,5 +106,7 @@ CREATE TABLE sync_operations (
   status TEXT NOT NULL DEFAULT 'pending',
   attempts INTEGER NOT NULL DEFAULT 0,
   last_error TEXT,
+  lease_id TEXT,
+  lease_until INTEGER,
   UNIQUE(device_id, sequence)
 )''';

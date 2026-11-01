@@ -26,11 +26,17 @@ abstract interface class SyncTransport {
   SyncProviderKind get kind;
   SyncTransportCapabilities get capabilities;
   Future<void> connect();
-  Future<List<SyncRemoteObject>> listObjects({String? cursor});
+  Future<SyncRemotePage> listObjects({String? cursor});
   Future<void> uploadObject({
     required String objectId, required Stream<List<int>> encryptedBytes,
     required int byteLength, required String sha256,
   });
   Future<Stream<List<int>>> downloadObject(String objectId);
   Future<void> disconnect();
+}
+
+class SyncRemotePage {
+  const SyncRemotePage({required this.objects, this.nextCursor});
+  final List<SyncRemoteObject> objects;
+  final String? nextCursor;
 }

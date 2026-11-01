@@ -13,22 +13,25 @@
 - The production README promises local-only storage.
 
 ## Foundation added
-- Schema v10 adds sync_metadata and append-only sync_operations.
+- Schema v11 adds sync_metadata and append-only sync_operations.
 - Note/folder queue mutations append journal operations in the same SQLite transaction.
 - Each installation receives a persistent device ID and monotonic local sequence.
 - SyncJournal exposes local status and pending operations.
 - SyncTransport defines a provider-neutral encrypted-object contract.
+- HTTPS WebDAV adapter supports collection discovery, depth-one object listing, immutable create-only uploads and downloads.
+- Google Drive adapter stores immutable encrypted objects in the user's private `appDataFolder`; it accepts a short-lived OAuth token from the host app, exposes pagination cursors and never stores credentials.
+- Journal delivery now has atomic leases, idempotent acknowledgement, retry release and stale-lease recovery.
+- Automated tests cover journal rollback, sequence order, retries, crash recovery, WebDAV HTTPS/path boundaries and Google Drive listing/download.
 - Settings exposes a Sync & Devices page without claiming network providers are connected.
 
-## Next stages
-1. Add tests for journal atomicity, migration from v9, duplicate handling and crash recovery.
-2. Define immutable encrypted object and manifest formats.
-3. Implement QR-authenticated LAN pairing and transfer.
-4. Implement Google Drive appDataFolder and user-selected-folder adapters.
-5. Implement WebDAV with ETag/conditional-write support.
-6. Add domain-specific merge for handwriting, text, folders, attachments and PDF annotations.
-7. Add key recovery, device revocation, retention and garbage collection.
-8. Add platform-specific best-effort background scheduling.
+## Remaining work
+1. Connect journal leases to an encrypted change-pack builder and verified apply pipeline.
+2. Implement QR-authenticated LAN pairing and transfer.
+3. Add Google OAuth consent/token refresh and user-facing Drive account setup; the appDataFolder transport is implemented.
+4. Add user-facing HTTPS WebDAV configuration and connection testing; the transport is implemented.
+5. Add domain-specific merge for handwriting, text, folders, attachments and PDF annotations.
+6. Add key recovery, device revocation, retention and garbage collection.
+7. Add platform-specific best-effort background scheduling and user-facing provider setup.
 
 ## Constraints
 - Never sync the SQLite database file as a unit.
