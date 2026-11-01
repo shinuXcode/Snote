@@ -50,6 +50,87 @@ class SyncJournal {
     });
   }
 
+  /// Requeues leases left behind by a killed process.
+  static Future<int> recoverExpiredLeases({DateTime? now}) async {
+    final db = await SnoteDatabase.open();
+    final timestamp = (now ?? DateTime.now()).millisecondsSinceEpoch;
+    return db.update(
+      'sync_operations',
+      {'status': 'pending', 'lease_id': null, 'lease_until': null},
+      where: "status = 'in_progress' AND lease_until <= ?",
+      whereArgs: [timestamp],
+    );
+  }
+
+  /// Atomically reserves a bounded batch. A single lease ID identifies this attempt.
+  static Future<SyncJournalLease> claimPending({
+    int limit = 50,
+    Duration leaseDuration = const Duration(minutes: 2),
+    DateTime? now,
+  }) async {
+    final db = await SnoteDatabase.open();
+    final timestamp = (now ?? DateTime.now()).millisecondsSinceEpoch;
+    final leaseId = _uuid.v4();
+    return db.transaction((tx) async {
+      await tx.update(
+        'sync_operations',
+        {'status': 'pending', 'lease_id': null, 'lease_until': null},
+        where: "status = 'in_progress' AND lease_until <= ?",
+        whereArgs: [timestamp],
+      );
+      final rows = await tx.query(
+        'sync_operations',
+        where: "status = 'pending'",
+        orderBy: 'sequence ASC',
+        limit: limit.clamp(1, 500).toInt(),
+      );
+      if (rows.isEmpty) {
+        return SyncJournalLease(id: leaseId, operations: const []);
+      }
+      final ids = rows.map((row) => row['operation_id'] as String).toList();
+      final placeholders = List.filled(ids.length, '?').join(',');
+      await tx.rawUpdate(
+        "UPDATE sync_operations SET status = 'in_progress', lease_id = ?, lease_until = ?, attempts = attempts + 1 WHERE status = 'pending' AND operation_id IN ($placeholders)",
+        [leaseId, timestamp + leaseDuration.inMilliseconds, ...ids],
+      );
+      final claimed = await tx.query(
+        'sync_operations',
+        where: 'lease_id = ? AND status = ?',
+        whereArgs: [leaseId, 'in_progress'],
+        orderBy: 'sequence ASC',
+      );
+      return SyncJournalLease(id: leaseId, operations: claimed);
+    });
+  }
+
+  /// Acknowledge only rows owned by this lease; repeated acknowledgements are safe.
+  static Future<int> acknowledge(SyncJournalLease lease) async {
+    if (lease.operations.isEmpty) return 0;
+    final db = await SnoteDatabase.open();
+    final ids = lease.operations.map((row) => row['operation_id'] as String).toList();
+    final placeholders = List.filled(ids.length, '?').join(',');
+    return db.rawUpdate(
+      "UPDATE sync_operations SET status = 'uploaded', lease_id = NULL, lease_until = NULL, last_error = NULL WHERE lease_id = ? AND operation_id IN ($placeholders)",
+      [lease.id, ...ids],
+    );
+  }
+
+  /// Return a failed batch to pending without losing its attempt count.
+  static Future<int> release(
+    SyncJournalLease lease, {
+    required String error,
+  }) async {
+    if (lease.operations.isEmpty) return 0;
+    final db = await SnoteDatabase.open();
+    final ids = lease.operations.map((row) => row['operation_id'] as String).toList();
+    final placeholders = List.filled(ids.length, '?').join(',');
+    final safeError = error.length > 1000 ? error.substring(0, 1000) : error;
+    return db.rawUpdate(
+      "UPDATE sync_operations SET status = 'pending', lease_id = NULL, lease_until = NULL, last_error = ? WHERE lease_id = ? AND operation_id IN ($placeholders)",
+      [safeError, lease.id, ...ids],
+    );
+  }
+
   static Future<List<Map<String, Object?>>> pending({int limit = 100}) async {
     final db = await SnoteDatabase.open();
     return db.query('sync_operations', where: "status = 'pending'",
@@ -62,4 +143,10 @@ class SyncJournalStatus {
   final String deviceId;
   final int pendingOperations;
   final int lastSequence;
+}
+
+class SyncJournalLease {
+  const SyncJournalLease({required this.id, required this.operations});
+  final String id;
+  final List<Map<String, Object?>> operations;
 }
