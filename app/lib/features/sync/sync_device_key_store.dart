@@ -21,7 +21,8 @@ class SyncDeviceKeyStore {
       }
       return decoded;
     }
-    final bytes = List<int>.generate(32, (_) => math.Random.secure().nextInt(256));
+    final random = math.Random.secure();
+    final bytes = List<int>.generate(32, (_) => random.nextInt(256));
     await _storage.write(key: _storageKey, value: base64Encode(bytes));
     return bytes;
   }
