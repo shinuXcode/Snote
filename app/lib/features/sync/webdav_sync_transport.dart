@@ -91,7 +91,7 @@ class WebDavSyncTransport implements SyncTransport {
   }
 
   @override
-  Future<List<SyncRemoteObject>> listObjects({String? cursor}) async {
+  Future<SyncRemotePage> listObjects({String? cursor}) async {
     _requireConnected();
     if (cursor != null && cursor.isNotEmpty) {
       throw ArgumentError('WebDAV listing does not use continuation cursors.');
@@ -130,7 +130,7 @@ class WebDavSyncTransport implements SyncTransport {
       ));
     }
     objects.sort((a, b) => a.objectId.compareTo(b.objectId));
-    return objects;
+    return SyncRemotePage(objects: objects);
   }
 
   String? _descendantText(XmlElement element, String localName) {
