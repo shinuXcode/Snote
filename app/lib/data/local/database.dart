@@ -96,7 +96,7 @@ class SnoteDatabase {
             declaration: 'INTEGER',
           );
         }
-        if (oldVersion >= 11 && oldVersion < 12) {
+        if (oldVersion < 12) {
           await _addColumnIfMissing(
             db,
             table: 'sync_operations',
