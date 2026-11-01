@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/config/account_scope.dart';
 import 'local_file_store.dart';
 import 'database.dart';
+import '../../features/sync/sync_journal.dart';
 
 const defaultFolderColor = 0xff5b6cf9;
 
@@ -559,6 +560,12 @@ class FolderRepository {
       'created_at': DateTime.now().millisecondsSinceEpoch,
       'attempts': 0,
     });
+    await SyncJournal.record(
+      db,
+      entityType: 'folder',
+      entityId: id,
+      operation: operation,
+    );
   }
 
   Future<void> queueNote(
@@ -580,5 +587,11 @@ class FolderRepository {
       'created_at': DateTime.now().millisecondsSinceEpoch,
       'attempts': 0,
     });
+    await SyncJournal.record(
+      db,
+      entityType: 'note',
+      entityId: noteId,
+      operation: operation,
+    );
   }
 }

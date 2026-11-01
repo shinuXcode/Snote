@@ -39,6 +39,8 @@ class SnoteDatabase {
         await db.execute(createPagesTable);
         await db.execute(createAttachmentsTable);
         await db.execute(createSyncQueueTable);
+        await db.execute(createSyncMetadataTable);
+        await db.execute(createSyncOperationsTable);
         await db.execute(createAppNotificationsTable);
         await db.execute(createFolderCoversTable);
       },
@@ -74,6 +76,11 @@ class SnoteDatabase {
         }
         if (oldVersion < 7) {
           await db.execute(createFolderCoversTable);
+        }
+        if (oldVersion < 10) {
+          // Additive-only sync journal migration. Existing notes and files are untouched.
+          await db.execute(createSyncMetadataTable);
+          await db.execute(createSyncOperationsTable);
         }
         if (oldVersion < 9) {
           // Additive-only migration: existing notes and folders remain intact
@@ -145,6 +152,14 @@ class SnoteDatabase {
         await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_folder_covers_created '
           'ON folder_covers(created_at DESC)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_sync_operations_status_sequence '
+          'ON sync_operations(status, sequence)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_sync_operations_entity '
+          'ON sync_operations(entity_type, entity_id, created_at)',
         );
         await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_sync_queue_owner_entity '
