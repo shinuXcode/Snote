@@ -160,8 +160,8 @@ class SyncJournal {
     final placeholders = List.filled(ids.length, '?').join(',');
     final timestamp = (now ?? DateTime.now()).millisecondsSinceEpoch;
     return db.rawUpdate(
-      "UPDATE sync_operations SET lease_until = ? WHERE lease_id = ? AND status = 'in_progress' AND operation_id IN ($placeholders)",
-      [timestamp + leaseDuration.inMilliseconds, lease.id, ...ids],
+      "UPDATE sync_operations SET lease_until = ? WHERE lease_id = ? AND status = 'in_progress' AND lease_until > ? AND operation_id IN ($placeholders)",
+      [timestamp + leaseDuration.inMilliseconds, lease.id, timestamp, ...ids],
     );
   }
 
