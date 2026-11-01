@@ -1488,6 +1488,23 @@ class _NotesHomePageState extends State<NotesHomePage> {
     );
   }
 
+  /// Rebuild the notebook after returning from settings.
+  ///
+  /// Some device/plugin settings can leave the retained home route with stale
+  /// loading state. Clear that state first, then refresh repository data. A
+  /// failed refresh is handled by _load() and leaves the previous list visible.
+  Future<void> _openSettingsAndRefreshHome() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(builder: (_) => const SettingsPage()),
+    );
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _loadingMoreDatabaseNotes = false;
+    });
+    await _load();
+  }
+
   Future<void> _openPdfAnnotation() async {
     await Navigator.push(
       context,
@@ -1511,10 +1528,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
         _SideRail(
           expanded: !_sidebarCollapsed,
           onToggle: () => setState(() => _sidebarCollapsed = !_sidebarCollapsed),
-          onSettings: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const SettingsPage()),
-          ),
+          onSettings: () => unawaited(_openSettingsAndRefreshHome()),
           onUpdates: _openUpdates,
           onCovers: _openCoverLibrary,
           favoritesSelected: _favoritesOnly,
@@ -1650,10 +1664,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
                 icon: const Icon(Icons.collections_bookmark_outlined),
               ),
               IconButton(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const SettingsPage()),
-                ),
+                onPressed: () => unawaited(_openSettingsAndRefreshHome()),
                 tooltip: 'Settings',
                 icon: const Icon(Icons.tune_rounded),
               ),
