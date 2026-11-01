@@ -70,7 +70,9 @@ void main() {
 
     await transport.connect();
     expect(transport.kind, SyncProviderKind.webDav);
-    final objects = await transport.listObjects();
+    final page = await transport.listObjects();
+    final objects = page.objects;
+    expect(page.nextCursor, isNull);
 
     expect(objects, hasLength(1));
     expect(objects.single.objectId, 'abc123');
