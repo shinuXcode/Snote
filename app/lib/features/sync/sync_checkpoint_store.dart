@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:crypto/crypto.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -91,6 +93,9 @@ class SyncCheckpointStore {
       if (!isSnapshot && toSequence <= lastSequence) {
         return false;
       }
+      if (isSnapshot && toSequence < lastSequence) {
+        throw StateError('A snapshot cannot move a device cursor backwards.');
+      }
 
       // Any exception rolls back both the domain mutations and the checkpoint.
       await applyChanges(tx);
@@ -163,15 +168,5 @@ class SyncCheckpointStore {
     );
   }
 
-  static String _encode(Map<String, Object?> value) =>
-      value.entries.map((entry) => '"${entry.key}":${_jsonValue(entry.value)}').join(',').isEmpty
-          ? '{}'
-          : '{${value.entries.map((entry) => '"${entry.key}":${_jsonValue(entry.value)}').join(',')}}';
-
-  static String _jsonValue(Object? value) {
-    if (value == null) return 'null';
-    if (value is bool || value is num) return value.toString();
-    final escaped = value.toString().replaceAll(r'\', r'\\').replaceAll('"', r'\"');
-    return '"$escaped"';
-  }
+  static String _encode(Map<String, Object?> value) => jsonEncode(value);
 }
