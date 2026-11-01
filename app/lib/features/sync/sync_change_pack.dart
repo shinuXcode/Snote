@@ -94,7 +94,8 @@ class SyncChangePack {
     if (rawKey.length != 32) {
       throw ArgumentError('Sync encryption key must contain exactly 32 bytes.');
     }
-    final nonce = List<int>.generate(12, (_) => math.Random.secure().nextInt(256));
+    final random = math.Random.secure();
+    final nonce = List<int>.generate(12, (_) => random.nextInt(256));
     final cleartext = utf8.encode(jsonEncode(toPayload()));
     final box = await _cipher.encrypt(
       cleartext,
