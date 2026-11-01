@@ -41,7 +41,7 @@ class GoogleDriveSyncTransport implements SyncTransport {
   );
 
   Uri _objectQuery(String objectId) => _filesUri.replace(queryParameters: {
-    'q': "'appDataFolder' in parents and trashed = false and name = 'snote_\${objectId}.blob'",
+    'q': "'appDataFolder' in parents and trashed = false and name = 'snote_${objectId}.blob'",
     'fields': 'files(id,name,size,modifiedTime,appProperties)',
     'pageSize': '10',
   });
@@ -127,7 +127,7 @@ class GoogleDriveSyncTransport implements SyncTransport {
     final decoded = jsonDecode(await response.stream.bytesToString());
     if (decoded is! Map || decoded['files'] is! List) return null;
     for (final raw in (decoded['files'] as List).whereType<Map>()) {
-      if (raw['name'] == 'snote_\${objectId}.blob') return raw.cast<String, dynamic>();
+      if (raw['name'] == 'snote_${objectId}.blob') return raw.cast<String, dynamic>();
     }
     return null;
   }
@@ -156,9 +156,9 @@ class GoogleDriveSyncTransport implements SyncTransport {
       throw StateError('A different immutable object already uses this ID in Google Drive.');
     }
 
-    final boundary = 'snotee_\${DateTime.now().microsecondsSinceEpoch}';
+    final boundary = 'snotee_${DateTime.now().microsecondsSinceEpoch}';
     final metadata = utf8.encode(jsonEncode({
-      'name': 'snote_\${objectId}.blob',
+      'name': 'snote_${objectId}.blob',
       'parents': ['appDataFolder'],
       'appProperties': {'sha256': sha256.toLowerCase(), 'format': 'snotee-sync-v1'},
     }));
