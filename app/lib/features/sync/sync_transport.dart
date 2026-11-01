@@ -1,3 +1,5 @@
+import 'dart:async';
+
 enum SyncProviderKind { localNetwork, googleDrive, webDav, webRtc }
 
 class SyncRemoteObject {
