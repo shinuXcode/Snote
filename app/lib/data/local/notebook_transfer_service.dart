@@ -5,6 +5,7 @@ import 'package:archive/archive.dart';
 import 'package:file_picker/file_picker.dart';
 
 import 'folder_repository.dart';
+import 'notebook_import_folder_order.dart';
 import 'note_repository.dart';
 
 class NotebookTransferService {
@@ -126,13 +127,32 @@ class NotebookTransferService {
     final folderMap = <String, String>{};
     final folderData = decoded['folders'];
     if (folderData is List) {
-      for (final item in folderData.whereType<Map>()) {
-        final oldId = item['id']?.toString();
-        final folderName = item['name']?.toString().trim();
-        if (oldId == null || folderName == null || folderName.isEmpty) continue;
+      final validFolders = folderData
+          .whereType<Map>()
+          .map(
+            (item) => item.map<String, Object?>(
+              (key, value) => MapEntry(key.toString(), value),
+            ),
+          )
+          .where((item) {
+            final id = item['id']?.toString();
+            final name = item['name']?.toString().trim();
+            return id != null && id.isNotEmpty && name != null && name.isNotEmpty;
+          })
+          .toList(growable: false);
+
+      // Exports are sorted for display, not necessarily parent-first. Resolve
+      // parent folders before children so import order cannot flatten a tree.
+      for (final item in orderImportedFolders(validFolders)) {
+        final oldId = item['id']!.toString();
+        final folderName = item['name']!.toString().trim();
         final parentId = item['parentId']?.toString();
-        final mappedParentId = parentId == null ? fallbackFolderId : folderMap[parentId] ?? fallbackFolderId;
-        final newFolder = await folders.create(name: folderName, parentId: mappedParentId);
+        final mappedParentId =
+            parentId == null ? fallbackFolderId : folderMap[parentId] ?? fallbackFolderId;
+        final newFolder = await folders.create(
+          name: folderName,
+          parentId: mappedParentId,
+        );
         folderMap[oldId] = newFolder.id;
       }
     }
