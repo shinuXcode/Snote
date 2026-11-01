@@ -43,7 +43,7 @@ class WebDavSyncTransport implements SyncTransport {
     supportsBackgroundOperation: false,
   );
 
-  String get _authorization => 'Basic ${base64Encode(utf8.encode('$username:$password'))}';
+  String get _authorization => "Basic ${base64Encode(utf8.encode('$username:$password'))}";
 
   Uri _objectUri(String objectId) {
     if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,179}$').hasMatch(objectId)) {
