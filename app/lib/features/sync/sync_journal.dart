@@ -64,8 +64,8 @@ class SyncJournal {
     });
   }
 
-  static Future<SyncJournalStatus> status() async {
-    final db = await SnoteDatabase.open();
+  static Future<SyncJournalStatus> status({Database? database}) async {
+    final db = database ?? await SnoteDatabase.open();
     return db.transaction((tx) async {
       final deviceId = await _ensureDeviceId(tx);
       final counts = await tx.rawQuery(
