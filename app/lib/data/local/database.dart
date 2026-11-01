@@ -96,6 +96,14 @@ class SnoteDatabase {
             declaration: 'INTEGER',
           );
         }
+        if (oldVersion >= 11 && oldVersion < 12) {
+          await _addColumnIfMissing(
+            db,
+            table: 'sync_operations',
+            column: 'next_attempt_at',
+            declaration: 'INTEGER',
+          );
+        }
         if (oldVersion < 9) {
           // Additive-only migration: existing notes and folders remain intact
           // and default to not-favorited.
