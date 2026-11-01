@@ -157,6 +157,6 @@ void main() {
   test('new schema includes durable lease columns', () async {
     final columns = await db.rawQuery('PRAGMA table_info(sync_operations)');
     final names = columns.map((row) => row['name']).toSet();
-    expect(names, containsAll(['lease_id', 'lease_until', 'attempts', 'status']));
+    expect(names, containsAll(['lease_id', 'lease_until', 'next_attempt_at', 'attempts', 'status']));
   });
 }
