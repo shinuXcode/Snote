@@ -29,7 +29,7 @@ class WebDavSyncTransport implements SyncTransport {
         uri.userInfo.isNotEmpty || uri.hasQuery || uri.hasFragment) {
       throw ArgumentError('WebDAV requires an HTTPS collection URL without embedded credentials, query or fragment.');
     }
-    final path = uri.path.endsWith('/') ? uri.path : '\${uri.path}/';
+    final path = uri.path.endsWith('/') ? uri.path : '${uri.path}/';
     return uri.replace(path: path);
   }
 
@@ -43,13 +43,13 @@ class WebDavSyncTransport implements SyncTransport {
     supportsBackgroundOperation: false,
   );
 
-  String get _authorization => 'Basic \${base64Encode(utf8.encode('$username:$password'))}';
+  String get _authorization => 'Basic ${base64Encode(utf8.encode('$username:$password'))}';
 
   Uri _objectUri(String objectId) {
     if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,179}$').hasMatch(objectId)) {
       throw ArgumentError.value(objectId, 'objectId', 'Invalid sync object ID.');
     }
-    return collectionUri.resolve('\${Uri.encodeComponent(objectId)}.blob');
+    return collectionUri.resolve('${Uri.encodeComponent(objectId)}.blob');
   }
 
   Future<http.StreamedResponse> _send(http.BaseRequest request, {required Set<int> accepted}) async {
