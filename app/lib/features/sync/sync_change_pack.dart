@@ -81,6 +81,18 @@ class SyncChangePack {
         throw const FormatException('Operation sequence falls outside the declared pack range.');
       }
     }
+    if (kind == SyncChangePackKind.delta) {
+      final orderedSequences = sequences.toList()..sort();
+      final expectedCount = toSequence - fromSequence + 1;
+      if (orderedSequences.length != expectedCount) {
+        throw const FormatException('Delta pack must include every sequence in its declared range.');
+      }
+      for (var index = 0; index < orderedSequences.length; index++) {
+        if (orderedSequences[index] != fromSequence + index) {
+          throw const FormatException('Delta pack sequence range contains a gap.');
+        }
+      }
+    }
     for (final entry in vectorClock.entries) {
       if (entry.key.isEmpty || entry.value < 0) {
         throw const FormatException('Invalid vector clock entry.');
