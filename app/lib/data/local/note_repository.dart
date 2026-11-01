@@ -325,27 +325,57 @@ class NoteRepository {
   Future<void> permanentlyDelete(String id) async {
     final db = await _db;
     await db.transaction((tx) async {
+      await _recordDependentDeletes(tx, id);
+      await SyncJournal.record(
+        tx,
+        entityType: 'note',
+        entityId: id,
+        operation: 'purge',
+      );
       await tx.delete(
         'sync_queue',
         where: 'entity_id = ? AND owner_id = ?',
         whereArgs: [id, SnoteAccountScope.ownerId],
       );
-      await tx.delete(
-        'attachments',
-        where: 'note_id = ?',
-        whereArgs: [id],
-      );
-      await tx.delete(
-        'pages',
-        where: 'note_id = ?',
-        whereArgs: [id],
-      );
+      await tx.delete('attachments', where: 'note_id = ?', whereArgs: [id]);
+      await tx.delete('pages', where: 'note_id = ?', whereArgs: [id]);
       await tx.delete(
         'notes',
         where: 'id = ? AND owner_id = ?',
         whereArgs: [id, SnoteAccountScope.ownerId],
       );
     });
+  }
+
+  Future<void> _recordDependentDeletes(DatabaseExecutor tx, String noteId) async {
+    final attachments = await tx.query(
+      'attachments',
+      columns: ['id'],
+      where: 'note_id = ?',
+      whereArgs: [noteId],
+    );
+    for (final row in attachments) {
+      await SyncJournal.record(
+        tx,
+        entityType: 'attachment',
+        entityId: row['id']! as String,
+        operation: 'delete',
+      );
+    }
+    final pages = await tx.query(
+      'pages',
+      columns: ['id'],
+      where: 'note_id = ?',
+      whereArgs: [noteId],
+    );
+    for (final row in pages) {
+      await SyncJournal.record(
+        tx,
+        entityType: 'page',
+        entityId: row['id']! as String,
+        operation: 'delete',
+      );
+    }
   }
 
   Future<void> restore(String id) async {
@@ -368,11 +398,31 @@ class NoteRepository {
   Future<void> purgeExpiredTrash() async {
     final db = await _db;
     final cutoff = DateTime.now().subtract(const Duration(days: 30)).millisecondsSinceEpoch;
-    await db.delete(
-      'notes',
-      where: 'owner_id = ? AND deleted_at IS NOT NULL AND deleted_at < ?',
-      whereArgs: [SnoteAccountScope.ownerId, cutoff],
-    );
+    await db.transaction((tx) async {
+      final expired = await tx.query(
+        'notes',
+        columns: ['id'],
+        where: 'owner_id = ? AND deleted_at IS NOT NULL AND deleted_at < ?',
+        whereArgs: [SnoteAccountScope.ownerId, cutoff],
+      );
+      for (final row in expired) {
+        final id = row['id']! as String;
+        await _recordDependentDeletes(tx, id);
+        await SyncJournal.record(
+          tx,
+          entityType: 'note',
+          entityId: id,
+          operation: 'purge',
+        );
+        await tx.delete('attachments', where: 'note_id = ?', whereArgs: [id]);
+        await tx.delete('pages', where: 'note_id = ?', whereArgs: [id]);
+        await tx.delete(
+          'notes',
+          where: 'id = ? AND owner_id = ?',
+          whereArgs: [id, SnoteAccountScope.ownerId],
+        );
+      }
+    });
   }
 
   Future<void> delete(String id) async {
