@@ -54,9 +54,6 @@ void main() {
 
   test('Google Drive resolves object IDs to Drive file IDs before download', () async {
     final client = MockClient((request) async {
-      if (request.url.path == '/drive/v3/files') {
-        return http.Response('{"files":[]}', 200);
-      }
       if (request.url.path == '/drive/v3/files/drive-file-42' &&
           request.url.queryParameters['alt'] == 'media') {
         return http.Response('encrypted-object', 200);
@@ -64,8 +61,11 @@ void main() {
       if (request.url.path == '/drive/v3/files' &&
           request.url.queryParameters['q']?.contains("snote_blob-42.blob") == true) {
         return http.Response('''
-          {"files":[{"id":"drive-file-42","name":"snote_blob-42.blob","size":"15","appProperties":{"sha256":"\${'c' * 64}"}}]}
+          {"files":[{"id":"drive-file-42","name":"snote_blob-42.blob","size":"15","appProperties":{"sha256":"${'c' * 64}"}}]}
         ''', 200);
+      }
+      if (request.url.path == '/drive/v3/files') {
+        return http.Response('{"files":[]}', 200);
       }
       return http.Response('not found', 404);
     });
