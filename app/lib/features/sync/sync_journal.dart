@@ -51,8 +51,8 @@ class SyncJournal {
   }
 
   /// Requeues leases left behind by a killed process.
-  static Future<int> recoverExpiredLeases({DateTime? now}) async {
-    final db = await SnoteDatabase.open();
+  static Future<int> recoverExpiredLeases({DateTime? now, Database? database}) async {
+    final db = database ?? await SnoteDatabase.open();
     final timestamp = (now ?? DateTime.now()).millisecondsSinceEpoch;
     return db.update(
       'sync_operations',
@@ -67,8 +67,9 @@ class SyncJournal {
     int limit = 50,
     Duration leaseDuration = const Duration(minutes: 2),
     DateTime? now,
+    Database? database,
   }) async {
-    final db = await SnoteDatabase.open();
+    final db = database ?? await SnoteDatabase.open();
     final timestamp = (now ?? DateTime.now()).millisecondsSinceEpoch;
     final leaseId = _uuid.v4();
     return db.transaction((tx) async {
@@ -104,9 +105,9 @@ class SyncJournal {
   }
 
   /// Acknowledge only rows owned by this lease; repeated acknowledgements are safe.
-  static Future<int> acknowledge(SyncJournalLease lease) async {
+  static Future<int> acknowledge(SyncJournalLease lease, {Database? database}) async {
     if (lease.operations.isEmpty) return 0;
-    final db = await SnoteDatabase.open();
+    final db = database ?? await SnoteDatabase.open();
     final ids = lease.operations.map((row) => row['operation_id'] as String).toList();
     final placeholders = List.filled(ids.length, '?').join(',');
     return db.rawUpdate(
@@ -119,9 +120,10 @@ class SyncJournal {
   static Future<int> release(
     SyncJournalLease lease, {
     required String error,
+    Database? database,
   }) async {
     if (lease.operations.isEmpty) return 0;
-    final db = await SnoteDatabase.open();
+    final db = database ?? await SnoteDatabase.open();
     final ids = lease.operations.map((row) => row['operation_id'] as String).toList();
     final placeholders = List.filled(ids.length, '?').join(',');
     final safeError = error.length > 1000 ? error.substring(0, 1000) : error;
@@ -131,8 +133,8 @@ class SyncJournal {
     );
   }
 
-  static Future<List<Map<String, Object?>>> pending({int limit = 100}) async {
-    final db = await SnoteDatabase.open();
+  static Future<List<Map<String, Object?>>> pending({int limit = 100, Database? database}) async {
+    final db = database ?? await SnoteDatabase.open();
     return db.query('sync_operations', where: "status = 'pending'",
         orderBy: 'sequence ASC', limit: limit.clamp(1, 1000).toInt());
   }
