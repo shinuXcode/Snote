@@ -1,4 +1,4 @@
-const databaseVersion = 9;
+const databaseVersion = 10;
 const createNotesTable = '''
 CREATE TABLE notes (
   id TEXT PRIMARY KEY,
@@ -86,4 +86,25 @@ CREATE TABLE folder_covers (
   name TEXT NOT NULL,
   image_data BLOB NOT NULL,
   created_at INTEGER NOT NULL
+)''';
+
+const createSyncMetadataTable = '''
+CREATE TABLE sync_metadata (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+)''';
+
+const createSyncOperationsTable = '''
+CREATE TABLE sync_operations (
+  operation_id TEXT PRIMARY KEY,
+  device_id TEXT NOT NULL,
+  sequence INTEGER NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  operation TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT,
+  UNIQUE(device_id, sequence)
 )''';
