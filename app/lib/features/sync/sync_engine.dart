@@ -59,14 +59,15 @@ class SyncEngine {
   Future<SyncEngineResult> syncOnce() async {
     final db = _database ?? await SnoteDatabase.open();
     await SyncJournal.recoverExpiredLeases(database: db);
-    final journalStatus = await SyncJournal.status();
+    final journalStatus = await SyncJournal.status(database: db);
     var uploadedPacks = 0;
     var uploadedOperations = 0;
     var downloadedPacks = 0;
     var appliedPacks = 0;
     var skippedPacks = 0;
-    var cursor = 0;
+    String? cursor;
     final seenCursors = <String>{};
+    var pageCount = 0;
 
     await transport.connect();
     try {
@@ -105,9 +106,7 @@ class SyncEngine {
       }
 
       while (true) {
-        final page = await transport.listObjects(
-          cursor: cursor == 0 ? null : cursor.toString(),
-        );
+        final page = await transport.listObjects(cursor: cursor);
         for (final remote in page.objects) {
           downloadedPacks++;
           if (remote.byteLength < 1 ||
@@ -150,8 +149,9 @@ class SyncEngine {
         if (!seenCursors.add(next)) {
           throw StateError('Remote sync listing returned a repeated continuation cursor.');
         }
-        cursor++;
-        if (cursor >= maximumRemotePages) {
+        cursor = next;
+        pageCount++;
+        if (pageCount >= maximumRemotePages) {
           throw StateError('Remote sync listing exceeded the configured page limit.');
         }
       }
