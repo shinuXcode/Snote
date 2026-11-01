@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:crypto/crypto.dart';
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -36,7 +36,7 @@ class _MemoryTransport implements SyncTransport {
       ..sort((a, b) => a.key.compareTo(b.key));
     return SyncRemotePage(objects: values.map((entry) => SyncRemoteObject(
       objectId: entry.key,
-      sha256: sha256.convert(entry.value).toString(),
+      sha256: crypto.sha256.convert(entry.value).toString(),
       byteLength: entry.value.length,
       createdAt: DateTime.now().toUtc(),
     )).toList());
@@ -55,7 +55,7 @@ class _MemoryTransport implements SyncTransport {
     }
     final bytes = builder.takeBytes();
     if (bytes.length != byteLength ||
-        sha256.convert(bytes).toString() != sha256) {
+        crypto.sha256.convert(bytes).toString() != sha256) {
       throw StateError('Test transport received invalid upload bytes.');
     }
     objects[objectId] = Uint8List.fromList(bytes);
