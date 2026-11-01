@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../sync/sync_journal.dart';
+import 'sync_journal.dart';
 
 /// Beta status page: local journal is active; remote transports are not enabled yet.
 class SyncCenterPage extends StatefulWidget {
