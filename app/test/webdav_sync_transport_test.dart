@@ -92,10 +92,7 @@ void main() {
       client: client,
     );
     await transport.connect();
-    expect(
-      () => transport.downloadObject('../outside'),
-      throwsArgumentError,
-    );
+    await expectLater(transport.downloadObject('../outside'), throwsArgumentError);
     await transport.disconnect();
   });
 }
