@@ -82,6 +82,20 @@ class SnoteDatabase {
           await db.execute(createSyncMetadataTable);
           await db.execute(createSyncOperationsTable);
         }
+        if (oldVersion < 11) {
+          await _addColumnIfMissing(
+            db,
+            table: 'sync_operations',
+            column: 'lease_id',
+            declaration: 'TEXT',
+          );
+          await _addColumnIfMissing(
+            db,
+            table: 'sync_operations',
+            column: 'lease_until',
+            declaration: 'INTEGER',
+          );
+        }
         if (oldVersion < 9) {
           // Additive-only migration: existing notes and folders remain intact
           // and default to not-favorited.
