@@ -70,8 +70,8 @@ class SyncEngine {
     final seenCursors = <String>{};
     var pageCount = 0;
 
-    await transport.connect();
     try {
+      await transport.connect();
       final lease = await SyncJournal.claimPending(
         limit: batchSize,
         database: db,
