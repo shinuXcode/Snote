@@ -6,6 +6,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import 'database.dart';
+import '../../features/sync/sync_journal.dart';
 import '../../core/config/account_scope.dart';
 
 String _encodeNoteContent(Map<String, Object?> content) => jsonEncode(content);
@@ -495,6 +496,12 @@ class NoteRepository {
         'created_at': DateTime.now().millisecondsSinceEpoch,
         'attempts': 0,
       },
+    );
+    await SyncJournal.record(
+      db,
+      entityType: 'note',
+      entityId: id,
+      operation: operation,
     );
   }
 }
