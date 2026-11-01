@@ -20,8 +20,8 @@ import 'sync_journal.dart';
 class SnoteSyncPackBuilder {
   SnoteSyncPackBuilder({
     Database? database,
-    this.maximumFileBytes = 16 * 1024 * 1024,
-    this.maximumPackBinaryBytes = 48 * 1024 * 1024,
+    this.maximumFileBytes = 12 * 1024 * 1024,
+    this.maximumPackBinaryBytes = 40 * 1024 * 1024,
   }) : _database = database {
     if (maximumFileBytes < 1 || maximumPackBinaryBytes < maximumFileBytes) {
       throw ArgumentError('Invalid sync binary size limits.');
@@ -117,6 +117,7 @@ class SnoteSyncPackBuilder {
         final path = row.remove('stroke_file')?.toString();
         if (path != null && path.isNotEmpty) {
           final bytes = await readLocalFile(path);
+          row['strokeFileName'] = path.replaceAll('\\\\', '/').split('/').last;
           row['strokeBytesBase64'] = encodeBinary(bytes);
         }
         return row.cast<String, dynamic>();
