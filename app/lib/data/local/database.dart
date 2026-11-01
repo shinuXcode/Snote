@@ -82,7 +82,7 @@ class SnoteDatabase {
           await db.execute(createSyncMetadataTable);
           await db.execute(createSyncOperationsTable);
         }
-        if (oldVersion < 11) {
+        if (oldVersion >= 10 && oldVersion < 11) {
           await _addColumnIfMissing(
             db,
             table: 'sync_operations',
