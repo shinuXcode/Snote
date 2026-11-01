@@ -41,6 +41,9 @@ class SnoteDatabase {
         await db.execute(createSyncQueueTable);
         await db.execute(createSyncMetadataTable);
         await db.execute(createSyncOperationsTable);
+        await db.execute(createSyncDeviceCursorsTable);
+        await db.execute(createSyncAppliedPacksTable);
+        await db.execute(createSyncConflictsTable);
         await db.execute(createAppNotificationsTable);
         await db.execute(createFolderCoversTable);
       },
@@ -103,6 +106,11 @@ class SnoteDatabase {
             column: 'next_attempt_at',
             declaration: 'INTEGER',
           );
+        }
+        if (oldVersion < 13) {
+          await db.execute(createSyncDeviceCursorsTable);
+          await db.execute(createSyncAppliedPacksTable);
+          await db.execute(createSyncConflictsTable);
         }
         if (oldVersion < 9) {
           // Additive-only migration: existing notes and folders remain intact
@@ -182,6 +190,14 @@ class SnoteDatabase {
         await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_sync_operations_retry_schedule '
           'ON sync_operations(status, next_attempt_at, sequence)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_sync_applied_packs_device_sequence '
+          'ON sync_applied_packs(device_id, to_sequence)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_sync_conflicts_status_entity '
+          'ON sync_conflicts(status, entity_type, entity_id)',
         );
         await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_sync_operations_entity '
