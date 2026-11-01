@@ -89,11 +89,11 @@ class GoogleDriveSyncTransport implements SyncTransport {
   }
 
   @override
-  Future<List<SyncRemoteObject>> listObjects({String? cursor}) async {
+  Future<SyncRemotePage> listObjects({String? cursor}) async {
     _requireConnected();
     final page = await _listPage(pageToken: cursor);
     final files = page['files'];
-    if (files is! List) return const [];
+    if (files is! List) return const SyncRemotePage(objects: []);
     final objects = <SyncRemoteObject>[];
     for (final raw in files.whereType<Map>()) {
       final name = raw['name']?.toString() ?? '';
@@ -113,7 +113,10 @@ class GoogleDriveSyncTransport implements SyncTransport {
       ));
     }
     objects.sort((a, b) => a.objectId.compareTo(b.objectId));
-    return objects;
+    return SyncRemotePage(
+      objects: objects,
+      nextCursor: page['nextPageToken']?.toString(),
+    );
   }
 
   bool _validId(String id) =>
