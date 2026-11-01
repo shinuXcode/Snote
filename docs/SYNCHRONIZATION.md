@@ -18,8 +18,8 @@
 - Each installation receives a persistent device ID and monotonic local sequence.
 - SyncJournal exposes local status and pending operations.
 - SyncTransport defines a provider-neutral encrypted-object contract.
-- HTTPS WebDAV adapter supports collection discovery, bounded object listing, immutable create-only uploads and downloads.
-- Google Drive adapter stores immutable encrypted objects in the user's private `appDataFolder`; it accepts a short-lived OAuth token from the host app and never stores credentials.
+- HTTPS WebDAV adapter supports collection discovery, depth-one object listing, immutable create-only uploads and downloads.
+- Google Drive adapter stores immutable encrypted objects in the user's private `appDataFolder`; it accepts a short-lived OAuth token from the host app, exposes pagination cursors and never stores credentials.
 - Journal delivery now has atomic leases, idempotent acknowledgement, retry release and stale-lease recovery.
 - Automated tests cover journal rollback, sequence order, retries, crash recovery, WebDAV HTTPS/path boundaries and Google Drive listing/download.
 - Settings exposes a Sync & Devices page without claiming network providers are connected.
