@@ -27,7 +27,7 @@ void main() {
               "name": "snote_note-01.blob",
               "size": "128",
               "modifiedTime": "2026-11-01T12:00:00.000Z",
-              "appProperties": {"sha256": "${'b' * 64}"}
+              "appProperties": {"sha256": "${List.filled(64, 'b').join()}"}
             },
             {"id":"other","name":"photo.png","size":"12"},
             {"id":"bad","name":"snote_../bad.blob","size":"12"}
@@ -47,7 +47,7 @@ void main() {
     expect(objects, hasLength(1));
     expect(objects.single.objectId, 'note-01');
     expect(objects.single.byteLength, 128);
-    expect(objects.single.sha256, 'b' * 64);
+    expect(objects.single.sha256, List.filled(64, 'b').join());
     expect(requests, hasLength(2));
     await transport.disconnect();
   });
@@ -61,7 +61,7 @@ void main() {
       if (request.url.path == '/drive/v3/files' &&
           request.url.queryParameters['q']?.contains("snote_blob-42.blob") == true) {
         return http.Response('''
-          {"files":[{"id":"drive-file-42","name":"snote_blob-42.blob","size":"15","appProperties":{"sha256":"${'c' * 64}"}}]}
+          {"files":[{"id":"drive-file-42","name":"snote_blob-42.blob","size":"15","appProperties":{"sha256":"${List.filled(64, 'c').join()}"}}]}
         ''', 200);
       }
       if (request.url.path == '/drive/v3/files') {
