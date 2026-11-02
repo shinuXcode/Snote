@@ -59,6 +59,7 @@ class SyncEngine {
 
   Future<SyncEngineResult> syncOnce() async {
     final db = _database ?? await SnoteDatabase.open();
+    await SyncJournal.ensureInitialSnapshot(database: db);
     await SyncJournal.recoverExpiredLeases(database: db);
     final journalStatus = await SyncJournal.status(database: db);
     var uploadedPacks = 0;
