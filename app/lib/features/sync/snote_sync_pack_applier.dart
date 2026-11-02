@@ -131,7 +131,7 @@ class SnoteSyncPackApplier {
     final filename = row.remove('strokeFileName')?.toString();
     row['stroke_file'] = existing.isEmpty ? null : existing.first['stroke_file'];
     if (existing.isNotEmpty && !_sameRevision(existing.first, row)) {
-      await _recordConflict(tx, 'page', id, existing.first, row);
+      await _recordConflict(tx, 'page', id, existing.first, entity);
       return;
     }
     if (encoded != null) {
@@ -161,7 +161,7 @@ class SnoteSyncPackApplier {
     row.remove('remote_path');
     row['local_path'] = existing.isEmpty ? '' : existing.first['local_path'];
     if (existing.isNotEmpty && !_sameRevision(existing.first, row)) {
-      await _recordConflict(tx, 'attachment', id, existing.first, row);
+      await _recordConflict(tx, 'attachment', id, existing.first, entity);
       return;
     }
     if (encoded == null) {
