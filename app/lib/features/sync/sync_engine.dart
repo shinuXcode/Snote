@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
@@ -20,13 +19,7 @@ typedef SyncPackApplier = Future<void> Function(
   SyncChangePack pack,
 );
 
-/// Runs one complete encrypted transport cycle.
-///
-/// Domain serialization and domain-specific merge/apply rules are injected so
-/// this coordinator never guesses how a note, page, stroke, or attachment is
-/// represented. The builder must include all referenced binary data in the
-/// encrypted pack; the applier must mutate only through the supplied
-/// transaction. The encryption key must be shared securely by paired devices.
+/// Runs one encrypted upload/download/apply cycle.
 class SyncEngine {
   SyncEngine({
     required this.transport,
@@ -62,6 +55,7 @@ class SyncEngine {
     await SyncJournal.ensureInitialSnapshot(database: db);
     await SyncJournal.recoverExpiredLeases(database: db);
     final journalStatus = await SyncJournal.status(database: db);
+
     var uploadedPacks = 0;
     var uploadedOperations = 0;
     var downloadedPacks = 0;
@@ -73,6 +67,7 @@ class SyncEngine {
 
     try {
       await transport.connect();
+
       final lease = await SyncJournal.claimPending(
         limit: batchSize,
         database: db,
@@ -107,8 +102,8 @@ class SyncEngine {
         }
       }
 
-      // Fetch metadata first, then apply in per-device sequence order. Cloud
-      // providers do not promise chronological listing order.
+      // Providers do not guarantee chronological listing order. Collect
+      // bounded metadata first, then apply each source device's sequence.
       final remoteObjects = <SyncRemoteObject>[];
       var listedBytes = 0;
       while (true) {
@@ -118,11 +113,16 @@ class SyncEngine {
           throw StateError('Remote sync listing exceeded the 5000-object safety limit.');
         }
         for (final object in page.objects) {
+          if (object.byteLength < 1 ||
+              !RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,179}$').hasMatch(object.objectId)) {
+            throw const FormatException('Remote sync object metadata is invalid.');
+          }
           listedBytes += object.byteLength;
           if (listedBytes > 256 * 1024 * 1024) {
             throw StateError('Remote sync batch exceeded the 256 MiB safety limit.');
           }
         }
+
         final next = page.nextCursor;
         if (next == null || next.isEmpty) break;
         if (!seenCursors.add(next)) {
@@ -138,80 +138,6 @@ class SyncEngine {
       final verifiedPacks = <({SyncChangePack pack, String digest})>[];
       for (final remote in remoteObjects) {
         downloadedPacks++;
-        if (remote.byteLength < 1 ||
-            !RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,179}
-
-      return SyncEngineResult(
-        uploadedPacks: uploadedPacks,
-        uploadedOperations: uploadedOperations,
-        downloadedPacks: downloadedPacks,
-        appliedPacks: appliedPacks,
-        skippedPacks: skippedPacks,
-      );
-    } finally {
-      await transport.disconnect();
-    }
-  }
-
-  void _validateContiguousLease(
-    List<Map<String, Object?>> operations,
-    String deviceId,
-  ) {
-    if (operations.isEmpty) return;
-    final sorted = [...operations]
-      ..sort((a, b) => (a['sequence'] as num).compareTo(b['sequence'] as num));
-    for (var index = 0; index < sorted.length; index++) {
-      if (sorted[index]['device_id'] != deviceId) {
-        throw StateError('A sync lease contains operations from another device.');
-      }
-      final sequence = (sorted[index]['sequence'] as num).toInt();
-      if (index > 0 &&
-          sequence != (sorted[index - 1]['sequence'] as num).toInt() + 1) {
-        throw StateError('A sync lease contains a sequence gap.');
-      }
-    }
-  }
-
-  void _validateBuiltPack(
-    SyncChangePack pack,
-    List<Map<String, Object?>> operations,
-    String deviceId,
-  ) {
-    final sorted = [...operations]
-      ..sort((a, b) => (a['sequence'] as num).compareTo(b['sequence'] as num));
-    if (pack.kind != SyncChangePackKind.delta ||
-        pack.deviceId != deviceId ||
-        pack.fromSequence != (sorted.first['sequence'] as num).toInt() ||
-        pack.toSequence != (sorted.last['sequence'] as num).toInt()) {
-      throw StateError('The delta builder returned a pack outside the claimed journal range.');
-    }
-    final expectedIds = sorted.map((row) => row['operation_id']).toSet();
-    final actualIds = pack.operations.map((row) => row['operationId']).toSet();
-    if (expectedIds.length != actualIds.length ||
-        !expectedIds.containsAll(actualIds)) {
-      throw StateError('The encrypted pack does not represent every claimed journal operation.');
-    }
-  }
-}
-
-class SyncEngineResult {
-  const SyncEngineResult({
-    required this.uploadedPacks,
-    required this.uploadedOperations,
-    required this.downloadedPacks,
-    required this.appliedPacks,
-    required this.skippedPacks,
-  });
-
-  final int uploadedPacks;
-  final int uploadedOperations;
-  final int downloadedPacks;
-  final int appliedPacks;
-  final int skippedPacks;
-}
-).hasMatch(remote.objectId)) {
-          throw const FormatException('Remote sync object metadata is invalid.');
-        }
         final bytes = await SyncObjectIntegrity.collectAndVerify(
           await transport.downloadObject(remote.objectId),
           expectedByteLength: remote.byteLength,
