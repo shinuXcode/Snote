@@ -273,16 +273,22 @@ class _NotesHomePageState extends State<NotesHomePage> {
     final searching = query.isNotEmpty;
 
     try {
-      final allFolders = _favoritesOnly
-          ? await _folders.listFavorites()
-          : await _folders.listAllVisible();
-      final notes = _favoritesOnly
-          ? (await _notes.listFavorites(limit: _databasePageSize))
-              .where(_matchesSearch)
-              .toList(growable: false)
-          : searching
-              ? await _notes.searchVisible(query, limit: _databasePageSize)
-              : await _notes.list(folderId: _folderId, limit: _databasePageSize);
+      // Load both collections together and bound the wait. A stalled database
+      // open or platform resume must never leave the notebook spinner forever.
+      final loaded = await Future.wait<Object>([
+        _favoritesOnly
+            ? _folders.listFavorites()
+            : _folders.listAllVisible(),
+        _favoritesOnly
+            ? _notes.listFavorites(limit: _databasePageSize).then(
+                (items) => items.where(_matchesSearch).toList(growable: false),
+              )
+            : searching
+                ? _notes.searchVisible(query, limit: _databasePageSize)
+                : _notes.list(folderId: _folderId, limit: _databasePageSize),
+      ]).timeout(const Duration(seconds: 25));
+      final allFolders = loaded[0] as List<LocalFolder>;
+      final notes = loaded[1] as List<LocalNote>;
       if (!mounted || generation != _loadGeneration) return;
 
       final selectedId = _selected?.id;
@@ -1494,15 +1500,21 @@ class _NotesHomePageState extends State<NotesHomePage> {
   /// loading state. Clear that state first, then refresh repository data. A
   /// failed refresh is handled by _load() and leaves the previous list visible.
   Future<void> _openSettingsAndRefreshHome() async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(builder: (_) => const SettingsPage()),
-    );
-    if (!mounted) return;
-    setState(() {
-      _loading = false;
-      _loadingMoreDatabaseNotes = false;
-    });
-    await _load();
+    try {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(builder: (_) => const SettingsPage()),
+      );
+    } finally {
+      if (!mounted) return;
+      // The home route is retained beneath Settings. Recover its visible state
+      // before touching SQLite again, so even a slow/failed refresh cannot
+      // strand the user on a full-screen progress indicator.
+      setState(() {
+        _loading = false;
+        _loadingMoreDatabaseNotes = false;
+      });
+      await _load();
+    }
   }
 
   Future<void> _openPdfAnnotation() async {
