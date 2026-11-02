@@ -1,13 +1,13 @@
-# Snote Showcase feedback setup
+# Snotee Showcase feedback setup
 
-The website feedback and rating form stores submissions as issues in the public `shinuXcode/Snote` GitHub repository. It does not use browser storage or Supabase.
+The website feedback and rating form stores submissions as issues in the public `shinuXcode/Snotee` GitHub repository. It does not use browser storage or Supabase.
 
 ## Vercel environment variables
 
 In the Vercel project settings for the showcase website, add:
 
-- `SNOTE_FEEDBACK_GITHUB_TOKEN`: a fine-grained GitHub token scoped only to `shinuXcode/Snote`, with **Issues: Read and write** permission. Keep it server-side; never prefix it with `NEXT_PUBLIC_`.
-- `SNOTE_FEEDBACK_REPOSITORY`: `shinuXcode/Snote` (optional; this is the default).
+- `SNOTE_FEEDBACK_GITHUB_TOKEN`: a fine-grained GitHub token scoped only to `shinuXcode/Snotee`, with **Issues: Read and write** permission. Keep it server-side; never prefix it with `NEXT_PUBLIC_`.
+- `SNOTE_FEEDBACK_REPOSITORY`: `shinuXcode/Snotee` (optional; this is the default).
 
 Redeploy the website after setting these values. Without the token, the form returns a clear error and does not save feedback anywhere.
 
