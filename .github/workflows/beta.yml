@@ -14,6 +14,7 @@ on:
       - feat/snote-beta96-workspace-overhaul
       - feat/writing-engine-touch-notes-refresh
       - beta/snote-0.1.2
+      - feat/snotee-v2-sync-integration
     paths:
       - "app/**"
       - ".github/workflows/beta.yml"
@@ -54,7 +55,7 @@ jobs:
           set -euo pipefail
           VERSION="$(awk '/^version:/ {sub(/^version:[[:space:]]*/, ""); print; exit}' app/pubspec.yaml)"
           case "$VERSION" in
-            1.1.0-beta.*+*|0.1.1+*|0.1.2+*) ;;
+            1.1.0-beta.*+*|0.1.1+*|0.1.2+*|2.0.0+*) ;;
             *) echo "Unexpected beta version in app/pubspec.yaml: $VERSION"; exit 1 ;;
           esac
           RELEASE_VERSION="${VERSION%%+*}"
@@ -347,7 +348,7 @@ jobs:
         run: |
           set -euo pipefail
           NOTES="$(cat <<EOF
-          Snote $PACKAGE_VERSION build for testing only.
+          Snotee $PACKAGE_VERSION build for testing only.
           Build commit: $GITHUB_SHA
           These per-ABI APKs use the separate Android application ID com.snote.snote.beta. Install the APK matching the device CPU architecture to use less storage than the previous universal APK.
           Published only after dependency resolution, formatting, analysis, automated tests, Android APK build, APK identity/version validation, and SHA-256 generation pass.
