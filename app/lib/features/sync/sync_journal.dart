@@ -64,6 +64,74 @@ class SyncJournal {
     });
   }
 
+  /// Queues a one-time baseline of existing local content. This is required
+  /// so notes created before sync was enabled are included on a newly paired
+  /// device. The marker and all baseline journal entries commit atomically.
+  static Future<int> ensureInitialSnapshot({Database? database}) async {
+    final db = database ?? await SnoteDatabase.open();
+    return db.transaction((tx) async {
+      final marker = await tx.query(
+        'sync_metadata',
+        columns: ['value'],
+        where: 'key = ?',
+        whereArgs: ['initial_snapshot_seeded_v1'],
+        limit: 1,
+      );
+      if (marker.isNotEmpty) return 0;
+      var count = 0;
+
+      final notes = await tx.query('notes', orderBy: 'created_at ASC');
+      for (final row in notes) {
+        await record(
+          tx,
+          entityType: 'note',
+          entityId: row['id']! as String,
+          operation: row['deleted_at'] == null ? 'upsert' : 'delete',
+        );
+        count++;
+      }
+
+      final folders = await tx.query('folders', orderBy: 'created_at ASC');
+      for (final row in folders) {
+        await record(
+          tx,
+          entityType: 'folder',
+          entityId: row['id']! as String,
+          operation: row['deleted_at'] == null ? 'upsert' : 'delete',
+        );
+        count++;
+      }
+
+      final pages = await tx.query('pages', orderBy: 'created_at ASC');
+      for (final row in pages) {
+        await record(
+          tx,
+          entityType: 'page',
+          entityId: row['id']! as String,
+          operation: 'upsert',
+        );
+        count++;
+      }
+
+      final attachments = await tx.query('attachments', orderBy: 'created_at ASC');
+      for (final row in attachments) {
+        await record(
+          tx,
+          entityType: 'attachment',
+          entityId: row['id']! as String,
+          operation: 'upsert',
+        );
+        count++;
+      }
+
+      await tx.insert('sync_metadata', {
+        'key': 'initial_snapshot_seeded_v1',
+        'value': DateTime.now().millisecondsSinceEpoch.toString(),
+      });
+      return count;
+    });
+  }
+
   static Future<SyncJournalStatus> status({Database? database}) async {
     final db = database ?? await SnoteDatabase.open();
     return db.transaction((tx) async {
