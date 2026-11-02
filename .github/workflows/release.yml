@@ -102,9 +102,15 @@ jobs:
               elif stripped.startswith('minSdk ='):
                   line = indent + 'minSdk = 24'
                   min_count += 1
+              if 'applicationId = "com.snote.snote"' in line:
+                  # Keep the existing installed beta package ID for this one-time
+                  # promotion so Android updates the app in place and preserves notes.
+                  line = line.replace('applicationId = "com.snote.snote"', 'applicationId = "com.snote.snote.beta"')
               updated.append(line)
           if compile_count != 1 or min_count != 1:
               raise SystemExit(f'Expected one compileSdk and minSdk assignment; got {compile_count}, {min_count}')
+          if 'applicationId = "com.snote.snote.beta"' not in text:
+              raise SystemExit('Production promotion must retain the installed beta application ID')
           text = '\n'.join(updated) + '\n'
           if 'isCoreLibraryDesugaringEnabled = true' not in text:
               if 'compileOptions {' not in text:
