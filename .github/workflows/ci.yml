@@ -135,6 +135,12 @@ jobs:
         working-directory: app
         run: flutter pub get
 
+      - name: Generate Snotee adaptive launcher icons
+        working-directory: app
+        run: |
+          dart run tool/generate_launcher_icons.dart
+          dart run flutter_launcher_icons
+
       - name: Clean
         working-directory: app
         run: flutter clean
