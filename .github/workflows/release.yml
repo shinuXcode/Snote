@@ -1,4 +1,4 @@
-name: Snote Production Release
+name: Snotee Production Release
 
 on:
   push:
@@ -26,22 +26,22 @@ jobs:
         include:
           - os: ubuntu-latest
             target: android
-            artifact: Snote-Android.apk
+            artifact: Snotee-Android.apk
           - os: ubuntu-latest
             target: linux
-            artifact: Snote-Linux.tar.gz
+            artifact: Snotee-Linux.tar.gz
           - os: windows-2022
             target: windows
-            artifact: Snote-Windows.zip
+            artifact: Snotee-Windows.zip
           - os: macos-latest
             target: macos
-            artifact: Snote-macOS.zip
+            artifact: Snotee-macOS.zip
           - os: macos-latest
             target: ios
-            artifact: Snote-iOS-unsigned.zip
+            artifact: Snotee-iOS-unsigned.zip
           - os: ubuntu-latest
             target: web
-            artifact: Snote-Web.tar.gz
+            artifact: Snotee-Web.tar.gz
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
@@ -171,7 +171,7 @@ jobs:
                   continue
               s = p.read_text()
               if 'NSCameraUsageDescription' not in s:
-                  s = s.replace('</dict>', '  <key>NSCameraUsageDescription</key>\n  <string>Snote uses the camera to scan note transfer QR codes.</string>\n</dict>')
+                  s = s.replace('</dict>', '  <key>NSCameraUsageDescription</key>\n  <string>Snotee uses the camera to scan note transfer QR codes.</string>\n</dict>')
               p.write_text(s)
 
           podfile = Path('ios/Podfile')
@@ -195,6 +195,13 @@ jobs:
       - name: Install dependencies
         working-directory: app
         run: flutter pub get
+
+      - name: Generate Snotee Android launcher icons
+        if: matrix.target == 'android'
+        working-directory: app
+        run: |
+          dart run tool/generate_launcher_icons.dart
+          dart run flutter_launcher_icons
 
       - name: Clean
         working-directory: app
@@ -282,28 +289,28 @@ jobs:
 
       - name: Package Android
         if: matrix.target == 'android'
-        run: cp app/build/app/outputs/flutter-apk/app-release.apk Snote-Android.apk
+        run: cp app/build/app/outputs/flutter-apk/app-release.apk Snotee-Android.apk
 
       - name: Package Linux
         if: matrix.target == 'linux'
-        run: tar -czf Snote-Linux.tar.gz -C app/build/linux/x64/release bundle
+        run: tar -czf Snotee-Linux.tar.gz -C app/build/linux/x64/release bundle
 
       - name: Package Windows
         if: matrix.target == 'windows'
         shell: pwsh
-        run: Compress-Archive -Path app/build/windows/x64/runner/Release/* -DestinationPath Snote-Windows.zip
+        run: Compress-Archive -Path app/build/windows/x64/runner/Release/* -DestinationPath Snotee-Windows.zip
 
       - name: Package macOS
         if: matrix.target == 'macos'
-        run: ditto -c -k --sequesterRsrc --keepParent app/build/macos/Build/Products/Release Snote-macOS.zip
+        run: ditto -c -k --sequesterRsrc --keepParent app/build/macos/Build/Products/Release Snotee-macOS.zip
 
       - name: Package iOS
         if: matrix.target == 'ios'
-        run: ditto -c -k --sequesterRsrc --keepParent app/build/ios/iphoneos Snote-iOS-unsigned.zip
+        run: ditto -c -k --sequesterRsrc --keepParent app/build/ios/iphoneos Snotee-iOS-unsigned.zip
 
       - name: Package Web
         if: matrix.target == 'web'
-        run: tar -czf Snote-Web.tar.gz -C app/build web
+        run: tar -czf Snotee-Web.tar.gz -C app/build web
 
       - name: Upload platform artifact
         uses: actions/upload-artifact@v4
@@ -337,5 +344,5 @@ jobs:
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"
           else
-            gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --title "Snote $VERSION" --generate-notes --latest
+            gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --title "Snotee $VERSION" --generate-notes --latest
           fi
