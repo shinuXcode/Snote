@@ -4,6 +4,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../data/local/local_file_store.dart';
+import 'sync_change_pack.dart';
 
 /// Applies decrypted Snotee change packs without generating new local journal
 /// events. The caller must run this inside SyncCheckpointStore's transaction.
@@ -13,7 +14,7 @@ class SnoteSyncPackApplier {
   static const _uuid = Uuid();
   final String localOwnerId;
 
-  Future<void> apply(Transaction transaction, dynamic pack) async {
+  Future<void> apply(Transaction transaction, SyncChangePack pack) async {
     final operations = pack.operations;
     final stagedFiles = <String>[];
     try {
@@ -58,11 +59,12 @@ class SnoteSyncPackApplier {
     }
     final deleted = entity['deleted'] == true ||
         action == 'delete' || action == 'purge';
+    final permanentDelete = action == 'purge';
 
     switch (type) {
       case 'note':
         await _applyRow(tx, table: 'notes', id: id, entity: entity,
-            deleted: deleted, softDelete: true, stagedFiles: stagedFiles);
+            deleted: deleted, softDelete: !permanentDelete, stagedFiles: stagedFiles);
         return;
       case 'folder':
         await _applyRow(tx, table: 'folders', id: id, entity: entity,
@@ -127,17 +129,16 @@ class SnoteSyncPackApplier {
     final row = Map<String, Object?>.from(entity);
     final encoded = row.remove('strokeBytesBase64')?.toString();
     final filename = row.remove('strokeFileName')?.toString();
+    row['stroke_file'] = existing.isEmpty ? null : existing.first['stroke_file'];
+    if (existing.isNotEmpty && !_sameRevision(existing.first, row)) {
+      await _recordConflict(tx, 'page', id, existing.first, row);
+      return;
+    }
     if (encoded != null) {
       final bytes = base64Decode(encoded);
       final path = await writeLocalFile('sync_pages', '${id}_${filename ?? 'strokes.bin'}', bytes);
       stagedFiles.add(path);
       row['stroke_file'] = path;
-    } else {
-      row['stroke_file'] = existing.isEmpty ? null : existing.first['stroke_file'];
-    }
-    if (existing.isNotEmpty && !_sameRevision(existing.first, row)) {
-      await _recordConflict(tx, 'page', id, existing.first, row);
-      return;
     }
     await tx.insert('pages', row, conflictAlgorithm: ConflictAlgorithm.replace);
   }
@@ -157,6 +158,12 @@ class SnoteSyncPackApplier {
     final row = Map<String, Object?>.from(entity);
     final encoded = row.remove('contentBase64')?.toString();
     row.remove('contentLength');
+    row.remove('remote_path');
+    row['local_path'] = existing.isEmpty ? '' : existing.first['local_path'];
+    if (existing.isNotEmpty && !_sameRevision(existing.first, row)) {
+      await _recordConflict(tx, 'attachment', id, existing.first, row);
+      return;
+    }
     if (encoded == null) {
       throw const FormatException('Remote attachment is missing its binary content.');
     }
@@ -165,11 +172,6 @@ class SnoteSyncPackApplier {
     final path = await writeLocalFile('sync_attachments', name, bytes);
     stagedFiles.add(path);
     row['local_path'] = path;
-    row.remove('remote_path');
-    if (existing.isNotEmpty && !_sameRevision(existing.first, row)) {
-      await _recordConflict(tx, 'attachment', id, existing.first, row);
-      return;
-    }
     await tx.insert('attachments', row, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
