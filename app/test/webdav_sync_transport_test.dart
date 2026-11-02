@@ -31,6 +31,9 @@ void main() {
       if (request.method == 'PROPFIND' && request.headers['Depth'] == '0') {
         return http.Response('', 207);
       }
+      if (request.method == 'GET' && request.url.path.endsWith('/abc123.sha256')) {
+        return http.Response('a' * 64, 200);
+      }
       if (request.method == 'PROPFIND' && request.headers['Depth'] == '1') {
         return http.Response('''
           <?xml version="1.0"?>
