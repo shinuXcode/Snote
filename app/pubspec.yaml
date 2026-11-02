@@ -57,7 +57,6 @@ flutter_launcher_icons:
   image_path: assets/branding/snote-logo.png
   adaptive_icon_background: '#101216'
   adaptive_icon_foreground: assets/branding/snote-launcher-foreground.png
-  adaptive_icon_monochrome: assets/branding/snote-launcher-monochrome.png
   min_sdk_android: 24
 
 flutter:
