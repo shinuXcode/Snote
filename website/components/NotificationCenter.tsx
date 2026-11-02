@@ -37,7 +37,7 @@ export default function NotificationCenter() {
       {error && <p className="notification-error">{error}</p>}
       {!loading && !error && items.length === 0 && <p className="muted">No published updates yet.</p>}
       <div className="notification-list">{items.map(item => <a className="notification-item" href={item.href} target="_blank" rel="noreferrer" key={item.id}>
-        <span className="notification-kind">{item.kind}</span><strong>{item.title}</strong><span className="muted">{item.body}</span><small>{item.date ? new Date(item.date).toLocaleDateString() : "Snote project update"} <Icon name="external" size={12}/></small>
+        <span className="notification-kind">{item.kind}</span><strong>{item.title}</strong><span className="muted">{item.body}</span><small>{item.date ? new Date(item.date).toLocaleDateString() : "Snotee project update"} <Icon name="external" size={12}/></small>
       </a>)}</div>
       <a className="notification-all" href="https://github.com/shinuXcode/Snote/releases" target="_blank" rel="noreferrer">All GitHub releases <Icon name="arrow" size={14}/></a>
     </section>}
