@@ -8,11 +8,10 @@ import 'package:image/image.dart' as img;
 /// The original Snotee mark nearly fills its square source image. Android
 /// applies launcher-specific masks (circle, squircle, teardrop, etc.), so
 /// using it edge-to-edge clips the pen and the outer stroke. This generator
-/// scales the mark into the central 68.75% safe area and writes a separate
-/// white-alpha monochrome layer for themed Android icons.
+/// scales the mark into the central 61% safe area and writes a dedicated foreground layer with transparent padding.
 Future<void> main() async {
   const canvasSize = 512;
-  const safeSize = 352;
+  const safeSize = 312;
 
   final source = File('assets/branding/snote-logo.png');
   if (!await source.exists()) {
@@ -50,26 +49,8 @@ Future<void> main() async {
     dstY: (canvasSize - height) ~/ 2,
   );
 
-  final monochrome = img.Image(
-    width: canvasSize,
-    height: canvasSize,
-    numChannels: 4,
-  );
-  img.fill(monochrome, color: img.ColorRgba8(255, 255, 255, 0));
-
-  for (var y = 0; y < canvasSize; y++) {
-    for (var x = 0; x < canvasSize; x++) {
-      final alpha = foreground.getPixel(x, y).a.toInt();
-      if (alpha > 0) {
-        monochrome.setPixelRgba(x, y, 255, 255, 255, alpha);
-      }
-    }
-  }
-
   await File('assets/branding/snote-launcher-foreground.png')
       .writeAsBytes(img.encodePng(foreground));
-  await File('assets/branding/snote-launcher-monochrome.png')
-      .writeAsBytes(img.encodePng(monochrome));
 
   stdout.writeln(
     'Generated 512x512 adaptive icon layers with a centered $safeSize px safe-zone mark.',
