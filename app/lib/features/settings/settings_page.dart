@@ -330,9 +330,18 @@ class _SettingsPageState extends State<SettingsPage> {
         Card(
           child: ListTile(
             leading: const Icon(Icons.info_outline_rounded),
-            title: const Text('Snote $snoteVersionName', style: TextStyle(fontWeight: FontWeight.w900)),
-            subtitle: const Text('Offline-first handwriting and rich-text notes.'),
-            onTap: () => showAboutDialog(context: context, applicationName: 'Snote', applicationVersion: snoteVersionName),
+            title: Text('Snotee $snoteVersionLabel', style: const TextStyle(fontWeight: FontWeight.w900)),
+            subtitle: const Text('Offline-first handwriting, PDF annotation and rich-text notebook.'),
+            onTap: () => showAboutDialog(
+              context: context,
+              applicationName: 'Snotee',
+              applicationVersion: snoteVersionLabel,
+              applicationLegalese: 'Open-source · Offline-first · No mandatory account',
+              children: const [
+                SizedBox(height: 12),
+                Text('A handwriting and document workspace designed to keep your notebook available locally, even without an internet connection.'),
+              ],
+            ),
           ),
         ),
       ]),
