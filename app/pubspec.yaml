@@ -55,8 +55,10 @@ dev_dependencies:
 flutter_launcher_icons:
   android: true
   image_path: assets/branding/snote-logo.png
+  image_path_android: assets/branding/snote-launcher-android.png
   adaptive_icon_background: '#101216'
   adaptive_icon_foreground: assets/branding/snote-launcher-foreground.png
+  adaptive_icon_foreground_inset: 0
   min_sdk_android: 24
 
 flutter:
