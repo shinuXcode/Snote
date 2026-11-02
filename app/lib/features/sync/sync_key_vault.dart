@@ -56,6 +56,21 @@ class SyncKeyVault {
     );
   }
 
+  /// Returns the active 256-bit recovery material for an explicit user
+  /// initiated device pairing. Never log or persist this value outside secure
+  /// storage; the UI must warn the user to share it only with a trusted device.
+  Future<String> exportRecoveryKey() async {
+    final current = await _storage.read(key: _activeKeyName);
+    if (current == null || current.isEmpty) {
+      throw StateError('Create a sync key before pairing another device.');
+    }
+    final bytes = base64Url.decode(base64Url.normalize(current));
+    if (bytes.length != 32) {
+      throw const FormatException('Stored sync key has an invalid length.');
+    }
+    return base64UrlEncode(bytes).replaceAll('=', '');
+  }
+
   /// Imports user-held recovery material. Import never overwrites an existing
   /// key; callers must explicitly rotate or revoke first.
   Future<SyncVaultKey> importRecoveryKey(String recoveryKey) async {
