@@ -6,6 +6,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import 'database.dart';
+import '../../features/sync/sync_journal.dart';
 import '../../core/config/account_scope.dart';
 
 String _encodeNoteContent(Map<String, Object?> content) => jsonEncode(content);
@@ -20,6 +21,7 @@ class LocalNote {
   final int updatedAt;
   final int? deletedAt;
   final int version;
+  final bool isFavorite;
 
   const LocalNote({
     required this.id,
@@ -31,6 +33,7 @@ class LocalNote {
     required this.updatedAt,
     this.deletedAt,
     required this.version,
+    this.isFavorite = false,
   });
 
   Map<String, Object?> toMap() => {
@@ -44,6 +47,7 @@ class LocalNote {
         'updated_at': updatedAt,
         'deleted_at': deletedAt,
         'version': version,
+        'is_favorite': isFavorite ? 1 : 0,
         'sync_state': 'pending',
       };
 
@@ -57,6 +61,7 @@ class LocalNote {
         updatedAt: (m['updated_at']! as num).toInt(),
         deletedAt: (m['deleted_at'] as num?)?.toInt(),
         version: (m['version'] as num?)?.toInt() ?? 1,
+        isFavorite: (m['is_favorite'] as num?)?.toInt() == 1,
       );
 
   Map<String, Object?> toRemote(String userId) => {
@@ -90,13 +95,14 @@ class NoteRepository {
   Future<LocalNote> create({
     String title = 'Untitled note',
     String? folderId,
+    String noteType = 'handwriting',
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final note = LocalNote(
       id: _uuid.v4(),
       title: title.trim().isEmpty ? 'Untitled note' : title.trim(),
       folderId: folderId,
-      noteType: 'handwriting',
+      noteType: noteType,
       createdAt: now,
       updatedAt: now,
       version: 1,
@@ -167,6 +173,36 @@ class NoteRepository {
     return rows.map(LocalNote.fromMap).toList();
   }
 
+  Future<List<LocalNote>> listFavorites({int limit = 10000, int offset = 0}) async {
+    final db = await _db;
+    final rows = await db.query(
+      'notes',
+      where: 'owner_id = ? AND deleted_at IS NULL AND is_favorite = 1',
+      whereArgs: [SnoteAccountScope.ownerId],
+      orderBy: 'updated_at DESC',
+      limit: limit.clamp(1, 10000).toInt(),
+      offset: offset > 0 ? offset : null,
+    );
+    return rows.map(LocalNote.fromMap).toList(growable: false);
+  }
+
+  Future<void> setFavorite(String id, bool favorite) async {
+    final db = await _db;
+    await db.transaction((tx) async {
+      final changed = await tx.update(
+        'notes',
+        {
+          'is_favorite': favorite ? 1 : 0,
+          'updated_at': DateTime.now().millisecondsSinceEpoch,
+          'sync_state': 'pending',
+        },
+        where: 'id = ? AND owner_id = ? AND deleted_at IS NULL',
+        whereArgs: [id, SnoteAccountScope.ownerId],
+      );
+      if (changed > 0) await _queue(tx, id, 'upsert');
+    });
+  }
+
   /// Searches titles inside SQLite to avoid scanning and filtering every note
   /// in the UI isolate on each keystroke.
   Future<List<LocalNote>> searchVisible(String query, {int limit = 10000, int offset = 0}) async {
@@ -184,6 +220,7 @@ class NoteRepository {
         'updated_at',
         'deleted_at',
         'version',
+        'is_favorite',
       ],
       where: 'owner_id = ? AND deleted_at IS NULL AND title LIKE ?',
       whereArgs: [SnoteAccountScope.ownerId, '%$normalized%'],
@@ -288,27 +325,57 @@ class NoteRepository {
   Future<void> permanentlyDelete(String id) async {
     final db = await _db;
     await db.transaction((tx) async {
+      await _recordDependentDeletes(tx, id);
+      await SyncJournal.record(
+        tx,
+        entityType: 'note',
+        entityId: id,
+        operation: 'purge',
+      );
       await tx.delete(
         'sync_queue',
         where: 'entity_id = ? AND owner_id = ?',
         whereArgs: [id, SnoteAccountScope.ownerId],
       );
-      await tx.delete(
-        'attachments',
-        where: 'note_id = ?',
-        whereArgs: [id],
-      );
-      await tx.delete(
-        'pages',
-        where: 'note_id = ?',
-        whereArgs: [id],
-      );
+      await tx.delete('attachments', where: 'note_id = ?', whereArgs: [id]);
+      await tx.delete('pages', where: 'note_id = ?', whereArgs: [id]);
       await tx.delete(
         'notes',
         where: 'id = ? AND owner_id = ?',
         whereArgs: [id, SnoteAccountScope.ownerId],
       );
     });
+  }
+
+  Future<void> _recordDependentDeletes(DatabaseExecutor tx, String noteId) async {
+    final attachments = await tx.query(
+      'attachments',
+      columns: ['id'],
+      where: 'note_id = ?',
+      whereArgs: [noteId],
+    );
+    for (final row in attachments) {
+      await SyncJournal.record(
+        tx,
+        entityType: 'attachment',
+        entityId: row['id']! as String,
+        operation: 'delete',
+      );
+    }
+    final pages = await tx.query(
+      'pages',
+      columns: ['id'],
+      where: 'note_id = ?',
+      whereArgs: [noteId],
+    );
+    for (final row in pages) {
+      await SyncJournal.record(
+        tx,
+        entityType: 'page',
+        entityId: row['id']! as String,
+        operation: 'delete',
+      );
+    }
   }
 
   Future<void> restore(String id) async {
@@ -331,11 +398,31 @@ class NoteRepository {
   Future<void> purgeExpiredTrash() async {
     final db = await _db;
     final cutoff = DateTime.now().subtract(const Duration(days: 30)).millisecondsSinceEpoch;
-    await db.delete(
-      'notes',
-      where: 'owner_id = ? AND deleted_at IS NOT NULL AND deleted_at < ?',
-      whereArgs: [SnoteAccountScope.ownerId, cutoff],
-    );
+    await db.transaction((tx) async {
+      final expired = await tx.query(
+        'notes',
+        columns: ['id'],
+        where: 'owner_id = ? AND deleted_at IS NOT NULL AND deleted_at < ?',
+        whereArgs: [SnoteAccountScope.ownerId, cutoff],
+      );
+      for (final row in expired) {
+        final id = row['id']! as String;
+        await _recordDependentDeletes(tx, id);
+        await SyncJournal.record(
+          tx,
+          entityType: 'note',
+          entityId: id,
+          operation: 'purge',
+        );
+        await tx.delete('attachments', where: 'note_id = ?', whereArgs: [id]);
+        await tx.delete('pages', where: 'note_id = ?', whereArgs: [id]);
+        await tx.delete(
+          'notes',
+          where: 'id = ? AND owner_id = ?',
+          whereArgs: [id, SnoteAccountScope.ownerId],
+        );
+      }
+    });
   }
 
   Future<void> delete(String id) async {
@@ -459,6 +546,12 @@ class NoteRepository {
         'created_at': DateTime.now().millisecondsSinceEpoch,
         'attempts': 0,
       },
+    );
+    await SyncJournal.record(
+      db,
+      entityType: 'note',
+      entityId: id,
+      operation: operation,
     );
   }
 }

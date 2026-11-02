@@ -1,6 +1,6 @@
-# Snote Flutter app
+# Snotee Flutter app
 
-Snote is a local-only notebook. Notes, folders, settings and attachments stay on this device; the app has no account, login, signup, remote database or cloud-sync requirement.
+Snotee is a local-only notebook. Notes, folders, settings and attachments stay on this device; the app has no account, login, signup, remote database or cloud-sync requirement.
 
 ## Run locally
 

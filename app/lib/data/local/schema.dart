@@ -1,4 +1,4 @@
-const databaseVersion = 8;
+const databaseVersion = 13;
 const createNotesTable = '''
 CREATE TABLE notes (
   id TEXT PRIMARY KEY,
@@ -11,6 +11,7 @@ CREATE TABLE notes (
   updated_at INTEGER NOT NULL,
   deleted_at INTEGER,
   version INTEGER NOT NULL DEFAULT 1,
+  is_favorite INTEGER NOT NULL DEFAULT 0,
   sync_state TEXT NOT NULL DEFAULT 'pending'
 )''';
 
@@ -23,6 +24,7 @@ CREATE TABLE folders (
   color_value INTEGER NOT NULL DEFAULT 4284187897,
   icon_key TEXT NOT NULL DEFAULT 'folder',
   sort_order INTEGER NOT NULL DEFAULT 0,
+  is_favorite INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   deleted_at INTEGER
@@ -84,4 +86,60 @@ CREATE TABLE folder_covers (
   name TEXT NOT NULL,
   image_data BLOB NOT NULL,
   created_at INTEGER NOT NULL
+)''';
+
+const createSyncMetadataTable = '''
+CREATE TABLE sync_metadata (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+)''';
+
+const createSyncOperationsTable = '''
+CREATE TABLE sync_operations (
+  operation_id TEXT PRIMARY KEY,
+  device_id TEXT NOT NULL,
+  sequence INTEGER NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  operation TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT,
+  lease_id TEXT,
+  lease_until INTEGER,
+  next_attempt_at INTEGER,
+  UNIQUE(device_id, sequence)
+)''';
+
+const createSyncDeviceCursorsTable = '''
+CREATE TABLE sync_device_cursors (
+  device_id TEXT PRIMARY KEY,
+  last_sequence INTEGER NOT NULL DEFAULT 0,
+  checkpoint_id TEXT,
+  updated_at INTEGER NOT NULL
+)''';
+
+const createSyncAppliedPacksTable = '''
+CREATE TABLE sync_applied_packs (
+  pack_id TEXT PRIMARY KEY,
+  device_id TEXT NOT NULL,
+  from_sequence INTEGER NOT NULL,
+  to_sequence INTEGER NOT NULL,
+  sha256 TEXT NOT NULL,
+  applied_at INTEGER NOT NULL
+)''';
+
+const createSyncConflictsTable = '''
+CREATE TABLE sync_conflicts (
+  conflict_id TEXT PRIMARY KEY,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  local_revision_json TEXT NOT NULL,
+  remote_revision_json TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open',
+  created_at INTEGER NOT NULL,
+  resolved_at INTEGER,
+  resolution_json TEXT
 )''';

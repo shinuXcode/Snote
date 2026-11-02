@@ -33,7 +33,7 @@ void main() {
     );
     final recorder = PictureRecorder();
     final canvas = Canvas(recorder);
-    const painter = EditorV2InkPainter(
+    final painter = EditorV2InkPainter(
       strokes: <Stroke>[committed],
       liveStroke: live,
       selectedStrokeIds: <String>{'saved-stroke'},
@@ -50,6 +50,7 @@ void main() {
     expect(painted, greaterThan(0));
     image.dispose();
     picture.dispose();
+    painter.dispose();
   });
 
   test('shape geometry painter draws a recognizable coordinate plane', () async {
@@ -63,8 +64,8 @@ void main() {
       shape: 'cartesianPlane',
     );
     final recorder = PictureRecorder();
-    EditorV2InkPainter(strokes: const <Stroke>[stroke])
-        .paint(Canvas(recorder), const Size(220, 220));
+    final painter = EditorV2InkPainter(strokes: const <Stroke>[stroke]);
+    painter.paint(Canvas(recorder), const Size(220, 220));
     final picture = recorder.endRecording();
     final image = await picture.toImage(220, 220);
     final bytes = await image.toByteData(format: ImageByteFormat.rawRgba);
@@ -72,5 +73,6 @@ void main() {
     expect(bytes!.lengthInBytes, greaterThan(0));
     image.dispose();
     picture.dispose();
+    painter.dispose();
   });
 }

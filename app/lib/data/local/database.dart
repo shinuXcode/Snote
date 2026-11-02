@@ -39,6 +39,11 @@ class SnoteDatabase {
         await db.execute(createPagesTable);
         await db.execute(createAttachmentsTable);
         await db.execute(createSyncQueueTable);
+        await db.execute(createSyncMetadataTable);
+        await db.execute(createSyncOperationsTable);
+        await db.execute(createSyncDeviceCursorsTable);
+        await db.execute(createSyncAppliedPacksTable);
+        await db.execute(createSyncConflictsTable);
         await db.execute(createAppNotificationsTable);
         await db.execute(createFolderCoversTable);
       },
@@ -75,6 +80,54 @@ class SnoteDatabase {
         if (oldVersion < 7) {
           await db.execute(createFolderCoversTable);
         }
+        if (oldVersion < 10) {
+          // Additive-only sync journal migration. Existing notes and files are untouched.
+          await db.execute(createSyncMetadataTable);
+          await db.execute(createSyncOperationsTable);
+        }
+        if (oldVersion >= 10 && oldVersion < 11) {
+          await _addColumnIfMissing(
+            db,
+            table: 'sync_operations',
+            column: 'lease_id',
+            declaration: 'TEXT',
+          );
+          await _addColumnIfMissing(
+            db,
+            table: 'sync_operations',
+            column: 'lease_until',
+            declaration: 'INTEGER',
+          );
+        }
+        if (oldVersion < 12) {
+          await _addColumnIfMissing(
+            db,
+            table: 'sync_operations',
+            column: 'next_attempt_at',
+            declaration: 'INTEGER',
+          );
+        }
+        if (oldVersion < 13) {
+          await db.execute(createSyncDeviceCursorsTable);
+          await db.execute(createSyncAppliedPacksTable);
+          await db.execute(createSyncConflictsTable);
+        }
+        if (oldVersion < 9) {
+          // Additive-only migration: existing notes and folders remain intact
+          // and default to not-favorited.
+          await _addColumnIfMissing(
+            db,
+            table: 'notes',
+            column: 'is_favorite',
+            declaration: 'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _addColumnIfMissing(
+            db,
+            table: 'folders',
+            column: 'is_favorite',
+            declaration: 'INTEGER NOT NULL DEFAULT 0',
+          );
+        }
       },
       onOpen: (db) async {
         await db.execute(
@@ -95,6 +148,14 @@ class SnoteDatabase {
         await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_notes_owner_title '
           'ON notes(owner_id, title COLLATE NOCASE)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_notes_owner_favorite '
+          'ON notes(owner_id, is_favorite, updated_at DESC)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_folders_owner_favorite '
+          'ON folders(owner_id, is_favorite, updated_at DESC)',
         );
         await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_notes_title ON notes(title COLLATE NOCASE)',
@@ -121,6 +182,26 @@ class SnoteDatabase {
         await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_folder_covers_created '
           'ON folder_covers(created_at DESC)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_sync_operations_status_sequence '
+          'ON sync_operations(status, sequence)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_sync_operations_retry_schedule '
+          'ON sync_operations(status, next_attempt_at, sequence)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_sync_applied_packs_device_sequence '
+          'ON sync_applied_packs(device_id, to_sequence)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_sync_conflicts_status_entity '
+          'ON sync_conflicts(status, entity_type, entity_id)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_sync_operations_entity '
+          'ON sync_operations(entity_type, entity_id, created_at)',
         );
         await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_sync_queue_owner_entity '

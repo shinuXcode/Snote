@@ -18,10 +18,13 @@ import '../folders/folder_cover_art.dart';
 import '../folders/folder_cover_library_page.dart';
 import '../pdf/pdf_annotation_page.dart';
 import '../settings/settings_page.dart';
+import '../settings/local_backups_page.dart';
 import '../share/qr_import_page.dart';
+import '../share/qr_transfer_page.dart';
 import '../trash/trash_page.dart';
 import '../tools/flashcard_page.dart';
 import '../tools/mind_map_page.dart';
+import '../tools/note_collection_page.dart';
 import '../tools/screenshot_import_page.dart';
 import '../updates/update_center_page.dart';
 import '../onboarding/welcome_guide_page.dart';
@@ -46,6 +49,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
   List<LocalFolder> _allFolders = const [];
   List<LocalNote> _noteList = const [];
   bool _sidebarCollapsed = false;
+  bool _favoritesOnly = false;
   bool _gridView = true;
   String? _folderId;
   final List<LocalFolder> _breadcrumbs = [];
@@ -89,62 +93,110 @@ class _NotesHomePageState extends State<NotesHomePage> {
       _sharingSubscription =
           ReceiveSharingIntent.instance.getMediaStream().listen(
         (items) => unawaited(_handleIncomingSharedMedia(items)),
-        onError: (error) => debugPrint('Snote incoming-share stream error: $error'),
+        onError: (error) => debugPrint('Snotee incoming-share stream error: $error'),
       );
       final initialItems = await ReceiveSharingIntent.instance.getInitialMedia();
       if (initialItems.isNotEmpty) {
         unawaited(_handleIncomingSharedMedia(initialItems));
       }
     } catch (error) {
-      debugPrint('Snote could not initialize incoming-share listener: $error');
+      debugPrint('Snotee could not initialize incoming-share listener: $error');
     }
   }
 
   bool _isIncomingImage(SharedMediaFile item) {
     if ((item.mimeType ?? '').toLowerCase().startsWith('image/')) return true;
     final path = item.path.toLowerCase().split('?').first;
-    return const ['.png', '.jpg', '.jpeg', '.webp', '.heic', '.heif', '.bmp', '.gif'].any(path.endsWith);
+    return const ['.png', '.jpg', '.jpeg', '.webp', '.heic', '.heif', '.bmp', '.gif']
+        .any(path.endsWith);
+  }
+
+  bool _isIncomingPdf(SharedMediaFile item) {
+    if ((item.mimeType ?? '').toLowerCase() == 'application/pdf') return true;
+    return item.path.toLowerCase().split('?').first.endsWith('.pdf');
   }
 
   Future<void> _handleIncomingSharedMedia(List<SharedMediaFile> items) async {
     if (!mounted || _handlingIncomingShare || items.isEmpty) return;
-    SharedMediaFile? image;
+    SharedMediaFile? supported;
     for (final item in items) {
-      if (_isIncomingImage(item)) { image = item; break; }
+      if (_isIncomingPdf(item) || _isIncomingImage(item)) {
+        supported = item;
+        break;
+      }
     }
-    if (image == null) {
+    if (supported == null) {
       try { await ReceiveSharingIntent.instance.reset(); } catch (_) {}
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Snotee supports shared PDF files and images.')),
+        );
+      }
       return;
     }
-    final path = image.path.trim();
+
+    final path = supported.path.trim();
     if (path.isEmpty || path == _lastIncomingSharePath) {
       try { await ReceiveSharingIntent.instance.reset(); } catch (_) {}
       return;
     }
+
     _handlingIncomingShare = true;
     _lastIncomingSharePath = path;
     try {
-      final bytes = await readSharedMediaBytes(path);
-      if (bytes.isEmpty) throw StateError('The shared image is empty.');
-      try { await ReceiveSharingIntent.instance.reset(); } catch (_) {}
-      if (!mounted) return;
       final filename = path.replaceAll(String.fromCharCode(92), '/').split('/').last;
       final title = filename.replaceFirst(RegExp(r'\.[^.]+$'), '').trim();
-      await Navigator.of(context).push<LocalNote>(
-        MaterialPageRoute(
-          builder: (_) => ScreenshotImportPage(
-            folderId: _folderId,
-            initialBytes: bytes,
-            initialName: title.isEmpty ? 'Shared screenshot' : title,
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Importing $filename…')),
+        );
+      }
+      final bytes = await readSharedMediaBytes(path);
+      if (bytes.isEmpty) throw StateError('The shared file is empty or unreadable.');
+      if (bytes.length > 250 * 1024 * 1024) {
+        throw StateError('Files larger than 250 MB cannot be imported through sharing.');
+      }
+      try { await ReceiveSharingIntent.instance.reset(); } catch (_) {}
+      if (!mounted) return;
+
+      if (_isIncomingPdf(supported)) {
+        if (bytes.length < 5 ||
+            String.fromCharCodes(bytes.take(5)) != '%PDF-') {
+          throw const FormatException('The shared file does not contain a valid PDF.');
+        }
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute(
+            builder: (_) => PdfAnnotationPage(
+              folderId: _folderId,
+              initialPdfBytes: bytes,
+              initialPdfName: filename.toLowerCase().endsWith('.pdf')
+                  ? filename
+                  : '$filename.pdf',
+            ),
           ),
-        ),
-      );
-      if (mounted) await _load();
+        );
+      } else {
+        await Navigator.of(context).push<LocalNote>(
+          MaterialPageRoute(
+            builder: (_) => ScreenshotImportPage(
+              folderId: _folderId,
+              initialBytes: bytes,
+              initialName: title.isEmpty ? 'Shared image' : title,
+            ),
+          ),
+        );
+      }
+      if (mounted) {
+        await _load();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Import completed. The source file was not moved or deleted.')),
+        );
+      }
     } catch (error) {
       try { await ReceiveSharingIntent.instance.reset(); } catch (_) {}
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not import the shared image: ' + error.toString())),
+          SnackBar(content: Text('Could not import the shared file: $error')),
         );
       }
     } finally {
@@ -181,17 +233,22 @@ class _NotesHomePageState extends State<NotesHomePage> {
     final folderId = _folderId;
     setState(() => _loadingMoreDatabaseNotes = true);
     try {
-      final batch = query.isNotEmpty
-          ? await _notes.searchVisible(
-              query,
+      final batch = _favoritesOnly
+          ? (await _notes.listFavorites(
               limit: _databasePageSize,
               offset: _databaseOffset,
-            )
-          : await _notes.list(
-              folderId: folderId,
-              limit: _databasePageSize,
-              offset: _databaseOffset,
-            );
+            )).where(_matchesSearch).toList(growable: false)
+          : query.isNotEmpty
+              ? await _notes.searchVisible(
+                  query,
+                  limit: _databasePageSize,
+                  offset: _databaseOffset,
+                )
+              : await _notes.list(
+                  folderId: folderId,
+                  limit: _databasePageSize,
+                  offset: _databaseOffset,
+                );
       if (!mounted || generation != _loadGeneration) return;
       final ids = _noteList.map((note) => note.id).toSet();
       final additions = batch.where((note) => ids.add(note.id)).toList();
@@ -216,10 +273,16 @@ class _NotesHomePageState extends State<NotesHomePage> {
     final searching = query.isNotEmpty;
 
     try {
-      final allFolders = await _folders.listAllVisible();
-      final notes = searching
-          ? await _notes.searchVisible(query, limit: _databasePageSize)
-          : await _notes.list(folderId: _folderId, limit: _databasePageSize);
+      final allFolders = _favoritesOnly
+          ? await _folders.listFavorites()
+          : await _folders.listAllVisible();
+      final notes = _favoritesOnly
+          ? (await _notes.listFavorites(limit: _databasePageSize))
+              .where(_matchesSearch)
+              .toList(growable: false)
+          : searching
+              ? await _notes.searchVisible(query, limit: _databasePageSize)
+              : await _notes.list(folderId: _folderId, limit: _databasePageSize);
       if (!mounted || generation != _loadGeneration) return;
 
       final selectedId = _selected?.id;
@@ -250,7 +313,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
         });
       }
     } catch (error, stackTrace) {
-      debugPrint('Snote notebook load failed: $error\\n$stackTrace');
+      debugPrint('Snotee notebook load failed: $error\\n$stackTrace');
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _loading = false;
@@ -294,6 +357,94 @@ class _NotesHomePageState extends State<NotesHomePage> {
   // The rebuilt editor always owns a dedicated full-screen route.
   bool _usesSplitWorkspace(BuildContext context) => false;
 
+  Future<void> _toggleNoteFavorite(LocalNote note) async {
+    await _notes.setFavorite(note.id, !note.isFavorite);
+    if (mounted) await _load();
+  }
+
+  Future<void> _toggleFolderFavorite(LocalFolder folder) async {
+    await _folders.setFavorite(folder.id, !folder.isFavorite);
+    if (mounted) await _load();
+  }
+
+  Future<void> _transferNoteByQr(LocalNote note) async {
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(builder: (_) => QrTransferPage(note: note)),
+    );
+  }
+
+  Future<void> _transferFolderByQr(LocalFolder folder) async {
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(builder: (_) => QrTransferPage(folder: folder)),
+    );
+  }
+
+  Future<String?> _askEncryptedExportPassword(String title) async {
+    final controller = TextEditingController();
+    final password = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Encrypt $title'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          obscureText: true,
+          decoration: const InputDecoration(
+            labelText: 'Transfer password',
+            helperText: 'Use at least 8 characters. Enter the same password on the receiving device.',
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () {
+              if (controller.text.length >= 8) Navigator.pop(dialogContext, controller.text);
+            },
+            child: const Text('Export'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return password;
+  }
+
+  Future<void> _exportEncryptedSelection({
+    required String title,
+    String? noteId,
+    String? folderId,
+  }) async {
+    final password = await _askEncryptedExportPassword(title);
+    if (password == null || !mounted) return;
+    try {
+      final uri = await _transfer.exportEncryptedPicked(
+        password: password,
+        noteId: noteId,
+        folderId: folderId,
+      );
+      if (uri != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Encrypted $title export is ready to share.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Encrypted export failed: $error')),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportEncryptedNoteFile(LocalNote note) =>
+      _exportEncryptedSelection(title: 'note', noteId: note.id);
+
+  Future<void> _exportEncryptedFolderFile(LocalFolder folder) =>
+      _exportEncryptedSelection(title: 'folder', folderId: folder.id);
+
+
   Future<void> _createFolder() async {
     final c = TextEditingController();
     final name = await showDialog<String>(
@@ -316,7 +467,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
   Future<void> _createNote() async {
     final folderId = _folderId;
     debugPrint(
-      '[Snote][Navigation] New Note requested '
+      '[Snotee][Navigation] New Note requested '
       'platform=${defaultTargetPlatform.name} folder=${folderId ?? 'root'}',
     );
     try {
@@ -334,22 +485,22 @@ class _NotesHomePageState extends State<NotesHomePage> {
       }
       if (!mounted) return;
 
-      debugPrint('[Snote][Navigation] persisted new note id=${note.id}');
+      debugPrint('[Snotee][Navigation] persisted new note id=${note.id}');
       setState(() => _selected = note);
       // Always open New Note in its own full-screen route. In particular,
       // do not mount a just-created note inside the split-workspace editor:
       // this isolates its lifecycle and constraints from the home layout.
-      debugPrint('[Snote][Navigation] push dedicated new-note route noteId=${note.id}');
+      debugPrint('[Snotee][Navigation] push dedicated new-note route noteId=${note.id}');
       await Navigator.of(context).push<void>(
         MaterialPageRoute<void>(
           settings: RouteSettings(name: '/new-note/${note.id}'),
           builder: (_) => NewNoteRoute(note: note),
         ),
       );
-      debugPrint('[Snote][Navigation] dedicated new-note route returned noteId=${note.id}');
+      debugPrint('[Snotee][Navigation] dedicated new-note route returned noteId=${note.id}');
       await _load();
     } catch (error, stackTrace) {
-      debugPrint('[Snote][Navigation] New Note failed: $error\n$stackTrace');
+      debugPrint('[Snotee][Navigation] New Note failed: $error\n$stackTrace');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Could not open a new note: $error')),
@@ -385,7 +536,10 @@ class _NotesHomePageState extends State<NotesHomePage> {
     if (!_usesSplitWorkspace(context)) {
       await Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => _noteContentPage(note)),
+        MaterialPageRoute(
+          settings: RouteSettings(name: '/snotee/editor/${note.id}'),
+          builder: (_) => _noteContentPage(note),
+        ),
       );
       await _load();
     }
@@ -421,7 +575,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
         if (key != null && key.startsWith('cover:')) return key;
       }
     } catch (_) {}
-    return 'cover:' + (note.id.hashCode.abs() % 200).toString();
+    return 'cover:' + (note.id.hashCode.abs() % 400).toString();
   }
 
   Future<void> _changeNoteCover(LocalNote note) async {
@@ -455,6 +609,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
       current = current.parentId == null ? null : byId[current.parentId];
     }
     setState(() {
+      _favoritesOnly = false;
       _breadcrumbs
         ..clear()
         ..addAll(path.reversed);
@@ -1080,6 +1235,40 @@ class _NotesHomePageState extends State<NotesHomePage> {
     }
   }
 
+  Future<void> _openHomeDestination(String destination) async {
+    if (destination == 'home' || destination == 'favorites') {
+      setState(() {
+        _favoritesOnly = destination == 'favorites';
+        _folderId = null;
+        _breadcrumbs.clear();
+        _selected = null;
+        _search.clear();
+      });
+      await _load();
+      return;
+    }
+    final Widget page;
+    switch (destination) {
+      case 'flashcards':
+        page = const NoteCollectionPage(kind: 'flashcard');
+        break;
+      case 'mindmaps':
+        page = const NoteCollectionPage(kind: 'mindmap');
+        break;
+      case 'trash':
+        page = const TrashPage();
+        break;
+      case 'backups':
+        page = const LocalBackupsPage();
+        break;
+      default:
+        return;
+    }
+    if (!mounted) return;
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+    if (mounted) await _load();
+  }
+
   Future<void> _openPlus() async {
     final messenger = ScaffoldMessenger.of(context);
     final action = await showModalBottomSheet<String>(
@@ -1137,6 +1326,25 @@ class _NotesHomePageState extends State<NotesHomePage> {
   Widget build(BuildContext context) {
     final wide = _usesSplitWorkspace(context);
     return Scaffold(
+      drawer: wide ? null : Drawer(
+        child: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(14, 10, 14, 18),
+                child: SnoteLogo(size: 32),
+              ),
+              _homeDrawerItem(Icons.home_rounded, 'Home', 'home'),
+              _homeDrawerItem(Icons.star_rounded, 'Favorites', 'favorites'),
+              _homeDrawerItem(Icons.style_rounded, 'Flashcards', 'flashcards'),
+              _homeDrawerItem(Icons.hub_rounded, 'Mindmaps', 'mindmaps'),
+              _homeDrawerItem(Icons.backup_rounded, 'Local Backups', 'backups'),
+              _homeDrawerItem(Icons.delete_outline_rounded, 'Trash', 'trash'),
+            ],
+          ),
+        ),
+      ),
       body: SafeArea(child: wide ? _desktop() : _mobile()),
       floatingActionButton: FloatingActionButton(
         tooltip: 'Add',
@@ -1146,6 +1354,17 @@ class _NotesHomePageState extends State<NotesHomePage> {
     );
   }
 
+
+  Widget _homeDrawerItem(IconData icon, String label, String destination) =>
+      ListTile(
+        leading: Icon(icon),
+        title: Text(label),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        onTap: () {
+          Navigator.pop(context);
+          unawaited(_openHomeDestination(destination));
+        },
+      );
 
   /// Beta 79's new notebook launch panel. Feature-specific destinations remain
   /// available from the existing action sheet; these are only quick shortcuts.
@@ -1269,6 +1488,23 @@ class _NotesHomePageState extends State<NotesHomePage> {
     );
   }
 
+  /// Rebuild the notebook after returning from settings.
+  ///
+  /// Some device/plugin settings can leave the retained home route with stale
+  /// loading state. Clear that state first, then refresh repository data. A
+  /// failed refresh is handled by _load() and leaves the previous list visible.
+  Future<void> _openSettingsAndRefreshHome() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(builder: (_) => const SettingsPage()),
+    );
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _loadingMoreDatabaseNotes = false;
+    });
+    await _load();
+  }
+
   Future<void> _openPdfAnnotation() async {
     await Navigator.push(
       context,
@@ -1292,12 +1528,11 @@ class _NotesHomePageState extends State<NotesHomePage> {
         _SideRail(
           expanded: !_sidebarCollapsed,
           onToggle: () => setState(() => _sidebarCollapsed = !_sidebarCollapsed),
-          onSettings: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const SettingsPage()),
-          ),
+          onSettings: () => unawaited(_openSettingsAndRefreshHome()),
           onUpdates: _openUpdates,
           onCovers: _openCoverLibrary,
+          favoritesSelected: _favoritesOnly,
+          onDestination: (destination) => unawaited(_openHomeDestination(destination)),
         ),
         Expanded(
           child: Column(
@@ -1353,6 +1588,13 @@ class _NotesHomePageState extends State<NotesHomePage> {
                         onPasteNotes: _pasteNoteClipboard,
                         canPasteNotes: _noteClipboard != null,
                         onChangeNoteCover: _changeNoteCover,
+                        onToggleNoteFavorite: _toggleNoteFavorite,
+                        onToggleFolderFavorite: _toggleFolderFavorite,
+                        onTransferNote: _transferNoteByQr,
+                        onTransferFolder: _transferFolderByQr,
+                        onExportEncryptedNote: _exportEncryptedNoteFile,
+                        onExportEncryptedFolder: _exportEncryptedFolderFile,
+                        favoritesOnly: _favoritesOnly,
                         folderSort: _folderSort,
                         onFolderSort: _setFolderSort,
                         selectedFolderIds: _selectedFolderIds,
@@ -1403,7 +1645,12 @@ class _NotesHomePageState extends State<NotesHomePage> {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: Row(
             children: [
-              const SnoteLogo(size: 34),
+              Builder(builder: (context) => IconButton(
+                tooltip: 'Open navigation',
+                onPressed: () => Scaffold.of(context).openDrawer(),
+                icon: const Icon(Icons.menu_rounded),
+              )),
+              const SnoteLogo(size: 40),
               const Spacer(),
               IconButton(onPressed: () => setState(() { _searchVisible = !_searchVisible; if (!_searchVisible) _search.clear(); }), tooltip: 'Search notes', icon: const Icon(Icons.search_rounded)),
               IconButton(
@@ -1417,10 +1664,7 @@ class _NotesHomePageState extends State<NotesHomePage> {
                 icon: const Icon(Icons.collections_bookmark_outlined),
               ),
               IconButton(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const SettingsPage()),
-                ),
+                onPressed: () => unawaited(_openSettingsAndRefreshHome()),
                 tooltip: 'Settings',
                 icon: const Icon(Icons.tune_rounded),
               ),
@@ -1486,6 +1730,13 @@ class _NotesHomePageState extends State<NotesHomePage> {
                         onPasteNotes: _pasteNoteClipboard,
                         canPasteNotes: _noteClipboard != null,
                         onChangeNoteCover: _changeNoteCover,
+                        onToggleNoteFavorite: _toggleNoteFavorite,
+                        onToggleFolderFavorite: _toggleFolderFavorite,
+                        onTransferNote: _transferNoteByQr,
+                        onTransferFolder: _transferFolderByQr,
+                        onExportEncryptedNote: _exportEncryptedNoteFile,
+                        onExportEncryptedFolder: _exportEncryptedFolderFile,
+                        favoritesOnly: _favoritesOnly,
                         folderSort: _folderSort,
                         onFolderSort: _setFolderSort,
                         selectedFolderIds: _selectedFolderIds,
@@ -1530,6 +1781,8 @@ class _SideRail extends StatelessWidget {
   final VoidCallback onSettings;
   final VoidCallback onUpdates;
   final VoidCallback onCovers;
+  final bool favoritesSelected;
+  final ValueChanged<String> onDestination;
 
   const _SideRail({
     required this.expanded,
@@ -1537,6 +1790,8 @@ class _SideRail extends StatelessWidget {
     required this.onSettings,
     required this.onUpdates,
     required this.onCovers,
+    required this.favoritesSelected,
+    required this.onDestination,
   });
 
   @override
@@ -1588,7 +1843,13 @@ class _SideRail extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 20),
-          entry(icon: Icons.auto_stories_rounded, label: 'Notebook', selected: true, onTap: () {}),
+          entry(icon: Icons.home_rounded, label: 'Home', selected: !favoritesSelected, onTap: () => onDestination('home')),
+          entry(icon: Icons.star_rounded, label: 'Favorites', selected: favoritesSelected, onTap: () => onDestination('favorites')),
+          entry(icon: Icons.style_rounded, label: 'Flashcards', onTap: () => onDestination('flashcards')),
+          entry(icon: Icons.hub_rounded, label: 'Mindmaps', onTap: () => onDestination('mindmaps')),
+          entry(icon: Icons.backup_rounded, label: 'Local Backups', onTap: () => onDestination('backups')),
+          entry(icon: Icons.delete_outline_rounded, label: 'Trash', onTap: () => onDestination('trash')),
+          const Divider(height: 18),
           entry(icon: Icons.notifications_none_rounded, label: 'Updates & notices', onTap: onUpdates),
           entry(icon: Icons.collections_bookmark_outlined, label: 'Cover library', onTap: onCovers),
           entry(icon: Icons.settings_outlined, label: 'Settings', onTap: onSettings),
@@ -1616,9 +1877,11 @@ class _TopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
         child: Row(
           children: [
+            const SnoteLogo(size: 42),
+            const SizedBox(width: 20),
             if (searchVisible)
               Expanded(child: TextField(
                 controller: search,
@@ -1629,8 +1892,10 @@ class _TopBar extends StatelessWidget {
                   suffixIcon: IconButton(onPressed: onToggleSearch, icon: const Icon(Icons.close_rounded), tooltip: 'Close search'),
                 ),
               ))
-            else
+            else ...[
+              const Spacer(),
               IconButton(onPressed: onToggleSearch, tooltip: 'Search notes', icon: const Icon(Icons.search_rounded)),
+            ],
             const SizedBox(width: 8),
             IconButton(
               onPressed: onToggleView,
@@ -1690,6 +1955,13 @@ class _HierarchyPanel extends StatelessWidget {
   final VoidCallback onPasteNotes;
   final bool canPasteNotes;
   final ValueChanged<LocalNote> onChangeNoteCover;
+  final ValueChanged<LocalNote> onToggleNoteFavorite;
+  final ValueChanged<LocalFolder> onToggleFolderFavorite;
+  final ValueChanged<LocalNote> onTransferNote;
+  final ValueChanged<LocalFolder> onTransferFolder;
+  final ValueChanged<LocalNote> onExportEncryptedNote;
+  final ValueChanged<LocalFolder> onExportEncryptedFolder;
+  final bool favoritesOnly;
   final String folderSort;
   final ValueChanged<String> onFolderSort;
   final Set<String> selectedFolderIds;
@@ -1740,6 +2012,13 @@ class _HierarchyPanel extends StatelessWidget {
     required this.onPasteNotes,
     required this.canPasteNotes,
     required this.onChangeNoteCover,
+    required this.onToggleNoteFavorite,
+    required this.onToggleFolderFavorite,
+    required this.onTransferNote,
+    required this.onTransferFolder,
+    required this.onExportEncryptedNote,
+    required this.onExportEncryptedFolder,
+    required this.favoritesOnly,
     required this.folderSort,
     required this.onFolderSort,
     required this.selectedFolderIds,
@@ -1783,15 +2062,14 @@ class _HierarchyPanel extends StatelessWidget {
         if (key != null && key.startsWith('cover:')) return key;
       }
     } catch (_) {}
-    return 'cover:' + (note.id.hashCode.abs() % 200).toString();
+    return 'cover:' + (note.id.hashCode.abs() % 400).toString();
   }
 
   @override
   Widget build(BuildContext context) {
     if (loading) return const Center(child: CircularProgressIndicator());
     final theme = Theme.of(context);
-    final visibleFolders = allFolders.where((folder) => folder.parentId == currentFolderId).toList();
-    final renderedFolders = visibleFolders.take(folderRenderLimit).toList();
+    final visibleFolders = (favoritesOnly ? allFolders : allFolders.where((folder) => folder.parentId == currentFolderId)).toList();
     final renderedNotes = notes.take(noteRenderLimit).toList();
     switch (folderSort) {
       case 'nameDesc':
@@ -1806,15 +2084,16 @@ class _HierarchyPanel extends StatelessWidget {
       default:
         visibleFolders.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     }
+    final renderedFolders = visibleFolders.take(folderRenderLimit).toList();
 
     return ListView(
       padding: EdgeInsets.fromLTRB(compact ? 12 : 14, 4, compact ? 12 : 14, 110),
       children: [
         Row(
           children: [
-            const Expanded(
+            Expanded(
               child: Text(
-                'Folders & notes',
+                favoritesOnly ? 'Favorites' : 'Folders & notes',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
               ),
             ),
@@ -1917,6 +2196,9 @@ class _HierarchyPanel extends StatelessWidget {
                     onCopy: () => onSetFolderClipboard(folder, 'copy'),
                     onCut: () => onSetFolderClipboard(folder, 'cut'),
                     onDetails: () => onFolderDetails(folder),
+                    onToggleFavorite: () => onToggleFolderFavorite(folder),
+                    onTransfer: () => onTransferFolder(folder),
+                    onExportEncrypted: () => onExportEncryptedFolder(folder),
                   ),
                 );
               }).toList(),
@@ -2002,6 +2284,12 @@ class _HierarchyPanel extends StatelessWidget {
                               onSelected: (value) {
                                 if (value == 'cover') {
                                   onChangeNoteCover(note);
+                                } else if (value == 'favorite') {
+                                  onToggleNoteFavorite(note);
+                                } else if (value == 'transfer') {
+                                  onTransferNote(note);
+                                } else if (value == 'encrypted-file') {
+                                  onExportEncryptedNote(note);
                                 } else if (value == 'rename') {
                                   onRenameNote(note);
                                 } else if (value == 'delete') {
@@ -2018,6 +2306,9 @@ class _HierarchyPanel extends StatelessWidget {
                               },
                               itemBuilder: (_) => [
                                 const PopupMenuItem(value: 'cover', child: Text('Change cover')),
+                                PopupMenuItem(value: 'favorite', child: Text(note.isFavorite ? 'Remove from favorites' : 'Add to favorites')),
+                                const PopupMenuItem(value: 'transfer', child: Text('Encrypted QR transfer')),
+                                const PopupMenuItem(value: 'encrypted-file', child: Text('Export encrypted file')),
                                 const PopupMenuItem(value: 'rename', child: Text('Rename')),
                                 const PopupMenuItem(value: 'move', child: Text('Move to folder')),
                                 const PopupMenuItem(value: 'copy', child: Text('Copy')),
@@ -2052,6 +2343,9 @@ class _HierarchyPanel extends StatelessWidget {
               onPaste: onPasteNotes,
               canPasteNotes: canPasteNotes,
               onChangeCover: () => onChangeNoteCover(note),
+              onToggleFavorite: () => onToggleNoteFavorite(note),
+              onTransfer: () => onTransferNote(note),
+              onExportEncrypted: () => onExportEncryptedNote(note),
             ),
           ),
         if (notes.length > renderedNotes.length ||
@@ -2094,12 +2388,18 @@ class _FolderCoverCard extends StatelessWidget {
   final VoidCallback onCopy;
   final VoidCallback onCut;
   final VoidCallback onDetails;
+  final VoidCallback onToggleFavorite;
+  final VoidCallback onTransfer;
+  final VoidCallback onExportEncrypted;
 
   const _FolderCoverCard({
     required this.folder, required this.selected, required this.selectionMode,
     required this.onOpen, required this.onSelect, required this.onCustomize,
     required this.onRename, required this.onDelete, required this.onMove,
     required this.onCopy, required this.onCut, required this.onDetails,
+    required this.onToggleFavorite,
+    required this.onTransfer,
+    required this.onExportEncrypted,
   });
 
   @override
@@ -2143,18 +2443,24 @@ class _FolderCoverCard extends StatelessWidget {
                           case 'copy': onCopy(); break;
                           case 'cut': onCut(); break;
                           case 'details': onDetails(); break;
+                          case 'favorite': onToggleFavorite(); break;
+                          case 'transfer': onTransfer(); break;
+                          case 'encrypted-file': onExportEncrypted(); break;
                           case 'rename': onRename(); break;
                           case 'delete': onDelete(); break;
                         }
                       },
-                      itemBuilder: (_) => const [
-                        PopupMenuItem(value: 'open', child: Text('Open folder')),
+                      itemBuilder: (_) => [
+                        const PopupMenuItem(value: 'open', child: Text('Open folder')),
                         PopupMenuItem(value: 'cover', child: Text('Change cover / color')),
                         PopupMenuItem(value: 'select', child: Text('Select')),
                         PopupMenuItem(value: 'move', child: Text('Move')),
                         PopupMenuItem(value: 'copy', child: Text('Copy')),
                         PopupMenuItem(value: 'cut', child: Text('Cut')),
                         PopupMenuItem(value: 'details', child: Text('Details')),
+                        PopupMenuItem(value: 'favorite', child: Text(folder.isFavorite ? 'Remove from favorites' : 'Add to favorites')),
+                        const PopupMenuItem(value: 'transfer', child: Text('Encrypted QR transfer')),
+                        const PopupMenuItem(value: 'encrypted-file', child: Text('Export encrypted file')),
                         PopupMenuItem(value: 'rename', child: Text('Rename')),
                         PopupMenuItem(value: 'delete', child: Text('Delete')),
                       ],
@@ -2205,6 +2511,9 @@ class _HomeNoteTile extends StatelessWidget {
   final VoidCallback onPaste;
   final bool canPasteNotes;
   final VoidCallback onChangeCover;
+  final VoidCallback onToggleFavorite;
+  final VoidCallback onTransfer;
+  final VoidCallback onExportEncrypted;
 
   const _HomeNoteTile({
     required this.note,
@@ -2220,6 +2529,9 @@ class _HomeNoteTile extends StatelessWidget {
     required this.onPaste,
     required this.canPasteNotes,
     required this.onChangeCover,
+    required this.onToggleFavorite,
+    required this.onTransfer,
+    required this.onExportEncrypted,
   });
 
   @override
@@ -2277,6 +2589,12 @@ class _HomeNoteTile extends StatelessWidget {
                   onSelected: (value) {
                     if (value == 'cover') {
                       onChangeCover();
+                    } else if (value == 'favorite') {
+                      onToggleFavorite();
+                    } else if (value == 'transfer') {
+                      onTransfer();
+                    } else if (value == 'encrypted-file') {
+                      onExportEncrypted();
                     } else if (value == 'rename') {
                       onRename();
                     } else if (value == 'delete') {
@@ -2293,6 +2611,9 @@ class _HomeNoteTile extends StatelessWidget {
                   },
                   itemBuilder: (_) => [
                     const PopupMenuItem(value: 'cover', child: Text('Change cover')),
+                    PopupMenuItem(value: 'favorite', child: Text(note.isFavorite ? 'Remove from favorites' : 'Add to favorites')),
+                    const PopupMenuItem(value: 'transfer', child: Text('Encrypted QR transfer')),
+                    const PopupMenuItem(value: 'encrypted-file', child: Text('Export encrypted file')),
                     const PopupMenuItem(value: 'rename', child: Text('Rename')),
                     const PopupMenuItem(value: 'move', child: Text('Move to folder')),
                     const PopupMenuItem(value: 'copy', child: Text('Copy')),
@@ -2325,8 +2646,8 @@ class _WorkspaceEmpty extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.draw_outlined, size: 54, color: Theme.of(context).colorScheme.primary),
-                const SizedBox(height: 16),
+                const SnoteLogo(size: 76),
+                const SizedBox(height: 18),
                 const Text('Open a note to start writing', textAlign: TextAlign.center, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 8),
                 const Text('Choose a note from the list, or create a new one. The workspace will not stay blank.', textAlign: TextAlign.center),

@@ -28,6 +28,7 @@ import '../../../canvas_engine/models/stroke.dart';
 import '../../../canvas_engine/models/stroke_codec.dart';
 import '../../../canvas_engine/widgets/page_background.dart';
 import '../../../ui/snote_floating_toolbar.dart';
+import '../../../ui/snote_tool_glyph.dart';
 import '../../../core/security/note_lock_service.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../settings/settings_page.dart';
@@ -83,6 +84,17 @@ class EditorV2Page extends StatefulWidget {
 
 class _EditorV2PageState extends State<EditorV2Page>
     with WidgetsBindingObserver {
+  // Keep already-open editor routes mounted while another note is selected.
+  // This preserves decoded page state and warm PDF raster/document caches.
+  static final Set<String> _openEditorNoteIds = <String>{};
+  static const int _maxMountedEditorTabs = 5;
+  static final LinkedHashMap<String, LocalNote> _editorTabNotes =
+      LinkedHashMap<String, LocalNote>();
+  static final Map<String, Route<dynamic>> _editorRoutes =
+      <String, Route<dynamic>>{};
+
+  static String _editorRouteName(String noteId) => '/snotee/editor/$noteId';
+
   static const double _defaultPageHeight = 1152;
 
   double get _pageHeight {
@@ -118,7 +130,9 @@ class _EditorV2PageState extends State<EditorV2Page>
         : shortToLong;
   }
   static const int _maxPdfPagesPerImport = 40;
-  static const int _maxPdfRasterCacheBytes = 48 * 1024 * 1024;
+  // Keep decoded PDF page rasters bounded on memory-constrained phones.
+  // The original PDF remains attached and visible pages can be rerendered.
+  static const int _maxPdfRasterCacheBytes = 32 * 1024 * 1024;
   static const List<Color> _palette = <Color>[
     Color(0xff111827), Color(0xff263238), Color(0xff546e7a), Color(0xff90a4ae),
     Color(0xff000000), Color(0xffffffff), Color(0xff37474f), Color(0xff78909c),
@@ -165,6 +179,9 @@ class _EditorV2PageState extends State<EditorV2Page>
   final Map<String, TextEditingController> _textControllers =
       <String, TextEditingController>{};
   final Map<String, Uint8List> _backgroundBytesCache = <String, Uint8List>{};
+  final LinkedHashMap<String, List<Stroke>> _decodedStrokeCache =
+      LinkedHashMap<String, List<Stroke>>();
+  final Map<String, List> _strokeSourceLists = <String, List>{};
   final Map<String, Uint8List> _imageBytesCache = <String, Uint8List>{};
   final Map<String, DocumentAsset> _pdfSourceAssets = <String, DocumentAsset>{};
   final Map<String, Uint8List> _pdfSourceBytesCache = <String, Uint8List>{};
@@ -182,6 +199,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   Offset? _lastErasePosition;
   bool _eraseUndoCaptured = false;
   List<Stroke>? _eraseWorkingStrokes;
+  final Map<String, Rect> _eraseWorkingBounds = <String, Rect>{};
   Timer? _holdTimer;
   Offset? _holdStartPosition;
   Offset? _pageSwipeStart;
@@ -228,6 +246,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   int? _activePointer;
   Offset? _gestureStart;
   Offset? _eraserCursor;
+  double _eraserCursorRadius = 18;
   Offset _floatingOffset = const Offset(12, 12);
   List<StrokePoint> _livePoints = <StrokePoint>[];
   Stroke? _liveStroke;
@@ -235,6 +254,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   final Set<String> _selectedStrokeIds = <String>{};
   final Set<String> _selectedImageIds = <String>{};
   final Set<String> _selectedTextBoxIds = <String>{};
+  final List<Offset> _lassoOutlinePoints = <Offset>[];
   final Map<String, Map<String, Object?>> _toolProfiles = <String, Map<String, Object?>>{};
   Map<String, Object?>? _pageClipboard;
   Map<String, Object?>? _selectionClipboard;
@@ -243,7 +263,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   List<String> _toolbarOrder = <String>[];
   bool _showNoteSwitcherInTitleBar = true;
   bool _showTabsBar = false;
-  Future<List<LocalNote>>? _noteTabsFuture;
+  Route<dynamic>? _editorRoute;
   List<Map<String, Object?>>? _selectionTransformImageSnapshot;
   List<Map<String, Object?>>? _selectionTransformTextSnapshot;
   bool _showFavoritesShowcase = true;
@@ -251,7 +271,10 @@ class _EditorV2PageState extends State<EditorV2Page>
   bool _showPagePreview = true;
   bool _floatingPageNavigation = false;
   bool _fullScreenMode = false;
+  bool _readingMode = false;
+  CanvasTool? _toolBeforeReading;
   bool _showFloatingTimer = false;
+  bool _showBrowserPanel = false;
   bool _toolbarCollapsedToEdge = false;
   bool _calculatorCollapsed = false;
   bool _showViewportHud = false;
@@ -308,6 +331,8 @@ class _EditorV2PageState extends State<EditorV2Page>
   @override
   void initState() {
     super.initState();
+    _openEditorNoteIds.add(widget.note.id);
+    _editorTabNotes[widget.note.id] = widget.note;
     WidgetsBinding.instance.addObserver(this);
     _title.text = widget.note.title;
     _quill.addListener(_scheduleSave);
@@ -318,7 +343,6 @@ class _EditorV2PageState extends State<EditorV2Page>
     _floatingToolbar = _settings.getBool('editorV2FloatingToolbar');
     _compactFloatingToolbar = _settings.getBool('editorV2CompactFloatingToolbar');
     _showTabsBar = _settings.getBool('editorV2ShowTabs');
-    _noteTabsFuture = _repo.listAllVisible(limit: 12);
     _toolbarCollapsedToEdge = _settings.getBool('editorV2ToolbarCollapsed');
     _toolbarLength = _settings.getDouble('editorV2ToolbarLength').clamp(180.0, 900.0).toDouble();
     _toolbarThickness = _settings.getDouble('editorV2ToolbarThickness').clamp(28.0, 96.0).toDouble();
@@ -374,6 +398,11 @@ class _EditorV2PageState extends State<EditorV2Page>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route != null) {
+      _editorRoute = route;
+      _editorRoutes[widget.note.id] = route;
+    }
     if (_fitInitialized) return;
     _fitInitialized = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -558,6 +587,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     _title.text = saved.title;
 
     if (!mounted) return;
+    _clearStrokeDecodeCache();
     setState(() {
       _rootContent = root;
       _pages = pages;
@@ -574,6 +604,11 @@ class _EditorV2PageState extends State<EditorV2Page>
       _loadError = null;
     });
     _initializeTextControllers();
+    // Warm the pages adjacent to the restored/current page only after the
+    // first interactive frame. This keeps initial editor paint responsive.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _warmAdjacentPdfPages(_page);
+    });
     debugPrint(
       '[Snote][EditorV2] document ready noteId=${widget.note.id} '
       'pages=${pages.length} pdfPages=$totalPdfPages migratedPdf=$renderedPdf',
@@ -634,7 +669,17 @@ class _EditorV2PageState extends State<EditorV2Page>
           });
         }
       }
-      final maxDimension = thumbnail ? 320.0 : 2800.0;
+      final devicePixelRatio =
+          WidgetsBinding.instance.platformDispatcher.views.first.devicePixelRatio;
+      final zoom = _transform.value.getMaxScaleOnAxis().clamp(.5, 3.0).toDouble();
+      // PDF rasterization is the most memory-intensive part of opening a
+      // textbook. Cap the first-pass bitmap size to avoid multi-page OOMs;
+      // zooming still rerenders the current page at a higher bounded scale.
+      final maxDimension = thumbnail
+          ? 256.0
+          : (math.max(page.width, page.height) * devicePixelRatio * zoom)
+              .clamp(960.0, 2000.0)
+              .toDouble();
       final scale = math.min(maxDimension / page.width, maxDimension / page.height);
       final rendered = await page.render(
         width: (page.width * scale).clamp(1.0, maxDimension).toDouble(),
@@ -652,7 +697,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   void _rememberPdfRasterFuture(String key, Future<Uint8List?> future) {
     _pdfRasterFutureCache.remove(key);
     _pdfRasterFutureCache[key] = future;
-    while (_pdfRasterFutureCache.length > 12) {
+    while (_pdfRasterFutureCache.length > 8) {
       _pdfRasterFutureCache.remove(_pdfRasterFutureCache.keys.first);
     }
   }
@@ -662,7 +707,15 @@ class _EditorV2PageState extends State<EditorV2Page>
     int pageNumber, {
     bool thumbnail = false,
   }) {
-    final key = '$assetId:$pageNumber:${thumbnail ? 'thumb' : 'full'}';
+    final zoom = _transform.value.getMaxScaleOnAxis();
+    final resolution = thumbnail
+        ? 'thumb'
+        : zoom >= 2
+            ? 'high'
+            : zoom >= 1
+                ? 'normal'
+                : 'fit';
+    final key = '$assetId:$pageNumber:$resolution';
 
     final cachedFuture = _pdfRasterFutureCache.remove(key);
     if (cachedFuture != null) {
@@ -1115,7 +1168,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     } else if (key == 'timer') {
       setState(() => _showFloatingTimer = true);
     } else if (key == 'webSearch') {
-      unawaited(SnoteWebSearchPanel.show(context));
+      setState(() => _showBrowserPanel = true);
     }
   }
 
@@ -1183,7 +1236,7 @@ class _EditorV2PageState extends State<EditorV2Page>
             child: SizedBox(
               width: 34,
               height: 34,
-              child: Icon(_toolIcon(tool), color: Theme.of(context).colorScheme.primary),
+              child: _toolGlyph(tool, size: 19, color: Theme.of(context).colorScheme.primary),
             ),
           ),
           child: GestureDetector(
@@ -1192,7 +1245,7 @@ class _EditorV2PageState extends State<EditorV2Page>
               visualDensity: VisualDensity.compact,
               tooltip: '${tool.label} • double-tap for settings',
               onPressed: () => _selectTool(tool),
-              icon: Icon(_toolIcon(tool), size: 19),
+              icon: _toolGlyph(tool, size: 19),
             ),
           ),
         ),
@@ -1213,7 +1266,7 @@ class _EditorV2PageState extends State<EditorV2Page>
           child: SizedBox(
             width: 36,
             height: 36,
-            child: Icon(_toolIcon(tool), color: Theme.of(context).colorScheme.primary),
+            child: _toolGlyph(tool, size: 19, color: Theme.of(context).colorScheme.primary),
           ),
         ),
         child: Tooltip(
@@ -1226,26 +1279,16 @@ class _EditorV2PageState extends State<EditorV2Page>
               width: _favoritesVertical ? 34 : 38,
               height: _favoritesVertical ? 38 : 34,
               margin: const EdgeInsets.all(2),
-              decoration: BoxDecoration(
-                color: active
-                    ? Theme.of(context).colorScheme.primaryContainer
-                    : Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: active
-                      ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).colorScheme.outlineVariant,
-                ),
-              ),
+              decoration: const BoxDecoration(shape: BoxShape.circle),
               child: _settings.getBool('showPenCaseStrokeSize') && active
                   ? Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(_toolIcon(tool), size: 14),
+                        _toolGlyph(tool, size: 14),
                         Text(_size.toStringAsFixed(1), style: const TextStyle(fontSize: 7, height: 1)),
                       ],
                     )
-                  : Icon(_toolIcon(tool), size: 16),
+                  : _toolGlyph(tool, size: 16),
             ),
           ),
         ),
@@ -1255,6 +1298,7 @@ class _EditorV2PageState extends State<EditorV2Page>
 
   void _rememberCurrentToolProfile() {
     _toolProfiles[_tool.name] = <String, Object?>{
+      ...?_toolProfiles[_tool.name],
       'size': _size,
       'color': _color.toARGB32(),
       'opacity': _opacity,
@@ -1373,6 +1417,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   }
 
   void _pushUndo() {
+    _clearStrokeDecodeCache();
     _undoStack.add(EditorV2DocumentCodec.clonePages(_pages));
     if (_undoStack.length > 80) _undoStack.removeAt(0);
     _redoStack.clear();
@@ -1380,6 +1425,7 @@ class _EditorV2PageState extends State<EditorV2Page>
 
   void _undo() {
     if (_undoStack.isEmpty) return;
+    _clearStrokeDecodeCache();
     _redoStack.add(EditorV2DocumentCodec.clonePages(_pages));
     setState(() {
       _pages = _undoStack.removeLast();
@@ -1393,6 +1439,7 @@ class _EditorV2PageState extends State<EditorV2Page>
 
   void _redo() {
     if (_redoStack.isEmpty) return;
+    _clearStrokeDecodeCache();
     _undoStack.add(EditorV2DocumentCodec.clonePages(_pages));
     setState(() {
       _pages = _redoStack.removeLast();
@@ -1406,9 +1453,29 @@ class _EditorV2PageState extends State<EditorV2Page>
 
   List<Stroke> _strokesFor(Map<String, Object?> page) {
     final raw = page['strokes'];
-    return StrokeCodec.documentToStrokes(<String, Object?>{
-      'strokes': raw is List ? raw : <Object?>[],
+    if (raw is! List) return const <Stroke>[];
+    final pageId = page['id']?.toString() ?? 'page-$_page';
+    final cached = _decodedStrokeCache.remove(pageId);
+    if (cached != null && identical(_strokeSourceLists[pageId], raw)) {
+      _decodedStrokeCache[pageId] = cached;
+      return cached;
+    }
+    final decoded = StrokeCodec.documentToStrokes(<String, Object?>{
+      'strokes': raw,
     });
+    _strokeSourceLists[pageId] = raw;
+    _decodedStrokeCache[pageId] = decoded;
+    while (_decodedStrokeCache.length > 6) {
+      final oldest = _decodedStrokeCache.keys.first;
+      _decodedStrokeCache.remove(oldest);
+      _strokeSourceLists.remove(oldest);
+    }
+    return decoded;
+  }
+
+  void _clearStrokeDecodeCache() {
+    _decodedStrokeCache.clear();
+    _strokeSourceLists.clear();
   }
 
   StrokePoint _pointFrom(PointerEvent event) {
@@ -1451,7 +1518,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
     final points = shapeTool && _livePoints.isNotEmpty
         ? <StrokePoint>[_livePoints.first, _livePoints.last]
-        : List<StrokePoint>.from(_livePoints);
+        : _livePoints;
     return Stroke(
       id: 'live-${_activePointer ?? 0}',
       points: points,
@@ -1459,6 +1526,19 @@ class _EditorV2PageState extends State<EditorV2Page>
       shape: shapeTool ? _tool.name : null,
       dashed: _tool == CanvasTool.dashedLine || _tool == CanvasTool.dottedLine,
     );
+  }
+
+  List<Offset> _simplifyLassoOutline(List<Offset> points) {
+    if (points.length <= 3) return points;
+    final simplified = <Offset>[points.first];
+    for (var i = 1; i < points.length - 1; i++) {
+      if ((points[i] - simplified.last).distance >= 2.5 &&
+          simplified.length < 255) {
+        simplified.add(points[i]);
+      }
+    }
+    if (simplified.last != points.last) simplified.add(points.last);
+    return simplified;
   }
 
   bool _strokeMostlyInsidePolygon(
@@ -1638,23 +1718,25 @@ class _EditorV2PageState extends State<EditorV2Page>
     double? baseRadius,
   }) {
     final radius = baseRadius ?? math.max(18, _size * 2).toDouble();
-    if (!_settings.getBool('pressureErase') ||
-        !_settings.getBool('pressureEraseArea')) {
-      return radius;
-    }
+    if (!_settings.getBool('pressureErase')) return radius;
     final pressure = _pointFrom(event).pressure.clamp(0.0, 1.0).toDouble();
     final threshold = _settings.getDouble('pressureEraseThreshold').clamp(0.0, 1.0).toDouble();
     final effectivePressure = threshold >= 1
         ? (pressure >= 1 ? 1.0 : 0.0)
         : ((pressure - threshold) / (1 - threshold)).clamp(0.0, 1.0).toDouble();
-    return radius * (0.5 + effectivePressure * 1.5);
+    return radius * (0.08 + effectivePressure * 1.42);
   }
 
   void _onPointerDown(PointerDownEvent event) {
+    if (_readingMode) {
+      _navigationOnlyPointers.add(event.pointer);
+      return;
+    }
     _lastEraseTimestamp = null;
     _lastErasePosition = event.localPosition;
     _eraseUndoCaptured = false;
     _eraseWorkingStrokes = null;
+    _eraseWorkingBounds.clear();
     _activePointers.add(event.pointer);
     if (event.kind == PointerDeviceKind.stylus ||
         event.kind == PointerDeviceKind.invertedStylus) {
@@ -1730,6 +1812,10 @@ class _EditorV2PageState extends State<EditorV2Page>
     _pageSwipeTriggered = false;
     _longPressTriggered = false;
     _livePoints = <StrokePoint>[_pointFrom(event)];
+    if (_tool == CanvasTool.lasso) {
+      _lassoOutlinePoints.clear();
+      _lassoRect = Rect.fromPoints(event.localPosition, event.localPosition);
+    }
     _eraserCursor = event.localPosition;
     _liveStroke = _buildLiveStroke();
     _holdTimer?.cancel();
@@ -1756,6 +1842,7 @@ class _EditorV2PageState extends State<EditorV2Page>
             _livePoints.clear();
             _liveStroke = null;
             _eraserCursor = position;
+            _eraserCursorRadius = _pressureEraseRadius(event, baseRadius: 48);
           });
         }
       });
@@ -1816,8 +1903,10 @@ class _EditorV2PageState extends State<EditorV2Page>
     if (_activePointer == event.pointer && _pressureEraseActive) {
       _eraserCursor = event.localPosition;
       final radius = _pressureEraseRadius(event);
+      _eraserCursorRadius = radius;
+      final previousPosition = _lastErasePosition ?? event.localPosition;
       if (_pressureEraseAllowed(event) && _shouldProcessErase(event, radius)) {
-        _eraseAt(event.localPosition, radius);
+        _eraseAlongSegment(previousPosition, event.localPosition, radius);
       }
       setState(() {});
       return;
@@ -1829,8 +1918,10 @@ class _EditorV2PageState extends State<EditorV2Page>
           _settings.getString('eraserMode') == 'pixel';
       final baseRadius = precisionRadius ? 7.0 : math.max(18, _size * 2).toDouble();
       final radius = _pressureEraseRadius(event, baseRadius: baseRadius);
+      _eraserCursorRadius = radius;
+      final previousPosition = _lastErasePosition ?? event.localPosition;
       if (_pressureEraseAllowed(event) && _shouldProcessErase(event, radius)) {
-        _eraseAt(event.localPosition, radius);
+        _eraseAlongSegment(previousPosition, event.localPosition, radius);
       }
       setState(() {});
       return;
@@ -1848,6 +1939,9 @@ class _EditorV2PageState extends State<EditorV2Page>
       if ((point.position - previous).distance < .35) return;
     }
     _livePoints.add(point);
+    if (_tool == CanvasTool.lasso && _gestureStart != null) {
+      _lassoRect = Rect.fromPoints(_gestureStart!, event.localPosition);
+    }
     _liveStroke = _buildLiveStroke();
     _eraserCursor = event.localPosition;
     setState(() {});
@@ -1885,7 +1979,13 @@ class _EditorV2PageState extends State<EditorV2Page>
       _navigationOnlyPointers.remove(event.pointer);
       final swipe = event.localPosition - _pageSwipeStart!;
       final horizontalSwipe = swipe.dx.abs() > swipe.dy.abs() * 1.25;
-      final forward = horizontalSwipe ? swipe.dx > 0 : swipe.dy < 0;
+      final portraitVerticalSwipe = !horizontalSwipe &&
+          MediaQuery.orientationOf(context) == Orientation.portrait;
+      final forward = horizontalSwipe
+          ? swipe.dx < 0
+          : portraitVerticalSwipe
+              ? swipe.dy < 0
+              : swipe.dy > 0;
       setState(() {
         _activePointer = null;
         _gestureStart = null;
@@ -1961,7 +2061,33 @@ class _EditorV2PageState extends State<EditorV2Page>
         );
       }
     } else if (_tool == CanvasTool.lasso) {
-      _selectInPolygon(completedPoints.map((sample) => sample.position).toList());
+      final lassoPath = completedPoints.map((sample) => sample.position).toList();
+      final pathLength = lassoPath.length < 2
+          ? 0.0
+          : List.generate(lassoPath.length - 1, (i) => (lassoPath[i + 1] - lassoPath[i]).distance)
+              .fold<double>(0, (sum, distance) => sum + distance);
+      final lassoProfile = _toolProfiles[CanvasTool.lasso.name];
+      final freehandSelection = (lassoProfile?['lassoFreehandSelection'] as bool?) ?? true;
+      final freehandOutline = (lassoProfile?['lassoFreehandOutline'] as bool?) ?? false;
+      if (pathLength < 10) {
+        _lassoOutlinePoints.clear();
+        _selectStrokeAt(end, radius: math.max(14, _size * 2));
+      } else {
+        if (freehandSelection) {
+          _selectInPolygon(lassoPath);
+        } else {
+          _selectInRect(Rect.fromPoints(lassoPath.first, lassoPath.last));
+        }
+        setState(() {
+          if (freehandOutline) {
+            _lassoOutlinePoints
+              ..clear()
+              ..addAll(_simplifyLassoOutline(lassoPath));
+          } else {
+            _lassoOutlinePoints.clear();
+          }
+        });
+      }
     } else if (_tool == CanvasTool.fill) {
       _fillShapeAt(end);
     } else if (completedPoints.isNotEmpty) {
@@ -2031,33 +2157,69 @@ class _EditorV2PageState extends State<EditorV2Page>
     return result;
   }
 
+  void _eraseAlongSegment(Offset from, Offset to, double radius) {
+    final distance = (to - from).distance;
+    final spacing = math.max(2.0, radius * .45);
+    final steps = math.max(1, (distance / spacing).ceil());
+    for (var step = 0; step <= steps; step++) {
+      _eraseAt(Offset.lerp(from, to, step / steps)!, radius);
+    }
+  }
+
+  Rect? _eraseBoundsForStroke(Stroke stroke) {
+    if (stroke.points.isEmpty) return null;
+    var left = stroke.points.first.position.dx;
+    var right = left;
+    var top = stroke.points.first.position.dy;
+    var bottom = top;
+    for (final point in stroke.points.skip(1)) {
+      left = math.min(left, point.position.dx);
+      right = math.max(right, point.position.dx);
+      top = math.min(top, point.position.dy);
+      bottom = math.max(bottom, point.position.dy);
+    }
+    return Rect.fromLTRB(left, top, right, bottom).inflate(stroke.pen.size / 2);
+  }
+
   void _eraseAt(Offset position, double radius) {
     final raw = _pageData['strokes'];
     if (raw is! List || raw.isEmpty) {
       _eraseWorkingStrokes = null;
+      _eraseWorkingBounds.clear();
       return;
     }
 
-    // Decode once for the entire drag. Mutate the cached working vector set
-    // until the pointer is released instead of reparsing every saved sample.
+    // Decode vectors once per drag and cache each stroke's broad-phase bounds.
+    // Most pointer samples can now skip distant strokes without walking every
+    // point in every stroke.
     final decoded = _eraseWorkingStrokes ??
         StrokeCodec.documentToStrokes(<String, Object?>{'strokes': raw});
     _eraseWorkingStrokes = decoded;
     final retained = <Stroke>[];
+    final nextBounds = <String, Rect>{};
     var changed = false;
-    final partialErase = _tool == CanvasTool.pixelEraser ||
-        _settings.getString('eraserMode') == 'pixel';
+    final baseFootprint = Rect.fromCenter(
+      center: position,
+      width: radius * 2,
+      height: radius * 1.4,
+    );
+    final partialErase = _pressureEraseActive
+        ? _settings.getString('pressureEraserMode') == 'pixel'
+        : (_tool == CanvasTool.pixelEraser || _settings.getString('eraserMode') == 'pixel');
 
     for (final stroke in decoded) {
-      if (stroke.points.isEmpty) {
+      final bounds = _eraseWorkingBounds[stroke.id] ?? _eraseBoundsForStroke(stroke);
+      if (bounds == null) {
         retained.add(stroke);
         continue;
       }
-      final footprint = Rect.fromCenter(
-        center: position,
-        width: radius * 2,
-        height: radius * 1.4,
-      ).inflate(stroke.pen.size / 2);
+      if (!bounds.overlaps(baseFootprint)) {
+        retained.add(stroke);
+        nextBounds[stroke.id] = bounds;
+        continue;
+      }
+
+      final footprint = baseFootprint.inflate(stroke.pen.size / 2);
       var hit = footprint.contains(stroke.points.first.position);
       for (var i = 1; !hit && i < stroke.points.length; i++) {
         hit = footprint.contains(stroke.points[i].position) ||
@@ -2070,6 +2232,7 @@ class _EditorV2PageState extends State<EditorV2Page>
 
       if (!hit) {
         retained.add(stroke);
+        nextBounds[stroke.id] = bounds;
         continue;
       }
 
@@ -2085,10 +2248,16 @@ class _EditorV2PageState extends State<EditorV2Page>
         if (fragment.length < 2) continue;
         final fragmentId =
             '${stroke.id}-px-${DateTime.now().microsecondsSinceEpoch}-${fragmentNumber++}';
-        retained.add(stroke.copyWith(id: fragmentId, points: fragment));
+        final clipped = stroke.copyWith(id: fragmentId, points: fragment);
+        retained.add(clipped);
+        final clippedBounds = _eraseBoundsForStroke(clipped);
+        if (clippedBounds != null) nextBounds[clipped.id] = clippedBounds;
       }
     }
 
+    _eraseWorkingBounds
+      ..clear()
+      ..addAll(nextBounds);
     if (!changed) return;
     _eraseWorkingStrokes = retained;
     // One undo checkpoint covers an entire eraser gesture, not each pointer
@@ -2206,6 +2375,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     _selectedStrokeIds.clear();
     _selectedImageIds.clear();
     _selectedTextBoxIds.clear();
+    _lassoOutlinePoints.clear();
   }
 
   int get _selectionCount =>
@@ -2275,7 +2445,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       if (sourcePolygon.isNotEmpty) _selectInRect(Rect.fromPoints(sourcePolygon.first, sourcePolygon.last));
       return;
     }
-    final polygon = List<Offset>.unmodifiable(sourcePolygon);
+    final polygon = List<Offset>.unmodifiable(_simplifyLassoOutline(sourcePolygon));
     final xs = polygon.map((point) => point.dx);
     final ys = polygon.map((point) => point.dy);
     final left = xs.reduce((a, b) => math.min(a, b).toDouble());
@@ -2284,13 +2454,50 @@ class _EditorV2PageState extends State<EditorV2Page>
     final bottom = ys.reduce((a, b) => math.max(a, b).toDouble());
     final polygonBounds = Rect.fromLTRB(left, top, right, bottom);
     final selectedStrokes = <String>{};
-
+    // Keep the freeform lasso responsive on dense pages: reject strokes outside
+    // the lasso bounds before checking their geometry, then select visible ink
+    // that touches the outline as well as ink fully inside it.
     for (final stroke in _strokesFor(_pageData)) {
-      final points = stroke.points.map((sample) => sample.position).toList();
-      if (points.isEmpty) continue;
-      if (_strokeMostlyInsidePolygon(points, polygon)) {
-        selectedStrokes.add(stroke.id);
+      if (stroke.points.isEmpty) continue;
+      final strokeRadius = math.max(1.5, stroke.pen.size / 2);
+      var strokeBounds = Rect.fromPoints(
+        stroke.points.first.position,
+        stroke.points.first.position,
+      );
+      for (final sample in stroke.points.skip(1)) {
+        strokeBounds = strokeBounds.expandToInclude(
+          Rect.fromPoints(sample.position, sample.position),
+        );
       }
+      if (!strokeBounds.inflate(strokeRadius).overlaps(polygonBounds)) continue;
+
+      var selected = false;
+      for (final sample in stroke.points) {
+        final point = sample.position;
+        if (_pointInPolygon(point, polygon)) {
+          selected = true;
+          break;
+        }
+        for (var i = 0; i < polygon.length; i++) {
+          if (_distanceToSegment(point, polygon[i], polygon[(i + 1) % polygon.length]) <= strokeRadius) {
+            selected = true;
+            break;
+          }
+        }
+        if (selected) break;
+      }
+      // Catch a lasso boundary that crosses between widely spaced ink samples.
+      for (var i = 1; !selected && i < stroke.points.length; i++) {
+        final a = stroke.points[i - 1].position;
+        final b = stroke.points[i].position;
+        for (var j = 0; j < polygon.length; j++) {
+          if (_segmentsIntersect(a, b, polygon[j], polygon[(j + 1) % polygon.length])) {
+            selected = true;
+            break;
+          }
+        }
+      }
+      if (selected) selectedStrokes.add(stroke.id);
     }
 
     final selectedImages = <String>{};
@@ -2913,7 +3120,6 @@ class _EditorV2PageState extends State<EditorV2Page>
     final next = !_showTabsBar;
     setState(() {
       _showTabsBar = next;
-      _noteTabsFuture ??= _repo.listAllVisible(limit: 12);
     });
     await _settings.setBool('editorV2ShowTabs', next);
   }
@@ -2922,50 +3128,94 @@ class _EditorV2PageState extends State<EditorV2Page>
     if (note.id == widget.note.id) return;
     await _flushSave();
     if (!mounted) return;
-    Navigator.of(context).pushReplacement(MaterialPageRoute<void>(
-      builder: (_) => EditorV2Page(note: note),
-    ));
+
+    final navigator = Navigator.of(context);
+    final existingRoute = _editorRoutes[note.id];
+    if (existingRoute != null && existingRoute.isActive) {
+      _editorTabNotes.remove(note.id);
+      _editorTabNotes[note.id] = note;
+      setState(() {});
+      navigator.popUntil((route) => identical(route, existingRoute));
+      return;
+    }
+    if (existingRoute != null) _editorRoutes.remove(note.id);
+    _editorTabNotes.remove(note.id);
+    _openEditorNoteIds.remove(note.id);
+
+    while (_editorTabNotes.length >= _maxMountedEditorTabs) {
+      final oldestId = _editorTabNotes.keys.firstWhere(
+        (id) => id != widget.note.id && id != note.id,
+        orElse: () => '',
+      );
+      if (oldestId.isEmpty) break;
+      final oldestRoute = _editorRoutes.remove(oldestId);
+      _editorTabNotes.remove(oldestId);
+      _openEditorNoteIds.remove(oldestId);
+      if (oldestRoute != null) navigator.removeRoute(oldestRoute);
+    }
+    _editorTabNotes[note.id] = note;
+    setState(() {});
+    await navigator.push<void>(
+      MaterialPageRoute<void>(
+        settings: RouteSettings(name: _editorRouteName(note.id)),
+        builder: (_) => EditorV2Page(note: note),
+      ),
+    );
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _closeNoteTab(LocalNote note) async {
+    final navigator = Navigator.of(context);
+    if (note.id == widget.note.id) {
+      await _flushSave();
+      if (!mounted) return;
+      if (navigator.canPop()) navigator.pop();
+      return;
+    }
+    final route = _editorRoutes[note.id];
+    if (route == null) {
+      _editorTabNotes.remove(note.id);
+      _openEditorNoteIds.remove(note.id);
+      if (mounted) setState(() {});
+      return;
+    }
+    if (route.isActive) navigator.removeRoute(route);
+    _editorRoutes.remove(note.id);
+    _editorTabNotes.remove(note.id);
+    _openEditorNoteIds.remove(note.id);
+    if (mounted) setState(() {});
   }
 
   Widget _buildNoteTabs() {
+    final notes = _editorTabNotes.values.toList(growable: false);
+    if (notes.isEmpty) return const SizedBox.shrink();
     return Material(
       color: Theme.of(context).colorScheme.surfaceContainerLow,
       child: SizedBox(
         height: 44,
-        child: FutureBuilder<List<LocalNote>>(
-          future: _noteTabsFuture ??= _repo.listAllVisible(limit: 12),
-          builder: (context, snapshot) {
-            final notes = snapshot.data ?? const <LocalNote>[];
-            if (snapshot.hasError) {
-              return Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Could not load note tabs', style: TextStyle(color: Theme.of(context).colorScheme.error)),
-              );
-            }
-            if (notes.isEmpty) return const SizedBox.shrink();
-            return ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-              itemCount: notes.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 5),
-              itemBuilder: (context, index) {
-                final note = notes[index];
-                final active = note.id == widget.note.id;
-                return ChoiceChip(
-                  visualDensity: VisualDensity.compact,
-                  selected: active,
-                  avatar: Icon(active ? Icons.edit_note_rounded : Icons.note_outlined, size: 16),
-                  label: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 170),
-                    child: Text(
-                      note.title.trim().isEmpty ? 'Untitled note' : note.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  onSelected: (_) => unawaited(_openNoteTab(note)),
-                );
-              },
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          itemCount: notes.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 5),
+          itemBuilder: (context, index) {
+            final note = notes[index];
+            final active = note.id == widget.note.id;
+            return InputChip(
+              visualDensity: VisualDensity.compact,
+              selected: active,
+              avatar: Icon(active ? Icons.edit_note_rounded : Icons.note_outlined, size: 16),
+              label: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 150),
+                child: Text(
+                  note.title.trim().isEmpty ? 'Untitled note' : note.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              onPressed: active ? null : () => unawaited(_openNoteTab(note)),
+              onDeleted: () => unawaited(_closeNoteTab(note)),
+              deleteButtonTooltipMessage: 'Close ${note.title.isEmpty ? 'untitled note' : note.title}',
             );
           },
         ),
@@ -3010,11 +3260,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       ),
     );
     if (selected == null || selected.id == widget.note.id || !mounted) return;
-    await _flushSave();
-    if (!mounted) return;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute<void>(builder: (_) => EditorV2Page(note: selected)),
-    );
+    await _openNoteTab(selected);
   }
 
   void _selectTool(CanvasTool tool) {
@@ -3049,6 +3295,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     if (tool != CanvasTool.lasso) {
       _clearSelectionIds();
       _lassoRect = null;
+      _lassoOutlinePoints.clear();
     }
   }
 
@@ -3304,8 +3551,12 @@ class _EditorV2PageState extends State<EditorV2Page>
     var velocity = _velocitySensitivity;
     var curve = _pressureCurve;
     var color = _color;
+    final initialProfile = _toolProfiles[targetTool.name];
+    var lassoFreehandSelection = (initialProfile?['lassoFreehandSelection'] as bool?) ?? true;
+    var lassoFreehandOutline = (initialProfile?['lassoFreehandOutline'] as bool?) ?? false;
     var places = Set<String>.from(_placementsFor(targetTool));
     var precisionErase = _settings.getString('eraserMode') == 'pixel';
+    var pressurePixelErase = _settings.getString('pressureEraserMode') == 'pixel';
 
     void saveProfile({bool persist = true}) {
       setState(() {
@@ -3319,16 +3570,22 @@ class _EditorV2PageState extends State<EditorV2Page>
       });
       _toolPlacements[targetTool.name] = Set<String>.from(places);
       if (persist) unawaited(_saveToolPlacements());
-      if (persist && targetTool == CanvasTool.eraser) {
+      if (persist && (targetTool == CanvasTool.eraser || targetTool == CanvasTool.pixelEraser)) {
         unawaited(_settings.setString('eraserMode', precisionErase ? 'pixel' : 'stroke'));
+        unawaited(_settings.setString('pressureEraserMode', pressurePixelErase ? 'pixel' : 'stroke'));
       }
       _toolProfiles[targetTool.name] = <String, Object?>{
+        ...? _toolProfiles[targetTool.name],
         'size': size,
         'color': color.toARGB32(),
         'opacity': opacity,
         'pressureSensitivity': pressure,
         'velocitySensitivity': velocity,
         'pressureCurve': curve.name,
+        if (targetTool == CanvasTool.lasso) ...{
+          'lassoFreehandSelection': lassoFreehandSelection,
+          'lassoFreehandOutline': lassoFreehandOutline,
+        },
       };
       if (persist) unawaited(_saveToolProfiles());
     }
@@ -3384,13 +3641,49 @@ class _EditorV2PageState extends State<EditorV2Page>
           ),
           const SizedBox(height: 8),
           Row(children: [const Icon(Icons.line_weight_rounded, size: 17), const SizedBox(width: 7), Text('Stroke size: ${size.toStringAsFixed(1)}')]),
-          Slider(
-            min: .5,
-            max: 40,
-            value: size.clamp(.5, 40),
-            onChanged: (value) { setPanelState(() => size = value); saveProfile(persist: false); },
-            onChangeEnd: (_) => saveProfile(),
-          ),
+          if (targetTool == CanvasTool.lasso)
+            Row(
+              children: [
+                IconButton(
+                  tooltip: 'Decrease lasso size',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () {
+                    setPanelState(() => size = (size - .5).clamp(.5, 40).toDouble());
+                    saveProfile();
+                  },
+                  icon: const Icon(Icons.remove_circle_outline_rounded),
+                ),
+                Expanded(
+                  child: Slider(
+                    min: .5,
+                    max: 40,
+                    value: size.clamp(.5, 40),
+                    onChanged: (value) {
+                      setPanelState(() => size = value);
+                      saveProfile(persist: false);
+                    },
+                    onChangeEnd: (_) => saveProfile(),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Increase lasso size',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () {
+                    setPanelState(() => size = (size + .5).clamp(.5, 40).toDouble());
+                    saveProfile();
+                  },
+                  icon: const Icon(Icons.add_circle_outline_rounded),
+                ),
+              ],
+            )
+          else
+            Slider(
+              min: .5,
+              max: 40,
+              value: size.clamp(.5, 40),
+              onChanged: (value) { setPanelState(() => size = value); saveProfile(persist: false); },
+              onChangeEnd: (_) => saveProfile(),
+            ),
           Row(children: [const Icon(Icons.opacity_rounded, size: 17), const SizedBox(width: 7), Text('Opacity: ${(opacity * 100).round()}%')]),
           Slider(
             min: .05,
@@ -3426,17 +3719,58 @@ class _EditorV2PageState extends State<EditorV2Page>
               if (value != null) { setPanelState(() => curve = value); saveProfile(); }
             },
           ),
-          if (targetTool == CanvasTool.eraser)
+          if (targetTool == CanvasTool.eraser || targetTool == CanvasTool.pixelEraser) ...[
+            const Text('Normal eraser'),
+            SegmentedButton<bool>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: false, icon: Icon(Icons.gesture_rounded), label: Text('Stroke')),
+                ButtonSegment(value: true, icon: Icon(Icons.auto_fix_normal_rounded), label: Text('Pixel')),
+              ],
+              selected: <bool>{precisionErase},
+              onSelectionChanged: (value) {
+                setPanelState(() => precisionErase = value.first);
+                saveProfile();
+              },
+            ),
+            const SizedBox(height: 8),
+            const Text('Pressure eraser'),
+            SegmentedButton<bool>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: false, icon: Icon(Icons.gesture_rounded), label: Text('Stroke')),
+                ButtonSegment(value: true, icon: Icon(Icons.auto_fix_normal_rounded), label: Text('Pixel')),
+              ],
+              selected: <bool>{pressurePixelErase},
+              onSelectionChanged: (value) {
+                setPanelState(() => pressurePixelErase = value.first);
+                saveProfile();
+              },
+            ),
+          ],
+          if (targetTool == CanvasTool.lasso) ...[
             SwitchListTile(
               dense: true,
-              secondary: const Icon(Icons.crop_16_9_rounded),
               contentPadding: EdgeInsets.zero,
-              title: const Text('Precision erase radius'),
-              subtitle: const Text('Use a narrow hit area instead of the standard eraser radius'),
-              value: precisionErase,
-              onChanged: (value) { setPanelState(() => precisionErase = value); saveProfile(); },
+              title: const Text('Freehand selection'),
+              subtitle: const Text('Trace an irregular area. Turn off to select with a rectangle.'),
+              value: lassoFreehandSelection,
+              onChanged: (value) {
+                setPanelState(() => lassoFreehandSelection = value);
+                saveProfile();
+              },
             ),
-          if (targetTool == CanvasTool.lasso) ...[
+            SwitchListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Freehand lasso boundary'),
+              subtitle: const Text('Show the traced outline instead of a rectangular selection box.'),
+              value: lassoFreehandOutline,
+              onChanged: (value) {
+                setPanelState(() => lassoFreehandOutline = value);
+                saveProfile();
+              },
+            ),
             OutlinedButton.icon(
               icon: const Icon(Icons.text_fields_rounded),
               label: const Text('Convert selected ink to text'),
@@ -3451,57 +3785,26 @@ class _EditorV2PageState extends State<EditorV2Page>
           const SizedBox(height: 8),
           const Divider(),
           const Text('Tool placement', style: TextStyle(fontWeight: FontWeight.w800)),
-          CheckboxListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            secondary: const Icon(Icons.title_rounded),
-            title: const Text('Show in Title Bar'),
-            value: places.contains('titleBar'),
-            onChanged: (value) {
+          SegmentedButton<String>(
+            showSelectedIcon: false,
+            multiSelectionEnabled: true,
+            emptySelectionAllowed: true,
+            segments: const [
+              ButtonSegment(value: 'titleBar', tooltip: 'Title bar', icon: Icon(Icons.title_rounded)),
+              ButtonSegment(value: 'toolbar', tooltip: 'Toolbar', icon: Icon(Icons.widgets_outlined)),
+              ButtonSegment(value: 'pencase', tooltip: 'Pencase', icon: Icon(Icons.inventory_2_outlined)),
+            ],
+            selected: places,
+            onSelectionChanged: (selection) {
               setPanelState(() {
-                if (value == true) {
-                  places.add('titleBar');
-                } else {
-                  places.remove('titleBar');
-                }
+                places
+                  ..clear()
+                  ..addAll(selection);
               });
               saveProfile();
             },
           ),
-          CheckboxListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            secondary: const Icon(Icons.widgets_outlined),
-            title: const Text('Show in Main Toolbar'),
-            value: places.contains('toolbar'),
-            onChanged: (value) {
-              setPanelState(() {
-                if (value == true) {
-                  places.add('toolbar');
-                } else {
-                  places.remove('toolbar');
-                }
-              });
-              saveProfile();
-            },
-          ),
-          CheckboxListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            secondary: const Icon(Icons.inventory_2_outlined),
-            title: const Text('Show in Pencase'),
-            value: places.contains('pencase'),
-            onChanged: (value) {
-              setPanelState(() {
-                if (value == true) {
-                  places.add('pencase');
-                } else {
-                  places.remove('pencase');
-                }
-              });
-              saveProfile();
-            },
-          ),
+          const SizedBox(height: 8),
           SwitchListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
@@ -4150,13 +4453,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                             borderRadius: BorderRadius.circular(9),
                             onTap: () => Navigator.pop(sheetContext, sticker),
                             child: Ink(
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.surfaceContainerHigh,
-                                borderRadius: BorderRadius.circular(9),
-                                border: Border.all(
-                                  color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: .5),
-                                ),
-                              ),
+                              decoration: const BoxDecoration(),
                               child: Stack(
                                 fit: StackFit.expand,
                                 children: [
@@ -4807,11 +5104,24 @@ class _EditorV2PageState extends State<EditorV2Page>
   void _addPage({int? insertAfter, Map<String, Object?>? templateFrom}) {
     _pushUndo();
     final previous = templateFrom ?? _pageData;
+    final storedDefaultTemplate = _settings.getString('editorV2DefaultPageTemplate');
+    final defaultTemplate = templateFrom == null &&
+            PageTemplate.values.any((template) => template.name == storedDefaultTemplate)
+        ? storedDefaultTemplate
+        : '';
+    final defaultPaperColor = templateFrom == null
+        ? int.tryParse(_settings.getString('defaultPagePaperColor'))
+        : null;
+    final defaultLineColor = templateFrom == null
+        ? int.tryParse(_settings.getString('defaultPageLineColor'))
+        : null;
     final page = EditorV2DocumentCodec.normalizePage(<String, Object?>{
       'id': DateTime.now().microsecondsSinceEpoch.toString(),
-      'template': previous['template'] ?? 'dotted',
-      'paperColor': previous['paperColor'] ?? 0xffffffff,
-      'lineColor': previous['lineColor'] ?? 0xffd8dee8,
+      'template': defaultTemplate.isNotEmpty
+          ? defaultTemplate
+          : previous['template'] ?? 'dotted',
+      'paperColor': defaultPaperColor ?? previous['paperColor'] ?? 0xffffffff,
+      'lineColor': defaultLineColor ?? previous['lineColor'] ?? 0xffd8dee8,
       'lineOpacity': previous['lineOpacity'] ?? .85,
       'spacing': previous['spacing'] ?? 28.0,
       'lineWidth': previous['lineWidth'] ?? .7,
@@ -5360,48 +5670,146 @@ class _EditorV2PageState extends State<EditorV2Page>
       );
       return;
     }
-    final current = Color((page['paperColor'] as num?)?.toInt() ?? 0xffffffff);
-    final chosen = await showDialog<Color>(
+
+    var paperColor = Color((page['paperColor'] as num?)?.toInt() ?? 0xffffffff);
+    var lineColor = Color((page['lineColor'] as num?)?.toInt() ?? 0xffd8dee8);
+    var lineOpacity = ((page['lineOpacity'] as num?)?.toDouble() ?? .85)
+        .clamp(0.0, 1.0).toDouble();
+    final spacing = ((page['spacing'] as num?)?.toDouble() ?? 28.0)
+        .clamp(10.0, 80.0).toDouble();
+    final template = PageTemplate.values.firstWhere(
+      (value) => value.name == page['template']?.toString(),
+      orElse: () => PageTemplate.blank,
+    );
+
+    final chosen = await showDialog<Map<String, Object?>>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('Page ${index + 1} background'),
-        content: Wrap(
-          spacing: 9,
-          runSpacing: 9,
-          children: [
-            ActionChip(
-              avatar: const Icon(Icons.colorize_rounded, size: 17),
-              label: const Text('Custom…'),
-              onPressed: () async {
-                final selectedColor = await _pickCustomColor(initial: current, title: 'Custom page background');
-                if (selectedColor != null && dialogContext.mounted) Navigator.pop(dialogContext, selectedColor);
-              },
-            ),
-            ..._palette.map((color) => InkWell(
-            onTap: () => Navigator.pop(dialogContext, color),
-            borderRadius: BorderRadius.circular(20),
-            child: Container(
-              width: 30,
-              height: 30,
-              decoration: BoxDecoration(
-                color: color,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: color.toARGB32() == current.toARGB32()
-                      ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).colorScheme.outlineVariant,
-                  width: color.toARGB32() == current.toARGB32() ? 3 : 1,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          Widget palette(String label, Color selected, ValueChanged<Color> onChanged) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 7),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ActionChip(
+                      avatar: const Icon(Icons.colorize_rounded, size: 17),
+                      label: const Text('Custom'),
+                      onPressed: () async {
+                        final custom = await _pickCustomColor(
+                          initial: selected,
+                          title: 'Custom $label',
+                        );
+                        if (custom != null && dialogContext.mounted) {
+                          setDialogState(() => onChanged(custom));
+                        }
+                      },
+                    ),
+                    ..._palette.map((color) => InkWell(
+                      onTap: () => setDialogState(() => onChanged(color)),
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: color.toARGB32() == selected.toARGB32()
+                                ? Theme.of(dialogContext).colorScheme.primary
+                                : Theme.of(dialogContext).colorScheme.outlineVariant,
+                            width: color.toARGB32() == selected.toARGB32() ? 3 : 1,
+                          ),
+                        ),
+                      ),
+                    )),
+                  ],
+                ),
+              ],
+            );
+          }
+
+          return AlertDialog(
+            title: Text('Template appearance · Page ${index + 1}'),
+            content: SizedBox(
+              width: 440,
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      height: 150,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Theme.of(dialogContext).colorScheme.outlineVariant),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: CustomPaint(
+                        painter: PageBackground(
+                          template: template,
+                          paperColor: paperColor,
+                          lineColor: lineColor,
+                          spacing: spacing,
+                          lineOpacity: lineOpacity,
+                          lineWidth: ((page['lineWidth'] as num?)?.toDouble() ?? .7),
+                          cornellAssist: page['cornellAssist'] == true,
+                        ),
+                        child: const SizedBox.expand(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    palette('Paper background', paperColor, (value) => paperColor = value),
+                    const SizedBox(height: 16),
+                    palette('Template lines', lineColor, (value) => lineColor = value),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text('Line opacity', style: TextStyle(fontWeight: FontWeight.w800)),
+                        ),
+                        Text('${(lineOpacity * 100).round()}%'),
+                      ],
+                    ),
+                    Slider(
+                      value: lineOpacity,
+                      min: 0,
+                      max: 1,
+                      onChanged: (value) => setDialogState(() => lineOpacity = value),
+                    ),
+                  ],
                 ),
               ),
             ),
-          )).toList(),
-          ],
-        ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, <String, Object?>{
+                  'paperColor': paperColor.toARGB32(),
+                  'lineColor': lineColor.toARGB32(),
+                  'lineOpacity': lineOpacity,
+                }),
+                child: const Text('Apply'),
+              ),
+            ],
+          );
+        },
       ),
     );
     if (chosen == null || !mounted) return;
     _pushUndo();
-    setState(() => page['paperColor'] = chosen.toARGB32());
+    setState(() {
+      page['paperColor'] = chosen['paperColor'];
+      page['lineColor'] = chosen['lineColor'];
+      page['lineOpacity'] = chosen['lineOpacity'];
+    });
     _scheduleSave();
   }
 
@@ -5593,20 +6001,21 @@ class _EditorV2PageState extends State<EditorV2Page>
     _scheduleSave();
   }
 
-  void _warmAdjacentPdfPages(int pageIndex) {
-    // Render only the neighboring PDF pages after the active page is visible.
-    // Current-page rendering stays demand-driven so navigation is not blocked.
-    for (final index in <int>[pageIndex - 1, pageIndex + 1]) {
-      if (index < 0 || index >= _pages.length) continue;
+  Future<void> _warmAdjacentPdfPages(int pageIndex) async {
+    // Prioritize the next page, then warm the previous page. Serial prefetch
+    // avoids two large raster jobs competing with the active canvas.
+    for (final index in <int>[pageIndex + 1, pageIndex - 1]) {
+      if (!mounted || index < 0 || index >= _pages.length) continue;
       final record = _pages[index];
       if (record['pdfLazyRender'] != true) continue;
       final assetId = record['pdfSourceAssetId']?.toString();
       final sourcePage = (record['pdfSourcePage'] as num?)?.toInt();
       if (assetId == null || assetId.isEmpty || sourcePage == null) continue;
-      unawaited(_lazyPdfPageRaster(assetId, sourcePage).catchError((Object error) {
+      try {
+        await _lazyPdfPageRaster(assetId, sourcePage);
+      } catch (error) {
         debugPrint('[Snote][PDF] adjacent-page prefetch failed: $error');
-        return null;
-      }));
+      }
     }
   }
 
@@ -6313,7 +6722,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       case 'timer':
         setState(() => _showFloatingTimer = true);
       case 'webSearch':
-        unawaited(SnoteWebSearchPanel.show(context));
+        setState(() => _showBrowserPanel = true);
       case 'favorite':
         unawaited(_addFavoritePen());
       case 'dockTop':
@@ -6361,9 +6770,53 @@ class _EditorV2PageState extends State<EditorV2Page>
         _transform.value = Matrix4.identity()..scale(scale);
       case 'fullscreen':
         _toggleFullScreen();
+      case 'readingMode':
+        setState(() {
+          _readingMode = !_readingMode;
+          _fullScreenMode = _readingMode;
+          _panMode = _readingMode;
+          if (!_readingMode && _toolBeforeReading != null) {
+            _tool = _toolBeforeReading!;
+            _toolBeforeReading = null;
+          }
+        });
+        unawaited(SystemChrome.setEnabledSystemUIMode(_readingMode ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge));
       case 'save':
         unawaited(_save(force: true));
     }
+  }
+
+  Widget _toolGlyph(
+    CanvasTool tool, {
+    double size = 18,
+    Color? color,
+  }) {
+    final glyphColor = color ?? Theme.of(context).colorScheme.onSurface;
+    if (tool.isShape) {
+      return SizedBox(
+        width: size,
+        height: size,
+        child: CustomPaint(
+          painter: _EditorV2ShapePreviewPainter(
+            shape: tool.name,
+            color: glyphColor,
+          ),
+        ),
+      );
+    }
+    if (const <CanvasTool>{
+      CanvasTool.ballpoint,
+      CanvasTool.fountain,
+      CanvasTool.pencil,
+      CanvasTool.highlighter,
+      CanvasTool.marker,
+      CanvasTool.brush,
+      CanvasTool.eraser,
+      CanvasTool.pixelEraser,
+    }.contains(tool)) {
+      return SnoteToolGlyph(tool: tool, color: glyphColor, size: size);
+    }
+    return Icon(_toolIcon(tool), size: size, color: glyphColor);
   }
 
   IconData _toolIcon(CanvasTool tool) {
@@ -6400,17 +6853,14 @@ class _EditorV2PageState extends State<EditorV2Page>
           child: Tooltip(
             message: '${tool.label}\nDouble-tap for settings • long-press and drag to reorder',
             child: Material(
-              color: _tool == tool ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surface,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(7),
-                side: BorderSide(color: _tool == tool ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outlineVariant.withValues(alpha: .65)),
-              ),
+              color: Colors.transparent,
+              shape: const CircleBorder(),
               child: InkWell(
                 borderRadius: BorderRadius.circular(7),
                 onTapDown: (details) => _toolSettingsAnchor = details.globalPosition,
                 onDoubleTap: () => _strokeSettings(tool, _toolSettingsAnchor),
                 onTap: () => _selectTool(tool),
-                child: SizedBox(width: 27, height: 27, child: Icon(_toolIcon(tool), size: 16, color: _tool == tool ? Theme.of(context).colorScheme.primary : null)),
+                child: SizedBox(width: 30, height: 30, child: Stack(alignment: Alignment.center, children: [_toolGlyph(tool, size: 18, color: _tool == tool ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface), if (_tool == tool) Positioned(bottom: 1, child: Container(width: 4, height: 4, decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, shape: BoxShape.circle))) ])),
               ),
             ),
           ),
@@ -6425,7 +6875,7 @@ class _EditorV2PageState extends State<EditorV2Page>
         feedback: Material(
           elevation: 8,
           borderRadius: BorderRadius.circular(7),
-          child: SizedBox(width: 29, height: 29, child: Icon(_toolIcon(tool), size: 17, color: Theme.of(context).colorScheme.primary)),
+          child: SizedBox(width: 29, height: 29, child: _toolGlyph(tool, size: 17, color: Theme.of(context).colorScheme.primary)),
         ),
         childWhenDragging: tile(faded: true),
         child: tile(faded: false),
@@ -6653,26 +7103,31 @@ class _EditorV2PageState extends State<EditorV2Page>
       ),
     ];
     final screenWidth = MediaQuery.sizeOf(context).width;
+    final screenHeight = MediaQuery.sizeOf(context).height;
     final compactWidth = vertical
         ? _toolbarThickness.clamp(28.0, 96.0).toDouble()
         : math.min(
             math.max(1.0, screenWidth - 12),
             math.min(_toolbarLength, actions.length * 28.0 + quickButtons.length * 30.0 + 69.0),
           );
+    final compactHeight = vertical
+        ? math.min(_toolbarLength, math.max(180.0, screenHeight - 24))
+        : _toolbarThickness.clamp(28.0, 96.0).toDouble();
     return SnoteFloatingToolbar(
       children: children,
       vertical: vertical,
       compact: _compactFloatingToolbar,
       fullScreen: _fullScreenMode,
       width: compactWidth,
-      marginLeft: _toolbarMarginLeft,
-      marginTop: _toolbarMarginTop,
-      marginRight: _toolbarMarginRight,
-      marginBottom: _toolbarMarginBottom,
-      paddingLeft: _toolbarPaddingLeft,
-      paddingTop: _toolbarPaddingTop,
-      paddingRight: _toolbarPaddingRight,
-      paddingBottom: _toolbarPaddingBottom,
+      height: compactHeight,
+      marginLeft: _fullScreenMode ? 0 : _toolbarMarginLeft,
+      marginTop: _fullScreenMode ? 0 : _toolbarMarginTop,
+      marginRight: _fullScreenMode ? 0 : _toolbarMarginRight,
+      marginBottom: _fullScreenMode ? 0 : _toolbarMarginBottom,
+      paddingLeft: _fullScreenMode ? 0 : _toolbarPaddingLeft,
+      paddingTop: _fullScreenMode ? 0 : _toolbarPaddingTop,
+      paddingRight: _fullScreenMode ? 0 : _toolbarPaddingRight,
+      paddingBottom: _fullScreenMode ? 0 : _toolbarPaddingBottom,
     );
   }
 
@@ -6690,20 +7145,25 @@ class _EditorV2PageState extends State<EditorV2Page>
           borderRadius: BorderRadius.circular(9),
           onTap: () => _applyFavorite(favorite),
           onLongPress: () => _removeFavorite(favorite),
-          child: Container(
+          child: SizedBox(
             width: _favoritesVertical ? 34 : 38,
             height: _favoritesVertical ? 38 : 34,
-            margin: const EdgeInsets.all(2),
-            decoration: BoxDecoration(
-              color: active ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(color: active ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outlineVariant),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+            child: Stack(
+              alignment: Alignment.center,
               children: [
-                Icon(_toolIcon(favoriteTool), size: 17, color: color),
-                Container(margin: const EdgeInsets.only(top: 3), width: 18, height: 2, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3))),
+                _toolGlyph(favoriteTool, size: 19, color: color),
+                if (active)
+                  Positioned(
+                    bottom: 2,
+                    child: Container(
+                      width: 4,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primary,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -7124,6 +7584,32 @@ class _EditorV2PageState extends State<EditorV2Page>
       final box = item.map<String, Object?>((key, value) => MapEntry(key.toString(), value));
       final id = box['id']?.toString() ?? '';
       if (id.isEmpty) continue;
+      final x = (box['x'] as num?)?.toDouble() ?? .12;
+      final y = (box['y'] as num?)?.toDouble() ?? .12;
+      final width = (box['width'] as num?)?.toDouble() ?? .68;
+      final height = (box['height'] as num?)?.toDouble() ?? .16;
+      final fontSize = (box['fontSize'] as num?)?.toDouble() ?? 18;
+      final color = Color((box['color'] as num?)?.toInt() ?? 0xff263238);
+      if (box['sticker'] == true) {
+        children.add(Positioned(
+          left: x * _pageWidth,
+          top: y * _pageHeight,
+          width: width * _pageWidth,
+          height: height * _pageHeight,
+          child: IgnorePointer(
+            child: Center(
+              child: FittedBox(
+                fit: BoxFit.contain,
+                child: Text(
+                  box['text']?.toString() ?? '',
+                  style: TextStyle(fontSize: fontSize, color: color, height: 1),
+                ),
+              ),
+            ),
+          ),
+        ));
+        continue;
+      }
       final controller = _textControllers.putIfAbsent(
         id,
         () => _FormattedTextEditingController(text: box['text']?.toString() ?? ''),
@@ -7132,12 +7618,6 @@ class _EditorV2PageState extends State<EditorV2Page>
       if (controller is _FormattedTextEditingController) {
         controller.formatRanges = formatRanges;
       }
-      final x = (box['x'] as num?)?.toDouble() ?? .12;
-      final y = (box['y'] as num?)?.toDouble() ?? .12;
-      final width = (box['width'] as num?)?.toDouble() ?? .68;
-      final height = (box['height'] as num?)?.toDouble() ?? .16;
-      final fontSize = (box['fontSize'] as num?)?.toDouble() ?? 18;
-      final color = Color((box['color'] as num?)?.toInt() ?? 0xff263238);
       children.add(Positioned(
         left: x * _pageWidth,
         top: y * _pageHeight,
@@ -7212,17 +7692,17 @@ class _EditorV2PageState extends State<EditorV2Page>
                 ),
               ),
               Positioned(
-                right: 0,
-                top: 0,
-                child: IconButton(
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(width: 22, height: 22),
-                  tooltip: 'Remove text box',
-                  onPressed: () => _removeTextBox(id),
-                  icon: const Icon(Icons.close_rounded, size: 12),
+                  right: 0,
+                  top: 0,
+                  child: IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(width: 22, height: 22),
+                    tooltip: 'Remove text box',
+                    onPressed: () => _removeTextBox(id),
+                    icon: const Icon(Icons.close_rounded, size: 12),
+                  ),
                 ),
-              ),
             ],
           ),
           ),
@@ -7407,7 +7887,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                                   right: 0,
                                   top: 0,
                                   child: Material(
-                                    color: Theme.of(context).colorScheme.surface.withValues(alpha: .96),
+                                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
                                     borderRadius: const BorderRadius.only(
                                       bottomLeft: Radius.circular(8),
                                     ),
@@ -7416,8 +7896,9 @@ class _EditorV2PageState extends State<EditorV2Page>
                                       useRootNavigator: true,
                                       position: PopupMenuPosition.under,
                                       padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints.tightFor(width: 34, height: 32),
-                                      iconSize: 18,
+                                      constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+                                      iconSize: 22,
+                                      icon: Icon(Icons.more_vert_rounded, color: Theme.of(context).colorScheme.onSurface),
                                       onSelected: (action) {
                                         switch (action) {
                                           case 'blank':
@@ -7463,7 +7944,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                                         const PopupMenuDivider(),
                                         const PopupMenuItem(value: 'cut', child: ListTile(dense: true, leading: Icon(Icons.content_cut_rounded), title: Text('Cut page'))),
                                         const PopupMenuItem(value: 'copy', child: ListTile(dense: true, leading: Icon(Icons.copy_rounded), title: Text('Copy page'))),
-                                        PopupMenuItem(value: 'paste', enabled: _pageClipboard != null, child: const ListTile(dense: true, leading: Icon(Icons.content_paste_rounded), title: Text('Paste after'))),
+                                        PopupMenuItem(value: 'paste', enabled: _pageClipboard != null, child: const ListTile(dense: true, leading: Icon(Icons.content_paste_rounded), title: Text('Paste as page'))),
                                         const PopupMenuItem(value: 'duplicate', child: ListTile(dense: true, leading: Icon(Icons.control_point_duplicate_rounded), title: Text('Duplicate'))),
                                         const PopupMenuItem(value: 'clear', child: ListTile(dense: true, leading: Icon(Icons.cleaning_services_outlined), title: Text('Clear page…'))),
                                         const PopupMenuItem(value: 'share', child: ListTile(dense: true, leading: Icon(Icons.share_outlined), title: Text('Share page'))),
@@ -7477,7 +7958,6 @@ class _EditorV2PageState extends State<EditorV2Page>
                                         ),
                                         const PopupMenuItem(value: 'delete', child: ListTile(dense: true, leading: Icon(Icons.delete_outline_rounded), title: Text('Delete page…'))),
                                       ],
-                                      icon: const Icon(Icons.more_horiz_rounded),
                                     ),
                                   ),
                                 ),
@@ -7519,6 +7999,12 @@ class _EditorV2PageState extends State<EditorV2Page>
     final strokes = _strokesFor(page);
     final live = _liveStroke;
     final selected = Set<String>.from(_selectedStrokeIds);
+    final lassoProfile = _toolProfiles[CanvasTool.lasso.name];
+    final showFreehandLassoOutline = (lassoProfile?['lassoFreehandOutline'] as bool?) ?? false;
+    final drawingLasso = _tool == CanvasTool.lasso && _activePointer != null && _livePoints.length > 1;
+    final lassoOutline = drawingLasso
+        ? _livePoints.map((point) => point.position).toList(growable: false)
+        : List<Offset>.unmodifiable(_lassoOutlinePoints);
     return RepaintBoundary(
       key: _pageCaptureKey,
       child: Container(
@@ -7562,16 +8048,22 @@ class _EditorV2PageState extends State<EditorV2Page>
                 onPointerHover: (event) {
                   if (_tool == CanvasTool.eraser || _tool == CanvasTool.pixelEraser) {
                     _eraserCursor = event.localPosition;
+                    final baseRadius = _tool == CanvasTool.pixelEraser ||
+                            _settings.getString('eraserMode') == 'pixel'
+                        ? 7.0
+                        : math.max(18, _size * 2).toDouble();
+                    _eraserCursorRadius = _pressureEraseRadius(event, baseRadius: baseRadius);
                     setState(() {});
                   }
                 },
                 child: CustomPaint(
                   painter: EditorV2InkPainter(
                     strokes: strokes,
-                    liveStroke: live,
+                    liveStroke: _tool == CanvasTool.lasso ? null : live,
                     selectedStrokeIds: selected,
                     eraserCursor: _tool == CanvasTool.eraser || _tool == CanvasTool.pixelEraser ? _eraserCursor : null,
-                    eraserRadius: _tool == CanvasTool.pixelEraser ? 7 : math.max(18, _size * 2).toDouble(),
+                    eraserRadius: _eraserCursorRadius,
+                    highlighterOnTop: _settings.getBool('highlighterOnTop'),
                   ),
                   size: Size(_pageWidth, _pageHeight),
                 ),
@@ -7580,7 +8072,33 @@ class _EditorV2PageState extends State<EditorV2Page>
             ),
             Positioned.fill(child: _buildImages(page)),
             Positioned.fill(child: IgnorePointer(ignoring: page['locked'] == true, child: _buildTextBoxes(page))),
-            if (_lassoRect != null)
+            if (_settings.getBool('highlighterOnTop'))
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    painter: EditorV2InkPainter(
+                      strokes: strokes,
+                      liveStroke: live?.pen.type == PenType.highlighter ? live : null,
+                      selectedStrokeIds: selected,
+                      onlyHighlighters: true,
+                    ),
+                    size: Size(_pageWidth, _pageHeight),
+                  ),
+                ),
+              ),
+            if (showFreehandLassoOutline && lassoOutline.length > 1)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    painter: _LassoOutlinePainter(
+                      points: lassoOutline,
+                      closed: !drawingLasso,
+                    ),
+                    size: Size(_pageWidth, _pageHeight),
+                  ),
+                ),
+              ),
+            if (!showFreehandLassoOutline && _lassoRect != null)
               Positioned(
                 left: math.min(_lassoRect!.left, _lassoRect!.right),
                 top: math.min(_lassoRect!.top, _lassoRect!.bottom),
@@ -8306,6 +8824,7 @@ class _EditorV2PageState extends State<EditorV2Page>
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'fit', child: Text('Fit page to width')),
               const PopupMenuItem(value: 'fullscreen', child: Text('Toggle full screen')),
+              PopupMenuItem(value: 'readingMode', child: Text(_readingMode ? 'Exit reading mode' : 'Reading mode')),
               const PopupMenuItem(value: 'image', child: Text('Insert image from file')),
               const PopupMenuItem(value: 'clipboardImage', child: Text('Paste screenshot from clipboard')),
               PopupMenuItem(value: 'pasteSelection', enabled: _selectionClipboard != null, child: const Text('Paste copied selection')),
@@ -8364,23 +8883,33 @@ class _EditorV2PageState extends State<EditorV2Page>
 
   Widget _buildEditorLayout() {
     final sidebarWidth = MediaQuery.sizeOf(context).width >= 900 ? 216.0 : 172.0;
+    final previewOnRight = _settings.getString('editorV2PagePreviewSide') == 'right';
+    final showPreview = _showPagePreview && !_fullScreenMode;
     final viewport = Expanded(
       child: Stack(
         clipBehavior: Clip.none,
         children: [
           Positioned.fill(
-            left: _showPagePreview && !_fullScreenMode ? sidebarWidth + 8 : 0,
+            left: showPreview && !previewOnRight ? sidebarWidth + 8 : 0,
+            right: showPreview && previewOnRight ? sidebarWidth + 8 : 0,
             child: _buildCanvas(),
           ),
-          if (_showPagePreview && !_fullScreenMode)
+          if (showPreview)
             Positioned(
-              left: 0,
+              left: previewOnRight ? null : 0,
+              right: previewOnRight ? 0 : null,
               top: 0,
               bottom: 0,
               width: sidebarWidth,
               child: _buildPagePreviewSidebar(),
             ),
-          if ((_floatingToolbar || _fullScreenMode) && !_toolbarCollapsedToEdge)
+          if (_showBrowserPanel)
+            Positioned.fill(
+              child: SnoteWebSearchPanel(
+                onClose: () => setState(() => _showBrowserPanel = false),
+              ),
+            ),
+          if (!_readingMode && (_floatingToolbar || _fullScreenMode) && !_toolbarCollapsedToEdge)
             Positioned(
               left: _floatingOffset.dx.clamp(0, math.max(0, MediaQuery.sizeOf(context).width - 160)).toDouble(),
               top: _floatingOffset.dy.clamp(0, math.max(0, MediaQuery.sizeOf(context).height - 210)).toDouble(),
@@ -8411,28 +8940,42 @@ class _EditorV2PageState extends State<EditorV2Page>
                   child: Stack(
                     clipBehavior: Clip.none,
                     children: [
-                      ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxWidth: math.min(_fullScreenMode && !_compactFloatingToolbar ? MediaQuery.sizeOf(context).width * .94 : (_compactFloatingToolbar ? _toolbarLength : 360.0), MediaQuery.sizeOf(context).width - 12),
-                          maxHeight: math.min(_fullScreenMode ? MediaQuery.sizeOf(context).height * .32 : 190.0, MediaQuery.sizeOf(context).height * .5),
-                        ),
-                        child: _buildToolbar(vertical: _toolbarDock == 'left' || _toolbarDock == 'right'),
-                      ),
+                      Builder(builder: (context) {
+                        final vertical = _toolbarDock == 'left' || _toolbarDock == 'right';
+                        final screen = MediaQuery.sizeOf(context);
+                        return ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: vertical
+                                ? _toolbarThickness.clamp(28.0, 96.0).toDouble()
+                                : math.min(_compactFloatingToolbar ? _toolbarLength : 360.0, screen.width - 12),
+                            maxHeight: vertical
+                                ? math.min(_toolbarLength, screen.height - 24)
+                                : _toolbarThickness.clamp(28.0, 96.0).toDouble(),
+                          ),
+                          child: _buildToolbar(vertical: vertical),
+                        );
+                      }),
                       Positioned(
                         right: -5,
                         bottom: -5,
                         child: GestureDetector(
                           behavior: HitTestBehavior.opaque,
-                          onPanUpdate: (details) => setState(() {
-                            _toolbarLength = (_toolbarLength + details.delta.dx).clamp(180.0, 900.0).toDouble();
-                            final verticalPadding = details.delta.dy / 2;
-                            _toolbarPaddingTop = (_toolbarPaddingTop + verticalPadding).clamp(0.0, 28.0).toDouble();
-                            _toolbarPaddingBottom = (_toolbarPaddingBottom + verticalPadding).clamp(0.0, 28.0).toDouble();
-                          }),
+                          onPanUpdate: (details) {
+                            if (_toolbarDimensionsLocked) return;
+                            final vertical = _toolbarDock == 'left' || _toolbarDock == 'right';
+                            setState(() {
+                              if (vertical) {
+                                _toolbarThickness = (_toolbarThickness + details.delta.dx).clamp(28.0, 96.0).toDouble();
+                                _toolbarLength = (_toolbarLength + details.delta.dy).clamp(180.0, 900.0).toDouble();
+                              } else {
+                                _toolbarLength = (_toolbarLength + details.delta.dx).clamp(180.0, 900.0).toDouble();
+                                _toolbarThickness = (_toolbarThickness + details.delta.dy).clamp(28.0, 96.0).toDouble();
+                              }
+                            });
+                          },
                           onPanEnd: (_) {
                             unawaited(_settings.setDouble('editorV2ToolbarLength', _toolbarLength));
-                            unawaited(_settings.setDouble('editorV2ToolbarPaddingTop', _toolbarPaddingTop));
-                            unawaited(_settings.setDouble('editorV2ToolbarPaddingBottom', _toolbarPaddingBottom));
+                            unawaited(_settings.setDouble('editorV2ToolbarThickness', _toolbarThickness));
                           },
                           child: Material(
                             color: Theme.of(context).colorScheme.primary,
@@ -8447,9 +8990,9 @@ class _EditorV2PageState extends State<EditorV2Page>
                 ),
               ),
             ),
-          if (_showFavoritesShowcase || _pencaseTools.isNotEmpty) _buildFavoriteShowcase(),
+          if (!_readingMode && (_showFavoritesShowcase || _pencaseTools.isNotEmpty)) _buildFavoriteShowcase(),
           // Page navigation is now handled by the expanded page-preview sidebar.
-          if (_fullScreenMode && !_toolbarCollapsedToEdge)
+          if (_fullScreenMode && !_readingMode && !_toolbarCollapsedToEdge)
             Positioned(
               top: 8,
               right: 52,
@@ -8533,7 +9076,28 @@ class _EditorV2PageState extends State<EditorV2Page>
                 ),
               ),
             ),
-          if (_fullScreenMode)
+          if (_readingMode)
+            Positioned(
+              left: 12,
+              right: 12,
+              top: 8,
+              child: SafeArea(
+                child: Center(
+                  child: Material(
+                    elevation: 6,
+                    borderRadius: BorderRadius.circular(28),
+                    color: Theme.of(context).colorScheme.surface.withValues(alpha: .94),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      IconButton(tooltip: 'Previous page', onPressed: _page > 0 ? () => _goToPage(_page - 1) : null, icon: const Icon(Icons.chevron_left_rounded)),
+                      Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Text('${_page + 1} / ${_pages.length}', style: const TextStyle(fontWeight: FontWeight.w700))),
+                      IconButton(tooltip: 'Next page', onPressed: _page + 1 < _pages.length ? () => _goToPage(_page + 1) : null, icon: const Icon(Icons.chevron_right_rounded)),
+                      IconButton(tooltip: 'Exit reading mode', onPressed: () => _onMenuSelected('readingMode'), icon: const Icon(Icons.close_rounded)),
+                    ]),
+                  ),
+                ),
+              ),
+            ),
+          if (_fullScreenMode && !_readingMode)
             Positioned(
               right: 8,
               top: 8,
@@ -8600,6 +9164,11 @@ class _EditorV2PageState extends State<EditorV2Page>
 
   @override
   void dispose() {
+    _openEditorNoteIds.remove(widget.note.id);
+    _editorTabNotes.remove(widget.note.id);
+    if (identical(_editorRoutes[widget.note.id], _editorRoute)) {
+      _editorRoutes.remove(widget.note.id);
+    }
     WidgetsBinding.instance.removeObserver(this);
     _saveTimer?.cancel();
     _studyTimer?.cancel();
@@ -9299,6 +9868,18 @@ class _EditorV2ToolPickerState extends State<_EditorV2ToolPicker> {
         ),
       );
     }
+    if (const <CanvasTool>{
+      CanvasTool.ballpoint,
+      CanvasTool.fountain,
+      CanvasTool.pencil,
+      CanvasTool.highlighter,
+      CanvasTool.marker,
+      CanvasTool.brush,
+      CanvasTool.eraser,
+      CanvasTool.pixelEraser,
+    }.contains(tool)) {
+      return SnoteToolGlyph(tool: tool, color: scheme.primary, size: 23);
+    }
     return Icon(_pickerIcon(tool), size: 23, color: scheme.primary);
   }
 
@@ -9748,4 +10329,47 @@ class _CaptureRegionPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _CaptureRegionPainter oldDelegate) =>
       oldDelegate.selection != selection;
+}
+
+
+class _LassoOutlinePainter extends CustomPainter {
+  const _LassoOutlinePainter({
+    required this.points,
+    required this.closed,
+  });
+
+  final List<Offset> points;
+  final bool closed;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.length < 2) return;
+    final path = Path()..moveTo(points.first.dx, points.first.dy);
+    for (final point in points.skip(1)) {
+      path.lineTo(point.dx, point.dy);
+    }
+    if (closed) path.close();
+    if (closed) {
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = const Color(0xff3979e8).withValues(alpha: .08)
+          ..style = PaintingStyle.fill,
+      );
+    }
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = const Color(0xff3979e8)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..isAntiAlias = true,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _LassoOutlinePainter oldDelegate) =>
+      oldDelegate.closed != closed || !identical(oldDelegate.points, points);
 }

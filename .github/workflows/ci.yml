@@ -2,18 +2,19 @@ name: Snote CI
 
 on:
   push:
-    branches: [main, feat/snote-beta81-tool-layout-fill, feat/snote-beta82-editor-polish-ocr]
+    branches: [main, feat/snote-beta81-tool-layout-fill, feat/snote-beta82-editor-polish-ocr, feat/snotee-beta-polish-20261030, feat/sync-transport-completion, feat/hybrid-sync-one-phase-logo-quality, fix/beta-navigation-pdf-stability-20261101]
     paths:
       - "app/**"
       - "website/**"
       - ".github/workflows/**"
+      - ".github/scripts/**"
   pull_request:
-    branches: [main]
+    branches: [main, feat/snotee-beta-polish-20261030]
   workflow_dispatch:
 
 concurrency:
   group: snote-ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   flutter:

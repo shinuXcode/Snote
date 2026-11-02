@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../data/local/note_repository.dart';
+import '../../data/local/notebook_transfer_service.dart';
 
 class QrImportPage extends StatefulWidget {
   const QrImportPage({super.key});
@@ -19,6 +20,7 @@ class _QrImportPageState extends State<QrImportPage> {
   String? _transferId;
   int? _total;
   bool _importing = false;
+  String? _completedTransferId;
 
   bool get _cameraSupported => kIsWeb ||
       defaultTargetPlatform == TargetPlatform.android ||
@@ -36,12 +38,18 @@ class _QrImportPageState extends State<QrImportPage> {
         await _saveNote(decoded.cast<String, dynamic>());
         return;
       }
+      if (format == 'snote-encrypted-notebook-v1' ||
+          format == 'snote-encrypted-archive-v1') {
+        await _saveEncryptedTransfer(decoded.cast<String, dynamic>());
+        return;
+      }
 
       if (format != 'snote-qr-v2') {
         throw const FormatException('Not an Snote transfer QR.');
       }
 
       final transferId = decoded['transfer_id']?.toString();
+      if (transferId != null && transferId == _completedTransferId) return;
       final index = (decoded['index'] as num?)?.toInt();
       final total = (decoded['total'] as num?)?.toInt();
       final data = decoded['data']?.toString();
@@ -58,15 +66,80 @@ class _QrImportPageState extends State<QrImportPage> {
       if (mounted) setState(() {});
 
       if (_chunks.length == total && _chunks.keys.every((i) => i >= 0 && i < total)) {
-        final payload = List.generate(total, (i) => _chunks[i]).join();
-        final note = jsonDecode(payload);
-        if (note is! Map) throw const FormatException('Invalid assembled note.');
-        await _saveNote(note.cast<String, dynamic>());
+        _completedTransferId = transferId;
+        final encoded = List.generate(total, (i) => _chunks[i]).join();
+        try {
+          final decodedPayload = jsonDecode(utf8.decode(base64Decode(encoded)));
+          if (decodedPayload is! Map) throw const FormatException('Invalid encrypted transfer.');
+          await _saveEncryptedTransfer(decodedPayload.cast<String, dynamic>());
+        } on FormatException {
+          // Older beta QR v2 frames carried a plaintext note payload. Keep
+          // receiving those existing transfers for backward compatibility.
+          final legacy = jsonDecode(encoded);
+          if (legacy is! Map) throw const FormatException('Invalid assembled note.');
+          await _saveNote(legacy.cast<String, dynamic>());
+        }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
       }
+    }
+  }
+
+  Future<String?> _askTransferPassword() async {
+    final controller = TextEditingController();
+    final password = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Decrypt QR transfer'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          obscureText: true,
+          decoration: const InputDecoration(labelText: 'Transfer password'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () {
+              if (controller.text.length >= 8) Navigator.pop(dialogContext, controller.text);
+            },
+            child: const Text('Decrypt'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return password;
+  }
+
+  Future<void> _saveEncryptedTransfer(Map<String, dynamic> envelope) async {
+    _importing = true;
+    try {
+      final password = await _askTransferPassword();
+      if (!mounted || password == null) {
+        _chunks.clear();
+        _transferId = null;
+        _total = null;
+        if (mounted) setState(() {});
+        return;
+      }
+      final bytes = utf8.encode(jsonEncode(envelope));
+      final count = await NotebookTransferService(NoteRepository())
+          .importEncryptedArchiveBytes(bytes, password: password);
+      _chunks.clear();
+      _transferId = null;
+      _total = null;
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Encrypted transfer imported $count note(s), with folder and attachment data.')),
+        );
+      }
+    } finally {
+      _importing = false;
     }
   }
 
@@ -109,7 +182,22 @@ class _QrImportPageState extends State<QrImportPage> {
   Widget build(BuildContext context) {
     final progress = _total == null || _total == 0 ? null : (_chunks.length / _total!).toDouble();
     return Scaffold(
-      appBar: AppBar(title: const Text('Import transfer')),
+      appBar: AppBar(
+        title: const Text('Import transfer'),
+        actions: [
+          if (_completedTransferId != null)
+            IconButton(
+              tooltip: 'Reset and scan again',
+              onPressed: () => setState(() {
+                _chunks.clear();
+                _transferId = null;
+                _total = null;
+                _completedTransferId = null;
+              }),
+              icon: const Icon(Icons.restart_alt_rounded),
+            ),
+        ],
+      ),
       body: Column(
         children: [
           if (_cameraSupported)
