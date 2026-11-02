@@ -49,10 +49,20 @@ Future<void> main() async {
     dstY: (canvasSize - height) ~/ 2,
   );
 
+  final androidIcon = img.Image(
+    width: canvasSize,
+    height: canvasSize,
+    numChannels: 4,
+  );
+  img.fill(androidIcon, color: img.ColorRgba8(16, 18, 22, 255));
+  img.compositeImage(androidIcon, foreground);
+
   await File('assets/branding/snote-launcher-foreground.png')
       .writeAsBytes(img.encodePng(foreground));
+  await File('assets/branding/snote-launcher-android.png')
+      .writeAsBytes(img.encodePng(androidIcon));
 
   stdout.writeln(
-    'Generated 512x512 adaptive icon layers with a centered $safeSize px safe-zone mark.',
+    'Generated padded adaptive foreground and dark-background Android legacy icon ($safeSize px safe zone).',
   );
 }
