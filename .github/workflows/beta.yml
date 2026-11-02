@@ -1,4 +1,4 @@
-name: Snotee Beta Build
+name: Snotee Preview Build
 
 on:
   push:
@@ -54,7 +54,7 @@ jobs:
           set -euo pipefail
           VERSION="$(awk '/^version:/ {sub(/^version:[[:space:]]*/, ""); print; exit}' app/pubspec.yaml)"
           case "$VERSION" in
-            1.1.0-beta.*+*|0.1.1+*|0.1.2+*) ;;
+            1.1.0-beta.*+*|0.1.1+*|0.1.2+*|2.0.0+*) ;;
             *) echo "Unexpected beta version in app/pubspec.yaml: $VERSION"; exit 1 ;;
           esac
           RELEASE_VERSION="${VERSION%%+*}"
@@ -109,7 +109,7 @@ jobs:
                   line = indent + 'minSdk = 24'
                   min_count += 1
               if 'applicationId = "com.snote.snote"' in line:
-                  line = line.replace('applicationId = "com.snote.snote"', 'applicationId = "com.snote.snote.beta"')
+                  line = line.replace('applicationId = "com.snote.snote"', 'applicationId = "com.snote.snote.preview"')
               updated.append(line)
 
           text = '\n'.join(updated) + '\n'
@@ -119,10 +119,10 @@ jobs:
               raise SystemExit(f'Expected one minSdk assignment, found {min_count}')
           if 'compileSdk = 37' not in text:
               raise SystemExit('Android app module is not configured for compileSdk 37')
-          if 'applicationId = "com.snote.snote.beta"' not in text:
+          if 'applicationId = "com.snote.snote.preview"' not in text:
               raise SystemExit('Could not set the separate beta application ID')
           build.write_text(text)
-          print('Verified Android app module compileSdk=37, minSdk=24, applicationId=com.snote.snote.beta')
+          print('Verified Android app module compileSdk=37, minSdk=24, applicationId=com.snote.snote.preview')
 
           manifest = Path('android/app/src/main/AndroidManifest.xml')
           if not manifest.is_file():
@@ -130,8 +130,8 @@ jobs:
           text = manifest.read_text()
           if 'android.permission.CAMERA' not in text:
               text = text.replace('</manifest>', '    <uses-permission android:name="android.permission.CAMERA" />\n</manifest>')
-          text = text.replace('android:label="snote"', 'android:label="Snotee Beta"')
-          text = text.replace('android:label="Snotee"', 'android:label="Snotee Beta"')
+          text = text.replace('android:label="snote"', 'android:label="Snotee Preview"')
+          text = text.replace('android:label="Snotee"', 'android:label="Snotee Preview"')
           if 'android:launchMode="singleTop"' in text:
               text = text.replace('android:launchMode="singleTop"', 'android:launchMode="singleTask"')
           if 'android.intent.action.SEND' not in text:
@@ -176,7 +176,7 @@ jobs:
           </paths>
           ''')
 
-          if 'Snotee Beta' not in manifest.read_text():
+          if 'Snotee Preview' not in manifest.read_text():
               raise SystemExit('Beta app label was not set')
           if 'android.intent.action.SEND' not in manifest.read_text():
               raise SystemExit('Android image share filters were not configured')
@@ -324,7 +324,7 @@ jobs:
             BADGING="$("$AAPT" dump badging "$APK")"
             APP_ID="$(printf '%s\n' "$BADGING" | awk -F"'" '/^package:/ {print $2; exit}')"
             VERSION_NAME="$(printf '%s\n' "$BADGING" | grep '^package:' | grep -o "versionName='[^']*'" | cut -d"'" -f2)"
-            test "$APP_ID" = "com.snote.snote.beta"
+            test "$APP_ID" = "com.snote.snote.preview"
             test "$VERSION_NAME" = "$EXPECTED_VERSION"
             echo "Verified $APK: applicationId=$APP_ID versionName=$VERSION_NAME"
           done
@@ -353,7 +353,7 @@ jobs:
           NOTES="$(cat <<EOF
           Snotee $PACKAGE_VERSION build for testing only.
           Build commit: $GITHUB_SHA
-          These per-ABI APKs use the separate Android application ID com.snote.snote.beta. Install the APK matching the device CPU architecture to use less storage than the previous universal APK.
+          These per-ABI APKs use the separate Android application ID com.snote.snote.preview. Install the APK matching the device CPU architecture to use less storage than the previous universal APK.
           Published only after dependency resolution, formatting, analysis, automated tests, Android APK build, APK identity/version validation, and SHA-256 generation pass.
           EOF
           )"
