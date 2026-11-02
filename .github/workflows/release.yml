@@ -109,9 +109,9 @@ jobs:
               updated.append(line)
           if compile_count != 1 or min_count != 1:
               raise SystemExit(f'Expected one compileSdk and minSdk assignment; got {compile_count}, {min_count}')
+          text = '\n'.join(updated) + '\n'
           if 'applicationId = "com.snote.snote.beta"' not in text:
               raise SystemExit('Production promotion must retain the installed beta application ID')
-          text = '\n'.join(updated) + '\n'
           if 'isCoreLibraryDesugaringEnabled = true' not in text:
               if 'compileOptions {' not in text:
                   raise SystemExit('Generated Gradle file has no compileOptions block')
