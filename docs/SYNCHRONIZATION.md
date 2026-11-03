@@ -55,6 +55,8 @@ This scope is for the app's private Drive appDataFolder; it does not grant acces
 1. Open [Google Cloud Console](https://console.cloud.google.com/), create/select a project, and enable **Google Drive API**.
 2. Configure the OAuth consent screen (branding, support email, developer contact). While the app is in Testing, add each tester's Google account under Test users.
 3. Create an **Android OAuth client** using the beta package name `com.snote.snote.beta` and the SHA-1 certificate fingerprint for each signing identity you will distribute (debug, locally signed release, and Google Play app-signing certificate if applicable).
+
+   **Important beta CI limitation:** `.github/workflows/beta.yml` currently generates a new temporary signing keystore on every run. Its SHA-1 therefore changes between beta APKs, so one Android OAuth client cannot reliably authorize all CI beta releases. For repeatable beta OAuth, create one persistent beta keystore, keep it outside Git, configure it as GitHub Actions secrets, and update the signing step to use that keystore on every run. Until that is done, use a locally signed build with a stable keystore for OAuth testing; do not register a one-run CI fingerprint as the permanent identity.
 4. Create an **iOS OAuth client** using the exact iOS bundle identifier. Add its reversed client ID as a URL scheme in `ios/Runner/Info.plist` (URL Types).
 5. Create a **Web application OAuth client ID**. The Android SDK uses this as its `serverClientId`; do not use the Android client ID in that field.
 6. Supply the public client IDs at build time. Do not add a client secret to Flutter code, Git, APK assets, or `--dart-define`.
