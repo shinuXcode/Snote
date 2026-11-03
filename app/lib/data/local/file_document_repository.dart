@@ -141,13 +141,11 @@ class FileDocumentRepository {
   Future<void> delete(DocumentAsset asset) async {
     final db = await _db;
     await db.transaction((tx) async {
-      final deleted = await tx.delete(
+      await tx.delete(
         'attachments',
         where: 'id = ?',
         whereArgs: [asset.id],
       );
-      if (deleted > 0) {
-      }
     });
     // Remove the local blob after its attachment record is deleted.
     await deleteLocalFile(asset.localPath);
@@ -167,14 +165,12 @@ class FileDocumentRepository {
   Future<void> cutToNote(DocumentAsset asset, String newNoteId) async {
     final db = await _db;
     await db.transaction((tx) async {
-      final changed = await tx.update(
+      await tx.update(
         'attachments',
         {'note_id': newNoteId},
         where: 'id = ? AND note_id = ?',
         whereArgs: [asset.id, asset.noteId],
       );
-      if (changed > 0) {
-      }
     });
   }
 }
