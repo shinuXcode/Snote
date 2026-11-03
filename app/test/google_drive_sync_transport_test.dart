@@ -55,6 +55,29 @@ void main() {
     await transport.disconnect();
   });
 
+  test('Google Drive requests a fresh SDK token for each API request', () async {
+    var tokenRequestCount = 0;
+    final seenAuthorizationHeaders = <String?>[];
+    final client = MockClient((request) async {
+      seenAuthorizationHeaders.add(request.headers['Authorization']);
+      return http.Response('{"files":[]}', 200);
+    });
+    final transport = GoogleDriveSyncTransport(
+      accessTokenProvider: () async => 'fresh-token-${++tokenRequestCount}',
+      client: client,
+    );
+
+    await transport.connect();
+    await transport.listObjects();
+
+    expect(tokenRequestCount, 2);
+    expect(seenAuthorizationHeaders, [
+      'Bearer fresh-token-1',
+      'Bearer fresh-token-2',
+    ]);
+    await transport.disconnect();
+  });
+
   test('Google Drive resolves object IDs to Drive file IDs before download', () async {
     final client = MockClient((request) async {
       if (request.url.path == '/drive/v3/files/drive-file-42' &&
