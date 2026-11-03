@@ -425,12 +425,6 @@ class FolderRepository {
       if (folderIds.isEmpty) return;
 
       final placeholders = List.filled(folderIds.length, '?').join(',');
-      final notes = await tx.query(
-        'notes',
-        columns: ['id'],
-        where: 'owner_id = ? AND deleted_at IS NULL AND folder_id IN ($placeholders)',
-        whereArgs: [SnoteAccountScope.ownerId, ...folderIds],
-      );
       await tx.update(
         'notes',
         {
@@ -440,8 +434,6 @@ class FolderRepository {
         where: 'owner_id = ? AND deleted_at IS NULL AND folder_id IN ($placeholders)',
         whereArgs: [SnoteAccountScope.ownerId, ...folderIds],
       );
-      for (final row in notes) {
-      }
       await _deleteRecursive(tx, id, now, <String>{});
     });
   }
