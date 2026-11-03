@@ -24,7 +24,10 @@ class GoogleDriveOAuthService {
   GoogleSignInAccount? _account;
 
   bool get isPlatformSupported =>
-      !kIsWeb && _signIn.supportsAuthenticate();
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS ||
+          defaultTargetPlatform == TargetPlatform.macOS);
 
   String? get accountEmail => _account?.email;
   String? get accountName => _account?.displayName;
