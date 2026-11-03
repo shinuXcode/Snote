@@ -319,6 +319,22 @@ class NoteRepository {
     });
   }
 
+  Future<void> delete(String id) async {
+    final db = await _db;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.transaction((tx) async {
+      await tx.update(
+        'notes',
+        {
+          'deleted_at': now,
+          'updated_at': now,
+        },
+        where: 'id = ? AND owner_id = ?',
+        whereArgs: [id, SnoteAccountScope.ownerId],
+      );
+    });
+  }
+
   Future<void> purgeExpiredTrash() async {
     final db = await _db;
     final cutoff = DateTime.now()
