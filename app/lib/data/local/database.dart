@@ -38,12 +38,6 @@ class SnoteDatabase {
         await db.execute(createNotesTable);
         await db.execute(createPagesTable);
         await db.execute(createAttachmentsTable);
-        await db.execute(createSyncQueueTable);
-        await db.execute(createSyncMetadataTable);
-        await db.execute(createSyncOperationsTable);
-        await db.execute(createSyncDeviceCursorsTable);
-        await db.execute(createSyncAppliedPacksTable);
-        await db.execute(createSyncConflictsTable);
         await db.execute(createAppNotificationsTable);
         await db.execute(createFolderCoversTable);
       },
@@ -80,38 +74,6 @@ class SnoteDatabase {
         if (oldVersion < 7) {
           await db.execute(createFolderCoversTable);
         }
-        if (oldVersion < 10) {
-          // Additive-only sync journal migration. Existing notes and files are untouched.
-          await db.execute(createSyncMetadataTable);
-          await db.execute(createSyncOperationsTable);
-        }
-        if (oldVersion >= 10 && oldVersion < 11) {
-          await _addColumnIfMissing(
-            db,
-            table: 'sync_operations',
-            column: 'lease_id',
-            declaration: 'TEXT',
-          );
-          await _addColumnIfMissing(
-            db,
-            table: 'sync_operations',
-            column: 'lease_until',
-            declaration: 'INTEGER',
-          );
-        }
-        if (oldVersion < 12) {
-          await _addColumnIfMissing(
-            db,
-            table: 'sync_operations',
-            column: 'next_attempt_at',
-            declaration: 'INTEGER',
-          );
-        }
-        if (oldVersion < 13) {
-          await db.execute(createSyncDeviceCursorsTable);
-          await db.execute(createSyncAppliedPacksTable);
-          await db.execute(createSyncConflictsTable);
-        }
         if (oldVersion < 9) {
           // Additive-only migration: existing notes and folders remain intact
           // and default to not-favorited.
@@ -127,6 +89,14 @@ class SnoteDatabase {
             column: 'is_favorite',
             declaration: 'INTEGER NOT NULL DEFAULT 0',
           );
+        if (oldVersion < 14) {
+          await db.execute('DROP TABLE IF EXISTS sync_queue');
+          await db.execute('DROP TABLE IF EXISTS sync_metadata');
+          await db.execute('DROP TABLE IF EXISTS sync_operations');
+          await db.execute('DROP TABLE IF EXISTS sync_device_cursors');
+          await db.execute('DROP TABLE IF EXISTS sync_applied_packs');
+          await db.execute('DROP TABLE IF EXISTS sync_conflicts');
+        }
         }
       },
       onOpen: (db) async {
@@ -182,30 +152,6 @@ class SnoteDatabase {
         await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_folder_covers_created '
           'ON folder_covers(created_at DESC)',
-        );
-        await db.execute(
-          'CREATE INDEX IF NOT EXISTS idx_sync_operations_status_sequence '
-          'ON sync_operations(status, sequence)',
-        );
-        await db.execute(
-          'CREATE INDEX IF NOT EXISTS idx_sync_operations_retry_schedule '
-          'ON sync_operations(status, next_attempt_at, sequence)',
-        );
-        await db.execute(
-          'CREATE INDEX IF NOT EXISTS idx_sync_applied_packs_device_sequence '
-          'ON sync_applied_packs(device_id, to_sequence)',
-        );
-        await db.execute(
-          'CREATE INDEX IF NOT EXISTS idx_sync_conflicts_status_entity '
-          'ON sync_conflicts(status, entity_type, entity_id)',
-        );
-        await db.execute(
-          'CREATE INDEX IF NOT EXISTS idx_sync_operations_entity '
-          'ON sync_operations(entity_type, entity_id, created_at)',
-        );
-        await db.execute(
-          'CREATE INDEX IF NOT EXISTS idx_sync_queue_owner_entity '
-          'ON sync_queue(owner_id, entity_type, entity_id, created_at)',
         );
       },
     );
