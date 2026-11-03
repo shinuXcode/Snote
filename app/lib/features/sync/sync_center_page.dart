@@ -59,10 +59,15 @@ class _SyncCenterPageState extends State<SyncCenterPage> {
       final credentials = values[2] as WebDavCredentials?;
       GoogleDriveAccount? googleAccount;
       String? googleSetupError;
-      try {
-        googleAccount = await _googleOAuth.restoreAccount();
-      } catch (error) {
-        googleSetupError = error.toString();
+      if (_googleOAuth.isPlatformSupported) {
+        try {
+          googleAccount = await _googleOAuth.restoreAccount();
+        } catch (error) {
+          googleSetupError = error.toString();
+        }
+      } else {
+        googleSetupError =
+            'Google Drive sign-in is currently supported on Android, iOS and macOS only.';
       }
       if (!mounted) return;
       setState(() {
@@ -363,7 +368,7 @@ class _SyncCenterPageState extends State<SyncCenterPage> {
                   const SizedBox(height: 12),
                   Wrap(spacing: 8, runSpacing: 8, children: [
                     OutlinedButton.icon(
-                      onPressed: _googleLoading || _running ? null : _connectGoogleDrive,
+                      onPressed: !_googleOAuth.isPlatformSupported || _googleLoading || _running ? null : _connectGoogleDrive,
                       icon: _googleLoading
                           ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                           : const Icon(Icons.login_rounded),
@@ -376,7 +381,7 @@ class _SyncCenterPageState extends State<SyncCenterPage> {
                         label: const Text('Disconnect'),
                       ),
                     FilledButton.icon(
-                      onPressed: _running || _loading || _googleLoading ? null : _runGoogleDriveSync,
+                      onPressed: !_googleOAuth.isPlatformSupported || _running || _loading || _googleLoading ? null : _runGoogleDriveSync,
                       icon: _running
                           ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                           : const Icon(Icons.sync_rounded),
