@@ -12,6 +12,7 @@
 - NoteRepository and FolderRepository maintain a coalescing sync_queue for pending entity changes.
 - SyncJournal records per-device monotonically sequenced operations.
 - Google Drive and HTTPS WebDAV adapters implement immutable object transport.
+- Google Drive OAuth sign-in is wired through google_sign_in 7.x on Android, iOS and macOS; the adapter requests only the Drive appDataFolder scope and obtains SDK-managed access tokens on demand.
 - Manual notebook export/import uses AES-256-GCM and a password-derived key.
 
 ## Implemented in this branch
@@ -35,12 +36,55 @@
 5. Implement deterministic merge rules for non-overlapping changes and preserve both revisions when automatic merge is unsafe.
 6. Implement manual conflict-resolution UI and safe note-delete/edit and folder-move conflict behavior.
 7. Add shared-key QR pairing, key exchange/recovery/rotation/revocation and device management.
-8. Add Google OAuth consent, refresh and secure token lifecycle; Drive resumable uploads and collision-safe create.
+8. Configure platform OAuth client IDs and test Google consent, token expiry/reconnect and revocation on real devices. The native Google Sign-In SDK manages native access-token renewal; the app does not receive or persist a refresh token. A server-managed refresh-token flow for unattended/background sync is not included. Add Drive resumable uploads and race-safe collision handling.
 9. Add WebDAV settings, secure credentials, capability discovery and scalable listing.
 10. Implement authenticated local-network discovery/transfer and WebRTC signaling/data channels only after the common change-pack protocol is stable.
 11. Add encrypted full/incremental backup, restore validation, background scheduling and metered/battery-aware policy.
 12. Run multi-device Android/Windows/Web tests, crash/offline/corruption scenarios and large-library performance benchmarks.
 
+## Google Drive OAuth setup (beta)
+
+The beta uses the official google_sign_in 7.2.x plugin. Authentication is separate from Drive authorization. Snotee requests only:
+
+`https://www.googleapis.com/auth/drive.appdata`
+
+This scope is for the app's private Drive appDataFolder; it does not grant access to the user's ordinary Drive files. The OAuth service is in `app/lib/features/sync/google_drive_oauth_service.dart`, and the transport receives an access-token provider rather than persisting a bearer token.
+
+### Google Cloud configuration
+
+1. Open [Google Cloud Console](https://console.cloud.google.com/), create/select a project, and enable **Google Drive API**.
+2. Configure the OAuth consent screen (branding, support email, developer contact). While the app is in Testing, add each tester's Google account under Test users.
+3. Create an **Android OAuth client** using the beta package name `com.snote.snote.beta` and the SHA-1 certificate fingerprint for each signing identity you will distribute (debug, locally signed release, and Google Play app-signing certificate if applicable).
+4. Create an **iOS OAuth client** using the exact iOS bundle identifier. Add its reversed client ID as a URL scheme in `ios/Runner/Info.plist` (URL Types).
+5. Create a **Web application OAuth client ID**. The Android SDK uses this as its `serverClientId`; do not use the Android client ID in that field.
+6. Supply the public client IDs at build time. Do not add a client secret to Flutter code, Git, APK assets, or `--dart-define`.
+
+Example Android build:
+
+```bash
+cd app
+flutter pub get
+flutter build apk --release \
+  --dart-define=GOOGLE_OAUTH_WEB_CLIENT_ID=YOUR_WEB_CLIENT_ID
+```
+
+Example iOS/macOS build:
+
+```bash
+flutter build ios --release \
+  --dart-define=GOOGLE_OAUTH_IOS_CLIENT_ID=YOUR_IOS_CLIENT_ID
+```
+
+The beta currently enables interactive native sign-in on Android, iOS and macOS. Web needs the Google-rendered sign-in button integration; Windows and Linux need a separate desktop OAuth/PKCE implementation and are intentionally not presented as supported by this service. For Android, verify the generated application ID and SHA-1 against the OAuth client before testing. Obtain fingerprints with `cd app/android && ./gradlew signingReport` after generating the Android runner.
+
+### Token lifecycle and security boundary
+
+- Tokens are requested just-in-time and passed directly to the Drive transport; they are not stored in SQLite, preferences, logs, sync packs or source control.
+- The native Google Sign-In SDK is asked for a current authorization on each transport request and may renew its cached access token. If authorization is no longer available, Sync Center asks the user to reconnect.
+- The Web implementation of `google_sign_in` does not refresh access tokens automatically after one hour; a fresh user authorization is required. Web sign-in UI is not yet wired in this beta.
+- The plugin does not expose a durable refresh token to this app. True unattended refresh-token management requires a carefully secured backend that exchanges an authorization code and stores the refresh token, or a separate native installed-app OAuth/PKCE implementation. No client secret belongs in the app.
+- Disconnect uses the SDK's disconnect operation to revoke the app's Google authorization. Revocation cannot remove encrypted data already synced to a Drive account.
+- OAuth sign-in only authenticates access to the transport. It does not by itself prove that note snapshots, conflicts, attachments, or two-way sync are production-ready.
 ## Constraints
 - Never sync the SQLite database file as a unit.
 - Never let multiple devices overwrite one shared manifest.
