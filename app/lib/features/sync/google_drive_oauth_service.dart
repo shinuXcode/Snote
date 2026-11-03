@@ -47,6 +47,7 @@ class GoogleDriveOAuthService {
         }
         // Android's Google Sign-In SDK expects the OAuth Web client ID here.
         serverClientId = _webClientId;
+        break;
       case TargetPlatform.iOS:
       case TargetPlatform.macOS:
         if (_iosClientId.isEmpty) {
@@ -57,6 +58,7 @@ class GoogleDriveOAuthService {
           );
         }
         clientId = _iosClientId;
+        break;
       case TargetPlatform.windows:
       case TargetPlatform.linux:
       case TargetPlatform.fuchsia:
