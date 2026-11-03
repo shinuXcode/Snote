@@ -100,8 +100,11 @@ class _SnoteAppState extends State<SnoteApp> {
     unawaited(_initialize());
   }
 
+  // Theme/settings notifications must rebuild the app shell without re-entering
+  // startup. Re-entering bootstrap here replaced AppEntry with a permanent loader
+  // when the user returned from Settings after changing a theme option.
   void _refresh() {
-    if (mounted) setState(() => _bootstrapping = true);
+    if (mounted) setState(() {});
   }
 
   Future<void> _initialize() async {
