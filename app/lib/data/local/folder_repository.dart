@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/config/account_scope.dart';
 import 'local_file_store.dart';
 import 'database.dart';
+import '../../features/sync/sync_journal.dart';
 
 const defaultFolderColor = 0xff5b6cf9;
 
@@ -17,6 +18,7 @@ class LocalFolder {
   final int createdAt;
   final int updatedAt;
   final int? deletedAt;
+  final bool isFavorite;
 
   const LocalFolder({
     required this.id,
@@ -28,6 +30,7 @@ class LocalFolder {
     required this.createdAt,
     required this.updatedAt,
     this.deletedAt,
+    this.isFavorite = false,
   });
 
   factory LocalFolder.fromMap(Map<String, Object?> map) => LocalFolder(
@@ -41,6 +44,7 @@ class LocalFolder {
         createdAt: (map['created_at']! as num).toInt(),
         updatedAt: (map['updated_at']! as num).toInt(),
         deletedAt: (map['deleted_at'] as num?)?.toInt(),
+        isFavorite: (map['is_favorite'] as num?)?.toInt() == 1,
       );
 
   Map<String, Object?> toExport() => {
@@ -50,6 +54,7 @@ class LocalFolder {
         'colorValue': colorValue,
         'iconKey': iconKey,
         'sortOrder': sortOrder,
+        'isFavorite': isFavorite,
         'createdAt': createdAt,
         'updatedAt': updatedAt,
       };
@@ -132,6 +137,33 @@ class FolderRepository {
       orderBy: 'sort_order ASC, name COLLATE NOCASE ASC',
     );
     return rows.map(LocalFolder.fromMap).toList();
+  }
+
+  Future<List<LocalFolder>> listFavorites() async {
+    final db = await _db;
+    final rows = await db.query(
+      'folders',
+      where: 'owner_id = ? AND deleted_at IS NULL AND is_favorite = 1',
+      whereArgs: [SnoteAccountScope.ownerId],
+      orderBy: 'updated_at DESC',
+    );
+    return rows.map(LocalFolder.fromMap).toList(growable: false);
+  }
+
+  Future<void> setFavorite(String id, bool favorite) async {
+    final db = await _db;
+    await db.transaction((tx) async {
+      final changed = await tx.update(
+        'folders',
+        {
+          'is_favorite': favorite ? 1 : 0,
+          'updated_at': DateTime.now().millisecondsSinceEpoch,
+        },
+        where: 'id = ? AND owner_id = ? AND deleted_at IS NULL',
+        whereArgs: [id, SnoteAccountScope.ownerId],
+      );
+      if (changed > 0) await _queue(tx, id, 'upsert');
+    });
   }
 
   Future<LocalFolder?> get(String id) async {
@@ -299,6 +331,7 @@ class FolderRepository {
           'color_value': original['color_value'] ?? defaultFolderColor,
           'icon_key': original['icon_key'] ?? 'folder',
           'sort_order': isRoot ? rootOrder : (original['sort_order'] ?? 0),
+          'is_favorite': 0,
           'created_at': now,
           'updated_at': now,
           'deleted_at': null,
@@ -527,6 +560,12 @@ class FolderRepository {
       'created_at': DateTime.now().millisecondsSinceEpoch,
       'attempts': 0,
     });
+    await SyncJournal.record(
+      db,
+      entityType: 'folder',
+      entityId: id,
+      operation: operation,
+    );
   }
 
   Future<void> queueNote(
@@ -548,5 +587,11 @@ class FolderRepository {
       'created_at': DateTime.now().millisecondsSinceEpoch,
       'attempts': 0,
     });
+    await SyncJournal.record(
+      db,
+      entityType: 'note',
+      entityId: noteId,
+      operation: operation,
+    );
   }
 }

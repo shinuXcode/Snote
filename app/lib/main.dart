@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart';
@@ -8,11 +9,12 @@ import 'app/app_entry.dart';
 import 'app/theme_controller.dart';
 import 'core/settings/app_settings.dart';
 import 'ui/snote_theme.dart';
+import 'ui/snote_logo.dart';
 
 void _installSnoteErrorLogging() {
   final previousFlutterError = FlutterError.onError;
   FlutterError.onError = (details) {
-    debugPrint('[Snote][FlutterError] ${details.exceptionAsString()}');
+    debugPrint('[Snotee][FlutterError] ${details.exceptionAsString()}');
     if (details.stack != null) {
       debugPrintStack(stackTrace: details.stack);
     }
@@ -26,13 +28,13 @@ void _installSnoteErrorLogging() {
   final dispatcher = WidgetsBinding.instance.platformDispatcher;
   final previousPlatformError = dispatcher.onError;
   dispatcher.onError = (error, stackTrace) {
-    debugPrint('[Snote][PlatformError] $error\n$stackTrace');
+    debugPrint('[Snotee][PlatformError] $error\n$stackTrace');
     return previousPlatformError?.call(error, stackTrace) ?? false;
   };
 }
 
 Widget _snoteErrorWidget(FlutterErrorDetails details) {
-  debugPrint('[Snote][ErrorWidget] ${details.exceptionAsString()}');
+  debugPrint('[Snotee][ErrorWidget] ${details.exceptionAsString()}');
   if (details.stack != null) debugPrintStack(stackTrace: details.stack);
   return Material(
     color: const Color(0xfff7f8fa),
@@ -67,8 +69,13 @@ void main() {
   WidgetsFlutterBinding.ensureInitialized();
   ErrorWidget.builder = _snoteErrorWidget;
   _installSnoteErrorLogging();
-  // Mount Flutter immediately so startup failures can show an error/retry
-  // screen instead of leaving the user on a blank launch surface.
+  final deferForNativeLaunch = !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+  if (deferForNativeLaunch) {
+    // Keep the OS launch screen visible until the first usable app frame.
+    WidgetsBinding.instance.deferFirstFrame();
+  }
   runApp(const SnoteApp());
 }
 
@@ -81,6 +88,9 @@ class _SnoteAppState extends State<SnoteApp> {
   final _theme = SnoteThemeController.instance;
   bool _bootstrapping = true;
   bool _bootstrapAttemptActive = false;
+  bool _firstFramePending = !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
   String? _startupError;
 
   @override
@@ -90,6 +100,9 @@ class _SnoteAppState extends State<SnoteApp> {
     unawaited(_initialize());
   }
 
+  // Theme/settings notifications must rebuild the app shell without re-entering
+  // startup. Re-entering bootstrap here replaced AppEntry with a permanent loader
+  // when the user returned from Settings after changing a theme option.
   void _refresh() {
     if (mounted) setState(() {});
   }
@@ -97,12 +110,7 @@ class _SnoteAppState extends State<SnoteApp> {
   Future<void> _initialize() async {
     if (_bootstrapAttemptActive) return;
     _bootstrapAttemptActive = true;
-    if (mounted) {
-      setState(() {
-        _bootstrapping = true;
-        _startupError = null;
-      });
-    }
+    if (mounted) setState(() {});
 
     try {
       await _theme.load();
@@ -113,7 +121,7 @@ class _SnoteAppState extends State<SnoteApp> {
         _startupError = null;
       });
     } catch (error, stackTrace) {
-      debugPrint('Snote startup failed: $error\\n$stackTrace');
+      debugPrint('Snotee startup failed: $error\\n$stackTrace');
       if (!mounted) return;
       setState(() {
         _bootstrapping = false;
@@ -121,6 +129,10 @@ class _SnoteAppState extends State<SnoteApp> {
       });
     } finally {
       _bootstrapAttemptActive = false;
+      if (_firstFramePending) {
+        _firstFramePending = false;
+        WidgetsBinding.instance.allowFirstFrame();
+      }
     }
   }
 
@@ -143,7 +155,7 @@ class _SnoteAppState extends State<SnoteApp> {
         ? profileSeed
         : _theme.colorTheme.color;
     final app = MaterialApp(
-      title: 'Snote',
+      title: 'Snotee',
       debugShowCheckedModeBanner: false,
       theme: _theme.eInk
           ? ThemeData(
@@ -187,14 +199,14 @@ class _SnoteAppState extends State<SnoteApp> {
         FlutterQuillLocalizations.delegate,
       ],
       supportedLocales: const [Locale('en'), Locale('hi')],
-      home: _bootstrapping
-          ? const _StartupPage()
-          : _startupError == null
-              ? const AppEntry()
-              : _StartupFailurePage(
-                  details: _startupError!,
-                  onRetry: _retryBootstrap,
-                ),
+      home: _startupError != null
+          ? _StartupFailurePage(
+              details: _startupError!,
+              onRetry: _retryBootstrap,
+            )
+          : _bootstrapping
+              ? const _StartupPage()
+              : const AppEntry(),
     );
     if (_theme.eInk && _theme.grayscale) {
       return ColorFiltered(
@@ -222,21 +234,27 @@ class _StartupPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        body: SafeArea(
-          child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const CircularProgressIndicator(),
-                const SizedBox(height: 18),
-                Text(
-                  'Starting Snote…',
-                  style: Theme.of(context).textTheme.titleMedium,
+        backgroundColor: const Color(0xfff7f8fa),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SnoteLogo(size: 76),
+              const SizedBox(height: 18),
+              const Text(
+                'Snotee',
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -.6,
                 ),
-                const SizedBox(height: 6),
-                const Text('Preparing your settings and notebook'),
-              ],
-            ),
+              ),
+              const SizedBox(height: 18),
+              const SizedBox(
+                width: 110,
+                child: LinearProgressIndicator(minHeight: 3),
+              ),
+            ],
           ),
         ),
       );
@@ -269,7 +287,7 @@ class _StartupFailurePage extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'Snote could not finish starting.',
+                      'Snotee could not finish starting.',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.titleLarge,
                     ),

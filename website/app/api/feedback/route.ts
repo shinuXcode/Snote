@@ -5,7 +5,7 @@ const allowedKinds = new Set(["General feedback", "Bug report", "Feature request
 
 export async function POST(request: Request) {
   const token = process.env.SNOTE_FEEDBACK_GITHUB_TOKEN;
-  const repository = process.env.SNOTE_FEEDBACK_REPOSITORY || "shinuXcode/Snote";
+  const repository = process.env.SNOTE_FEEDBACK_REPOSITORY || "shinuXcode/Snotee";
   if (!token) return Response.json({ error: "Feedback storage is not configured yet. No feedback was saved." }, { status: 503 });
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) return Response.json({ error: "Feedback repository configuration is invalid." }, { status: 500 });
 
@@ -24,13 +24,13 @@ export async function POST(request: Request) {
 
   const title = `[Website Feedback] ${rating}/5 — ${kind}`;
   const issueBody = [
-    "## Snote website feedback", "",
+    "## Snotee website feedback", "",
     `- **Rating:** ${rating}/5`,
     `- **Category:** ${kind}`,
-    "- **Source:** Snote Showcase website",
+    "- **Source:** Snotee Showcase website",
     contact ? `- **Contact (public):** ${contact}` : "- **Contact:** Not provided",
     "", "## Message", message, "", "---",
-    "Submitted through the Snote Showcase feedback form."
+    "Submitted through the Snotee Showcase feedback form."
   ].join("\n");
   try {
     const response = await fetch(`https://api.github.com/repos/${repository}/issues`, {

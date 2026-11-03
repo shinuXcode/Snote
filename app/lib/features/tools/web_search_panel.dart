@@ -10,7 +10,9 @@ import '../../core/settings/app_settings.dart';
 
 /// Embedded browser with request-level ad/tracker host blocking on Android.
 class SnoteWebSearchPanel extends StatefulWidget {
-  const SnoteWebSearchPanel({super.key});
+  final VoidCallback? onClose;
+
+  const SnoteWebSearchPanel({super.key, this.onClose});
 
   static Future<void> show(BuildContext context) => showDialog<void>(
         context: context,
@@ -238,7 +240,7 @@ class _SnoteWebSearchPanelState extends State<SnoteWebSearchPanel> {
                   ],
                 ),
                 IconButton(tooltip: 'Collapse to screen edge', onPressed: () => _setCollapsed(true), icon: const Icon(Icons.chevron_right_rounded)),
-                IconButton(tooltip: 'Close browser', onPressed: () => Navigator.of(context, rootNavigator: true).pop(), icon: const Icon(Icons.close)),
+                IconButton(tooltip: 'Close browser', onPressed: widget.onClose ?? () => Navigator.of(context, rootNavigator: true).pop(), icon: const Icon(Icons.close)),
               ]),
             ),
             Padding(

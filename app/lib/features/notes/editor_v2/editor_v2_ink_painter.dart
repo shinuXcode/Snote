@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -16,44 +17,128 @@ class EditorV2InkPainter extends CustomPainter {
   final Set<String> selectedStrokeIds;
   final Offset? eraserCursor;
   final double eraserRadius;
+  final bool highlighterOnTop;
+  final bool onlyHighlighters;
+  static final Finalizer<ui.Picture> _pictureFinalizer =
+      Finalizer<ui.Picture>((picture) => picture.dispose());
+  ui.Picture? _basePicture;
+  Path? _liveHighlighterPath;
+  List<StrokePoint>? _liveHighlighterPoints;
+  int _liveHighlighterPointCount = 0;
 
-  const EditorV2InkPainter({
+  EditorV2InkPainter({
     required this.strokes,
     this.liveStroke,
     this.selectedStrokeIds = const <String>{},
     this.eraserCursor,
     this.eraserRadius = 18,
+    this.highlighterOnTop = false,
+    this.onlyHighlighters = false,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    for (final stroke in strokes) {
-      _drawStroke(canvas, stroke);
-      if (selectedStrokeIds.contains(stroke.id)) {
-        final bounds = _strokeBounds(stroke);
-        if (bounds != null) {
-          final selection = Paint()
-            ..color = const Color(0xff3979e8).withValues(alpha: .9)
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.2;
-          canvas.drawRect(bounds.inflate(5), selection);
-        }
+    final basePicture = _basePicture ?? _recordBasePicture();
+    canvas.drawPicture(basePicture);
+    if (liveStroke != null &&
+        !(highlighterOnTop && !onlyHighlighters && liveStroke!.pen.type == PenType.highlighter) &&
+        (!onlyHighlighters || liveStroke!.pen.type == PenType.highlighter)) {
+      if (liveStroke!.pen.type == PenType.highlighter) {
+        _drawLiveHighlighter(canvas, liveStroke!);
+      } else {
+        _drawStroke(canvas, liveStroke!);
       }
     }
-    if (liveStroke != null) _drawStroke(canvas, liveStroke!);
     if (eraserCursor != null) {
-      final cursor = Paint()
-        ..color = const Color(0xff3979e8).withValues(alpha: .65)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.4;
-      canvas.drawRect(
-        Rect.fromCenter(
-          center: eraserCursor!,
-          width: eraserRadius * 2,
-          height: eraserRadius * 1.4,
-        ),
-        cursor,
+      final bounds = Rect.fromCircle(center: eraserCursor!, radius: eraserRadius);
+      // A translucent footprint plus a contrasting double outline stays visible
+      // over both light and dark page backgrounds while tracking pressure live.
+      canvas.drawCircle(
+        eraserCursor!,
+        eraserRadius,
+        Paint()..color = const Color(0xff3979e8).withValues(alpha: .10),
       );
+      canvas.drawCircle(
+        eraserCursor!,
+        eraserRadius,
+        Paint()
+          ..color = Colors.white.withValues(alpha: .95)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.2,
+      );
+      canvas.drawCircle(
+        eraserCursor!,
+        eraserRadius,
+        Paint()
+          ..color = const Color(0xff174ea6)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.4,
+      );
+      canvas.drawCircle(
+        eraserCursor!,
+        math.max(1.2, bounds.width * .012),
+        Paint()..color = const Color(0xff174ea6),
+      );
+    }
+  }
+
+  ui.Picture _recordBasePicture() {
+    final recorder = ui.PictureRecorder();
+    final recordingCanvas = Canvas(recorder);
+    for (final stroke in strokes) {
+      if (onlyHighlighters && stroke.pen.type != PenType.highlighter) continue;
+      if (highlighterOnTop && !onlyHighlighters && stroke.pen.type == PenType.highlighter) continue;
+      _drawStroke(recordingCanvas, stroke);
+    }
+    final picture = recorder.endRecording();
+    _basePicture = picture;
+    _pictureFinalizer.attach(this, picture, detach: this);
+    return picture;
+  }
+
+  void _drawLiveHighlighter(Canvas canvas, Stroke stroke) {
+    final points = stroke.points;
+    if (points.isEmpty) return;
+    if (!identical(_liveHighlighterPoints, points) ||
+        _liveHighlighterPointCount > points.length) {
+      _liveHighlighterPath = null;
+      _liveHighlighterPoints = points;
+      _liveHighlighterPointCount = 0;
+    }
+    if (_liveHighlighterPath == null) {
+      _liveHighlighterPath = Path()..moveTo(
+        points.first.position.dx,
+        points.first.position.dy,
+      );
+      _liveHighlighterPointCount = 1;
+    }
+    final path = _liveHighlighterPath!;
+    while (_liveHighlighterPointCount < points.length) {
+      final point = points[_liveHighlighterPointCount].position;
+      path.lineTo(point.dx, point.dy);
+      _liveHighlighterPointCount++;
+    }
+    final baseWidth = stroke.pen.size.clamp(.5, 60).toDouble();
+    final alpha = (stroke.pen.color.a * stroke.pen.opacity).clamp(0.0, 1.0).toDouble();
+    final paint = Paint()
+      ..color = stroke.pen.color.withValues(alpha: math.min(alpha, .38))
+      ..blendMode = BlendMode.multiply
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..strokeWidth = math.max(baseWidth, 7).toDouble()
+      ..isAntiAlias = true;
+    if (points.length == 1) {
+      canvas.drawCircle(
+        points.first.position,
+        math.max(1.5, paint.strokeWidth * .42),
+        Paint()
+          ..color = paint.color
+          ..blendMode = BlendMode.multiply
+          ..isAntiAlias = true,
+      );
+    } else {
+      canvas.drawPath(path, paint);
     }
   }
 
@@ -1624,11 +1709,52 @@ class EditorV2InkPainter extends CustomPainter {
     canvas.drawPath(path, paint);
   }
 
+  /// Releases the cached picture when an owner can explicitly end this painter's lifetime.
+  /// RenderCustomPaint does not call this method; the finalizer remains the fallback
+  /// for painters owned by the widget/rendering lifecycle.
+  void dispose() {
+    _pictureFinalizer.detach(this);
+    final picture = _basePicture;
+    _basePicture = null;
+    picture?.dispose();
+    _liveHighlighterPath = null;
+    _liveHighlighterPoints = null;
+    _liveHighlighterPointCount = 0;
+  }
+
   @override
-  bool shouldRepaint(covariant EditorV2InkPainter oldDelegate) =>
-      !identical(strokes, oldDelegate.strokes) ||
-      liveStroke != oldDelegate.liveStroke ||
-      selectedStrokeIds != oldDelegate.selectedStrokeIds ||
-      eraserCursor != oldDelegate.eraserCursor ||
-      eraserRadius != oldDelegate.eraserRadius;
+  bool shouldRepaint(covariant EditorV2InkPainter oldDelegate) {
+    final sameBaseStrokes =
+        identical(strokes, oldDelegate.strokes) &&
+        highlighterOnTop == oldDelegate.highlighterOnTop &&
+        onlyHighlighters == oldDelegate.onlyHighlighters;
+    if (sameBaseStrokes && oldDelegate._basePicture != null) {
+      _pictureFinalizer.detach(oldDelegate);
+      _basePicture = oldDelegate._basePicture;
+      oldDelegate._basePicture = null;
+      _pictureFinalizer.attach(this, _basePicture!, detach: this);
+    }
+
+    final sameLiveHighlighterPoints =
+        liveStroke?.pen.type == PenType.highlighter &&
+        oldDelegate.liveStroke?.pen.type == PenType.highlighter &&
+        identical(liveStroke?.points, oldDelegate.liveStroke?.points);
+    if (sameLiveHighlighterPoints) {
+      _liveHighlighterPath = oldDelegate._liveHighlighterPath;
+      _liveHighlighterPoints = oldDelegate._liveHighlighterPoints;
+      _liveHighlighterPointCount = oldDelegate._liveHighlighterPointCount;
+      oldDelegate._liveHighlighterPath = null;
+      oldDelegate._liveHighlighterPoints = null;
+      oldDelegate._liveHighlighterPointCount = 0;
+    }
+
+    return !sameBaseStrokes ||
+        liveStroke != oldDelegate.liveStroke ||
+        selectedStrokeIds != oldDelegate.selectedStrokeIds ||
+        eraserCursor != oldDelegate.eraserCursor ||
+        eraserRadius != oldDelegate.eraserRadius ||
+        highlighterOnTop != oldDelegate.highlighterOnTop ||
+        onlyHighlighters != oldDelegate.onlyHighlighters;
+  }
+
 }

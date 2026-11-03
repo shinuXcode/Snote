@@ -13,6 +13,6 @@ export default function FeaturesPage() {
  return <main className="shell section features-page">
   <Reveal><div className="eyebrow"><i/> THE TOOLKIT</div><h1 className="title">Tools for the way<br/><em>you think.</em></h1><p className="lead">Snotee brings writing, organizing, and document workflows into one open-source workspace. Features can vary by platform and release.</p></Reveal>
   <div className="grid features-grid">{features.map(([title,body],i)=><Reveal key={title}><article className="card feature-card"><span className="feature-number">0{i+1} / SNOTE</span><h2>{title}</h2><p className="muted">{body}</p></article></Reveal>)}</div>
-  <section className="showcase-cta"><div><span className="eyebrow"><i/> MADE IN THE OPEN</span><h2>See what we're<br/><em>building next.</em></h2><p>Follow releases, report issues, or contribute to the project on GitHub.</p></div><div className="row"><a className="cta" href="https://github.com/shinuXcode/Snotee" target="_blank" rel="noreferrer">Explore GitHub ↗</a><a className="ghost-cta" href="/download">Download Snotee</a></div></section>
+  <section className="showcase-cta"><div><span className="eyebrow"><i/> MADE IN THE OPEN</span><h2>See what we're<br/><em>building next.</em></h2><p>Follow releases, report issues, or contribute to the project on GitHub.</p></div><div className="row"><a className="cta" href="https://github.com/shinuXcode/Snote" target="_blank" rel="noreferrer">Explore GitHub ↗</a><a className="ghost-cta" href="/download">Download Snotee</a></div></section>
  </main>;
 }

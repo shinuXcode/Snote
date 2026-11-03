@@ -10,6 +10,7 @@ class SnoteFloatingToolbar extends StatelessWidget {
     required this.compact,
     required this.fullScreen,
     required this.width,
+    required this.height,
     required this.marginLeft,
     required this.marginTop,
     required this.marginRight,
@@ -25,6 +26,7 @@ class SnoteFloatingToolbar extends StatelessWidget {
   final bool compact;
   final bool fullScreen;
   final double width;
+  final double height;
   final double marginLeft;
   final double marginTop;
   final double marginRight;
@@ -44,11 +46,7 @@ class SnoteFloatingToolbar extends StatelessWidget {
           : EdgeInsets.fromLTRB(marginLeft, marginTop, marginRight, marginBottom),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: compact ? .88 : .96),
-        borderRadius: BorderRadius.circular(compact ? 9 : 13),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: .72),
-          width: .7,
-        ),
+        borderRadius: BorderRadius.circular(24),
         boxShadow: compact || fullScreen
             ? const <BoxShadow>[]
             : <BoxShadow>[
@@ -61,10 +59,11 @@ class SnoteFloatingToolbar extends StatelessWidget {
       ),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(compact ? 9 : 13),
+        borderRadius: BorderRadius.circular(24),
         clipBehavior: Clip.antiAlias,
         child: SizedBox(
           width: width,
+          height: height,
           child: SingleChildScrollView(
             padding: tight
                 ? EdgeInsets.zero

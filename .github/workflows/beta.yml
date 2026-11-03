@@ -1,4 +1,4 @@
-name: Snote Beta Build
+name: Snotee Preview Build
 
 on:
   push:
@@ -13,6 +13,7 @@ on:
       - restore/oct14-beta92
       - feat/snote-beta96-workspace-overhaul
       - feat/writing-engine-touch-notes-refresh
+      - beta/snote-0.1.2
     paths:
       - "app/**"
       - ".github/workflows/beta.yml"
@@ -53,14 +54,14 @@ jobs:
           set -euo pipefail
           VERSION="$(awk '/^version:/ {sub(/^version:[[:space:]]*/, ""); print; exit}' app/pubspec.yaml)"
           case "$VERSION" in
-            1.1.0-beta.*+*|0.1.1+*) ;;
+            1.1.0-beta.*+*|0.1.1+*|0.1.2+*|2.0.0+*) ;;
             *) echo "Unexpected beta version in app/pubspec.yaml: $VERSION"; exit 1 ;;
           esac
           RELEASE_VERSION="${VERSION%%+*}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "release_version=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
-          echo "Building Snote beta $VERSION"
+          echo "Building Snotee beta $VERSION"
 
       - name: Generate Android runner
         working-directory: app
@@ -108,7 +109,7 @@ jobs:
                   line = indent + 'minSdk = 24'
                   min_count += 1
               if 'applicationId = "com.snote.snote"' in line:
-                  line = line.replace('applicationId = "com.snote.snote"', 'applicationId = "com.snote.snote.beta"')
+                  line = line.replace('applicationId = "com.snote.snote"', 'applicationId = "com.snote.snote.preview"')
               updated.append(line)
 
           text = '\n'.join(updated) + '\n'
@@ -118,10 +119,10 @@ jobs:
               raise SystemExit(f'Expected one minSdk assignment, found {min_count}')
           if 'compileSdk = 37' not in text:
               raise SystemExit('Android app module is not configured for compileSdk 37')
-          if 'applicationId = "com.snote.snote.beta"' not in text:
+          if 'applicationId = "com.snote.snote.preview"' not in text:
               raise SystemExit('Could not set the separate beta application ID')
           build.write_text(text)
-          print('Verified Android app module compileSdk=37, minSdk=24, applicationId=com.snote.snote.beta')
+          print('Verified Android app module compileSdk=37, minSdk=24, applicationId=com.snote.snote.preview')
 
           manifest = Path('android/app/src/main/AndroidManifest.xml')
           if not manifest.is_file():
@@ -129,7 +130,8 @@ jobs:
           text = manifest.read_text()
           if 'android.permission.CAMERA' not in text:
               text = text.replace('</manifest>', '    <uses-permission android:name="android.permission.CAMERA" />\n</manifest>')
-          text = text.replace('android:label="snote"', 'android:label="Snote Beta"')
+          text = text.replace('android:label="snote"', 'android:label="Snotee Preview"')
+          text = text.replace('android:label="Snotee"', 'android:label="Snotee Preview"')
           if 'android:launchMode="singleTop"' in text:
               text = text.replace('android:launchMode="singleTop"', 'android:launchMode="singleTask"')
           if 'android.intent.action.SEND' not in text:
@@ -174,7 +176,7 @@ jobs:
           </paths>
           ''')
 
-          if 'Snote Beta' not in manifest.read_text():
+          if 'Snotee Preview' not in manifest.read_text():
               raise SystemExit('Beta app label was not set')
           if 'android.intent.action.SEND' not in manifest.read_text():
               raise SystemExit('Android image share filters were not configured')
@@ -256,6 +258,14 @@ jobs:
         working-directory: app
         run: flutter pub get
 
+      - name: Generate adaptive launcher icon layers
+        working-directory: app
+        run: dart run tool/generate_launcher_icons.dart
+
+      - name: Generate beta app icon
+        working-directory: app
+        run: dart run flutter_launcher_icons
+
       - name: Format
         working-directory: app
         run: dart format .
@@ -294,8 +304,8 @@ jobs:
               --ks-pass pass:beta-temp-password \
               --key-pass pass:beta-temp-password \
               --ks-key-alias snote-beta \
-              --out "Snote-Android-Beta-$ABI.apk" "$APK"
-            "$APKSIGNER" verify --verbose --print-certs "Snote-Android-Beta-$ABI.apk"
+              --out "Snotee-Android-Beta-$ABI.apk" "$APK"
+            "$APKSIGNER" verify --verbose --print-certs "Snotee-Android-Beta-$ABI.apk"
           done
           rm -f beta-signing.keystore
 
@@ -308,26 +318,26 @@ jobs:
           BUILD_TOOLS="$(find "$SDK_ROOT/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
           AAPT="$BUILD_TOOLS/aapt"
           APKSIGNER="$BUILD_TOOLS/apksigner"
-          for APK in Snote-Android-Beta-*.apk; do
+          for APK in Snotee-Android-Beta-*.apk; do
             test -s "$APK"
             "$APKSIGNER" verify --verbose "$APK"
             BADGING="$("$AAPT" dump badging "$APK")"
             APP_ID="$(printf '%s\n' "$BADGING" | awk -F"'" '/^package:/ {print $2; exit}')"
             VERSION_NAME="$(printf '%s\n' "$BADGING" | grep '^package:' | grep -o "versionName='[^']*'" | cut -d"'" -f2)"
-            test "$APP_ID" = "com.snote.snote.beta"
+            test "$APP_ID" = "com.snote.snote.preview"
             test "$VERSION_NAME" = "$EXPECTED_VERSION"
             echo "Verified $APK: applicationId=$APP_ID versionName=$VERSION_NAME"
           done
-          sha256sum Snote-Android-Beta-*.apk > Snote-Android-Beta.sha256
-          cat Snote-Android-Beta.sha256
+          sha256sum Snotee-Android-Beta-*.apk > Snotee-Android-Beta.sha256
+          cat Snotee-Android-Beta.sha256
 
       - name: Upload beta APK artifacts
         uses: actions/upload-artifact@v4
         with:
           name: snote-android-beta-${{ steps.beta_version.outputs.release_version }}
           path: |
-            Snote-Android-Beta-*.apk
-            Snote-Android-Beta.sha256
+            Snotee-Android-Beta-*.apk
+            Snotee-Android-Beta.sha256
           if-no-files-found: error
           retention-days: 30
 
@@ -341,17 +351,17 @@ jobs:
         run: |
           set -euo pipefail
           NOTES="$(cat <<EOF
-          Snote $PACKAGE_VERSION build for testing only.
+          Snotee $PACKAGE_VERSION build for testing only.
           Build commit: $GITHUB_SHA
-          These per-ABI APKs use the separate Android application ID com.snote.snote.beta. Install the APK matching the device CPU architecture to use less storage than the previous universal APK.
+          These per-ABI APKs use the separate Android application ID com.snote.snote.preview. Install the APK matching the device CPU architecture to use less storage than the previous universal APK.
           Published only after dependency resolution, formatting, analysis, automated tests, Android APK build, APK identity/version validation, and SHA-256 generation pass.
           EOF
           )"
 
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" Snote-Android-Beta-*.apk Snote-Android-Beta.sha256 --clobber --repo "$GITHUB_REPOSITORY"
-            gh release edit "$RELEASE_TAG" --title "Snote $PACKAGE_VERSION" --notes "$NOTES" --prerelease --repo "$GITHUB_REPOSITORY"
+            gh release upload "$RELEASE_TAG" Snotee-Android-Beta-*.apk Snotee-Android-Beta.sha256 --clobber --repo "$GITHUB_REPOSITORY"
+            gh release edit "$RELEASE_TAG" --title "Snotee $PACKAGE_VERSION" --notes "$NOTES" --prerelease --repo "$GITHUB_REPOSITORY"
           else
-            gh release create "$RELEASE_TAG" Snote-Android-Beta-*.apk Snote-Android-Beta.sha256 --repo "$GITHUB_REPOSITORY" --title "Snote $PACKAGE_VERSION" --notes "$NOTES" --target "$GITHUB_SHA" --prerelease
+            gh release create "$RELEASE_TAG" Snotee-Android-Beta-*.apk Snotee-Android-Beta.sha256 --repo "$GITHUB_REPOSITORY" --title "Snotee $PACKAGE_VERSION" --notes "$NOTES" --target "$GITHUB_SHA" --prerelease
           fi
 
