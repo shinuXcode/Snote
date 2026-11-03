@@ -10,16 +10,24 @@ import 'sync_transport.dart';
 /// Supply a short-lived OAuth access token obtained by the host app with the
 /// Drive appData scope. This adapter does not perform OAuth or persist tokens.
 class GoogleDriveSyncTransport implements SyncTransport {
-  GoogleDriveSyncTransport({required String accessToken, http.Client? client})
-      : _accessToken = accessToken.trim(),
+  GoogleDriveSyncTransport({
+    String? accessToken,
+    Future<String> Function()? accessTokenProvider,
+    http.Client? client,
+  })  : _accessToken = accessToken?.trim(),
+        _accessTokenProvider = accessTokenProvider,
         _client = client ?? http.Client(),
         _ownsClient = client == null {
-    if (_accessToken.isEmpty) {
-      throw ArgumentError.value(accessToken, 'accessToken', 'A Google OAuth access token is required.');
+    if ((_accessToken == null || _accessToken!.isEmpty) &&
+        _accessTokenProvider == null) {
+      throw ArgumentError(
+        'Provide an access token or an OAuth access-token provider.',
+      );
     }
   }
 
-  final String _accessToken;
+  final String? _accessToken;
+  final Future<String> Function()? _accessTokenProvider;
   final http.Client _client;
   final bool _ownsClient;
   bool _connected = false;
@@ -46,9 +54,18 @@ class GoogleDriveSyncTransport implements SyncTransport {
     'pageSize': '10',
   });
 
+  Future<String> _currentAccessToken() async {
+    final provider = _accessTokenProvider;
+    final token = provider == null ? _accessToken : await provider();
+    if (token == null || token.trim().isEmpty) {
+      throw StateError('Google Drive authorization is unavailable. Reconnect and retry.');
+    }
+    return token.trim();
+  }
+
   Future<http.StreamedResponse> _send(http.BaseRequest request, {required Set<int> accepted}) async {
     request.followRedirects = false;
-    request.headers['Authorization'] = 'Bearer $_accessToken';
+    request.headers['Authorization'] = 'Bearer ${await _currentAccessToken()}';
     request.headers['Accept'] = 'application/json, application/octet-stream';
     final response = await _client.send(request);
     if (response.statusCode >= 300 && response.statusCode < 400) {
@@ -173,7 +190,7 @@ class GoogleDriveSyncTransport implements SyncTransport {
       ..followRedirects = false
       ..contentLength = prefix.length + metadata.length + middle.length + byteLength + suffix.length
       ..headers.addAll({
-        'Authorization': 'Bearer $_accessToken',
+        'Authorization': 'Bearer ${await _currentAccessToken()}',
         'Content-Type': 'multipart/related; boundary=$boundary',
       });
 
