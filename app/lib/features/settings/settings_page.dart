@@ -13,7 +13,6 @@ import '../share/qr_import_page.dart';
 import '../share/qr_transfer_page.dart';
 import '../tools/screenshot_import_page.dart';
 import '../trash/trash_page.dart';
-import '../sync/sync_center_page.dart';
 
 class SettingsPage extends StatefulWidget {
   final bool noteOnly;
@@ -303,15 +302,6 @@ class _SettingsPageState extends State<SettingsPage> {
           onTap: _transfer,
         )),
       ]),
-      if (!_noteOnly && (_query.isEmpty || 'sync devices cloud wifi webdav'.contains(_query))) _group('Sync & Devices', [
-        Card(child: ListTile(
-          leading: const Icon(Icons.sync_rounded),
-          title: const Text('Sync & Devices', style: TextStyle(fontWeight: FontWeight.w800)),
-          subtitle: const Text('View local change journal and available synchronization methods.'),
-          trailing: const Icon(Icons.chevron_right_rounded),
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SyncCenterPage())),
-        )),
-      ]),
       if (!_noteOnly && (_query.isEmpty || 'updates about release app notices'.contains(_query))) _group('Updates & About', [
         Card(child: ListTile(
           leading: const Icon(Icons.menu_book_outlined),
@@ -447,7 +437,7 @@ class _SettingsPageState extends State<SettingsPage> {
     if (key.contains('pen') || key.contains('stroke') || key.contains('writing')) return Icons.draw_rounded;
     if (key.contains('theme') || key.contains('color') || key.contains('grayscale') || key.contains('e-ink') || key.contains('display')) return Icons.palette_outlined;
     if (key.contains('motion') || key.contains('gesture') || key.contains('long press') || key.contains('double tap')) return Icons.gesture_rounded;
-    if (key.contains('sync') || key.contains('backup')) return Icons.cloud_sync_outlined;
+    if (key.contains('backup')) return Icons.backup_outlined;
     if (key.contains('security') || key.contains('lock') || key.contains('privacy')) return Icons.lock_outline_rounded;
     if (key.contains('hyperlink') || key.contains('link')) return Icons.link_rounded;
     if (key.contains('screenshot') || key.contains('notification') || key.contains('push')) return Icons.notifications_outlined;
