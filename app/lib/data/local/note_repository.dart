@@ -170,7 +170,7 @@ class NoteRepository {
         {
           'is_favorite': favorite ? 1 : 0,
           'updated_at': DateTime.now().millisecondsSinceEpoch,
-          },
+        },
         where: 'id = ? AND owner_id = ? AND deleted_at IS NULL',
         whereArgs: [id, SnoteAccountScope.ownerId],
       );
@@ -321,7 +321,9 @@ class NoteRepository {
 
   Future<void> purgeExpiredTrash() async {
     final db = await _db;
-    final cutoff = DateTime.now().subtract(const Duration(days: 30)).millisecondsSinceEpoch;
+    final cutoff = DateTime.now()
+        .subtract(const Duration(days: 30))
+        .millisecondsSinceEpoch;
     await db.transaction((tx) async {
       final expired = await tx.query(
         'notes',
@@ -331,7 +333,15 @@ class NoteRepository {
       );
       for (final row in expired) {
         final id = row['id']! as String;
-      });
+        await tx.delete('attachments', where: 'note_id = ?', whereArgs: [id]);
+        await tx.delete('pages', where: 'note_id = ?', whereArgs: [id]);
+        await tx.delete(
+          'notes',
+          where: 'id = ? AND owner_id = ?',
+          whereArgs: [id, SnoteAccountScope.ownerId],
+        );
+      }
+    });
   }
 
 }
