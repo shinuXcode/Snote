@@ -89,6 +89,7 @@ class SnoteDatabase {
             column: 'is_favorite',
             declaration: 'INTEGER NOT NULL DEFAULT 0',
           );
+        }
         if (oldVersion < 14) {
           await db.execute('DROP TABLE IF EXISTS sync_queue');
           await db.execute('DROP TABLE IF EXISTS sync_metadata');
@@ -96,7 +97,6 @@ class SnoteDatabase {
           await db.execute('DROP TABLE IF EXISTS sync_device_cursors');
           await db.execute('DROP TABLE IF EXISTS sync_applied_packs');
           await db.execute('DROP TABLE IF EXISTS sync_conflicts');
-        }
         }
       },
       onOpen: (db) async {
