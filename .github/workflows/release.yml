@@ -315,7 +315,7 @@ jobs:
           SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
           BUILD_TOOLS="$(find "$SDK_ROOT/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
           "$BUILD_TOOLS/apksigner" verify --verbose --print-certs build/app/outputs/flutter-apk/app-release.apk
-          "$BUILD_TOOLS/apksigner" verify --print-certs build/app/outputs/flutter-apk/app-release.apk | grep -Fqi '94:2d:8c:08:90:e7:72:0e:bd:b5:74:50:b0:7a:f2:fe:4c:05:ae:29'
+          "$BUILD_TOOLS/apksigner" verify --print-certs build/app/outputs/flutter-apk/app-release.apk | grep -Fqi '942d8c0890e7720ebdb57450b07af2fe4c05ae29'
 
       - name: Build Linux
         if: matrix.target == 'linux'
