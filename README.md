@@ -12,7 +12,7 @@ Open-source, offline-first handwriting and rich-text notes for Android, iOS, Win
 
 ## Privacy and storage
 
-Snotee 2.0 is offline-first: notes remain on the device using SQLite and local files. No account or login is required. Export and local backup remain available. Cross-device cloud sync is still under development and is not advertised as production-ready until OAuth, conflict resolution, background retries and two-device restore tests pass.
+Snotee is intentionally offline-first: notes remain on the device using SQLite and local files. No account, hosted database, Snotee server or automatic cross-device sync is required. To move notebooks between devices, use a user-controlled encrypted `.snote` backup and transfer it through a storage or sharing service you choose. The app does not pay for or operate that storage. Full-fidelity export/restore validation, especially for handwriting page and stroke files, remains a separate acceptance requirement.
 
 ## Local setup
 

@@ -6,7 +6,6 @@ import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import 'database.dart';
-import '../../features/sync/sync_journal.dart';
 import '../../core/config/account_scope.dart';
 
 String _encodeNoteContent(Map<String, Object?> content) => jsonEncode(content);
@@ -48,7 +47,6 @@ class LocalNote {
         'deleted_at': deletedAt,
         'version': version,
         'is_favorite': isFavorite ? 1 : 0,
-        'sync_state': 'pending',
       };
 
   factory LocalNote.fromMap(Map<String, Object?> m) => LocalNote(
@@ -64,27 +62,6 @@ class LocalNote {
         isFavorite: (m['is_favorite'] as num?)?.toInt() == 1,
       );
 
-  Map<String, Object?> toRemote(String userId) => {
-        'id': id,
-        'user_id': userId,
-        'title': title,
-        'folder_id': folderId,
-        'note_type': noteType,
-        'content_json':
-            contentJson == null ? null : jsonDecode(contentJson!),
-        'created_at': DateTime.fromMillisecondsSinceEpoch(
-          createdAt,
-        ).toUtc().toIso8601String(),
-        'updated_at': DateTime.fromMillisecondsSinceEpoch(
-          updatedAt,
-        ).toUtc().toIso8601String(),
-        'version': version,
-        'deleted_at': deletedAt == null
-            ? null
-            : DateTime.fromMillisecondsSinceEpoch(
-                deletedAt!,
-              ).toUtc().toIso8601String(),
-      };
 }
 
 class NoteRepository {
@@ -112,7 +89,6 @@ class NoteRepository {
 
     await db.transaction((tx) async {
       await tx.insert('notes', note.toMap());
-      await _queue(tx, note.id, 'upsert');
     });
 
     return note;
@@ -189,17 +165,15 @@ class NoteRepository {
   Future<void> setFavorite(String id, bool favorite) async {
     final db = await _db;
     await db.transaction((tx) async {
-      final changed = await tx.update(
+      await tx.update(
         'notes',
         {
           'is_favorite': favorite ? 1 : 0,
           'updated_at': DateTime.now().millisecondsSinceEpoch,
-          'sync_state': 'pending',
         },
         where: 'id = ? AND owner_id = ? AND deleted_at IS NULL',
         whereArgs: [id, SnoteAccountScope.ownerId],
       );
-      if (changed > 0) await _queue(tx, id, 'upsert');
     });
   }
 
@@ -258,14 +232,12 @@ class NoteRepository {
           'content_json': encoded,
           'updated_at': DateTime.now().millisecondsSinceEpoch,
           'version': currentVersion + 1,
-          'sync_state': 'pending',
-          'deleted_at': null,
+            'deleted_at': null,
         },
         where: 'id = ? AND owner_id = ?',
         whereArgs: [id, SnoteAccountScope.ownerId],
       );
 
-      await _queue(tx, id, 'upsert');
     });
   }
 
@@ -281,12 +253,10 @@ class NoteRepository {
         {
           'title': trimmed,
           'updated_at': DateTime.now().millisecondsSinceEpoch,
-          'sync_state': 'pending',
-        },
+          },
         where: 'id = ? AND owner_id = ?',
         whereArgs: [id, SnoteAccountScope.ownerId],
       );
-      await _queue(tx, id, 'upsert');
     });
   }
 
@@ -299,12 +269,10 @@ class NoteRepository {
         {
           'folder_id': folderId,
           'updated_at': DateTime.now().millisecondsSinceEpoch,
-          'sync_state': 'pending',
-        },
+          },
         where: 'id = ? AND owner_id = ?',
         whereArgs: [id, SnoteAccountScope.ownerId],
       );
-      await _queue(tx, id, 'upsert');
     });
   }
 
@@ -325,18 +293,6 @@ class NoteRepository {
   Future<void> permanentlyDelete(String id) async {
     final db = await _db;
     await db.transaction((tx) async {
-      await _recordDependentDeletes(tx, id);
-      await SyncJournal.record(
-        tx,
-        entityType: 'note',
-        entityId: id,
-        operation: 'purge',
-      );
-      await tx.delete(
-        'sync_queue',
-        where: 'entity_id = ? AND owner_id = ?',
-        whereArgs: [id, SnoteAccountScope.ownerId],
-      );
       await tx.delete('attachments', where: 'note_id = ?', whereArgs: [id]);
       await tx.delete('pages', where: 'note_id = ?', whereArgs: [id]);
       await tx.delete(
@@ -347,36 +303,6 @@ class NoteRepository {
     });
   }
 
-  Future<void> _recordDependentDeletes(DatabaseExecutor tx, String noteId) async {
-    final attachments = await tx.query(
-      'attachments',
-      columns: ['id'],
-      where: 'note_id = ?',
-      whereArgs: [noteId],
-    );
-    for (final row in attachments) {
-      await SyncJournal.record(
-        tx,
-        entityType: 'attachment',
-        entityId: row['id']! as String,
-        operation: 'delete',
-      );
-    }
-    final pages = await tx.query(
-      'pages',
-      columns: ['id'],
-      where: 'note_id = ?',
-      whereArgs: [noteId],
-    );
-    for (final row in pages) {
-      await SyncJournal.record(
-        tx,
-        entityType: 'page',
-        entityId: row['id']! as String,
-        operation: 'delete',
-      );
-    }
-  }
 
   Future<void> restore(String id) async {
     final db = await _db;
@@ -386,18 +312,34 @@ class NoteRepository {
         {
           'deleted_at': null,
           'updated_at': DateTime.now().millisecondsSinceEpoch,
-          'sync_state': 'pending',
+          },
+        where: 'id = ? AND owner_id = ?',
+        whereArgs: [id, SnoteAccountScope.ownerId],
+      );
+    });
+  }
+
+  Future<void> delete(String id) async {
+    final db = await _db;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.transaction((tx) async {
+      await tx.update(
+        'notes',
+        {
+          'deleted_at': now,
+          'updated_at': now,
         },
         where: 'id = ? AND owner_id = ?',
         whereArgs: [id, SnoteAccountScope.ownerId],
       );
-      await _queue(tx, id, 'upsert');
     });
   }
 
   Future<void> purgeExpiredTrash() async {
     final db = await _db;
-    final cutoff = DateTime.now().subtract(const Duration(days: 30)).millisecondsSinceEpoch;
+    final cutoff = DateTime.now()
+        .subtract(const Duration(days: 30))
+        .millisecondsSinceEpoch;
     await db.transaction((tx) async {
       final expired = await tx.query(
         'notes',
@@ -407,13 +349,6 @@ class NoteRepository {
       );
       for (final row in expired) {
         final id = row['id']! as String;
-        await _recordDependentDeletes(tx, id);
-        await SyncJournal.record(
-          tx,
-          entityType: 'note',
-          entityId: id,
-          operation: 'purge',
-        );
         await tx.delete('attachments', where: 'note_id = ?', whereArgs: [id]);
         await tx.delete('pages', where: 'note_id = ?', whereArgs: [id]);
         await tx.delete(
@@ -425,133 +360,4 @@ class NoteRepository {
     });
   }
 
-  Future<void> delete(String id) async {
-    final db = await _db;
-    final now = DateTime.now().millisecondsSinceEpoch;
-
-    await db.transaction((tx) async {
-      await tx.update(
-        'notes',
-        {
-          'deleted_at': now,
-          'updated_at': now,
-          'sync_state': 'pending',
-        },
-        where: 'id = ? AND owner_id = ?',
-        whereArgs: [id, SnoteAccountScope.ownerId],
-      );
-      await _queue(tx, id, 'delete');
-    });
-  }
-
-  Future<List<Map<String, Object?>>> pendingQueue() async {
-    final db = await _db;
-    return db.query(
-      'sync_queue',
-      where: 'owner_id = ?',
-      whereArgs: [SnoteAccountScope.ownerId],
-      orderBy: 'created_at ASC',
-      limit: 100,
-    );
-  }
-
-  Future<void> markSynced(String noteId) async {
-    final db = await _db;
-
-    await db.transaction((tx) async {
-      await tx.update(
-        'notes',
-        {'sync_state': 'synced'},
-        where: 'id = ? AND owner_id = ?',
-        whereArgs: [noteId, SnoteAccountScope.ownerId],
-      );
-      await tx.delete(
-        'sync_queue',
-        where: 'entity_type = ? AND entity_id = ? AND owner_id = ?',
-        whereArgs: ['note', noteId, SnoteAccountScope.ownerId],
-      );
-    });
-  }
-
-  Future<void> applyRemote(Map<String, dynamic> remote) async {
-    final id = remote['id']?.toString();
-    if (id == null || id.isEmpty) return;
-
-    DateTime? parseDate(Object? value) =>
-        value == null ? null : DateTime.tryParse(value.toString());
-
-    final updatedDate = parseDate(remote['updated_at']);
-    if (updatedDate == null) return;
-
-    final updated = updatedDate.millisecondsSinceEpoch;
-    final local = await get(id);
-
-    if (local != null && local.updatedAt > updated) return;
-
-    final created =
-        parseDate(remote['created_at'])?.millisecondsSinceEpoch ?? updated;
-    final deleted =
-        parseDate(remote['deleted_at'])?.millisecondsSinceEpoch;
-
-    final db = await _db;
-
-    await db.insert(
-      'notes',
-      {
-        'id': id,
-        'owner_id': SnoteAccountScope.ownerId,
-        'title': remote['title']?.toString() ?? 'Untitled note',
-        'folder_id': remote['folder_id']?.toString(),
-        'note_type':
-            remote['note_type']?.toString() ?? 'handwriting',
-        'content_json': remote['content_json'] == null
-            ? null
-            : jsonEncode(remote['content_json']),
-        'created_at': local?.createdAt ?? created,
-        'updated_at': updated,
-        'deleted_at': deleted,
-        'version':
-            (remote['version'] as num?)?.toInt() ?? 1,
-        'sync_state': 'synced',
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-
-    await db.delete(
-      'sync_queue',
-      where: 'entity_type = ? AND entity_id = ? AND owner_id = ?',
-      whereArgs: ['note', id, SnoteAccountScope.ownerId],
-    );
-  }
-
-  Future<void> _queue(
-    DatabaseExecutor db,
-    String id,
-    String operation,
-  ) async {
-    await db.delete(
-      'sync_queue',
-      where: 'entity_type = ? AND entity_id = ? AND owner_id = ?',
-      whereArgs: ['note', id, SnoteAccountScope.ownerId],
-    );
-
-    await db.insert(
-      'sync_queue',
-      {
-        'id': _uuid.v4(),
-        'owner_id': SnoteAccountScope.ownerId,
-        'entity_type': 'note',
-        'entity_id': id,
-        'operation': operation,
-        'created_at': DateTime.now().millisecondsSinceEpoch,
-        'attempts': 0,
-      },
-    );
-    await SyncJournal.record(
-      db,
-      entityType: 'note',
-      entityId: id,
-      operation: operation,
-    );
-  }
 }

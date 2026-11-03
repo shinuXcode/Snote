@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../features/sync/sync_journal.dart';
 import 'database.dart';
 import 'local_file_store.dart';
 
@@ -79,21 +78,14 @@ class FileDocumentRepository {
           'note_id': noteId,
           'type': type,
           'local_path': path,
-          'remote_path': null,
           'size': bytes.length,
           'metadata_json': jsonEncode(data),
           'created_at': DateTime.now().millisecondsSinceEpoch,
         });
-        await SyncJournal.record(
-          tx,
-          entityType: 'attachment',
-          entityId: id,
-          operation: 'create',
-        );
       });
     } catch (_) {
       // The file is written before the SQL transaction. Remove it if the
-      // metadata+journal commit fails so failed imports do not leave orphans.
+      // metadata commit fails so failed imports do not leave orphans.
       try {
         await deleteLocalFile(path);
       } catch (_) {}
@@ -143,35 +135,19 @@ class FileDocumentRepository {
         where: 'id = ?',
         whereArgs: [id],
       );
-      await SyncJournal.record(
-        tx,
-        entityType: 'attachment',
-        entityId: id,
-        operation: 'update',
-      );
     });
   }
 
   Future<void> delete(DocumentAsset asset) async {
     final db = await _db;
     await db.transaction((tx) async {
-      final deleted = await tx.delete(
+      await tx.delete(
         'attachments',
         where: 'id = ?',
         whereArgs: [asset.id],
       );
-      if (deleted > 0) {
-        await SyncJournal.record(
-          tx,
-          entityType: 'attachment',
-          entityId: asset.id,
-          operation: 'delete',
-        );
-      }
     });
-    // Delete the local blob only after the tombstone is committed. If file
-    // deletion fails, the journal still records the logical deletion and the
-    // leftover blob can be reclaimed by orphan cleanup.
+    // Remove the local blob after its attachment record is deleted.
     await deleteLocalFile(asset.localPath);
   }
 
@@ -189,20 +165,12 @@ class FileDocumentRepository {
   Future<void> cutToNote(DocumentAsset asset, String newNoteId) async {
     final db = await _db;
     await db.transaction((tx) async {
-      final changed = await tx.update(
+      await tx.update(
         'attachments',
         {'note_id': newNoteId},
         where: 'id = ? AND note_id = ?',
         whereArgs: [asset.id, asset.noteId],
       );
-      if (changed > 0) {
-        await SyncJournal.record(
-          tx,
-          entityType: 'attachment',
-          entityId: asset.id,
-          operation: 'move',
-        );
-      }
     });
   }
 }
