@@ -4,7 +4,6 @@ import 'package:uuid/uuid.dart';
 import '../../core/config/account_scope.dart';
 import 'local_file_store.dart';
 import 'database.dart';
-import '../../features/sync/sync_journal.dart';
 
 const defaultFolderColor = 0xff5b6cf9;
 
@@ -108,7 +107,6 @@ class FolderRepository {
         'updated_at': now,
         'deleted_at': null,
       });
-      await _queue(tx, folder.id, 'upsert');
     });
     return folder;
   }
@@ -162,7 +160,6 @@ class FolderRepository {
         where: 'id = ? AND owner_id = ? AND deleted_at IS NULL',
         whereArgs: [id, SnoteAccountScope.ownerId],
       );
-      if (changed > 0) await _queue(tx, id, 'upsert');
     });
   }
 
@@ -191,7 +188,6 @@ class FolderRepository {
         where: 'id = ? AND owner_id = ? AND deleted_at IS NULL',
         whereArgs: [id, SnoteAccountScope.ownerId],
       );
-      if (count > 0) await _queue(tx, id, 'upsert');
     });
   }
 
@@ -212,7 +208,6 @@ class FolderRepository {
         where: 'id = ? AND owner_id = ? AND deleted_at IS NULL',
         whereArgs: [id, SnoteAccountScope.ownerId],
       );
-      if (count > 0) await _queue(tx, id, 'upsert');
     });
   }
 
@@ -266,7 +261,6 @@ class FolderRepository {
         where: 'id = ? AND owner_id = ? AND deleted_at IS NULL',
         whereArgs: [id, SnoteAccountScope.ownerId],
       );
-      await _queue(tx, id, 'upsert');
     });
   }
 
@@ -282,7 +276,6 @@ class FolderRepository {
         where: 'id = ? AND owner_id = ? AND deleted_at IS NULL',
         whereArgs: [id, SnoteAccountScope.ownerId],
       );
-      if (count > 0) await _queue(tx, id, 'upsert');
     });
   }
 
@@ -336,7 +329,6 @@ class FolderRepository {
           'updated_at': now,
           'deleted_at': null,
         });
-        await _queue(tx, newId, 'upsert');
         final children = await tx.query(
           'folders',
           columns: ['id'],
@@ -372,7 +364,6 @@ class FolderRepository {
             'updated_at': now,
             'deleted_at': null,
             'version': 1,
-            'sync_state': 'pending',
           });
           final pages = await tx.query('pages', where: 'note_id = ?', whereArgs: [oldNoteId]);
           for (final page in pages) {
@@ -409,7 +400,6 @@ class FolderRepository {
               'created_at': now,
             });
           }
-          await queueNote(tx, newNoteId, 'upsert');
         }
       }
 
@@ -446,13 +436,11 @@ class FolderRepository {
         {
           'folder_id': null,
           'updated_at': now,
-          'sync_state': 'pending',
         },
         where: 'owner_id = ? AND deleted_at IS NULL AND folder_id IN ($placeholders)',
         whereArgs: [SnoteAccountScope.ownerId, ...folderIds],
       );
       for (final row in notes) {
-        await queueNote(tx, row['id']! as String, 'upsert');
       }
       await _deleteRecursive(tx, id, now, <String>{});
     });
@@ -506,7 +494,6 @@ class FolderRepository {
       where: 'id = ? AND owner_id = ? AND deleted_at IS NULL',
       whereArgs: [id, SnoteAccountScope.ownerId],
     );
-    await _queue(tx, id, 'delete');
   }
 
   Future<void> _requireActiveFolder(DatabaseExecutor tx, String id) async {
@@ -545,53 +532,4 @@ class FolderRepository {
     return 'folder';
   }
 
-  Future<void> _queue(DatabaseExecutor db, String id, String operation) async {
-    await db.delete(
-      'sync_queue',
-      where: 'entity_type = ? AND entity_id = ? AND owner_id = ?',
-      whereArgs: ['folder', id, SnoteAccountScope.ownerId],
-    );
-    await db.insert('sync_queue', {
-      'id': _uuid.v4(),
-      'owner_id': SnoteAccountScope.ownerId,
-      'entity_type': 'folder',
-      'entity_id': id,
-      'operation': operation,
-      'created_at': DateTime.now().millisecondsSinceEpoch,
-      'attempts': 0,
-    });
-    await SyncJournal.record(
-      db,
-      entityType: 'folder',
-      entityId: id,
-      operation: operation,
-    );
-  }
-
-  Future<void> queueNote(
-    DatabaseExecutor db,
-    String noteId,
-    String operation,
-  ) async {
-    await db.delete(
-      'sync_queue',
-      where: 'entity_type = ? AND entity_id = ? AND owner_id = ?',
-      whereArgs: ['note', noteId, SnoteAccountScope.ownerId],
-    );
-    await db.insert('sync_queue', {
-      'id': _uuid.v4(),
-      'owner_id': SnoteAccountScope.ownerId,
-      'entity_type': 'note',
-      'entity_id': noteId,
-      'operation': operation,
-      'created_at': DateTime.now().millisecondsSinceEpoch,
-      'attempts': 0,
-    });
-    await SyncJournal.record(
-      db,
-      entityType: 'note',
-      entityId: noteId,
-      operation: operation,
-    );
-  }
 }
