@@ -11,7 +11,7 @@ CREATE TABLE notes (
   updated_at INTEGER NOT NULL,
   deleted_at INTEGER,
   version INTEGER NOT NULL DEFAULT 1,
-  is_favorite INTEGER NOT NULL DEFAULT 0,
+  is_favorite INTEGER NOT NULL DEFAULT 0
 )''';
 
 const createFoldersTable = '''
