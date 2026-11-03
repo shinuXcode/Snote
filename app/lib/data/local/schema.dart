@@ -1,4 +1,4 @@
-const databaseVersion = 13;
+const databaseVersion = 14;
 const createNotesTable = '''
 CREATE TABLE notes (
   id TEXT PRIMARY KEY,
@@ -12,7 +12,6 @@ CREATE TABLE notes (
   deleted_at INTEGER,
   version INTEGER NOT NULL DEFAULT 1,
   is_favorite INTEGER NOT NULL DEFAULT 0,
-  sync_state TEXT NOT NULL DEFAULT 'pending'
 )''';
 
 const createFoldersTable = '''
@@ -49,24 +48,11 @@ CREATE TABLE attachments (
   note_id TEXT NOT NULL,
   type TEXT NOT NULL,
   local_path TEXT NOT NULL,
-  remote_path TEXT,
   size INTEGER,
   metadata_json TEXT,
   created_at INTEGER NOT NULL
 )''';
 
-const createSyncQueueTable = '''
-CREATE TABLE sync_queue (
-  id TEXT PRIMARY KEY,
-  owner_id TEXT NOT NULL DEFAULT 'local',
-  entity_type TEXT NOT NULL,
-  entity_id TEXT NOT NULL,
-  operation TEXT NOT NULL,
-  payload_path TEXT,
-  created_at INTEGER NOT NULL,
-  attempts INTEGER NOT NULL DEFAULT 0,
-  last_error TEXT
-)''';
 
 const createAppNotificationsTable = '''
 CREATE TABLE app_notifications (
@@ -88,58 +74,7 @@ CREATE TABLE folder_covers (
   created_at INTEGER NOT NULL
 )''';
 
-const createSyncMetadataTable = '''
-CREATE TABLE sync_metadata (
-  key TEXT PRIMARY KEY,
-  value TEXT NOT NULL
-)''';
 
-const createSyncOperationsTable = '''
-CREATE TABLE sync_operations (
-  operation_id TEXT PRIMARY KEY,
-  device_id TEXT NOT NULL,
-  sequence INTEGER NOT NULL,
-  entity_type TEXT NOT NULL,
-  entity_id TEXT NOT NULL,
-  operation TEXT NOT NULL,
-  created_at INTEGER NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending',
-  attempts INTEGER NOT NULL DEFAULT 0,
-  last_error TEXT,
-  lease_id TEXT,
-  lease_until INTEGER,
-  next_attempt_at INTEGER,
-  UNIQUE(device_id, sequence)
-)''';
 
-const createSyncDeviceCursorsTable = '''
-CREATE TABLE sync_device_cursors (
-  device_id TEXT PRIMARY KEY,
-  last_sequence INTEGER NOT NULL DEFAULT 0,
-  checkpoint_id TEXT,
-  updated_at INTEGER NOT NULL
-)''';
 
-const createSyncAppliedPacksTable = '''
-CREATE TABLE sync_applied_packs (
-  pack_id TEXT PRIMARY KEY,
-  device_id TEXT NOT NULL,
-  from_sequence INTEGER NOT NULL,
-  to_sequence INTEGER NOT NULL,
-  sha256 TEXT NOT NULL,
-  applied_at INTEGER NOT NULL
-)''';
 
-const createSyncConflictsTable = '''
-CREATE TABLE sync_conflicts (
-  conflict_id TEXT PRIMARY KEY,
-  entity_type TEXT NOT NULL,
-  entity_id TEXT NOT NULL,
-  local_revision_json TEXT NOT NULL,
-  remote_revision_json TEXT NOT NULL,
-  reason TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'open',
-  created_at INTEGER NOT NULL,
-  resolved_at INTEGER,
-  resolution_json TEXT
-)''';
