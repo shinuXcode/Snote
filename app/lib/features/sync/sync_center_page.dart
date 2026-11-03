@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'google_drive_oauth_service.dart';
+import 'google_drive_sync_transport.dart';
 import 'snote_sync_runtime.dart';
 import 'sync_journal.dart';
 import 'sync_key_vault.dart';
@@ -19,8 +21,12 @@ class _SyncCenterPageState extends State<SyncCenterPage> {
   final _password = TextEditingController();
   final _vault = SyncKeyVault();
   final _providerSettings = SyncProviderSettings();
+  final _googleOAuth = GoogleDriveOAuthService.instance;
 
   SyncJournalStatus? _status;
+  GoogleDriveAccount? _googleAccount;
+  String? _googleSetupError;
+  bool _googleLoading = false;
   bool _loading = true;
   bool _running = false;
   bool _paired = false;
@@ -51,7 +57,17 @@ class _SyncCenterPageState extends State<SyncCenterPage> {
       ]);
       if (!mounted) return;
       final credentials = values[2] as WebDavCredentials?;
+      GoogleDriveAccount? googleAccount;
+      String? googleSetupError;
+      try {
+        googleAccount = await _googleOAuth.restoreAccount();
+      } catch (error) {
+        googleSetupError = error.toString();
+      }
+      if (!mounted) return;
       setState(() {
+        _googleAccount = googleAccount;
+        _googleSetupError = googleSetupError;
         _status = values[0] as SyncJournalStatus;
         _paired = values[1] != null;
         if (credentials != null) {
@@ -141,6 +157,69 @@ class _SyncCenterPageState extends State<SyncCenterPage> {
       _message('Pairing failed: $error');
     } finally {
       controller.dispose();
+    }
+  }
+
+  Future<void> _connectGoogleDrive() async {
+    if (_googleLoading || _running) return;
+    setState(() { _googleLoading = true; _googleSetupError = null; });
+    try {
+      final account = await _googleOAuth.signInAndAuthorize();
+      if (!mounted) return;
+      setState(() => _googleAccount = account);
+      _message('Google Drive connected for ${account.email}.');
+    } catch (error) {
+      if (mounted) setState(() => _googleSetupError = error.toString());
+      _message('Google Drive connection failed: $error');
+    } finally {
+      if (mounted) setState(() => _googleLoading = false);
+    }
+  }
+
+  Future<void> _disconnectGoogleDrive() async {
+    try {
+      await _googleOAuth.disconnect();
+      if (!mounted) return;
+      setState(() => _googleAccount = null);
+      _message('Google Drive disconnected and authorization revoked.');
+    } catch (error) {
+      _message('Could not disconnect Google Drive: $error');
+    }
+  }
+
+  Future<void> _runGoogleDriveSync() async {
+    if (_running || _loading) return;
+    setState(() { _running = true; _error = null; _lastResult = null; });
+    try {
+      final key = await _vault.readActiveKey();
+      if (key == null) {
+        throw StateError('Pair this device with your recovery key before syncing.');
+      }
+      // This runs from the Sync button, so Google may display consent if needed.
+      final account = await _googleOAuth.signInAndAuthorize();
+      if (mounted) setState(() => _googleAccount = account);
+      final transport = GoogleDriveSyncTransport(
+        accessTokenProvider: _googleOAuth.accessToken,
+      );
+      final result = await SnoteSyncRuntime(
+        transport: transport,
+        sharedKey: key.keyBytes,
+      ).synchronize();
+      if (!mounted) return;
+      setState(() {
+        _lastResult = 'Google Drive: uploaded ${result.uploadedOperations} changes; '
+            'applied ${result.appliedPacks} remote packs; skipped ${result.skippedPacks}.';
+      });
+      await _load();
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _error = error;
+          _googleSetupError = error.toString();
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _running = false);
     }
   }
 
@@ -250,6 +329,62 @@ class _SyncCenterPageState extends State<SyncCenterPage> {
                   ),
                 ]),
               ]),
+            )),
+            const SizedBox(height: 12),
+            _heading(context, 'Google Drive encrypted sync'),
+            Card(child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Snotee stores encrypted sync packs in Google Drive appDataFolder. '
+                    'It does not request access to your normal Drive files.',
+                  ),
+                  const SizedBox(height: 10),
+                  Row(children: [
+                    Icon(
+                      _googleAccount == null ? Icons.cloud_off_outlined : Icons.cloud_done_outlined,
+                      color: _googleAccount == null ? colors.outline : colors.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _googleAccount?.email ?? 'Google Drive not connected',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ]),
+                  if (_googleSetupError != null) ...[
+                    const SizedBox(height: 8),
+                    Text(_googleSetupError!, style: TextStyle(color: colors.error)),
+                  ],
+                  const SizedBox(height: 12),
+                  Wrap(spacing: 8, runSpacing: 8, children: [
+                    OutlinedButton.icon(
+                      onPressed: _googleLoading || _running ? null : _connectGoogleDrive,
+                      icon: _googleLoading
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.login_rounded),
+                      label: Text(_googleAccount == null ? 'Connect Google' : 'Reconnect Google'),
+                    ),
+                    if (_googleAccount != null)
+                      TextButton.icon(
+                        onPressed: _googleLoading || _running ? null : _disconnectGoogleDrive,
+                        icon: const Icon(Icons.link_off_rounded),
+                        label: const Text('Disconnect'),
+                      ),
+                    FilledButton.icon(
+                      onPressed: _running || _loading || _googleLoading ? null : _runGoogleDriveSync,
+                      icon: _running
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.sync_rounded),
+                      label: const Text('Sync with Drive'),
+                    ),
+                  ]),
+                ],
+              ),
             )),
             const SizedBox(height: 12),
             _heading(context, 'WebDAV encrypted storage'),
