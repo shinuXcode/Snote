@@ -165,7 +165,7 @@ class NoteRepository {
   Future<void> setFavorite(String id, bool favorite) async {
     final db = await _db;
     await db.transaction((tx) async {
-      final changed = await tx.update(
+      await tx.update(
         'notes',
         {
           'is_favorite': favorite ? 1 : 0,
