@@ -151,7 +151,7 @@ class FolderRepository {
   Future<void> setFavorite(String id, bool favorite) async {
     final db = await _db;
     await db.transaction((tx) async {
-      final changed = await tx.update(
+      await tx.update(
         'folders',
         {
           'is_favorite': favorite ? 1 : 0,
@@ -179,7 +179,7 @@ class FolderRepository {
     if (normalizedName.isEmpty) return;
     final db = await _db;
     await db.transaction((tx) async {
-      final count = await tx.update(
+      await tx.update(
         'folders',
         {
           'name': normalizedName,
