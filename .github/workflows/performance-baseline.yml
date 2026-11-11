@@ -1,0 +1,109 @@
+name: Snote Android emulator performance baseline
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "app/integration_test/**"
+      - "app/test_driver/**"
+      - "app/pubspec.yaml"
+      - ".github/workflows/performance-baseline.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  android-emulator-baseline:
+    name: Android profile-mode baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.3"
+          channel: stable
+
+      - name: Generate Android runner and copy maintained native integration
+        working-directory: app
+        run: |
+          set -euo pipefail
+          flutter create --platforms=android --org=com.snote --no-pub .
+          mkdir -p android/app/src/main/kotlin/com/snote/snote
+          cp native_android/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+          cp native_android/*.kt android/app/src/main/kotlin/com/snote/snote/
+          rm -f test/widget_test.dart
+
+      - name: Configure Android release-compatible build settings
+        working-directory: app
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          build = Path('android/app/build.gradle.kts')
+          lines = build.read_text().splitlines()
+          updated = []
+          compile_count = 0
+          min_count = 0
+          for line in lines:
+              stripped = line.strip()
+              indent = line[:len(line) - len(line.lstrip())]
+              if stripped.startswith('compileSdk ='):
+                  line = indent + 'compileSdk = 37'
+                  compile_count += 1
+              elif stripped.startswith('minSdk ='):
+                  line = indent + 'minSdk = 24'
+                  min_count += 1
+              updated.append(line)
+          if compile_count != 1 or min_count != 1:
+              raise SystemExit(f'Expected one compileSdk and minSdk assignment; got {compile_count}, {min_count}')
+          text = '\n'.join(updated) + '\n'
+          if 'isCoreLibraryDesugaringEnabled = true' not in text:
+              if 'compileOptions {' not in text:
+                  raise SystemExit('Generated Gradle file has no compileOptions block')
+              text = text.replace('compileOptions {', 'compileOptions {\n        isCoreLibraryDesugaringEnabled = true', 1)
+          dependencies = [
+              'coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")',
+              'implementation("com.google.mlkit:text-recognition-chinese:16.0.1")',
+              'implementation("com.google.mlkit:text-recognition-devanagari:16.0.1")',
+              'implementation("com.google.mlkit:text-recognition-japanese:16.0.1")',
+              'implementation("com.google.mlkit:text-recognition-korean:16.0.1")',
+          ]
+          for dependency in dependencies:
+              if dependency not in text:
+                  if 'dependencies {' not in text:
+                      text = text.rstrip() + '\n\ndependencies {\n    ' + dependency + '\n}\n'
+                  else:
+                      text = text.replace('dependencies {', 'dependencies {\n    ' + dependency, 1)
+          build.write_text(text)
+          PY
+
+      - name: Validate maintained Android integration
+        working-directory: app
+        run: python3 ../.github/scripts/configure_beta_android.py
+
+      - name: Install Flutter dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Run profile-mode workload on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: |
+            timeout 25m bash -euo pipefail -c 'cd app && flutter drive --profile --driver=test_driver/integration_test.dart --target=integration_test/performance_baseline_test.dart -d emulator-5554 2>&1 | tee "$GITHUB_WORKSPACE/performance-baseline.log"'
+
+      - name: Upload exact benchmark log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snote-android-emulator-performance-baseline
+          path: performance-baseline.log
+          if-no-files-found: warn
+          retention-days: 30
