@@ -1,12 +1,13 @@
 # Repository File Inventory — Snote
 
-> Snapshot of tracked blobs at `a844947da813be55f1b1609966711f7c7e97150c` on `refactor/repository-dry-size-optimization`. Sizes are Git blob byte counts. Responsibilities/risk are path-based triage, not proof of complete semantic review. Callers and imported dependencies require source-level tracing before refactoring.
+> Snapshot refreshed from `main` commit `730e5ee488f59dca305794ea8f9a1eda0f53c79c` (recursive Git tree, `truncated=false`). File responsibilities/risk remain path-based triage, not proof of complete semantic review. Sizes are Git blob byte counts. Responsibilities/risk are path-based triage, not proof of complete semantic review. Callers and imported dependencies require source-level tracing before refactoring.
 
-- Tracked files inventoried: **151** (recursive Git tree reported not truncated).
-- Dart application files: **83**.
+- Tracked files inventoried: **155** (recursive Git tree reported not truncated).
+- Dart files total: **102** (83 under `app/lib/**` plus test Dart files).
 - Test files: **19**.
 - Website files: **34**.
-- Generated/vendor files must be identified separately; no generated-file matches were found by the initial filename-pattern scan. Lockfiles are retained as dependency resolution inputs, not treated as duplicated application source.
+- Test-path files: **19**. Website files: **34**. Documentation files: **7**. Generated/vendor files must be identified separately; lockfiles are retained as dependency-resolution inputs, not treated as duplicated application source.
+- Largest current tracked files from the refreshed tree: `website/public/snote-logo.png` (1,298,678 bytes), `app/lib/features/notes/editor_v2/editor_v2_page.dart` (416,334 bytes), and `app/lib/features/notes/note_editor_page.dart` (296,631 bytes). These are Git blob sizes, not runtime cost or proof that a refactor is warranted.
 
 ## Prioritized large files
 
