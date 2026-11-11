@@ -246,17 +246,17 @@ class InkRenderer {
           : reportedOrientation;
       final nibAcrossStroke = math.sin(tangentAngle - nibAngle).abs();
       width *= .18 + nibAcrossStroke * 1.12;
-    } else if (index > 0) {
-      final previous = points[index - 1];
-      final dt = (point.timestamp - previous.timestamp).abs().clamp(.5, 250.0);
-      final velocity = (point.position - previous.position).distance / dt;
-      final velocityFactor = 1 -
-          (velocity / 3.2).clamp(0, 1).toDouble() *
-          pen.velocitySensitivity *
-          .22;
-      width *= velocityFactor;
-      width *= .82 + pressure * (.18 + pen.pressureSensitivity * .34);
     } else {
+      if (index > 0) {
+        final previous = points[index - 1];
+        final dt = (point.timestamp - previous.timestamp).abs().clamp(.5, 250.0);
+        final velocity = (point.position - previous.position).distance / dt;
+        final velocityFactor = 1 -
+            (velocity / 3.2).clamp(0, 1).toDouble() *
+            pen.velocitySensitivity *
+            .22;
+        width *= velocityFactor;
+      }
       width *= .82 + pressure * (.18 + pen.pressureSensitivity * .34);
     }
 
