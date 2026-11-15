@@ -79,17 +79,31 @@ class SnoteSettings extends ChangeNotifier {
   String getString(String key) => (_values[key] as String?) ?? stringDefaults[key] ?? '';
 
   Future<void> load() async {
+    // Secure-storage reads are independent. Fetch them together rather than
+    // paying one platform-channel round trip per preference during app launch.
+    final keys = <String>[
+      ...boolDefaults.keys.map((key) => 'snote.setting.$key'),
+      ...doubleDefaults.keys.map((key) => 'snote.setting.$key'),
+      ...stringDefaults.keys.map((key) => 'snote.setting.$key'),
+    ];
+    final reads = await Future.wait<String?>(
+      keys.map((key) => _storage.read(key: key)),
+    );
+    final persisted = <String, String>{
+      for (var index = 0; index < keys.length; index++)
+        if (reads[index] != null) keys[index]: reads[index]!,
+    };
     await _storage.delete(key: 'snote.setting.geminiApiKey');
     for (final entry in boolDefaults.entries) {
-      final raw = await _storage.read(key: 'snote.setting.' + entry.key);
+      final raw = persisted['snote.setting.${entry.key}'];
       if (raw != null) _values[entry.key] = raw == 'true';
     }
     for (final entry in doubleDefaults.entries) {
-      final raw = await _storage.read(key: 'snote.setting.' + entry.key);
+      final raw = persisted['snote.setting.${entry.key}'];
       if (raw != null) _values[entry.key] = double.tryParse(raw) ?? entry.value;
     }
     for (final entry in stringDefaults.entries) {
-      final raw = await _storage.read(key: 'snote.setting.' + entry.key);
+      final raw = persisted['snote.setting.${entry.key}'];
       if (raw != null) _values[entry.key] = raw;
     }
     if (_values['toolInstrumentDefaultsV1'] != 'done') {
