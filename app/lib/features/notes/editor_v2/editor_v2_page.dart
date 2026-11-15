@@ -214,6 +214,8 @@ class _EditorV2PageState extends State<EditorV2Page>
   List<Map<String, Object?>> _pages = <Map<String, Object?>>[];
   List<Map<String, Object?>> _favoritePens = <Map<String, Object?>>[];
   List<String> _favoriteStickers = <String>[];
+  String? _pendingSticker;
+  Offset? _pendingStickerPosition;
   List<int> _bookmarkedPages = <int>[];
   int _page = 0;
   CanvasTool _tool = CanvasTool.ballpoint;
@@ -458,7 +460,11 @@ class _EditorV2PageState extends State<EditorV2Page>
     if (saved == null) {
       throw StateError('This note no longer exists in the current local account.');
     }
-    final decoded = await compute(_decodeEditorDocumentPayload, saved.contentJson);
+    // Decode the note envelope and query its local attachments concurrently.
+    // Both operations are independent after the note row has been read.
+    final decodedFuture = compute(_decodeEditorDocumentPayload, saved.contentJson);
+    final assetsFuture = _documents.listForNote(widget.note.id);
+    final decoded = await decodedFuture;
     final root = Map<String, Object?>.from(decoded['root'] as Map);
     final pages = (decoded['pages'] as List)
         .map((page) => Map<String, Object?>.from(page as Map))
@@ -474,7 +480,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     Uint8List? pdfBytes = widget.initialPdfBytes;
     String? pdfName = widget.initialPdfName;
     DocumentAsset? sourcePdf;
-    final assets = await _documents.listForNote(widget.note.id);
+    final assets = await assetsFuture;
     for (final asset in assets) {
       final type = asset.type.toLowerCase();
       final name = asset.name.toLowerCase();
@@ -1796,6 +1802,11 @@ class _EditorV2PageState extends State<EditorV2Page>
       _ignoredPointers.add(event.pointer);
       return;
     }
+    if (_pendingSticker == null && _tool != CanvasTool.lasso &&
+        _selectStickerAt(event.localPosition)) {
+      _ignoredPointers.add(event.pointer);
+      return;
+    }
     _activePointer = event.pointer;
     _gestureStart = event.localPosition;
     _holdStartPosition = event.localPosition;
@@ -1933,6 +1944,10 @@ class _EditorV2PageState extends State<EditorV2Page>
       }
       return;
     }
+    if (_pendingSticker != null) {
+      setState(() => _pendingStickerPosition = event.localPosition);
+      return;
+    }
     final point = _pointFrom(event);
     if (_livePoints.isNotEmpty) {
       final previous = _livePoints.last.position;
@@ -2035,6 +2050,10 @@ class _EditorV2PageState extends State<EditorV2Page>
         _eraserCursor = null;
       });
       if (restoreTool != null) _selectTool(restoreTool);
+      return;
+    }
+    if (_pendingSticker != null) {
+      _placePendingSticker(event.localPosition);
       return;
     }
     final point = _pointFrom(event);
@@ -4505,23 +4524,87 @@ class _EditorV2PageState extends State<EditorV2Page>
       ),
     );
     if (chosen == null || !mounted) return;
+    setState(() {
+      _pendingSticker = chosen;
+      _pendingStickerPosition = Offset(_pageWidth / 2, _pageHeight / 2);
+      _tool = CanvasTool.sticker;
+      _clearSelectionIds();
+      _lassoRect = null;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Sticker ready — tap the page to place it. Move the pen to preview; choose another tool to cancel.')),
+    );
+  }
+
+  void _placePendingSticker(Offset position) {
+    final sticker = _pendingSticker;
+    if (sticker == null || _pageData['locked'] == true) return;
     _pushUndo();
     final id = DateTime.now().microsecondsSinceEpoch.toString();
+    const width = .16;
+    const height = .12;
+    final x = ((position.dx - _pageWidth * width / 2) / _pageWidth)
+        .clamp(0.0, 1 - width).toDouble();
+    final y = ((position.dy - _pageHeight * height / 2) / _pageHeight)
+        .clamp(0.0, 1 - height).toDouble();
     final boxes = _pageData['textBoxes'] as List<Object?>;
     boxes.add(<String, Object?>{
       'id': id,
-      'x': .42,
-      'y': .34,
-      'width': .22,
-      'height': .12,
-      'text': chosen,
+      'x': x,
+      'y': y,
+      'width': width,
+      'height': height,
+      'text': sticker,
       'fontSize': 50.0,
       'color': _color.toARGB32(),
       'sticker': true,
     });
-    _textControllers[id] = TextEditingController(text: chosen);
-    setState(() {});
+    _textControllers[id] = TextEditingController(text: sticker);
+    setState(() {
+      _pendingSticker = null;
+      _pendingStickerPosition = null;
+      _tool = CanvasTool.ballpoint;
+      _selectedTextBoxIds
+        ..clear()
+        ..add(id);
+      _selectedStrokeIds.clear();
+      _selectedImageIds.clear();
+      _lassoRect = Rect.fromLTWH(x * _pageWidth, y * _pageHeight,
+          width * _pageWidth, height * _pageHeight);
+      _activePointer = null;
+      _gestureStart = null;
+      _livePoints.clear();
+      _liveStroke = null;
+      _eraserCursor = null;
+    });
     _scheduleSave();
+  }
+
+  bool _selectStickerAt(Offset position) {
+    final raw = _pageData['textBoxes'];
+    if (raw is! List) return false;
+    for (final item in raw.whereType<Map>().toList().reversed) {
+      if (item['sticker'] != true) continue;
+      final x = (item['x'] as num?)?.toDouble() ?? .12;
+      final y = (item['y'] as num?)?.toDouble() ?? .12;
+      final width = (item['width'] as num?)?.toDouble() ?? .16;
+      final height = (item['height'] as num?)?.toDouble() ?? .12;
+      final bounds = Rect.fromLTWH(x * _pageWidth, y * _pageHeight,
+          width * _pageWidth, height * _pageHeight);
+      if (!bounds.contains(position)) continue;
+      final id = item['id']?.toString() ?? '';
+      if (id.isEmpty) return false;
+      setState(() {
+        _selectedStrokeIds.clear();
+        _selectedImageIds.clear();
+        _selectedTextBoxIds
+          ..clear()
+          ..add(id);
+        _lassoRect = bounds;
+      });
+      return true;
+    }
+    return false;
   }
 
   Future<void> _showPageFormatSettings() async {
@@ -6841,9 +6924,23 @@ class _EditorV2PageState extends State<EditorV2Page>
       CanvasTool.ruler || CanvasTool.divider => Icons.straighten_rounded,
       CanvasTool.compass || CanvasTool.protractor => Icons.architecture_rounded,
       CanvasTool.sticker => Icons.emoji_emotions_outlined,
+      _ when tool.name.toLowerCase().contains('chart') || tool.name.toLowerCase().contains('histogram') => Icons.bar_chart_rounded,
+      _ when tool.name.toLowerCase().contains('graph') || tool.name.toLowerCase().contains('wave') || tool.name.toLowerCase().contains('parabola') || tool.name.toLowerCase().contains('sine') => Icons.show_chart_rounded,
+      _ when tool.name.toLowerCase().contains('axis') || tool.name.toLowerCase().contains('coordinate') || tool.name.toLowerCase().contains('vectorfield') => Icons.grid_on_rounded,
+      _ when tool.name.toLowerCase().contains('circuit') || tool.name.toLowerCase().contains('resistor') || tool.name.toLowerCase().contains('capacitor') || tool.name.toLowerCase().contains('battery') || tool.name.toLowerCase().contains('voltage') => Icons.electrical_services_rounded,
+      _ when tool.name.toLowerCase().contains('atom') || tool.name.toLowerCase().contains('molecule') || tool.name.toLowerCase().contains('benzene') || tool.name.toLowerCase().contains('orbital') || tool.name.toLowerCase().contains('chem') => Icons.science_rounded,
+      _ when tool.name.toLowerCase().contains('cell') || tool.name.toLowerCase().contains('dna') || tool.name.toLowerCase().contains('neuron') || tool.name.toLowerCase().contains('leaf') || tool.name.toLowerCase().contains('microscope') => Icons.biotech_rounded,
+      _ when tool.name.toLowerCase().contains('lens') || tool.name.toLowerCase().contains('mirror') || tool.name.toLowerCase().contains('ray') || tool.name.toLowerCase().contains('light') => Icons.light_mode_rounded,
+      _ when tool.name.toLowerCase().contains('force') || tool.name.toLowerCase().contains('pulley') || tool.name.toLowerCase().contains('spring') || tool.name.toLowerCase().contains('lever') || tool.name.toLowerCase().contains('plane') => Icons.precision_manufacturing_rounded,
+      _ when tool.name.toLowerCase().contains('table') || tool.name.toLowerCase().contains('grid') => Icons.table_chart_rounded,
+      _ when tool.name.toLowerCase().contains('timeline') => Icons.timeline_rounded,
+      _ when tool.name.toLowerCase().contains('checklist') => Icons.checklist_rounded,
+      _ when tool.name.toLowerCase().contains('gear') || tool.name.toLowerCase().contains('mechan') => Icons.settings_rounded,
+      _ when tool.name.toLowerCase().contains('thermometer') || tool.name.toLowerCase().contains('temperature') => Icons.device_thermostat_rounded,
+      _ when tool.name.toLowerCase().contains('stopwatch') || tool.name.toLowerCase().contains('timer') => Icons.timer_rounded,
       _ when tool.isPen => Icons.edit_rounded,
       _ when tool.isMeasurementTool => Icons.architecture_rounded,
-      _ => Icons.category_outlined,
+      _ => Icons.category_rounded,
     };
   }
 
@@ -7705,6 +7802,27 @@ class _EditorV2PageState extends State<EditorV2Page>
                 ),
             ],
           ),
+          ),
+        ),
+      ));
+    }
+    final pendingSticker = _pendingSticker;
+    final pendingPosition = _pendingStickerPosition;
+    if (pendingSticker != null && pendingPosition != null) {
+      children.add(Positioned(
+        left: pendingPosition.dx - 42,
+        top: pendingPosition.dy - 42,
+        width: 84,
+        height: 84,
+        child: IgnorePointer(
+          child: Opacity(
+            opacity: .58,
+            child: Center(
+              child: FittedBox(
+                fit: BoxFit.contain,
+                child: Text(pendingSticker, style: const TextStyle(fontSize: 50, height: 1)),
+              ),
+            ),
           ),
         ),
       ));
