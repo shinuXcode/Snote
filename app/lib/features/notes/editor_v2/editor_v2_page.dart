@@ -758,7 +758,11 @@ class _EditorV2PageState extends State<EditorV2Page>
           _pdfRasterCache.values.fold<int>(0, (total, bytes) => total + bytes.length) >
               _maxPdfRasterCacheBytes) {
         if (_pdfRasterCache.isEmpty) break;
-        _pdfRasterCache.remove(_pdfRasterCache.keys.first);
+        final evictedKey = _pdfRasterCache.keys.first;
+        _pdfRasterCache.remove(evictedKey);
+        // Completed futures retain the raster bytes too; evict both references
+        // so the configured PDF memory budget reflects actual retained memory.
+        _pdfRasterFutureCache.remove(evictedKey);
       }
     }).catchError((Object error) {
       debugPrint('[Snote][EditorV2] lazy PDF page render failed ($pageNumber): $error');
@@ -3285,6 +3289,10 @@ class _EditorV2PageState extends State<EditorV2Page>
   void _selectTool(CanvasTool tool) {
     final profile = _toolProfiles[tool.name];
     setState(() {
+      if (tool != CanvasTool.sticker) {
+        _pendingSticker = null;
+        _pendingStickerPosition = null;
+      }
       _tool = tool;
       _size = (profile?['size'] as num?)?.toDouble() ?? switch (tool) {
         CanvasTool.eraser => 24,
