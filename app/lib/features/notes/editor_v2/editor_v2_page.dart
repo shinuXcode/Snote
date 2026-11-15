@@ -3287,6 +3287,10 @@ class _EditorV2PageState extends State<EditorV2Page>
   }
 
   void _selectTool(CanvasTool tool) {
+    if (tool == CanvasTool.sticker) {
+      unawaited(_addSticker());
+      return;
+    }
     final profile = _toolProfiles[tool.name];
     setState(() {
       if (tool != CanvasTool.sticker) {
