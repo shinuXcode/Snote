@@ -675,17 +675,17 @@ class _EditorV2PageState extends State<EditorV2Page>
           });
         }
       }
-      final devicePixelRatio =
-          WidgetsBinding.instance.platformDispatcher.views.first.devicePixelRatio;
       final zoom = _transform.value.getMaxScaleOnAxis().clamp(.5, 3.0).toDouble();
-      // PDF rasterization is the most memory-intensive part of opening a
-      // textbook. Cap the first-pass bitmap size to avoid multi-page OOMs;
-      // zooming still rerenders the current page at a higher bounded scale.
+      // Render a deliberately lighter first-pass bitmap for fast page display.
+      // The cache key changes at higher zoom tiers, so the visible page is
+      // rerendered more sharply when the reader zooms in.
       final maxDimension = thumbnail
           ? 256.0
-          : (math.max(page.width, page.height) * devicePixelRatio * zoom)
-              .clamp(960.0, 2000.0)
-              .toDouble();
+          : zoom >= 2
+              ? 1800.0
+              : zoom >= 1
+                  ? 1280.0
+                  : 960.0;
       final scale = math.min(maxDimension / page.width, maxDimension / page.height);
       final rendered = await page.render(
         width: (page.width * scale).clamp(1.0, maxDimension).toDouble(),
