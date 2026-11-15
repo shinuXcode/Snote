@@ -8172,6 +8172,11 @@ class _EditorV2PageState extends State<EditorV2Page>
                 onPointerUp: _onPointerUp,
                 onPointerCancel: _onPointerCancel,
                 onPointerHover: (event) {
+                  if (_pendingSticker != null) {
+                    _pendingStickerPosition = event.localPosition;
+                    setState(() {});
+                    return;
+                  }
                   if (_tool == CanvasTool.eraser || _tool == CanvasTool.pixelEraser) {
                     _eraserCursor = event.localPosition;
                     final baseRadius = _tool == CanvasTool.pixelEraser ||
