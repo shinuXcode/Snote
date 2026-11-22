@@ -2,7 +2,7 @@ export const revalidate = 300;
 
 export async function GET() {
   try {
-    const response = await fetch("https://api.github.com/repos/shinuXcode/Snotee/releases?per_page=6", {
+    const response = await fetch("https://api.github.com/repos/shinuXcode/Snote/releases?per_page=6", {
       headers: { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
       next: { revalidate: 300 }
     });

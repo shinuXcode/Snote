@@ -34,7 +34,7 @@ export default function DocsPage() {
    <span className="feature-number">{n} / PDF</span><h2>{title}</h2><p className="muted">{body}</p>
    <div className="docs-actions"><a className="docs-view" href={"/api/docs/"+slug} target="_blank" rel="noreferrer">Read online <span aria-hidden="true">↗</span></a><a className="docs-download" href={"/api/docs/"+slug+"?download=1"} download>Download PDF <span aria-hidden="true">↓</span></a></div>
   </article>)}</div>
-  <section className="docs-faq card"><div><span className="pill">HELP CENTRE</span><h2>Frequently asked questions</h2><p className="muted">Quick answers about installation, stylus input, privacy, cloud sync, permissions, SDKs, and releases.</p></div><Link className="cta" href="/faqs">Explore all 28 FAQs <span aria-hidden="true">→</span></Link></section>
+  <section className="docs-faq card"><div><span className="pill">HELP CENTRE</span><h2>Frequently asked questions</h2><p className="muted">Quick answers about installation, stylus input, privacy, local backups, permissions, SDKs, and releases.</p></div><Link className="cta" href="/faqs">Explore all 28 FAQs <span aria-hidden="true">→</span></Link></section>
   <p className="docs-note">Legal and security documents are informational and do not replace legal advice, platform-specific permission review, or a production security audit. Features can vary by version. PDF covers credit Sadab as founder/creator; interior pages carry Snotee and author footers.</p>
  </main>;
 }

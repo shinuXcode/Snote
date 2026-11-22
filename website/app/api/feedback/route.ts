@@ -5,7 +5,7 @@ const allowedKinds = new Set(["General feedback", "Bug report", "Feature request
 
 export async function POST(request: Request) {
   const token = process.env.SNOTE_FEEDBACK_GITHUB_TOKEN;
-  const repository = process.env.SNOTE_FEEDBACK_REPOSITORY || "shinuXcode/Snotee";
+  const repository = process.env.SNOTE_FEEDBACK_REPOSITORY || "shinuXcode/Snote";
   if (!token) return Response.json({ error: "Feedback storage is not configured yet. No feedback was saved." }, { status: 503 });
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) return Response.json({ error: "Feedback repository configuration is invalid." }, { status: 500 });
 
