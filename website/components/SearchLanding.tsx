@@ -3,6 +3,7 @@ import Link from "next/link";
 type Section = { title: string; body: string; bullets?: string[] };
 type FAQ = { question: string; answer: string };
 type Props = {
+  path: string;
   eyebrow: string;
   title: string;
   accent: string;
@@ -11,14 +12,14 @@ type Props = {
   faqs: FAQ[];
 };
 
-export default function SearchLanding({ eyebrow, title, accent, intro, sections, faqs }: Props) {
+export default function SearchLanding({ path, eyebrow, title, accent, intro, sections, faqs }: Props) {
   const schema = [
     {
       "@context": "https://schema.org",
       "@type": "WebPage",
       name: title + " " + accent + " | Snotee",
       description: intro,
-      url: "https://snotee.vercel.app" + (typeof window === "undefined" ? "" : window.location.pathname),
+      url: "https://snotee.vercel.app" + path,
       about: { "@type": "SoftwareApplication", name: "Snotee", applicationCategory: "ProductivityApplication" }
     },
     {
