@@ -22,7 +22,7 @@ Core note-taking is intended not to require a Snotee-hosted account, database, o
 
 The repository targets Android, iOS, Windows, macOS, Linux, and Web. A target platform does not guarantee an install-ready package. The downloads page and GitHub releases are the source of truth for currently published artifacts and signing status.
 
-The current iOS release artifact may be an unsigned archive rather than a signed, install-ready IPA. iOS distribution requires Apple signing and provisioning.
+The current Snotee 2.0.0 iOS release artifact is an unsigned archive, not a signed, install-ready IPA. iOS distribution requires Apple signing and provisioning.
 
 ## Project identity
 
