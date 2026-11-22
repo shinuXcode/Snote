@@ -28,11 +28,11 @@ const platformDescription: Record<string, string> = {
 function platformFor(name: string) {
   const n = name.toLowerCase();
   if (n.includes("android") || n.endsWith(".apk")) return "Android";
+  if (n.includes("web")) return "Web";
   if (n.includes("windows") || n.endsWith(".msi") || n.endsWith(".exe")) return "Windows";
   if (n.includes("macos") || n.includes("darwin") || n.endsWith(".dmg")) return "macOS";
   if (n.includes("linux") || n.endsWith(".appimage") || n.endsWith(".deb") || n.endsWith(".tar.gz")) return "Linux";
   if (n.includes("ios") || n.endsWith(".ipa")) return "iOS";
-  if (n.includes("web")) return "Web";
   return null;
 }
 
