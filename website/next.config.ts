@@ -15,7 +15,10 @@ const securityHeaders = [
 const config: NextConfig = {
   poweredByHeader: false,
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/api/:path*", headers: [...securityHeaders, { key: "X-Robots-Tag", value: "noindex, nofollow, nosnippet" }] },
+      { source: "/:path*", headers: securityHeaders }
+    ];
   }
 };
 
