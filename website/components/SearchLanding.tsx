@@ -4,6 +4,7 @@ type Section = { title: string; body: string; bullets?: string[] };
 type FAQ = { question: string; answer: string };
 type Props = {
   path: string;
+  path: string;
   eyebrow: string;
   title: string;
   accent: string;
