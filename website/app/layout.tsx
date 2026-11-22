@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import "./brand-overrides.css";
 import Link from "next/link";
 import MobileNav from "../components/MobileNav";
 import ThemeToggle from "../components/ThemeToggle";
