@@ -87,7 +87,7 @@ const appSchema = {
   "@type": "SoftwareApplication",
   name: "Snotee",
   applicationCategory: "ProductivityApplication",
-  operatingSystem: "Android, iOS, Windows, macOS, Linux, Web",
+  operatingSystem: "Android, Windows, macOS, Linux",
   description: "Open-source, local-first note-taking for handwriting, stylus input, rich text, and PDF workflows.",
   url: siteUrl,
   downloadUrl: siteUrl + "/download",
