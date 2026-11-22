@@ -47,12 +47,14 @@ export const metadata: Metadata = {
     url: siteUrl,
     siteName: "Snotee",
     type: "website",
-    locale: "en_US"
+    locale: "en_US",
+    images: [{ url: "/snote-logo.png", width: 512, height: 512, alt: "Snotee note-taking app logo" }]
   },
   twitter: {
     card: "summary",
     title: "Snotee — Open-source handwriting & PDF notes",
-    description: "A local-first workspace for handwritten notes, PDFs, and ideas."
+    description: "A local-first workspace for handwritten notes, PDFs, and ideas.",
+    images: ["/snote-logo.png"]
   }
 };
 
