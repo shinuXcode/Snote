@@ -10,41 +10,124 @@ import BrandLoader from "../components/BrandLoader";
 
 const siteUrl = "https://snotee.vercel.app";
 export const metadata: Metadata = {
- metadataBase: new URL(siteUrl),
- icons: { icon: "/snote-logo.png", apple: "/snote-logo.png" },
- title: { default: "Snotee — Notes that move with you", template: "%s | Snotee" },
- description: "Snotee is an open-source note-taking workspace for natural handwriting, PDF annotation, rich text, and ideas that stay yours.",
- applicationName: "Snotee",
- keywords: ["Snotee","open source notes","handwriting notes","stylus note taking","digital notebook","PDF annotation","offline notes","Flutter note taking app"],
- authors: [{ name: "Sadab", url: "https://github.com/shinuXcode" }],
- creator: "Sadab", publisher: "Snotee", category: "productivity",
- robots: { index: true, follow: true, googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1, "max-video-preview": -1 } },
- openGraph: { title: "Snotee — Notes that move with you", description: "Open-source notes for handwriting, reading, and thinking.", url: siteUrl, siteName: "Snotee", type: "website", locale: "en_US" },
- twitter: { card: "summary_large_image", title: "Snotee — Notes that move with you", description: "Open-source note-taking for handwriting, PDFs, and ideas." },
- other: { "geo.region": "IN", "content-language": "en" }
+  metadataBase: new URL(siteUrl),
+  icons: { icon: "/snote-logo.png", apple: "/snote-logo.png" },
+  title: {
+    default: "Snotee — Open-source handwriting & PDF notes",
+    template: "%s | Snotee"
+  },
+  description: "Snotee is an open-source, local-first note-taking app for handwriting, stylus input, PDF reading and annotation, and rich-text notes. Explore Android, desktop, web, and iOS release availability.",
+  applicationName: "Snotee",
+  keywords: [
+    "Snotee", "note taking app", "handwriting notes app", "Android note taking app",
+    "PDF annotation app", "open source notes app", "offline notes", "digital notebook",
+    "stylus notes", "Goodnotes alternative for Android"
+  ],
+  authors: [{ name: "Sadab", url: "https://github.com/shinuXcode" }],
+  creator: "Sadab",
+  publisher: "Snotee",
+  category: "productivity",
+  alternates: { canonical: "/" },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1
+    }
+  },
+  openGraph: {
+    title: "Snotee — Open-source handwriting & PDF notes",
+    description: "A local-first workspace for handwritten notes, PDFs, and ideas. Explore Snotee releases and source code.",
+    url: siteUrl,
+    siteName: "Snotee",
+    type: "website",
+    locale: "en_US"
+  },
+  twitter: {
+    card: "summary",
+    title: "Snotee — Open-source handwriting & PDF notes",
+    description: "A local-first workspace for handwritten notes, PDFs, and ideas."
+  }
 };
-export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#f5f3ee", colorScheme: "light" };
-const nav = [["/how-it-works","Showcase"],["/features","Features"],["/docs","Docs"]];
-const orgSchema = { "@context":"https://schema.org","@type":"Organization","name":"Snotee","url":siteUrl,"logo":siteUrl+"/snote-logo.png","founder":{"@type":"Person","name":"Sadab"},"sameAs":["https://github.com/shinuXcode/Snote"] };
-const appSchema = { "@context":"https://schema.org","@type":"SoftwareApplication","name":"Snotee","applicationCategory":"ProductivityApplication","operatingSystem":"Android, iOS, Windows, macOS, Linux, Web","description":"Open-source note-taking for handwriting, stylus input, rich text, and document workflows.","url":siteUrl,"downloadUrl":siteUrl+"/download","author":{"@type":"Person","name":"Sadab"},"license":"https://github.com/shinuXcode/Snote/blob/main/LICENSE","codeRepository":"https://github.com/shinuXcode/Snote","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"} };
-export default function RootLayout({children}:{children:React.ReactNode}) {
- return <>
-  <script type="application/ld+json" dangerouslySetInnerHTML={{__html:JSON.stringify(orgSchema)}} />
-  <script type="application/ld+json" dangerouslySetInnerHTML={{__html:JSON.stringify(appSchema)}} />
-  <header className="nav"><div className="navin shell">
-   <Link href="/" className="brand" aria-label="Snotee home"><img src="/snote-logo.png" alt="" /><span>snotee</span></Link>
-   <nav className="links" aria-label="Main navigation">{nav.map(([href,label])=><Link key={href} href={href}>{label}</Link>)}</nav>
-   <div className="nav-actions"><NotificationCenter/><ThemeToggle/><a className="nav-github" href="https://github.com/shinuXcode/Snote" target="_blank" rel="noreferrer" aria-label="Snotee on GitHub"><Icon name="github" size={19}/></a><Link className="nav-start" href="/download">Download <Icon name="arrow" size={15}/></Link></div>
-   <MobileNav/>
-  </div></header>
-  <BrandLoader />
-  {children}
-  <footer className="footer"><div className="shell footerin">
-   <Link href="/" className="footer-brand"><img src="/snote-logo.png" alt="" /> Snotee</Link>
-   <p>Make room for better thinking.</p>
-   <div className="footer-links"><Link href="/features">Features</Link><Link href="/docs">Docs</Link><Link href="/faqs">FAQs</Link><Link href="/founder">Founder</Link><Link href="/download">Download</Link><a href="https://github.com/shinuXcode/Snote" target="_blank" rel="noreferrer">GitHub ↗</a></div>
-   <span className="footer-copy">Open source. Built for your ideas. © {new Date().getFullYear()} Snotee.</span>
-  </div></footer>
-  <FeedbackCenter/>
- </>;
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#07162d",
+  colorScheme: "dark"
+};
+
+const nav = [
+  ["/how-it-works", "Showcase"],
+  ["/features", "Features"],
+  ["/docs", "Docs"],
+  ["/faqs", "FAQs"]
+];
+
+const orgSchema = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: "Snotee",
+  url: siteUrl,
+  logo: siteUrl + "/snote-logo.png",
+  founder: { "@type": "Person", name: "Sadab" },
+  sameAs: ["https://github.com/shinuXcode/Snote"]
+};
+
+const appSchema = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "Snotee",
+  applicationCategory: "ProductivityApplication",
+  operatingSystem: "Android, iOS, Windows, macOS, Linux, Web",
+  description: "Open-source, local-first note-taking for handwriting, stylus input, rich text, and PDF workflows.",
+  url: siteUrl,
+  downloadUrl: siteUrl + "/download",
+  author: { "@type": "Person", name: "Sadab" },
+  license: "https://github.com/shinuXcode/Snote/blob/main/LICENSE",
+  codeRepository: "https://github.com/shinuXcode/Snote",
+  isAccessibleForFree: true
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return <>
+    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(orgSchema) }} />
+    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(appSchema) }} />
+    <header className="nav">
+      <div className="navin shell">
+        <Link href="/" className="brand" aria-label="Snotee home">
+          <img src="/snote-logo.png" alt="" /><span>snotee</span>
+        </Link>
+        <nav className="links" aria-label="Main navigation">
+          {nav.map(([href, label]) => <Link key={href} href={href}>{label}</Link>)}
+        </nav>
+        <div className="nav-actions">
+          <NotificationCenter /><ThemeToggle />
+          <a className="nav-github" href="https://github.com/shinuXcode/Snote" target="_blank" rel="noreferrer" aria-label="Snotee on GitHub"><Icon name="github" size={19} /></a>
+          <Link className="nav-start" href="/download">Download <Icon name="arrow" size={15} /></Link>
+        </div>
+        <MobileNav />
+      </div>
+    </header>
+    <BrandLoader />
+    {children}
+    <footer className="footer">
+      <div className="shell footerin">
+        <Link href="/" className="footer-brand"><img src="/snote-logo.png" alt="" /> Snotee</Link>
+        <p>Make room for better thinking.</p>
+        <div className="footer-links">
+          <Link href="/features">Features</Link><Link href="/docs">Docs</Link>
+          <Link href="/faqs">FAQs</Link><Link href="/about-snotee">About Snotee</Link>
+          <Link href="/download">Downloads</Link>
+          <a href="https://github.com/shinuXcode/Snote" target="_blank" rel="noreferrer">GitHub ↗</a>
+        </div>
+        <span className="footer-copy">Open source. Built for your ideas. © {new Date().getFullYear()} Snotee.</span>
+      </div>
+    </footer>
+    <FeedbackCenter />
+  </>;
 }
