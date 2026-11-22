@@ -19,8 +19,8 @@ const platformOrder = ["Android", "Windows", "macOS", "Linux", "iOS", "Web"];
 
 function formatBytes(bytes: number) {
   if (!bytes) return "Size unavailable";
-  const mb = bytes / (1024 * 1024);
-  return mb >= 100 ? mb.toFixed(0) + " MB" : mb.toFixed(1) + " MB";
+  const mib = bytes / (1024 * 1024);
+  return mib.toFixed(1) + " MiB";
 }
 const platformDescription: Record<string, string> = {
   Android: "Android APK package",
