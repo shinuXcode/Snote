@@ -21,7 +21,7 @@ const platformDescription: Record<string, string> = {
   Windows: "Windows desktop archive",
   macOS: "macOS desktop archive",
   Linux: "Linux desktop archive",
-  iOS: "Unsigned iOS build archive",
+  iOS: "iOS package availability; signing status shown below",
   Web: "Web build archive"
 };
 
@@ -65,6 +65,8 @@ export default function ReleaseCenter() {
     if (platform) (result[platform] ??= []).push(asset);
     return result;
   }, {}) ?? {};
+  const iosAssets = groups.iOS ?? [];
+  const hasSignedIpa = iosAssets.some(asset => asset.name.toLowerCase().endsWith(".ipa") && !asset.name.toLowerCase().includes("unsigned"));
 
   return <section className="release-center" aria-labelledby="release-heading">
     <div className="release-topline">
@@ -84,17 +86,17 @@ export default function ReleaseCenter() {
         }}>Refresh <Icon name="refresh" size={15} /></button>
       </div>
       <div className="grid release-grid">
-        {platformOrder.filter(platform => groups[platform]?.length).map(platform => <article className="card release-card" key={platform}>
+        {platformOrder.map(platform => <article className="card release-card" key={platform}>
           <span className="pill">{platform}</span>
           <h3>{platform} build</h3>
           <p className="muted">{platformDescription[platform]}</p>
-          {groups[platform].map(asset => <a className="ghost-cta" href={"/api/download/" + asset.id} key={asset.id}>
+          {(groups[platform] ?? []).map(asset => <a className="ghost-cta" href={"/api/download/" + asset.id} key={asset.id}>
             {asset.name} <Icon name="download" size={15} />
           </a>)}
-          {platform === "iOS" && groups.iOS.some(asset => asset.name.toLowerCase().includes("unsigned")) && <p className="release-note-warning">Unsigned archive only. This is not an install-ready IPA; Apple signing and provisioning are required.</p>}
+          {!groups[platform]?.length && <p className="muted">No build is attached to this release. Check the release history for other versions.</p>}
+          {platform === "iOS" && !hasSignedIpa && <p className="release-note-warning">No signed, install-ready IPA is attached. The current iOS asset is an unsigned archive; Apple signing and provisioning are required.</p>}
         </article>)}
       </div>
-      {release.assets.some(asset => platformFor(asset.name) === "iOS") && !release.assets.some(asset => asset.name.toLowerCase().endsWith(".ipa")) && <p className="release-note-warning">No signed IPA is attached to this release. The iOS archive cannot be installed as an ordinary IPA until it is signed for distribution.</p>}
       <section className="release-history">
         <div className="release-topline"><h3>Version history</h3><span className="muted">Latest published versions</span></div>
         <div className="release-history-list">{release.history?.map(item => <article className="release-history-item" key={item.tag_name}>
