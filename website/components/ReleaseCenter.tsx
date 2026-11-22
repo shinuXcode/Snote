@@ -94,7 +94,7 @@ export default function ReleaseCenter() {
             {asset.name} <Icon name="download" size={15} />
           </a>)}
           {!groups[platform]?.length && <p className="muted">No build is attached to this release. Check the release history for other versions.</p>}
-          {platform === "iOS" && !hasSignedIpa && <p className="release-note-warning">No signed, install-ready IPA is attached. The current iOS asset is an unsigned archive; Apple signing and provisioning are required.</p>}
+          {platform === "iOS" && !hasSignedIpa && <p className="release-note-warning">{iosAssets.length ? "The current iOS asset is an unsigned archive, not an install-ready IPA. Apple signing and provisioning are required." : "No iOS build or signed IPA is attached to this release."}</p>}
         </article>)}
       </div>
       <section className="release-history">
