@@ -5,13 +5,14 @@ const hero = readFileSync(new URL("../components/MotionHero.tsx", import.meta.ur
 const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
 
 const required = [
-  ["homepage uses the current MotionHero", /import\s+MotionHero\s+from/.test(page) && /<MotionHero\s*\/?\s*>/.test(page)],
+  ["homepage uses the current MotionHero", /import\\s+MotionHero\\s+from/.test(page) && /<MotionHero\\s*\\/?\\s*>/.test(page)],
   ["current Snotee hero component is present", /template-hero/.test(hero)],
-  ["current Snotee styling and logo visibility are present", /--bg:#f5f3ee/.test(css) && /--accent:#c7f36b/.test(css) && /\.brand img\{display:block/.test(css)],
+  ["midnight navy design tokens are present", /--bg:#07162d/.test(css) && /--accent:#3d8bff/.test(css) && /--cyan:#35e4e2/.test(css)],
+  ["brand logo visibility is preserved", /\\.brand img\\{display:block/.test(css)],
 ];
 const forbidden = [
-  ["legacy blue homepage headline", /A notebook that gets out of the way\./.test(page)],
-  ["legacy feature-grid homepage", /The workspace/.test(page) && /features\.map/.test(page)],
+  ["legacy blue homepage headline", /A notebook that gets out of the way\\./.test(page)],
+  ["legacy feature-grid homepage", /The workspace/.test(page) && /features\\.map/.test(page)],
 ];
 let failed = false;
 for (const [label, ok] of required) {
