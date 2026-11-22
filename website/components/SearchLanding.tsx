@@ -24,6 +24,14 @@ export default function SearchLanding({ path, eyebrow, title, accent, intro, sec
     },
     {
       "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: "Home", item: "https://snotee.vercel.app/" },
+        { "@type": "ListItem", position: 2, name: eyebrow, item: "https://snotee.vercel.app" + path }
+      ]
+    },
+    {
+      "@context": "https://schema.org",
       "@type": "FAQPage",
       mainEntity: faqs.map(item => ({
         "@type": "Question",
