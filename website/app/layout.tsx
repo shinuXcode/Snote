@@ -22,7 +22,7 @@ export const metadata: Metadata = {
   applicationName: "Snotee",
   keywords: [
     "Snotee", "note taking app", "handwriting notes app", "Android note taking app",
-    "PDF annotation app", "open source notes app", "offline notes", "digital notebook",
+    "PDF annotation app", "open source notes app", "free note taking app", "offline notes", "digital notebook",
     "stylus notes", "Goodnotes alternative for Android"
   ],
   authors: [{ name: "Sadab", url: "https://github.com/shinuXcode" }],
