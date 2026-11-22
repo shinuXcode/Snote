@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 const faqs = [
 ["What is Snotee?","Snotee is an open-source, local-first note-taking project built with Flutter, focused on handwriting, stylus input, rich text, pages, and document workflows."],
-["Is Snotee open source?","Yes. Yes. Snotee is distributed under the MIT License. Read the root LICENSE file and third-party notices before redistribution."],
+["Is Snotee open source?","Yes. Snotee is distributed under the MIT License. Read the root LICENSE file and third-party notices before redistribution."],
 ["Who created Snotee?","Snotee documentation credits Sadab as founder and creator."],
 ["Which platforms are supported?","The repository describes Android, iOS, Windows, macOS, Linux, and Web. Check the specific release assets and notes for current availability."],
 ["Does Snotee work offline?","Snotee is designed for local-first use. Core note-taking does not require a Snotee-hosted server or constant network access."],
