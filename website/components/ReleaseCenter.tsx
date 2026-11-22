@@ -16,6 +16,12 @@ type Release = {
 };
 
 const platformOrder = ["Android", "Windows", "macOS", "Linux", "iOS", "Web"];
+
+function formatBytes(bytes: number) {
+  if (!bytes) return "Size unavailable";
+  const mb = bytes / (1024 * 1024);
+  return mb >= 100 ? mb.toFixed(0) + " MB" : mb.toFixed(1) + " MB";
+}
 const platformDescription: Record<string, string> = {
   Android: "Android APK package",
   Windows: "Windows desktop archive",
@@ -91,7 +97,7 @@ export default function ReleaseCenter() {
           <h3>{platform} build</h3>
           <p className="muted">{platformDescription[platform]}</p>
           {(groups[platform] ?? []).map(asset => <a className="ghost-cta" href={"/api/download/" + asset.id} key={asset.id}>
-            {asset.name} <Icon name="download" size={15} />
+            {asset.name} <span className="asset-size">{formatBytes(asset.size)}</span> <Icon name="download" size={15} />
           </a>)}
           {!groups[platform]?.length && <p className="muted">No build is attached to this release. Check the release history for other versions.</p>}
           {platform === "iOS" && !hasSignedIpa && <p className="release-note-warning">{iosAssets.length ? "The current iOS asset is an unsigned archive, not an install-ready IPA. Apple signing and provisioning are required." : "No iOS build or signed IPA is attached to this release."}</p>}
