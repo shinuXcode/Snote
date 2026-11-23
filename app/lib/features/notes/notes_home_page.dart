@@ -498,9 +498,11 @@ class _NotesHomePageState extends State<NotesHomePage> {
       // this isolates its lifecycle and constraints from the home layout.
       debugPrint('[Snotee][Navigation] push dedicated new-note route noteId=${note.id}');
       await Navigator.of(context).push<void>(
-        MaterialPageRoute<void>(
+        PageRouteBuilder<void>(
           settings: RouteSettings(name: '/new-note/${note.id}'),
-          builder: (_) => NewNoteRoute(note: note),
+          transitionDuration: Duration.zero,
+          reverseTransitionDuration: Duration.zero,
+          pageBuilder: (_, __, ___) => NewNoteRoute(note: note),
         ),
       );
       debugPrint('[Snotee][Navigation] dedicated new-note route returned noteId=${note.id}');
@@ -542,9 +544,11 @@ class _NotesHomePageState extends State<NotesHomePage> {
     if (!_usesSplitWorkspace(context)) {
       await Navigator.push(
         context,
-        MaterialPageRoute(
+        PageRouteBuilder<void>(
           settings: RouteSettings(name: '/snotee/editor/${note.id}'),
-          builder: (_) => _noteContentPage(note),
+          transitionDuration: Duration.zero,
+          reverseTransitionDuration: Duration.zero,
+          pageBuilder: (_, __, ___) => _noteContentPage(note),
         ),
       );
       await _load();
