@@ -2,7 +2,7 @@
 
 Open-source, offline-first handwriting and rich-text notes for Android, iOS, Windows, macOS, Linux and Web.
 
-**Current main promotion target:** Snotee 2.0.0 (build 97).
+**Current main promotion target:** Snotee 3.0.0 (build 98).
 
 ## Repository
 

@@ -132,9 +132,11 @@ class _PdfAnnotationPageState extends State<PdfAnnotationPage> {
         'assetId=${asset.id} bytes=${bytes.length}',
       );
       await Navigator.of(context).pushReplacement<void, void>(
-        MaterialPageRoute<void>(
+        PageRouteBuilder<void>(
           settings: RouteSettings(name: '/snotee/editor/${note.id}'),
-          builder: (_) => SnoteNextEditorRoute(
+          transitionDuration: Duration.zero,
+          reverseTransitionDuration: Duration.zero,
+          pageBuilder: (_, __, ___) => SnoteNextEditorRoute(
             note: note,
             initialPdfBytes: bytes,
             initialPdfName: fileName,

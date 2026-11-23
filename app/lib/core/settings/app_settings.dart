@@ -21,7 +21,7 @@ class SnoteSettings extends ChangeNotifier {
     'autoBackupLocal': true, 'writingPostureRightHand': true, 'disableBackGesture': false,
     'turnOffPush': false, 'pageSwipe': true, 'autoAddPage': true,
     'securePagePreviews': false, 'eInk': false, 'grayscaleEInk': true, 'reduceMotion': false,
-    'welcomeGuideSeen': false, 'editorV2FloatingToolbar': false, 'editorV2FavoritesVertical': false, 'editorV2FloatingPageNavigation': false, 'editorV2ShowFavoritesShowcase': true, 'editorV2ShowNoteSwitcher': true, 'editorV2RememberLastPage': true, 'editorV2CompactFullscreenToolbar': true, 'timerAlertEnabled': true, 'showTitleBarTimer': true, 'showTitleBarSearch': true, 'editorV2ShowTabs': false, 'editorV2ToolbarCollapsed': false, 'editorV2FavoriteCollapsed': false, 'editorV2CalculatorCollapsed': false, 'floatingTimerCollapsed': false, 'editorV2ToolbarDimensionsLocked': false,
+    'welcomeGuideSeen': false, 'editorV2FloatingToolbar': false, 'editorV2FavoritesVertical': false, 'editorV2FloatingPageNavigation': false, 'editorV2ShowFavoritesShowcase': true, 'editorV2ShowNoteSwitcher': true, 'editorV2RememberLastPage': true, 'editorV2CompactFullscreenToolbar': true, 'timerAlertEnabled': true, 'showTitleBarTimer': true, 'showTitleBarSearch': true, 'editorV2ShowTabs': true, 'editorV2ToolbarCollapsed': false, 'editorV2FavoriteCollapsed': false, 'editorV2CalculatorCollapsed': false, 'floatingTimerCollapsed': false, 'editorV2ToolbarDimensionsLocked': false,
   };
 
   static const doubleDefaults = <String, double>{
@@ -97,6 +97,13 @@ class SnoteSettings extends ChangeNotifier {
     for (final entry in boolDefaults.entries) {
       final raw = persisted['snote.setting.${entry.key}'];
       if (raw != null) _values[entry.key] = raw == 'true';
+    }
+    // Make the new instant tab/history switcher visible for existing users
+    // who never explicitly configured the old hidden-by-default tab strip.
+    // Preserve an explicit user choice of false when one was saved.
+    if (!persisted.containsKey('snote.setting.editorV2ShowTabs')) {
+      _values['editorV2ShowTabs'] = true;
+      await _storage.write(key: 'snote.setting.editorV2ShowTabs', value: 'true');
     }
     for (final entry in doubleDefaults.entries) {
       final raw = persisted['snote.setting.${entry.key}'];

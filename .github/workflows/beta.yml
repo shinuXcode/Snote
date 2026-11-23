@@ -54,7 +54,7 @@ jobs:
           set -euo pipefail
           VERSION="$(awk '/^version:/ {sub(/^version:[[:space:]]*/, ""); print; exit}' app/pubspec.yaml)"
           case "$VERSION" in
-            1.1.0-beta.*+*|0.1.1+*|0.1.2+*|2.0.0+*) ;;
+            1.1.0-beta.*+*|0.1.1+*|0.1.2+*|2.0.0+*|3.0.0+*) ;;
             *) echo "Unexpected beta version in app/pubspec.yaml: $VERSION"; exit 1 ;;
           esac
           RELEASE_VERSION="${VERSION%%+*}"
