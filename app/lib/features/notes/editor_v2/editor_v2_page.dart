@@ -178,6 +178,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   final FocusNode _quillFocus = FocusNode();
   final ScrollController _quillScroll = ScrollController();
   final TransformationController _transform = TransformationController();
+  final ValueNotifier<int> _livePaintRevision = ValueNotifier<int>(0);
   final GlobalKey _pageCaptureKey = GlobalKey();
   final Map<String, TextEditingController> _textControllers =
       <String, TextEditingController>{};
@@ -1869,6 +1870,10 @@ class _EditorV2PageState extends State<EditorV2Page>
     return true;
   }
 
+  void _requestLivePaint() {
+    _livePaintRevision.value++;
+  }
+
   void _onPointerMove(PointerMoveEvent event) {
     if (_ignoredPointers.contains(event.pointer)) return;
     if (_activePointer == event.pointer &&
@@ -1887,7 +1892,7 @@ class _EditorV2PageState extends State<EditorV2Page>
         _livePoints.clear();
         _liveStroke = null;
         _eraserCursor = null;
-        setState(() {});
+        _requestLivePaint();
         return;
       }
     }
@@ -1911,7 +1916,7 @@ class _EditorV2PageState extends State<EditorV2Page>
       if (_pressureEraseAllowed(event) && _shouldProcessErase(event, radius)) {
         _eraseAlongSegment(previousPosition, event.localPosition, radius);
       }
-      setState(() {});
+      _requestLivePaint();
       return;
     }
     if (_activePointer == event.pointer &&
@@ -1926,18 +1931,19 @@ class _EditorV2PageState extends State<EditorV2Page>
       if (_pressureEraseAllowed(event) && _shouldProcessErase(event, radius)) {
         _eraseAlongSegment(previousPosition, event.localPosition, radius);
       }
-      setState(() {});
+      _requestLivePaint();
       return;
     }
     if (_activePointer != event.pointer) {
       if (_tool == CanvasTool.eraser || _tool == CanvasTool.pixelEraser) {
         _eraserCursor = event.localPosition;
-        setState(() {});
+        _requestLivePaint();
       }
       return;
     }
     if (_pendingSticker != null) {
-      setState(() => _pendingStickerPosition = event.localPosition);
+      _pendingStickerPosition = event.localPosition;
+      _requestLivePaint();
       return;
     }
     final point = _pointFrom(event);
@@ -1951,7 +1957,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
     _liveStroke = _buildLiveStroke();
     _eraserCursor = event.localPosition;
-    setState(() {});
+    _requestLivePaint();
   }
 
   void _onPointerUp(PointerEvent event) {
@@ -2278,10 +2284,8 @@ class _EditorV2PageState extends State<EditorV2Page>
       _eraseUndoCaptured = true;
     }
     _pageData['strokes'] = retained.map(StrokeCodec.strokeToJson).toList();
-    setState(() {
-      _clearSelectionIds();
-      _eraserCursor = position;
-    });
+    _clearSelectionIds();
+    _eraserCursor = position;
     _scheduleSave();
   }
 
@@ -8210,7 +8214,15 @@ class _EditorV2PageState extends State<EditorV2Page>
     );
   }
 
-  Widget _buildPageSurface() {
+  Widget _buildPageSurface() => ValueListenableBuilder<int>(
+        valueListenable: _livePaintRevision,
+        builder: (context, revision, child) => _buildPageSurfaceContent(),
+      );
+
+  // High-frequency stylus samples repaint only the page subtree. Rebuilding
+  // the entire editor here used to rebuild title bars, tool docks, sidebars,
+  // and settings controls for every pointer-move event.
+  Widget _buildPageSurfaceContent() {
     final page = _pageData;
     final strokes = _strokesFor(page);
     final live = _liveStroke;
@@ -8264,7 +8276,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                 onPointerHover: (event) {
                   if (_pendingSticker != null) {
                     _pendingStickerPosition = event.localPosition;
-                    setState(() {});
+                    _requestLivePaint();
                     return;
                   }
                   if (_tool == CanvasTool.eraser || _tool == CanvasTool.pixelEraser) {
@@ -8274,7 +8286,7 @@ class _EditorV2PageState extends State<EditorV2Page>
                         ? 7.0
                         : math.max(18, _size * 2).toDouble();
                     _eraserCursorRadius = _pressureEraseRadius(event, baseRadius: baseRadius);
-                    setState(() {});
+                    _requestLivePaint();
                   }
                 },
                 child: CustomPaint(
@@ -9402,6 +9414,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     _quillFocus.dispose();
     _quillScroll.dispose();
     _transform.dispose();
+    _livePaintRevision.dispose();
     for (final controller in _textControllers.values) {
       controller.dispose();
     }
