@@ -30,7 +30,7 @@ const faqs = [
 ["How can I contact the project?","Use the official Snotee GitHub repository for issues and project discussions. Do not include private note content or access tokens."]
 ];
 export const metadata: Metadata = {
- title: "Snotee FAQs — Installation, Writing, Privacy and Updates",
+ title: "Snotee FAQs: Installation & Privacy",
  description: "Answers to common questions about Snotee installation, offline use, handwriting, PDFs, backups, permissions, cloud sync, licensing, and updates.",
  alternates: { canonical: "https://snotee.vercel.app/faqs" },
  openGraph: { title: "Snotee FAQs", description: "Clear answers about using, installing, and contributing to Snotee.", url: "https://snotee.vercel.app/faqs", type: "website" }
