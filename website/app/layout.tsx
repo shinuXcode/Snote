@@ -126,7 +126,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <div className="footer-links">
           <Link href="/features">Features</Link><Link href="/docs">Docs</Link>
           <Link href="/faqs">FAQs</Link><Link href="/about-snotee">About Snotee</Link>
-          <Link href="/download">Downloads</Link>
+          <Link href="/download">Downloads</Link><Link href="/android-note-taking-app">Android App</Link><Link href="/free-note-taking-app">Free Notes App</Link><Link href="/handwriting-notes">Handwriting</Link><Link href="/pdf-annotation">PDF Annotation</Link><Link href="/goodnotes-alternative">Goodnotes Alternative</Link><Link href="/open-source-notes-app">Open Source</Link>
           <a href="https://github.com/shinuXcode/Snote" target="_blank" rel="noreferrer">GitHub ↗</a>
         </div>
         <span className="footer-copy">Open source. Built for your ideas. © {new Date().getFullYear()} Snotee.</span>
