@@ -2,8 +2,8 @@ import Link from "next/link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
- title: "Snotee Documentation — User Guides, Licenses and Policies",
- description: "Read online or download Snotee user guides, feature catalogue, open-source documentation, privacy and data handling, permissions, license notices, app overview, SDK reference, and repository audit.",
+ title: "Snotee Documentation & User Guides",
+ description: "Read Snotee user guides, feature documentation, privacy notes, license notices, and platform build instructions.",
  alternates: { canonical: "https://snotee.vercel.app/docs" },
  openGraph: { title: "Snotee Documentation", description: "Read online or download guides, project documentation, policies, and PDF references for Snotee.", url: "https://snotee.vercel.app/docs", type: "website" }
 };
