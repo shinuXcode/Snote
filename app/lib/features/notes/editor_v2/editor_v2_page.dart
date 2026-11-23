@@ -288,6 +288,7 @@ class _EditorV2PageState extends State<EditorV2Page>
   double? _sizeBeforeWatermarkCover;
   double? _opacityBeforeWatermarkCover;
   Timer? _viewportHudTimer;
+  DateTime _lastViewportHudRefresh = DateTime.fromMillisecondsSinceEpoch(0);
   bool _pdfBackgroundVisible = true;
   bool _pressureEraseActive = false;
   CanvasTool? _toolBeforePressureErase;
@@ -6704,6 +6705,13 @@ class _EditorV2PageState extends State<EditorV2Page>
 
 
   void _showCanvasHud() {
+    final now = DateTime.now();
+    // InteractiveViewer can report updates every frame. Throttle HUD timer
+    // churn while retaining a responsive 1.5s hide delay after interaction.
+    if (now.difference(_lastViewportHudRefresh) < const Duration(milliseconds: 120)) {
+      return;
+    }
+    _lastViewportHudRefresh = now;
     _viewportHudTimer?.cancel();
     if (!_showViewportHud && mounted) setState(() => _showViewportHud = true);
     _viewportHudTimer = Timer(const Duration(milliseconds: 1500), () {
