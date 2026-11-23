@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Reveal from "../../components/Reveal";
-export const metadata: Metadata = { title: "Snotee Features — Handwriting, Notes and Documents", description: "Explore Snotee's handwriting engine, stylus input, local-first storage, organization, and document workflows.", alternates: { canonical: "https://snotee.vercel.app/features" } };
+export const metadata: Metadata = { title: "Features: Handwriting, Notes & PDFs", description: "Explore Snotee's handwriting engine, stylus input, local-first storage, organization, and document workflows.", alternates: { canonical: "https://snotee.vercel.app/features" } };
 const features = [
  ["Handwriting engine","Pressure-aware vector strokes, pen tools, and palm-rejection support where the device allows it."],
  ["Paper and canvas","Use notebook pages and flexible workspaces for different kinds of thinking."],
