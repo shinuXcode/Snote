@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-export const metadata: Metadata = { title: "About Sadab — Snotee Founder", description: "Meet Sadab, founder and creator of Snotee, an open-source note-taking project.", alternates: { canonical: "https://snotee.vercel.app/founder" } };
+export const metadata: Metadata = { title: "About Sadab — Founder", description: "Meet Sadab, founder and creator of Snotee, an open-source note-taking project.", alternates: { canonical: "https://snotee.vercel.app/founder" } };
 export default function FounderPage() {
  return <main className="shell section founder-page">
   <div className="eyebrow"><i/> THE PERSON BEHIND THE PROJECT</div>
