@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import SearchLanding from "../../components/SearchLanding";
 
 export const metadata: Metadata = {
-  title: "Free Note-Taking App with Handwriting and Local Storage | Snotee",
+  title: "Free Handwriting Notes App",
   description: "Explore Snotee, a free-to-download local-first notes app with handwriting, stylus-oriented tools, rich text, and PDF workflows. Check current platform builds.",
   alternates: { canonical: "https://snotee.vercel.app/free-note-taking-app" }
 };
