@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import SearchLanding from "../../components/SearchLanding";
 
 export const metadata: Metadata = {
-  title: "Handwriting Notes App with Stylus Tools",
-  description: "See how Snotee approaches digital handwriting, stylus input, pressure-aware strokes, notebook pages, and local-first note storage.",
+  title: "Handwriting Notes App for Android & Stylus",
+  description: "Explore Snotee, a handwriting notes app for Android tablets and stylus workflows. Write study notes, sketch ideas, and keep notebooks local-first.",
   alternates: { canonical: "https://snotee.vercel.app/handwriting-notes" }
 };
 
 export default function HandwritingNotesPage() {
-  return <SearchLanding path="/handwriting-notes" eyebrow="DIGITAL HANDWRITING" title="Put pen to page." accent="Keep ideas moving." intro="Snotee is an open-source handwriting notes app project built around a custom writing surface, stylus-oriented input, and a notebook-style workflow. The exact writing experience depends on the device and published app version." sections={[
+  return <SearchLanding path="/handwriting-notes" eyebrow="DIGITAL HANDWRITING" title="Handwriting notes." accent="Made for stylus workflows." intro="Snotee is an open-source handwriting notes app for digital notebooks, handwritten study notes, and stylus-first workflows. Its custom writing surface is designed for pen input, while real pressure response and palm rejection depend on the device and published app version." sections={[
     { title: "A writing surface, not a web form", body: "The app is built with Flutter and includes a dedicated canvas and ink pipeline. Its goal is to make strokes appear naturally while keeping the page stable during writing, scrolling, and zooming.", bullets: ["Custom canvas and stroke rendering", "Pen and eraser workflows", "Notebook page and canvas concepts"] },
     { title: "Stylus behavior depends on hardware", body: "Pressure sensitivity, palm rejection, hover, and pen shortcuts are not identical across Android tablets and styluses. Snotee's input handling is designed for pen workflows, but device-specific testing matters.", bullets: ["Pressure-aware ink where hardware exposes it", "Palm-rejection support where the device allows it", "Test with your own pen before moving important work"] },
     { title: "Keep handwritten work portable", body: "Snotee is designed as a local-first application. Use the backup and export options available in your version, and test that a backup restores correctly before removing the original notebook.", bullets: ["Local device storage", "User-controlled backup and transfer", "Open repository and public issue tracker"] }
