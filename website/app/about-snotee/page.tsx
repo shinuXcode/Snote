@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import SearchLanding from "../../components/SearchLanding";
 
 export const metadata: Metadata = {
-  title: "Snotee: Open-Source Local-First Notes",
+  title: "Open-Source Local-First Notes App",
   description: "Learn what Snotee is, who builds it, how local-first storage works, which platforms have published builds, and where to find its source code.",
   alternates: { canonical: "https://snotee.vercel.app/about-snotee" }
 };
