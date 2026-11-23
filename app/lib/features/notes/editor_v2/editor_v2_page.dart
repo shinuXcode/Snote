@@ -88,6 +88,9 @@ class _EditorV2PageState extends State<EditorV2Page>
   // This preserves decoded page state and warm PDF raster/document caches.
   static final Set<String> _openEditorNoteIds = <String>{};
   static const int _maxMountedEditorTabs = 5;
+  static const int _maxNoteHistoryEntries = 30;
+  static final List<LocalNote> _noteNavigationHistory = <LocalNote>[];
+  static int _noteNavigationIndex = -1;
   static final LinkedHashMap<String, LocalNote> _editorTabNotes =
       LinkedHashMap<String, LocalNote>();
   static final Map<String, Route<dynamic>> _editorRoutes =
@@ -189,8 +192,6 @@ class _EditorV2PageState extends State<EditorV2Page>
   final Map<String, Future<PdfDocument>> _pdfDocumentFutures = <String, Future<PdfDocument>>{};
   final Map<String, Future<Uint8List?>> _pdfRasterPending = <String, Future<Uint8List?>>{};
   final LinkedHashMap<String, Uint8List> _pdfRasterCache = LinkedHashMap<String, Uint8List>();
-  final LinkedHashMap<String, Future<Uint8List?>> _pdfRasterFutureCache =
-      LinkedHashMap<String, Future<Uint8List?>>();
   final Set<int> _activePointers = <int>{};
   final Set<int> _ignoredPointers = <int>{};
   final Set<int> _stylusPointers = <int>{};
@@ -335,6 +336,7 @@ class _EditorV2PageState extends State<EditorV2Page>
     super.initState();
     _openEditorNoteIds.add(widget.note.id);
     _editorTabNotes[widget.note.id] = widget.note;
+    _recordNoteNavigation(widget.note);
     WidgetsBinding.instance.addObserver(this);
     _title.text = widget.note.title;
     _quill.addListener(_scheduleSave);
@@ -641,7 +643,12 @@ class _EditorV2PageState extends State<EditorV2Page>
   Future<PdfDocument> _pdfDocumentForSource(String assetId) =>
       _pdfDocumentFutures.putIfAbsent(assetId, () async {
         final bytes = await _pdfBytesForSource(assetId);
-        return PdfDocument.openData(bytes);
+        final document = await PdfDocument.openData(bytes);
+        // The native PDF document owns its opened source. Drop the temporary
+        // Dart-side copy so large PDFs are not retained twice per open tab.
+        _pdfSourceBytesCache.remove(assetId);
+        _pdfSourceBytesFutures.remove(assetId);
+        return document;
       });
 
   Future<Uint8List?> _renderPdfPageRaster(String assetId, int pageNumber, {required bool thumbnail}) async {
@@ -700,14 +707,6 @@ class _EditorV2PageState extends State<EditorV2Page>
     }
   }
 
-  void _rememberPdfRasterFuture(String key, Future<Uint8List?> future) {
-    _pdfRasterFutureCache.remove(key);
-    _pdfRasterFutureCache[key] = future;
-    while (_pdfRasterFutureCache.length > 8) {
-      _pdfRasterFutureCache.remove(_pdfRasterFutureCache.keys.first);
-    }
-  }
-
   Future<Uint8List?> _lazyPdfPageRaster(
     String assetId,
     int pageNumber, {
@@ -723,25 +722,18 @@ class _EditorV2PageState extends State<EditorV2Page>
                 : 'fit';
     final key = '$assetId:$pageNumber:$resolution';
 
-    final cachedFuture = _pdfRasterFutureCache.remove(key);
-    if (cachedFuture != null) {
-      _pdfRasterFutureCache[key] = cachedFuture;
-      return cachedFuture;
-    }
-
+    // Keep completed rasters in one byte-budgeted LRU only. A second LRU of
+    // completed Future objects retains the same Uint8List references after
+    // raster eviction and quietly defeats the configured memory ceiling.
     final cachedBytes = _pdfRasterCache.remove(key);
     if (cachedBytes != null) {
       _pdfRasterCache[key] = cachedBytes;
-      final ready = Future<Uint8List?>.value(cachedBytes);
-      _rememberPdfRasterFuture(key, ready);
-      return ready;
+      return Future<Uint8List?>.value(cachedBytes);
     }
 
+    // Share in-flight work between the visible page, preview rail and prefetch.
     final pending = _pdfRasterPending[key];
-    if (pending != null) {
-      _rememberPdfRasterFuture(key, pending);
-      return pending;
-    }
+    if (pending != null) return pending;
 
     final future = _renderPdfPageRaster(
       assetId,
@@ -749,20 +741,15 @@ class _EditorV2PageState extends State<EditorV2Page>
       thumbnail: thumbnail,
     );
     _pdfRasterPending[key] = future;
-    _rememberPdfRasterFuture(key, future);
     unawaited(future.then<void>((bytes) {
-      if (bytes == null || bytes.isEmpty) return;
+      if (bytes == null || bytes.isEmpty || !mounted) return;
       _pdfRasterCache.remove(key);
       _pdfRasterCache[key] = bytes;
       while (_pdfRasterCache.length > 12 ||
-          _pdfRasterCache.values.fold<int>(0, (total, bytes) => total + bytes.length) >
+          _pdfRasterCache.values.fold<int>(0, (total, item) => total + item.length) >
               _maxPdfRasterCacheBytes) {
         if (_pdfRasterCache.isEmpty) break;
-        final evictedKey = _pdfRasterCache.keys.first;
-        _pdfRasterCache.remove(evictedKey);
-        // Completed futures retain the raster bytes too; evict both references
-        // so the configured PDF memory budget reflects actual retained memory.
-        _pdfRasterFutureCache.remove(evictedKey);
+        _pdfRasterCache.remove(_pdfRasterCache.keys.first);
       }
     }).catchError((Object error) {
       debugPrint('[Snote][EditorV2] lazy PDF page render failed ($pageNumber): $error');
@@ -3147,10 +3134,42 @@ class _EditorV2PageState extends State<EditorV2Page>
     await _settings.setBool('editorV2ShowTabs', next);
   }
 
-  Future<void> _openNoteTab(LocalNote note) async {
+  void _recordNoteNavigation(LocalNote note) {
+    if (_noteNavigationIndex >= 0 &&
+        _noteNavigationIndex < _noteNavigationHistory.length &&
+        _noteNavigationHistory[_noteNavigationIndex].id == note.id) {
+      _noteNavigationHistory[_noteNavigationIndex] = note;
+      return;
+    }
+    if (_noteNavigationIndex < _noteNavigationHistory.length - 1) {
+      _noteNavigationHistory.removeRange(
+        _noteNavigationIndex + 1,
+        _noteNavigationHistory.length,
+      );
+    }
+    _noteNavigationHistory.add(note);
+    if (_noteNavigationHistory.length > _maxNoteHistoryEntries) {
+      _noteNavigationHistory.removeRange(
+        0,
+        _noteNavigationHistory.length - _maxNoteHistoryEntries,
+      );
+    }
+    _noteNavigationIndex = _noteNavigationHistory.length - 1;
+  }
+
+  Future<void> _navigateNoteHistoryTo(int index) async {
+    if (index < 0 || index >= _noteNavigationHistory.length ||
+        index == _noteNavigationIndex) return;
+    final note = _noteNavigationHistory[index];
+    _noteNavigationIndex = index;
+    await _openNoteTab(note, recordHistory: false);
+  }
+
+  Future<void> _openNoteTab(LocalNote note, {bool recordHistory = true}) async {
     if (note.id == widget.note.id) return;
     await _flushSave();
     if (!mounted) return;
+    if (recordHistory) _recordNoteNavigation(note);
 
     final navigator = Navigator.of(context);
     final existingRoute = _editorRoutes[note.id];
@@ -3179,9 +3198,11 @@ class _EditorV2PageState extends State<EditorV2Page>
     _editorTabNotes[note.id] = note;
     setState(() {});
     await navigator.push<void>(
-      MaterialPageRoute<void>(
+      PageRouteBuilder<void>(
         settings: RouteSettings(name: _editorRouteName(note.id)),
-        builder: (_) => EditorV2Page(note: note),
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+        pageBuilder: (_, __, ___) => EditorV2Page(note: note),
       ),
     );
     if (mounted) setState(() {});
@@ -3219,10 +3240,67 @@ class _EditorV2PageState extends State<EditorV2Page>
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-          itemCount: notes.length,
+          itemCount: notes.length + 3,
           separatorBuilder: (_, __) => const SizedBox(width: 5),
           itemBuilder: (context, index) {
-            final note = notes[index];
+            if (index == 0) {
+              return IconButton(
+                tooltip: 'Previous note (history)',
+                visualDensity: VisualDensity.compact,
+                onPressed: _noteNavigationIndex > 0
+                    ? () => unawaited(_navigateNoteHistoryTo(_noteNavigationIndex - 1))
+                    : null,
+                icon: const Icon(Icons.arrow_back_rounded, size: 17),
+              );
+            }
+            if (index == 1) {
+              return IconButton(
+                tooltip: 'Next note (history)',
+                visualDensity: VisualDensity.compact,
+                onPressed: _noteNavigationIndex >= 0 &&
+                        _noteNavigationIndex < _noteNavigationHistory.length - 1
+                    ? () => unawaited(_navigateNoteHistoryTo(_noteNavigationIndex + 1))
+                    : null,
+                icon: const Icon(Icons.arrow_forward_rounded, size: 17),
+              );
+            }
+            if (index == 2) {
+              return PopupMenuButton<String>(
+                tooltip: 'Recent note history',
+                icon: const Icon(Icons.history_rounded, size: 19),
+                onSelected: (value) {
+                  final target = int.tryParse(value);
+                  if (target != null) unawaited(_navigateNoteHistoryTo(target));
+                },
+                itemBuilder: (context) => List<PopupMenuEntry<String>>.generate(
+                  _noteNavigationHistory.length,
+                  (offset) {
+                    final historyIndex = _noteNavigationHistory.length - 1 - offset;
+                    final historyNote = _noteNavigationHistory[historyIndex];
+                    return PopupMenuItem<String>(
+                      value: historyIndex.toString(),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(
+                          historyIndex == _noteNavigationIndex
+                              ? Icons.radio_button_checked_rounded
+                              : Icons.history_rounded,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            historyNote.title.trim().isEmpty ? 'Untitled note' : historyNote.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ]),
+                    );
+                  },
+                ),
+              );
+            }
+            final note = notes[index - 3];
             final active = note.id == widget.note.id;
             return InputChip(
               visualDensity: VisualDensity.compact,
