@@ -3,7 +3,7 @@ import SearchLanding from "../../components/SearchLanding";
 
 export const metadata: Metadata = {
   title: "Open-Source Notes App for Android & Desktop",
-  description: "Explore Snotee's public source code, MIT license, local-first architecture, supported platform targets, and ways to contribute.",
+  description: "Explore Snotee, an open-source note-taking app with public Flutter source code, local-first storage, handwritten notes, and PDF workflows for Android and desktop.",
   alternates: { canonical: "https://snotee.vercel.app/open-source-notes-app" }
 };
 
