@@ -15,6 +15,7 @@ const pages = [
   ["/pdf-annotation", 0.8, "monthly"],
   ["/open-source-notes-app", 0.7, "monthly"],
   ["/free-note-taking-app", 0.8, "monthly"],
+  ["/student-note-taking-app", 0.8, "monthly"],
   ["/goodnotes-alternative", 0.7, "monthly"]
 ] as const;
 
