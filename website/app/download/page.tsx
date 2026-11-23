@@ -3,7 +3,7 @@ import Link from "next/link";
 import ReleaseCenter from "../../components/ReleaseCenter";
 
 export const metadata: Metadata = {
-  title: "Download Snotee for All Platforms",
+  title: "Download for Android, Windows & Mac",
   description: "Get official Snotee Android and desktop releases. Check iOS signing, package sizes, and version notes.",
   alternates: { canonical: "https://snotee.vercel.app/download" },
   openGraph: {
