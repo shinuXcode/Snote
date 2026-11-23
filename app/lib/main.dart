@@ -113,8 +113,10 @@ class _SnoteAppState extends State<SnoteApp> {
     if (mounted) setState(() {});
 
     try {
-      await _theme.load();
-      await SnoteSettings.instance.load();
+      await Future.wait<void>([
+        _theme.load(),
+        SnoteSettings.instance.load(),
+      ]);
       if (!mounted) return;
       setState(() {
         _bootstrapping = false;

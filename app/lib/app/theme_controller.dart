@@ -38,22 +38,29 @@ class SnoteThemeController extends ChangeNotifier {
   ThemeMode themeMode = ThemeMode.system;
 
   Future<void> load() async {
-    eInk = (await _storage.read(key: 'snote.eink')) == 'true';
-    grayscale = (await _storage.read(key: 'snote.eink.grayscale')) != 'false';
-    reduceMotion = (await _storage.read(key: 'snote.reduce-motion')) == 'true';
-    final rawStyle = await _storage.read(key: 'snote.theme.style');
+    // These keys do not depend on one another; batch platform reads to shorten
+    // the blocking startup bootstrap on Android and desktop.
+    final values = await Future.wait<String?>([
+      _storage.read(key: 'snote.eink'),
+      _storage.read(key: 'snote.eink.grayscale'),
+      _storage.read(key: 'snote.reduce-motion'),
+      _storage.read(key: 'snote.theme.style'),
+      _storage.read(key: 'snote.theme.color'),
+      _storage.read(key: 'snote.theme.mode'),
+    ]);
+    eInk = values[0] == 'true';
+    grayscale = values[1] != 'false';
+    reduceMotion = values[2] == 'true';
     style = SnoteThemeStyle.values.firstWhere(
-      (item) => item.name == rawStyle,
+      (item) => item.name == values[3],
       orElse: () => SnoteThemeStyle.standard,
     );
-    final rawColorTheme = await _storage.read(key: 'snote.theme.color');
     colorTheme = SnoteColorTheme.values.firstWhere(
-      (item) => item.name == rawColorTheme,
+      (item) => item.name == values[4],
       orElse: () => SnoteColorTheme.profile,
     );
-    final rawMode = await _storage.read(key: 'snote.theme.mode');
     themeMode = ThemeMode.values.firstWhere(
-      (item) => item.name == rawMode,
+      (item) => item.name == values[5],
       orElse: () => ThemeMode.system,
     );
     notifyListeners();
