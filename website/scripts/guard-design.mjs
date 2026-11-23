@@ -7,7 +7,7 @@ const css = readFileSync(new URL("../app/brand-overrides.css", import.meta.url),
 const required = [
   ["homepage uses the current MotionHero", /import\s+MotionHero\s+from/.test(page) && /<MotionHero\s*\/?\s*>/.test(page)],
   ["current Snotee hero component is present", /template-hero/.test(hero)],
-  ["midnight navy design tokens are present", /--bg:\s*#07162d/.test(css) && /--accent:\s*#3d8bff/.test(css) && /--cyan:\s*#35e4e2/.test(css)],
+  ["espresso brown design tokens are present", /--bg:\s*#160f0b/.test(css) && /--accent:\s*#c58b57/.test(css) && /--cyan:\s*#e2b77e/.test(css)],
   ["brand logo visibility is preserved", /\.brand img/.test(css)],
 ];
 const forbidden = [
