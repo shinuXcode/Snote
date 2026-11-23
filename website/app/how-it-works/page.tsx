@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Reveal from "../../components/Reveal";
-export const metadata: Metadata = { title: "Snotee Showcase — A notebook built for thinking", description: "Explore Snotee's handwriting, stylus input, local-first storage, PDF annotation, and note-taking workflows.", alternates: { canonical: "https://snotee.vercel.app/how-it-works" } };
+export const metadata: Metadata = { title: "How the Snotee Notebook Works", description: "Explore Snotee's handwriting, stylus input, local-first storage, PDF annotation, and note-taking workflows.", alternates: { canonical: "https://snotee.vercel.app/how-it-works" } };
 const steps = [
  ["01","Capture","Start with a blank page, a paper template, or a PDF. Write by hand or type your thoughts."],
  ["02","Make it yours","Use stylus tools, rich text, shapes, images, lasso selection, and page layouts to express ideas."],
