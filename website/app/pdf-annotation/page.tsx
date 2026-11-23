@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import SearchLanding from "../../components/SearchLanding";
 
 export const metadata: Metadata = {
-  title: "PDF Annotation App for Study and Reading | Snotee",
+  title: "PDF Annotation for Study and Reading",
   description: "Explore Snotee's PDF reading and annotation workflows alongside handwritten notes. Check release-specific platform support before downloading.",
   alternates: { canonical: "https://snotee.vercel.app/pdf-annotation" }
 };

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import SearchLanding from "../../components/SearchLanding";
 
 export const metadata: Metadata = {
-  title: "Handwriting Notes App with Stylus Tools | Snotee",
+  title: "Handwriting Notes App with Stylus Tools",
   description: "See how Snotee approaches digital handwriting, stylus input, pressure-aware strokes, notebook pages, and local-first note storage.",
   alternates: { canonical: "https://snotee.vercel.app/handwriting-notes" }
 };

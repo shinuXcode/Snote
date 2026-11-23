@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import SearchLanding from "../../components/SearchLanding";
 
 export const metadata: Metadata = {
-  title: "Goodnotes Alternative for Android? Compare Snotee",
-  description: "Evaluating a Goodnotes alternative for Android? Compare Snotee's open-source approach, local-first design, handwriting workflows, platform builds, and current limitations.",
+  title: "Goodnotes Alternative for Android",
+  description: "Compare Snotee with Goodnotes for Android handwriting, local-first notes, PDF workflows, platform support, and limitations.",
   alternates: { canonical: "https://snotee.vercel.app/goodnotes-alternative" }
 };
 
