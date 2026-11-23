@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import "./brand-overrides.css";
-import "./brand-overrides.css";
 import Link from "next/link";
 import MobileNav from "../components/MobileNav";
 import ThemeToggle from "../components/ThemeToggle";
@@ -18,12 +17,13 @@ export const metadata: Metadata = {
     default: "Snotee — Open-source handwriting & PDF notes",
     template: "%s | Snotee"
   },
-  description: "Snotee is an open-source, local-first note-taking app for handwriting, stylus input, PDF reading and annotation, and rich-text notes. Explore Android, desktop, web, and iOS release availability.",
+  description: "Snotee is a free, open-source, local-first note-taking app for handwritten study notes, stylus input, PDF reading and annotation, and rich-text notes on Android and desktop.",
   applicationName: "Snotee",
   keywords: [
-    "Snotee", "note taking app", "handwriting notes app", "Android note taking app",
-    "PDF annotation app", "open source notes app", "free note taking app", "offline notes", "digital notebook",
-    "stylus notes", "Goodnotes alternative for Android"
+    "Snotee", "handwriting notes app", "Android note taking app with stylus",
+    "digital note taking app", "free note taking app", "PDF annotation app",
+    "open source note taking app", "offline note taking app", "student note taking app",
+    "digital notebook", "stylus note taking app", "Goodnotes alternative for Android"
   ],
   authors: [{ name: "Sadab", url: "https://github.com/shinuXcode" }],
   creator: "Sadab",
@@ -61,7 +61,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#07162d",
+  themeColor: "#160f0b",
   colorScheme: "dark"
 };
 
