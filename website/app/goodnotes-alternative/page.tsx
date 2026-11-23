@@ -3,7 +3,7 @@ import SearchLanding from "../../components/SearchLanding";
 
 export const metadata: Metadata = {
   title: "Goodnotes Alternative for Android",
-  description: "Looking for a Goodnotes alternative for Android? Compare Snotee for stylus handwriting, local-first notes, PDF workflows, open-source access, and current limitations.",
+  description: "Need a Goodnotes alternative for Android? Compare Snotee's stylus handwriting, local-first notes, PDF tools, open-source code, and limitations.",
   alternates: { canonical: "https://snotee.vercel.app/goodnotes-alternative" }
 };
 
